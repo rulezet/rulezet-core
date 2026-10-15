@@ -22,7 +22,8 @@ import json
 from sqlalchemy import func
 
 from ... import db
-from ...core.db_class.db import Rule, RuleRelation, RULE_RELATION_TYPES
+from app.core.db_class.rule import Rule
+from app.core.db_class.rule_relation import RULE_RELATION_TYPES, RuleRelation
 
 # Cap on how many outgoing links a user can hand-create for one rule from
 # the UI (the create/edit-page picker) — keeps a rule's "Linked Rules" page

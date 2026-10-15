@@ -2,9 +2,9 @@
 import json
 
 from app import db
-from app.core.db_class.db import (
-    Rule, RuleEditProposal, RuleFavoriteUser, RuleTagAssociation, RuleUpdateHistory, RuleVote, Tag,
-)
+from app.core.db_class.rule import Rule, RuleFavoriteUser, RuleUpdateHistory, RuleVote
+from app.core.db_class.rule_proposal import RuleEditProposal
+from app.core.db_class.tag import RuleTagAssociation, Tag
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.rules import edit_form, make_proposal, make_rule, new_rule_form, yara_rule
 
@@ -544,7 +544,7 @@ def test_a_superseded_version_cannot_be_revised(clients, users):
 
 
 def test_rejection_reason_is_stored_returned_and_notified(clients, users):
-    from app.core.db_class.db import Notification
+    from app.core.db_class.notification import Notification
     rule = make_rule(users.owner)
     proposal = make_proposal(rule, users.user)
 
@@ -583,7 +583,8 @@ def test_bulk_accept_keeps_one_version_per_thread(clients, users):
 
 
 def test_thread_participants_are_notified_of_a_decision(clients, users):
-    from app.core.db_class.db import Notification, UnifiedComment
+    from app.core.db_class.comment import UnifiedComment
+    from app.core.db_class.notification import Notification
     rule = make_rule(users.owner)
     v1 = make_proposal(rule, users.admin)
     v2 = make_proposal(rule, users.user, previous=v1, minutes=1)

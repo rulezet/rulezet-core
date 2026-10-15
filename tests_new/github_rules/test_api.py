@@ -7,7 +7,8 @@ answers the counts. "nobody" = no key, "bad key" = a key matching no account.
 """
 import pytest
 
-from app.core.db_class.db import ActivityLog, InvalidRuleModel, Rule
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.rule import InvalidRuleModel, Rule
 from tests_new.helpers.db import count
 from tests_new.helpers.formats import SAMPLES
 from tests_new.helpers.rules import make_rule, yara_rule

@@ -9,6 +9,9 @@ export default defineComponent({
         loading:        { type: Boolean, default: false },
         navigateOnClick:{ type: Boolean, default: false },
         ruleListBase:   { type: String,  default: '/rule/rules_list' },
+        // navigateOnClick goes to the technique's own page (/attack/technique/<id>:
+        // every rule for it, coverage, gaps) instead of the rule list filtered by it.
+        techniquePages: { type: Boolean, default: false },
         search:         { type: String,  default: '' },
         // Opt-in (bundle detail page): each rule of the selected technique
         // gets extra buttons that emit rule-action({ action, rule }) with
@@ -22,7 +25,9 @@ export default defineComponent({
         function selectTechnique(tactic, technique) {
             if (props.navigateOnClick) {
                 if (technique.count > 0) {
-                    window.location.href = `${props.ruleListBase}?attacks=${technique.id}`;
+                    window.location.href = props.techniquePages
+                        ? `/attack/technique/${encodeURIComponent(technique.id)}`
+                        : `${props.ruleListBase}?attacks=${technique.id}`;
                 }
                 return;
             }

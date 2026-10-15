@@ -16,7 +16,8 @@ making sure they cannot see or reach any OTHER admin page/action:
   dropdown + global search NAV_PAGES) without exposing the admin mega-menu.
 """
 
-from app.core.db_class.db import BackgroundJob, User
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.user import User
 from app.features.roles import roles_core
 
 

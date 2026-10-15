@@ -11,7 +11,8 @@ from flask_login import current_user
 
 from app import db
 import app.features.rule.rule_core as RuleModel
-from app.core.db_class.db import BackgroundJob, Rule
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.rule import Rule
 from app.core.utils.activity_log import log_activity
 
 JOB_TYPE = 'compute_rule_quality_score'

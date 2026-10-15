@@ -147,17 +147,17 @@ export default {
         </div>
 
         <div class="al-field mt-3">
-          <div class="al-field-label"><i class="fa-brands fa-github"></i>GitHub imports</div>
+          <div class="al-field-label"><i class="fa-brands fa-git-alt"></i>Git imports</div>
           <div class="al-chip-input" :class="{ 'al-disabled': githubAny }" @click="$refs.repoInput.focus()">
             <span v-for="r in githubRepos" :key="r" class="al-chip al-chip--github al-chip--mono">
               [[ r ]]<button type="button" class="al-chip-remove" @click.stop="githubRepos = githubRepos.filter(x => x !== r)">&times;</button>
             </span>
-            <input ref="repoInput" v-model="repoDraft" :disabled="githubAny" placeholder="owner/repo or GitHub URL (Enter to add)"
+            <input ref="repoInput" v-model="repoDraft" :disabled="githubAny" placeholder="owner/repo or repository URL — GitHub, GitLab… (Enter to add)"
                    @keydown.enter.prevent="addRepo" @keydown="onChipKey($event, 'repo')" @blur="addRepo">
           </div>
           <div class="form-check form-switch mt-2">
             <input class="form-check-input" type="checkbox" id="al-github-any" v-model="githubAny">
-            <label class="form-check-label small" for="al-github-any">Any rule imported from GitHub, whatever the repository</label>
+            <label class="form-check-label small" for="al-github-any">Any rule imported from a git repository (GitHub, GitLab, Gitea…), whatever the repository</label>
           </div>
         </div>
 
@@ -210,7 +210,7 @@ export default {
           <label class="al-option" :class="{ 'is-on': events.includes('updated') }">
             <input type="checkbox" class="form-check-input" value="updated" v-model="events">
             <div><div class="al-option-title"><i class="fa-solid fa-pen-to-square me-1 text-primary"></i>Updated</div>
-                 <div class="al-option-sub">Edits, accepted proposals, GitHub updates</div></div>
+                 <div class="al-option-sub">Edits, accepted proposals, Git updates</div></div>
           </label>
         </div>
       </div>
@@ -368,13 +368,15 @@ export default {
             if (!keywords.value.includes(v)) keywords.value = [...keywords.value, v]
         }
         function normalizeRepo(raw) {
-            return raw.trim().toLowerCase().replace(/\/+$/, '').replace(/^(https?:\/\/)?(www\.)?github\.com\//, '').replace(/\.git$/, '')
+            // Any git host: keep only the repo path (owner/repo, group/sub/repo).
+            return raw.trim().toLowerCase().replace(/\/+$/, '').replace(/^https?:\/\/[^/]+\//, '')
+                .replace(/^(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)+\//, '').replace(/\.git$/, '')
         }
         function addRepo() {
             const v = normalizeRepo(repoDraft.value)
             repoDraft.value = ''
             if (!v) return
-            if (!/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/.test(v)) { create_message('Use owner/repo or a GitHub repository URL.', 'warning-subtle'); return }
+            if (!/^[a-z0-9_.-]+(\/[a-z0-9_.-]+)+$/.test(v)) { create_message('Use owner/repo or a git repository URL (GitHub, GitLab, Gitea…).', 'warning-subtle'); return }
             if (!githubRepos.value.includes(v)) githubRepos.value = [...githubRepos.value, v]
         }
         function onChipKey(event, kind) {

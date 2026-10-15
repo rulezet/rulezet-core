@@ -27,9 +27,9 @@ import uuid as uuid_mod
 from sqlalchemy import func
 
 from app import db
-from app.core.db_class.db import (
-    Bundle, BundleNode, BundleRuleAssociation, BundleTagAssociation, Rule, Tag,
-)
+from app.core.db_class.bundle import Bundle, BundleNode, BundleRuleAssociation
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import BundleTagAssociation, Tag
 from .bundle_history_core import track_bundle_change
 
 TLP_FAMILY = ("tlp:",)

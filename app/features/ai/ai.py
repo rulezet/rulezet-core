@@ -15,7 +15,8 @@ from flask import Blueprint, abort, current_app, jsonify, redirect, render_templ
 from flask_login import current_user, login_required
 
 from app import db
-from app.core.db_class.db import AIAgentConfig, AIExecutionLog, AIGeneration, AIModelConfig, InstanceConfig
+from app.core.db_class.ai import AIAgentConfig, AIExecutionLog, AIGeneration, AIModelConfig
+from app.core.db_class.connector import InstanceConfig
 from app.core.utils.activity_log import log_activity
 from app.features.ai.ai_core import get_default_ollama_model, get_ollama_url, is_local_ollama_url
 
@@ -175,7 +176,7 @@ def mascot_toggle():
 #  - a non-local endpoint needs explicit consent (remote_allowed), always
 #    true for a cloud API, before it can be activated or tested.
 
-from app.core.db_class.db import AIProvider
+from app.core.db_class.ai import AIProvider
 from app.features.ai.ai_core import PROVIDER_KINDS, ProviderConfig, decrypt_secret, encrypt_secret
 
 

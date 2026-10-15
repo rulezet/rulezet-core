@@ -12,7 +12,7 @@ import uuid as _uuid_mod
 from flask import current_app
 
 from app import db
-from app.core.db_class.db import AdminTaskSchedule, AdminWorkflow
+from app.core.db_class.task_scheduler import AdminTaskSchedule, AdminWorkflow
 from app.features.admin.task_scheduler.task_types import TASK_TYPES
 from app.features.admin.task_scheduler.scheduler_engine import _creates_cycle
 
@@ -238,9 +238,80 @@ def _build_target_payload(task_type, target_payload):
     these, since they express a deliberate scheduling-safety choice, not a
     per-run preference."""
     task_def = TASK_TYPES[task_type]
-    payload = dict(target_payload or {})
+    payload = dict(target_payload) if isinstance(target_payload, dict) else {}
     payload.update(task_def.get('fixed_payload', {}))
     return payload
+
+
+def _validate_target_payload(task_type, payload):
+    """Per-type sanity checks on what a task will hand its job — catches a
+    blank repo URL or an empty format list at save time instead of as a
+    failed run in the middle of the night. Returns an error string or None."""
+    task_def = TASK_TYPES[task_type]
+    labels = {o['key']: o['label'] for o in task_def.get('extra_options', [])}
+    for key in task_def.get('required_options', []):
+        value = payload.get(key)
+        if value in (None, '', [], {}):
+            return f"\"{labels.get(key, key)}\" is required."
+
+    if task_type == 'github_import':
+        from app.features.rule.rule_format.utils_format.utils_import_update import valider_repo_github
+        url = payload.get('url')
+        if not isinstance(url, str) or not valider_repo_github(url.strip(), is_generic_source=True):
+            return "Enter a valid git repository URL (https://host/owner/repo — GitHub, GitLab, Gitea, …)."
+        for key in ('branch', 'license'):
+            if payload.get(key) is not None and not isinstance(payload.get(key), str):
+                return f"{key} must be text."
+
+    if task_type == 'native_tags_import':
+        from app.features.tags.imported_tags_core import FORMAT_TAG_SOURCES
+        formats = payload.get('formats')
+        if not isinstance(formats, list) or any(f not in FORMAT_TAG_SOURCES for f in formats):
+            return "Unsupported rule format in the list."
+
+    if task_type in ('field_parser', 'platform_tagging'):
+        from app.features.rule.field_parser_core import get_config, ALL_PLATFORM_CONFIGS
+        config_id = payload.get('config_id')
+        if not (task_type == 'platform_tagging' and config_id == ALL_PLATFORM_CONFIGS):
+            config_type = 'field_parser' if task_type == 'field_parser' else 'platform_tags'
+            try:
+                config_id = int(config_id)
+            except (TypeError, ValueError):
+                return "Choose a saved config."
+            if not get_config(config_id, config_type=config_type):
+                return "The chosen config no longer exists."
+            payload['config_id'] = config_id
+
+    for key in ('limit', 'batch_size', 'max_seconds'):
+        if key in payload and payload[key] not in (None, ''):
+            try:
+                if int(payload[key]) <= 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return f"\"{labels.get(key, key)}\" must be a positive number."
+    return None
+
+
+def run_task_type_now(task_type, target_payload, title, editor):
+    """The task form's "Now" trigger: one job of this task type, right now,
+    with no schedule saved — same job_type / fixed_payload / validation as
+    a scheduled firing."""
+    from app.features.jobs.jobs_core import create_job
+    if task_type not in TASK_TYPES:
+        return None, f"Unknown task_type: {task_type!r}"
+    if target_payload is not None and not isinstance(target_payload, dict):
+        return None, "target_payload must be an object."
+    payload = _build_target_payload(task_type, target_payload)
+    err = _validate_target_payload(task_type, payload)
+    if err:
+        return None, err
+    task_def = TASK_TYPES[task_type]
+    title = (title or '').strip() if isinstance(title, str) else ''
+    label = f"{title} — {task_def['label']}" if title else task_def['label']
+    job = create_job(job_type=task_def['job_type'], payload=payload, label=label[:255], created_by=editor.id)
+    if job is None:
+        return None, "Could not queue the job."
+    return job, None
 
 
 def _register_live(schedule):
@@ -283,6 +354,11 @@ def create_schedule(data, editor):
     if not title:
         return None, "Title is required."
 
+    target_payload = _build_target_payload(task_type, data.get('target_payload'))
+    err = _validate_target_payload(task_type, target_payload)
+    if err:
+        return None, err
+
     schedule = AdminTaskSchedule(
         uuid=str(_uuid_mod.uuid4()),
         title=title,
@@ -290,7 +366,7 @@ def create_schedule(data, editor):
         editor_id=editor.id,
         workflow_id=workflow.id,
         task_type=task_type,
-        target_payload=_build_target_payload(task_type, data.get('target_payload')),
+        target_payload=target_payload,
         is_active=bool(data.get('is_active', True)),
     )
     _apply_trigger_fields(schedule, data)
@@ -322,12 +398,18 @@ def update_schedule(schedule_uuid, data):
     if not title:
         return None, "Title is required."
 
+    if 'target_payload' in data:
+        target_payload = _build_target_payload(task_type, data.get('target_payload'))
+        err = _validate_target_payload(task_type, target_payload)
+        if err:
+            return None, err
+
     schedule.title = title
     schedule.description = data.get('description')
     schedule.is_active = bool(data.get('is_active', schedule.is_active))
     schedule.task_type = task_type
     if 'target_payload' in data:
-        schedule.target_payload = _build_target_payload(task_type, data.get('target_payload'))
+        schedule.target_payload = target_payload
     _apply_trigger_fields(schedule, data)
 
     db.session.commit()
@@ -399,7 +481,7 @@ def run_schedule_now(schedule_uuid):
     Returns the new run's job_uuid (still truthy, like the old `True`) so the
     caller can jump straight to that job's detail instead of waiting for the
     next live-status poll to discover it."""
-    from app.core.db_class.db import AdminTaskRun
+    from app.core.db_class.task_scheduler import AdminTaskRun
     from app.features.admin.task_scheduler.scheduler_engine import _fire_schedule
     schedule = AdminTaskSchedule.query.filter_by(uuid=schedule_uuid).first()
     if not schedule:
@@ -435,7 +517,7 @@ def launch_workflow(workflow, roots, triggered_by=None):
     launch-history table and fires the given root tasks under it; the
     chain's workflow_run_id is propagated to every task it triggers through
     on_job_finished(). triggered_by is None for a scheduled launch."""
-    from app.core.db_class.db import AdminWorkflowRun
+    from app.core.db_class.task_scheduler import AdminWorkflowRun
     from app.features.admin.task_scheduler.scheduler_engine import _fire_schedule
 
     workflow_run = AdminWorkflowRun(
@@ -472,7 +554,8 @@ def stop_workflow_jobs(workflow_uuid):
     directly (not via job_worker's own completion path) does NOT trigger
     on_job_finished(), so the chain simply stops — no child task fires from
     a cancelled run, which is exactly the intent of stopping a workflow."""
-    from app.core.db_class.db import AdminTaskRun, BackgroundJob
+    from app.core.db_class.job import BackgroundJob
+    from app.core.db_class.task_scheduler import AdminTaskRun
     from app.features.jobs.jobs_core import cancel_job
 
     workflow = AdminWorkflow.query.filter_by(uuid=workflow_uuid).first()
@@ -507,7 +590,9 @@ def _finalize_workflow_run_if_done(workflow_run_id):
     on_job_finished on its own. Idempotent: skips if already notified."""
     if not workflow_run_id:
         return
-    from app.core.db_class.db import AdminTaskRun, AdminWorkflowRun, BackgroundJob, Notification
+    from app.core.db_class.job import BackgroundJob
+    from app.core.db_class.notification import Notification
+    from app.core.db_class.task_scheduler import AdminTaskRun, AdminWorkflowRun
 
     workflow_run = AdminWorkflowRun.query.get(workflow_run_id)
     if not workflow_run:
@@ -557,7 +642,7 @@ def _finalize_workflow_run_if_done(workflow_run_id):
 def get_workflow_runs_page(workflow_uuid, page=1, per_page=10):
     """Launch history — one row per 'Run Workflow' click, each summarizing
     every task run it directly fired or chained afterwards."""
-    from app.core.db_class.db import AdminWorkflowRun
+    from app.core.db_class.task_scheduler import AdminWorkflowRun
     workflow = AdminWorkflow.query.filter_by(uuid=workflow_uuid).first()
     if not workflow:
         return None
@@ -571,7 +656,7 @@ def bulk_delete_workflow_runs(workflow_uuid, run_uuids):
     bookkeeping row — the AdminTaskRun rows it grouped keep existing (their
     workflow_run_id is set to NULL by the FK's ON DELETE SET NULL), so a
     task's own last_run_status/logs are unaffected."""
-    from app.core.db_class.db import AdminWorkflowRun
+    from app.core.db_class.task_scheduler import AdminWorkflowRun
     workflow = AdminWorkflow.query.filter_by(uuid=workflow_uuid).first()
     if not workflow:
         return None, "Workflow not found."
@@ -588,19 +673,28 @@ def bulk_delete_workflow_runs(workflow_uuid, run_uuids):
 
 
 def serialize_workflow_run(run):
-    from app.core.db_class.db import AdminTaskRun, BackgroundJob
+    from app.core.db_class.job import BackgroundJob
+    from app.core.db_class.task_scheduler import AdminTaskRun
 
     db.session.expire_all()
     task_runs = AdminTaskRun.query.filter_by(workflow_run_id=run.id).order_by(AdminTaskRun.started_at.asc()).all()
     tasks = []
+    last_finish = None
     for tr in task_runs:
         job = BackgroundJob.query.filter_by(uuid=tr.job_uuid).first() if tr.job_uuid else None
         job_status = job.status if job else tr.status
+        finished = (job.finished_at if job else None) or tr.finished_at
+        if finished is not None:
+            if finished.tzinfo is not None:
+                finished = finished.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+            last_finish = max(last_finish, finished) if last_finish else finished
         tasks.append({
             "task_uuid": tr.schedule.uuid,
             "task_title": tr.schedule.title,
+            "task_type": tr.schedule.task_type,
             "job_uuid": tr.job_uuid,
             "status": job_status,
+            "duration_seconds": _seconds_between(job.started_at, job.finished_at) if job else None,
         })
 
     statuses = [t["status"] for t in tasks]
@@ -624,10 +718,183 @@ def serialize_workflow_run(run):
             "avatar": run.triggered_by.get_avatar_url(),
         } if run.triggered_by else None,
         "status": overall,
+        "duration_seconds": _seconds_between(run.started_at, last_finish) if overall not in ('running', 'pending') else None,
         "task_count": len(tasks),
         "done_count": sum(1 for s in statuses if s == 'done'),
         "failed_count": sum(1 for s in statuses if s == 'failed'),
         "tasks": tasks,
+    }
+
+
+def _iso_utc(dt):
+    """BackgroundJob timestamps are UTC (aware or naive depending on the
+    backend) — always hand the browser an explicit 'Z' instant so it can
+    show local times and compute durations without guessing."""
+    if not dt:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    return dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def _seconds_between(start, end):
+    if not start or not end:
+        return None
+    if start.tzinfo is not None:
+        start = start.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    if end.tzinfo is not None:
+        end = end.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    return max(0, int((end - start).total_seconds()))
+
+
+_CONDITION_WORDS = {'success': 'succeeds', 'failure': 'fails', 'always': 'finishes'}
+
+
+def _skip_reason(task, parent_step):
+    """Why a task of the workflow has no run in this launch — the parent's
+    step (or None if the parent never ran here either) is enough to tell
+    'branch not taken' apart from 'never reached'."""
+    if task.trigger_mode != 'after_task' or not task.depends_on:
+        if not task.is_active:
+            return 'not_launched', "Not launched — this first task is paused."
+        return 'not_launched', "Not part of this launch."
+    parent_title = task.depends_on.title
+    if not parent_step:
+        return 'not_reached', f"Never reached — \"{parent_title}\" did not run in this launch."
+    status = parent_step['status']
+    if status in ('pending', 'running', 'paused'):
+        return 'waiting', f"Waiting for \"{parent_title}\" to finish."
+    if status == 'cancelled':
+        return 'not_reached', f"Never reached — \"{parent_title}\" was cancelled."
+    outcome = 'succeeded' if status == 'done' else 'failed'
+    return 'branch_not_taken', (f"Skipped — runs only if \"{parent_title}\" "
+                                f"{_CONDITION_WORDS.get(task.depends_on_condition, 'finishes')}, but it {outcome}.")
+
+
+def get_workflow_run_trace(workflow_uuid, run_uuid):
+    """The full execution path of one launch: every task that actually ran,
+    in the order it ran, with what triggered it (first task, or 'X
+    succeeded → on success'), its timing, its progress and its last log
+    line — plus every task of the workflow that did NOT run, with the
+    reason (branch not taken, never reached, paused…). Feeds the run trace
+    panel and the graph's 'path taken' highlighting. None if not found."""
+    from app.core.db_class.job import BackgroundJob, BackgroundJobLog
+    from app.core.db_class.task_scheduler import AdminTaskRun, AdminWorkflowRun
+
+    workflow = AdminWorkflow.query.filter_by(uuid=workflow_uuid).first()
+    if not workflow:
+        return None
+    run = AdminWorkflowRun.query.filter_by(uuid=run_uuid, workflow_id=workflow.id).first()
+    if not run:
+        return None
+
+    db.session.expire_all()  # job_worker mutates jobs on another thread
+    task_runs = (AdminTaskRun.query.filter_by(workflow_run_id=run.id)
+                 .order_by(AdminTaskRun.started_at.asc(), AdminTaskRun.id.asc()).all())
+
+    steps = []
+    step_by_schedule = {}
+    for tr in task_runs:
+        task = tr.schedule
+        job = BackgroundJob.query.filter_by(uuid=tr.job_uuid).first() if tr.job_uuid else None
+        status = job.status if job else tr.status
+        started = (job.started_at if job else None)
+        finished = (job.finished_at if job else None) or tr.finished_at
+        last_log = None
+        if job:
+            last = (BackgroundJobLog.query.filter_by(job_id=job.id)
+                    .order_by(BackgroundJobLog.id.desc()).first())
+            if last:
+                last_log = {"level": last.level, "message": (last.message or '')[:300]}
+
+        parent = step_by_schedule.get(task.depends_on_schedule_id) if task.trigger_mode == 'after_task' else None
+        if parent:
+            trigger = {
+                "kind": "after_task",
+                "parent_task_uuid": parent['task_uuid'],
+                "parent_title": parent['task_title'],
+                "parent_status": parent['status'],
+                "condition": task.depends_on_condition,
+            }
+        else:
+            trigger = {"kind": "root"}
+
+        step = {
+            "step": len(steps) + 1,
+            "task_uuid": task.uuid,
+            "task_title": task.title,
+            "task_type": task.task_type,
+            "job_uuid": tr.job_uuid,
+            "status": status,
+            "queued_at": _iso_utc(tr.started_at),
+            "started_at": _iso_utc(started),
+            "finished_at": _iso_utc(finished),
+            "wait_seconds": _seconds_between(tr.started_at, started),
+            "duration_seconds": _seconds_between(started, finished),
+            "done": job.done if job else 0,
+            "total": job.total if job else 0,
+            "error": (job.error or '')[:500] if job and job.error else None,
+            "last_log": last_log,
+            "trigger": trigger,
+        }
+        steps.append(step)
+        step_by_schedule[task.id] = step
+
+    skipped = []
+    for task in workflow.tasks:
+        if task.id in step_by_schedule:
+            continue
+        parent_step = step_by_schedule.get(task.depends_on_schedule_id) if task.depends_on_schedule_id else None
+        kind, reason = _skip_reason(task, parent_step)
+        skipped.append({
+            "task_uuid": task.uuid,
+            "task_title": task.title,
+            "task_type": task.task_type,
+            "kind": kind,
+            "reason": reason,
+            "parent_task_uuid": task.depends_on.uuid if task.depends_on else None,
+        })
+
+    statuses = [s['status'] for s in steps]
+    if any(s in ('pending', 'running', 'paused') for s in statuses):
+        overall = 'running'
+    elif 'failed' in statuses:
+        overall = 'failed'
+    elif 'cancelled' in statuses:
+        overall = 'cancelled'
+    elif statuses:
+        overall = 'done'
+    else:
+        overall = 'pending'
+
+    finished_points = [s['finished_at'] for s in steps if s['finished_at']]
+    finished_at = max(finished_points) if (finished_points and overall != 'running') else None
+    run_started = _iso_utc(run.started_at)
+    duration = None
+    if finished_at and run.started_at:
+        duration = _seconds_between(run.started_at, datetime.datetime.strptime(finished_at, '%Y-%m-%dT%H:%M:%SZ'))
+
+    return {
+        "uuid": run.uuid,
+        "status": overall,
+        "started_at": run_started,
+        "finished_at": finished_at,
+        "duration_seconds": duration,
+        "triggered_by": {
+            "id": run.triggered_by.id,
+            "name": f"{run.triggered_by.first_name} {run.triggered_by.last_name}".strip(),
+            "avatar": run.triggered_by.get_avatar_url(),
+        } if run.triggered_by else None,
+        "counts": {
+            "done": statuses.count('done'),
+            "failed": statuses.count('failed'),
+            "cancelled": statuses.count('cancelled'),
+            "running": sum(1 for s in statuses if s in ('pending', 'running', 'paused')),
+            "skipped": len(skipped),
+            "total": len(workflow.tasks),
+        },
+        "steps": steps,
+        "skipped": skipped,
     }
 
 
@@ -636,7 +903,8 @@ def get_workflow_live_status(workflow_uuid):
     live BackgroundJob state — feeds the graph view's running/done/failed
     node highlighting and the 'Live runs' log panel while a workflow is in
     flight. Returns None if the workflow doesn't exist."""
-    from app.core.db_class.db import AdminTaskRun, BackgroundJob
+    from app.core.db_class.job import BackgroundJob
+    from app.core.db_class.task_scheduler import AdminTaskRun
 
     workflow = AdminWorkflow.query.filter_by(uuid=workflow_uuid).first()
     if not workflow:

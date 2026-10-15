@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}GitHub Rules Dashboard — Rulezet{% endblock %}
+{% block title %}Git Repository Dashboard — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
@@ -153,22 +153,22 @@
 
     <!-- ── Header banner ── -->
     <div class="explorer-banner mb-4">
-        <i class="fa-brands fa-github banner-watermark"></i>
+        <i :class="providerIcon" class="banner-watermark"></i>
         <nav aria-label="breadcrumb" class="mb-3">
             <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
                 <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
-                <li class="breadcrumb-item"><a href="/rule/github/list_github_url" class="text-decoration-none text-muted">GitHub Sources</a></li>
+                <li class="breadcrumb-item"><a href="/rule/github/list_github_url" class="text-decoration-none text-muted">Git Sources</a></li>
                 <li class="breadcrumb-item active text-muted" aria-current="page">Dashboard</li>
             </ol>
         </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
-            <div class="banner-icon"><i class="fa-brands fa-github"></i></div>
+            <div class="banner-icon"><i :class="providerIcon"></i></div>
             <div class="min-width-0 flex-grow-1">
                 <h2 class="fw-bold mb-1">[[ repoDisplay ]]</h2>
                 <div class="banner-accent"></div>
             </div>
-            {% set repo_path = url.split('github.com/')[-1] if 'github.com/' in url else '' %}
+            {% set repo_path = url.split('://', 1)[-1].split('/', 1)[1] if url.split('://', 1)[-1].count('/') else '' %}
             {% if repo_path %}
             <a href="/alert/new?github_repos={{ repo_path | urlencode }}&name={{ ('New from ' ~ repo_path) | urlencode }}"
                class="btn btn-sm btn-outline-primary rounded-pill px-3 flex-shrink-0"
@@ -239,12 +239,12 @@
         </div>
     </div>
 
-    <!-- ── GitHub repository info card ── -->
+    <!-- ── Repository info card (any git host) ── -->
     <div class="card border-0 shadow-sm mb-4" style="background:var(--card-bg-color);">
         <div class="card-header border-bottom py-3" style="background:var(--card-bg-color);">
             <button class="gh-toggle-btn" @click="toggleGh" :aria-expanded="ghExpanded">
-                <i class="fa-brands fa-github" style="font-size:1rem;color:var(--subtle-text-color);"></i>
-                <span class="fw-semibold" style="font-size:.9rem;">GitHub Repository info</span>
+                <i :class="providerIcon" style="font-size:1rem;color:var(--subtle-text-color);"></i>
+                <span class="fw-semibold" style="font-size:.9rem;">[[ providerLabel ]] Repository info</span>
                 <span v-if="ghLoading" class="spinner-border spinner-border-sm text-secondary ms-1"></span>
                 <i class="fa-solid fa-chevron-down gh-chevron" :class="{ 'gh-chevron--open': ghExpanded }"></i>
             </button>
@@ -432,7 +432,7 @@
                                  class="d-flex align-items-center gap-2 px-3 py-2 rounded-2"
                                  style="background:var(--light-bg-color);border:1px solid var(--border-color);">
                                 <i class="fa-solid fa-code-branch" style="font-size:.75rem;color:var(--subtle-text-color);flex-shrink:0;"></i>
-                                <a :href="ghRepo.html_url + '/tree/' + b.name" target="_blank" rel="noreferrer"
+                                <a :href="gitTreeUrl(ghRepo.html_url || repoUrl, b.name)" target="_blank" rel="noreferrer"
                                    class="text-decoration-none fw-medium flex-grow-1"
                                    style="font-size:.82rem;font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                     [[ b.name ]]
@@ -531,6 +531,7 @@
 <script type="module">
     const { createApp, ref, computed, onMounted } = Vue
     import { message_list } from '/static/js/toaster.js'
+    import { repoTreeUrl as gitTreeUrl, gitProviderLabel, gitProviderIcon } from '/static/js/components/git-links.js'
     import RuleList                  from '/static/js/rule/ruleList.js'
     import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js'
     import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
@@ -540,7 +541,7 @@
     const currentUserId   = {{ current_user.id if current_user.is_authenticated else 'null' }}
     const csrfToken       = '{{ csrf_token() }}'
     const repoUrl         = {{ url | tojson }}
-    const repoPath        = repoUrl.replace('https://github.com/', '')
+    const repoPath        = repoUrl.replace(/^https?:\/\/[^/]+\//, '').replace(/\.git$/, '')
     const repoDisplay     = repoPath
 
     function fmtNum(n) {
@@ -583,7 +584,7 @@
             }
             const repoTreeUrl = computed(() => {
                 if (!repoUrl) return repoUrl
-                return selectedBranch.value ? repoUrl.replace(/\.git$/, '') + '/tree/' + selectedBranch.value : repoUrl
+                return selectedBranch.value ? gitTreeUrl(repoUrl, selectedBranch.value) : repoUrl
             })
             const ghExpanded          = ref(false)
             const ghFetched           = ref(false)
@@ -622,8 +623,8 @@
                     const data = await res.json()
 
                     ghLoading.value = false
-                    if (data.repo) ghRepo.value = data.repo
-                    else           ghError.value = data.repo_error || data.message || 'GitHub API error.'
+                    if (data.repo) { ghRepo.value = data.repo; ghError.value = data.repo_notice || null }
+                    else           ghError.value = data.repo_error || data.message || 'Repository API error.'
 
                     commitsLoading.value = false
                     commits.value = data.commits || []
@@ -658,7 +659,8 @@
                 contributors, contributorsLoading,
                 fmtNum, fmtSize, fmtDate,
                 isAuthenticated, isAdmin, currentUserId, csrfToken,
-                repoUrl, repoDisplay, repoTreeUrl,
+                repoUrl, repoDisplay, repoTreeUrl, gitTreeUrl,
+                providerLabel: gitProviderLabel(repoUrl), providerIcon: gitProviderIcon(repoUrl),
             }
         }
     }).mount('#main-container')

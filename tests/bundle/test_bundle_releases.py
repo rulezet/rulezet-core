@@ -6,7 +6,8 @@ import io
 import zipfile
 
 from app import db
-from app.core.db_class.db import Bundle, BundleRelease, Rule
+from app.core.db_class.bundle import Bundle, BundleRelease
+from app.core.db_class.rule import Rule
 
 from bundle_helpers import D, F, R, as_anonymous, login, make_bundle, make_rule, other, owner, save_structure
 

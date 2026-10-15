@@ -17,20 +17,20 @@
             <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
                 <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
-                <li class="breadcrumb-item"><a href="/rule/github/manage" class="text-decoration-none text-muted">GitHub Sources</a></li>
+                <li class="breadcrumb-item"><a href="/rule/github/manage" class="text-decoration-none text-muted">Git Sources</a></li>
                 <li class="breadcrumb-item active text-muted" aria-current="page">Import</li>
             </ol>
         </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
             <div class="banner-icon"><i class="fa-solid fa-file-import"></i></div>
-            <div><h2 class="fw-bold mb-1">GitHub Import</h2><div class="banner-accent"></div></div>
+            <div><h2 class="fw-bold mb-1">Git Import</h2><div class="banner-accent"></div></div>
         </div>
         <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
-            [[ !is_finished ? 'Importing rules from GitHub, live.' : 'Here is what was imported from this repository.' ]]
+            [[ !is_finished ? 'Importing rules from the git repository, live.' : 'Here is what was imported from this repository.' ]]
         </p>
         <div v-if="repoUrl" class="d-flex align-items-center gap-2 mt-2 flex-wrap">
-            <a :href="repoUrlWithBranch" target="_blank" rel="noreferrer" class="ul-repo-stat" style="text-decoration:none;" title="Open on GitHub">
-                <i class="fa-brands fa-github"></i>[[ repoUrl ]]
+            <a :href="repoUrlWithBranch" target="_blank" rel="noreferrer" class="ul-repo-stat" style="text-decoration:none;" title="Open the repository">
+                <i :class="gitProviderIcon(repoUrl)"></i>[[ repoUrl ]]
             </a>
             <span v-if="importBranch" class="badge bg-light text-muted fw-normal border-0" style="font-size:.72rem;">
                 <i class="fas fa-code-branch me-1" style="font-size:.65rem;"></i>[[ importBranch ]]
@@ -69,7 +69,7 @@
                 <div v-else-if="rateLimitStatus.remaining === 0" style="font-size:.82rem;color:var(--text-color);">
                     <i class="fas fa-hourglass-half me-1" style="color:#dc3545;"></i>
                     <strong>GitHub API rate limit reached</strong> — resets in [[ rateLimitResetLabel ]].
-                    <span v-if="!rateLimitStatus.authenticated">Add a <code>GITHUB_TOKEN</code> (Admin → Settings) to raise it from 60 to 5000 requests/hour.</span>
+                    <span v-if="!rateLimitStatus.authenticated">Add a <code>GITHUB_TOKEN</code> (Manage Git → Git tokens & hosts) to raise it from 60 to 5000 requests/hour.</span>
                 </div>
                 <div v-else style="font-size:.78rem;color:var(--subtle-text-color);">
                     <i class="fa-brands fa-github me-1"></i>GitHub API: [[ rateLimitStatus.remaining ]]/[[ rateLimitStatus.limit ]] requests remaining — this failure wasn't rate-limiting.
@@ -416,6 +416,7 @@
     import { message_list, create_message } from '/static/js/toaster.js';
     import ChartViewer from '/static/js/components/chart-viewer.js';
     import UserChip from '/static/js/components/UserChip.js';
+    import { repoTreeUrl, gitProviderLabel, gitProviderIcon } from '/static/js/components/git-links.js';
     import RuleList from '/static/js/rule/ruleList.js';
     import BadRuleList from '/static/js/rule/badRuleList.js';
     import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js';
@@ -461,7 +462,7 @@
             // only, fetched once the import errors out (that's the only
             // time it's actionable context here) and on-demand. Never on a
             // timer, same convention as the other two surfaces that show it
-            // (GitHub Sources list, /rule/create_rule's GitHub tab).
+            // (Git Sources list, /rule/create_rule's GitHub tab).
             const rateLimitStatus = ref(null)
             async function fetchRateLimitStatus() {
                 try {
@@ -504,7 +505,7 @@
             )
             const repoUrlWithBranch = computed(() =>
                 repoUrl.value && importBranch.value
-                    ? `${repoUrl.value.replace(/\/$/, '').replace(/\.git$/, '')}/tree/${encodeURIComponent(importBranch.value)}`
+                    ? repoTreeUrl(repoUrl.value, importBranch.value)
                     : repoUrl.value
             )
 
@@ -826,6 +827,7 @@
             });
 
             return {
+                gitProviderIcon,
                 message_list,
                 status_site,
                 progress, progressDone, progressTotal,

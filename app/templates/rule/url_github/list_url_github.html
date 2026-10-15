@@ -1,30 +1,34 @@
 {% extends 'base.html' %}
-{% block title %}GitHub Sources — Rulezet{% endblock %}
+{% block title %}Git Sources — Rulezet{% endblock %}
 {% import 'macros/form_macros.html' as f %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/github/git-host-filter.css') }}">
+{% endblock %}
 
 {% block content %}
 <div class="container mt-5" id="main-container" v-cloak>
 
   <div class="explorer-banner mb-4">
-    <i class="fa-brands fa-github banner-watermark"></i>
+    <i class="fa-brands fa-git-alt banner-watermark"></i>
     <nav aria-label="breadcrumb" class="mb-3">
         <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
             <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
             <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
-            <li class="breadcrumb-item active text-muted" aria-current="page">GitHub Sources</li>
+            <li class="breadcrumb-item active text-muted" aria-current="page">Git Sources</li>
         </ol>
     </nav>
     <div class="d-flex align-items-center gap-3 mb-3">
       <div class="banner-icon">
-        <i class="fa-brands fa-github"></i>
+        <i class="fa-brands fa-git-alt"></i>
       </div>
       <div>
-        <h2 class="fw-bold mb-1">GitHub Project URLs</h2>
+        <h2 class="fw-bold mb-1">Git Repositories</h2>
         <div class="banner-accent"></div>
       </div>
     </div>
     <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
-      Manage and perform bulk actions on GitHub repositories associated with your detection rules.
+      Manage and perform bulk actions on git repositories (GitHub, GitLab, Gitea…) associated with your detection rules.
     </p>
   </div>
 

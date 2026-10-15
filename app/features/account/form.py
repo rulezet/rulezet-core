@@ -10,7 +10,7 @@ from wtforms.fields import (
 from urllib.parse import urlparse
 
 from wtforms.validators import DataRequired, Email, EqualTo, InputRequired, Length, Regexp, Optional, URL
-from ...core.db_class.db import User
+from app.core.db_class.user import User
 
 
 def web_address(form, field):
@@ -69,7 +69,7 @@ class EditUserForm(FlaskForm):
         validators=[Optional(), Length(max=256), web_address]
     )
     github_url = StringField(
-        'GitHub',
+        'GitHub / GitLab / Git profile',
         validators=[Optional(), Length(max=256), web_address]
     )
     twitter_url = StringField(

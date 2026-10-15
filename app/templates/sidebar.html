@@ -48,6 +48,8 @@
                            href="/attack/heatmap"><i class="fa-solid fa-crosshairs"></i>ATT&amp;CK Heatmap</a></li>
                      <li><a class="dropdown-item {% if request.path == '/rule/formats' %}active{% endif %}"
                            href="/rule/formats"><i class="fa-solid fa-layer-group me-2"></i>Rule Formats</a></li>
+                     <li><a class="dropdown-item {% if request.path.startswith('/vulnerability') %}active{% endif %}"
+                           href="/vulnerability/"><i class="fa-solid fa-bug-slash me-2"></i>CVE Response Kits</a></li>
                      <li><a class="dropdown-item {% if request.path == '/rule/create_rule' %}active{% endif %}"
                            href="/rule/create_rule"><i class="fa-solid fa-file-circle-plus me-2"></i>Add Rules</a></li>
 
@@ -85,19 +87,23 @@
 
               
 
-               <!-- ── GitHub (hidden for non-admin GitHub Managers — they get
-                    the dedicated "GitHub Manager" dropdown below instead) ── -->
+               <!-- ── GitHub (hidden for non-admin Git Managers — they get
+                    the dedicated "Git Manager" dropdown below instead) ── -->
                {% if current_user.is_authenticated and (current_user.is_admin() or not current_user.has_permission('github.manage')) %}
                <li class="nav-item dropdown">
                   <a class="nav-link dropdown-toggle custom-nav-link fw-bold {% if '/github' in request.path %}active{% endif %}"
                      href="#" role="button" data-bs-toggle="dropdown">
-                     <i class="fa-brands fa-github fa-fw me-1"></i>Github
+                     <i class="fa-brands fa-git-alt fa-fw me-1"></i>Git
                   </a>
                   <ul class="dropdown-menu">
                      <li><a class="dropdown-item {% if request.path == '/rule/github/list_github_url' %}active{% endif %}"
-                           href="/rule/github/list_github_url"><i class="fa-solid fa-list fa-fw me-2"></i>Github List</a></li>
+                           href="/rule/github/list_github_url"><i class="fa-solid fa-list fa-fw me-2"></i>Git Sources</a></li>
                      <li><a class="dropdown-item {% if request.path == '/rule/github/manage' %}active{% endif %}"
-                           href="/rule/github/manage"><i class="fa-solid fa-bars-progress fa-fw me-2"></i>Manage Github</a></li>
+                           href="/rule/github/manage"><i class="fa-solid fa-bars-progress fa-fw me-2"></i>Manage Git</a></li>
+                     {% if current_user.is_admin() %}
+                     <li><a class="dropdown-item {% if request.path == '/rule/github/settings' %}active{% endif %}"
+                           href="/rule/github/settings"><i class="fa-solid fa-key fa-fw me-2"></i>Git tokens &amp; hosts</a></li>
+                     {% endif %}
                      <li><a class="dropdown-item" href="/rule/create_rule?tab=github">
                            <i class="fa-solid fa-file-import fa-fw me-2"></i>Import Rules</a></li>
                      <li>
@@ -213,6 +219,9 @@
                         <div class="col-4">
                            <div class="dr-nav-col__title">System</div>
                            <div class="dr-nav-col">
+                              <a href="/admin/configuration" class="dr-nav__item {% if request.path.startswith('/admin/configuration') %}active{% endif %}">
+                                 <i class="fa-solid fa-sliders"></i><span>Configuration</span>
+                              </a>
                               <a href="/connector/list" class="dr-nav__item {% if request.path.startswith('/connector') %}active{% endif %}">
                                  <i class="fa-solid fa-plug"></i><span>Connectors</span>
                               </a>
@@ -295,18 +304,18 @@
                </li>
                {% endif %}
 
-               <!-- ── GitHub Manager (dropdown, github.manage non-admins only) ── -->
+               <!-- ── Git Manager (dropdown, github.manage non-admins only) ── -->
                {% if current_user.is_authenticated and not current_user.is_admin() and current_user.has_permission('github.manage') %}
                <li class="nav-item dropdown">
                   <a class="nav-link dropdown-toggle custom-nav-link fw-bold {% if '/github' in request.path %}active{% endif %}"
                      href="#" role="button" data-bs-toggle="dropdown">
-                     <i class="fa-brands fa-github fa-fw me-1"></i>GitHub Manager
+                     <i class="fa-brands fa-git-alt fa-fw me-1"></i>Git Manager
                   </a>
                   <ul class="dropdown-menu">
                      <li><a class="dropdown-item {% if request.path == '/rule/github/list_github_url' %}active{% endif %}"
-                           href="/rule/github/list_github_url"><i class="fa-solid fa-list fa-fw me-2"></i>Github List</a></li>
+                           href="/rule/github/list_github_url"><i class="fa-solid fa-list fa-fw me-2"></i>Git Sources</a></li>
                      <li><a class="dropdown-item {% if request.path == '/rule/github/manage' %}active{% endif %}"
-                           href="/rule/github/manage"><i class="fa-solid fa-bars-progress fa-fw me-2"></i>Manage Github</a></li>
+                           href="/rule/github/manage"><i class="fa-solid fa-bars-progress fa-fw me-2"></i>Manage Git</a></li>
                      <li><a class="dropdown-item" href="/rule/create_rule?tab=github">
                            <i class="fa-solid fa-file-import fa-fw me-2"></i>Import Rules</a></li>
                      <li>
@@ -316,6 +325,10 @@
                            <span v-if="update_to_validate > 0" class="badge rounded-pill bg-danger ms-2">[[ update_to_validate ]]</span>
                         </a>
                      </li>
+                     <li><a class="dropdown-item {% if request.path.startswith('/admin/rule_mirror') %}active{% endif %}"
+                           href="/admin/rule_mirror"><i class="fa-brands fa-git-alt fa-fw me-2"></i>Rulesets</a></li>
+                     <li><a class="dropdown-item {% if request.path == '/rule/github/settings' %}active{% endif %}"
+                           href="/rule/github/settings"><i class="fa-solid fa-key fa-fw me-2"></i>Git tokens &amp; hosts</a></li>
                   </ul>
                </li>
                {% endif %}
@@ -437,7 +450,7 @@
       { label: 'Add Rules', url: '/rule/create_rule', icon: 'fa-file-circle-plus', keywords: ['create rule', 'add rule'] },
       { label: 'Proposals', url: '/rule/rule_propose_edit', icon: 'fa-lightbulb', keywords: ['proposals'] },
       { label: 'Bad Rules', url: '/rule/bad_rules_summary', icon: 'fa-bug', keywords: ['bad rules', 'invalid'] },
-      { label: 'Github Sources', url: '/rule/github/list_github_url', icon: 'fa-github', keywords: ['github'] },
+      { label: 'Git Sources', url: '/rule/github/list_github_url', icon: 'fa-code-branch', keywords: ['git', 'github', 'gitlab', 'repository'] },
       { label: 'Dashboard', url: '/dashboard/', icon: 'fa-gauge-high', keywords: ['dashboard'] },
       { label: 'Profile', url: '/account/', icon: 'fa-user-circle', keywords: ['profile', 'account'] },
       { label: 'Settings', url: '/settings', icon: 'fa-sliders', keywords: ['settings'] },
@@ -472,6 +485,8 @@
       { label: 'Admin: API Activity', url: '/admin/logs/api', icon: 'fa-code', keywords: ['api', 'api logs', 'api requests'] },
       { label: 'Server Settings', url: '/admin/settings', icon: 'fa-sliders', keywords: ['server settings'] },
       { label: 'Admin: Media', url: '/admin/media', icon: 'fa-images', keywords: ['media', 'images', 'uploads', 'files', 'avatars'] },
+      { label: 'CVE Response Kits', url: '/vulnerability/', icon: 'fa-bug-slash', keywords: ['cve', 'vulnerability', 'ghsa', 'response kit', 'vulnerabilities'] },
+      { label: 'Admin: Configuration', url: '/admin/configuration', icon: 'fa-sliders', keywords: ['configuration', 'settings', 'config', 'hardcoded', 'json', 'lists'] },
       {% endif %}
    ]
 

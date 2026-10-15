@@ -9,10 +9,11 @@ import uuid
 import pytest
 
 from app import db
-from app.core.db_class.db import (
-    Bundle, BundleRuleAssociation, Connector, Rule,
-    RuleTagAssociation, RuleUpdateHistory, Tag, User,
-)
+from app.core.db_class.bundle import Bundle, BundleRuleAssociation
+from app.core.db_class.connector import Connector
+from app.core.db_class.rule import Rule, RuleUpdateHistory
+from app.core.db_class.tag import RuleTagAssociation, Tag
+from app.core.db_class.user import User
 from app.features.connector import connector_core as core
 
 

@@ -3,7 +3,8 @@ Tests for the velociraptor blueprint routes (CRUD + admin-only gating).
 All routes require an admin session — mirrors tests/connector/test_connector_crud.py.
 """
 
-from app.core.db_class.db import Rule, VelociraptorServer
+from app.core.db_class.rule import Rule
+from app.core.db_class.velociraptor import VelociraptorServer
 
 
 def login_admin(client):

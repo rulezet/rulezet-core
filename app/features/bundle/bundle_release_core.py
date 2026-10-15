@@ -25,9 +25,9 @@ import uuid as uuid_mod
 import zipfile
 
 from app import db
-from app.core.db_class.db import (
-    Bundle, BundleNode, BundleRelease, BundleRuleAssociation, BundleTagAssociation, Rule, Tag,
-)
+from app.core.db_class.bundle import Bundle, BundleNode, BundleRelease, BundleRuleAssociation
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import BundleTagAssociation, Tag
 
 VERSION_RE = re.compile(r"^v?\d+(\.\d+){0,2}([-+][0-9A-Za-z.\-]+)?$")
 
@@ -241,7 +241,7 @@ def create_release(bundle_id: int, user, version: str, title: str | None, notes:
     db.session.commit()
 
     try:   # history entry (not a snapshot diff — a release doesn't change the bundle)
-        from app.core.db_class.db import BundleHistory
+        from app.core.db_class.bundle import BundleHistory
         db.session.add(BundleHistory(
             uuid=str(uuid_mod.uuid4()), bundle_id=bundle_id, user_id=getattr(user, "id", None),
             action="release", summary=f"Published release {version}" + (f" — {rel.title}" if rel.title else ""),

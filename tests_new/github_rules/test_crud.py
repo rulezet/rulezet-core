@@ -13,11 +13,14 @@ import zipfile
 import pytest
 
 from app import db
-from app.core.db_class.db import (
-    ActivityLog, BackgroundJob, GithubProposal, GithubSyncRun, GithubSyncRunRepo, GithubSyncSchedule,
-    ImporterResult, InvalidRuleModel, NewRule, Rule, RuleStatus, RuleTagAssociation, RuleUpdateHistory, Tag,
-    UpdateResult,
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.git import (
+    GithubProposal, GithubSyncRun, GithubSyncRunRepo, GithubSyncSchedule, ImporterResult, NewRule,
+    RuleStatus, UpdateResult,
 )
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.rule import InvalidRuleModel, Rule, RuleUpdateHistory
+from app.core.db_class.tag import RuleTagAssociation, Tag
 from app.features.jobs.job_handlers import (
     handle_bulk_new_rules_decision, handle_bulk_update_decision, handle_github_proposal_bulk_import,
     handle_github_sync_schedule_run,

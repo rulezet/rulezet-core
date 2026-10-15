@@ -15,11 +15,21 @@ from flask_mail import Message
 from app import mail
 
 from ... import db
-from ...core.db_class.db import BackgroundJob, Bundle, BundleVote, Connector, CustomTheme, Gamification, RequestOwnerRule, Rule, RuleAttackAssociation, RuleEditProposal, RuleFavoriteUser, RuleTest, RuleUpdateHistory, RuleVote, Tag, User, UserBadge, UserConfig
+from app.core.db_class.attack import RuleAttackAssociation
+from app.core.db_class.bundle import Bundle, BundleVote
+from app.core.db_class.connector import Connector
+from app.core.db_class.gamification import Gamification, UserBadge
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.rule import RequestOwnerRule, Rule, RuleFavoriteUser, RuleUpdateHistory, RuleVote
+from app.core.db_class.rule_proposal import RuleEditProposal
+from app.core.db_class.rule_tester import RuleTest
+from app.core.db_class.tag import Tag
+from app.core.db_class.user import CustomTheme, User, UserConfig
 from .badges import BADGES
 from ...core.utils.utils import as_db_id, generate_api_key
 from ..rule import rule_core as RuleModel
 import uuid
+from app.core.utils.app_settings import setting
 
 
 AVATAR_UPLOAD_FOLDER = os.path.join("app", "static", "uploads", "avatars")
@@ -33,43 +43,9 @@ ALLOWED_AVATAR_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 # an uploaded avatar everywhere. Every choice is whitelisted here.
 RULEZY_IMAGE_FOLDER = os.path.join("app", "static", "images", "rulezy")
 FONTAWESOME_DIR = os.path.join("app", "static", "fontawesome-6.3.0")
-AVATAR_BACKGROUNDS = {
-    # key: (label, top colour, bottom colour) — a vertical gradient
-    "blue":   ("Blue",   "#4d94ff", "#0a58ca"),
-    "sky":    ("Sky",    "#bfe3ff", "#6bb6ff"),
-    "teal":   ("Teal",   "#5fd3c4", "#0f8a7a"),
-    "green":  ("Green",  "#7fd88f", "#2b8a3e"),
-    "purple": ("Purple", "#b197fc", "#6741d9"),
-    "pink":   ("Pink",   "#ffb3d9", "#e64980"),
-    "orange": ("Orange", "#ffc078", "#f76707"),
-    "red":    ("Red",    "#ff8787", "#c92a2a"),
-    "gold":   ("Gold",   "#ffe066", "#f59f00"),
-    "slate":  ("Slate",  "#adb5bd", "#495057"),
-    "night":  ("Night",  "#364fc7", "#0b1026"),
-    "white":  ("White",  "#ffffff", "#e9ecef"),
-}
-AVATAR_BORDERS = {
-    # key: (label, colour) — None = no outline
-    "none":   ("None",   None),
-    "blue":   ("Blue",   "#0d6efd"),
-    "white":  ("White",  "#ffffff"),
-    "gold":   ("Gold",   "#f5b301"),
-    "green":  ("Green",  "#2b8a3e"),
-    "red":    ("Red",    "#e03131"),
-    "purple": ("Purple", "#7048e8"),
-    "dark":   ("Dark",   "#1e293b"),
-}
-AVATAR_ICONS = [
-    'shield-halved', 'user-shield', 'shield-virus', 'user-secret', 'user-ninja', 'user-astronaut', 'user-tie',
-    'bug', 'virus', 'biohazard', 'radiation', 'skull', 'skull-crossbones', 'bomb', 'mask',
-    'terminal', 'code', 'microchip', 'server', 'database', 'network-wired', 'wifi', 'satellite-dish', 'globe',
-    'lock', 'key', 'fingerprint', 'eye', 'magnifying-glass', 'brain', 'atom', 'flask', 'robot', 'rocket',
-    'meteor', 'bolt', 'fire', 'ghost', 'dragon', 'cat', 'dog', 'paw', 'crow', 'spider', 'fish', 'otter',
-    'hippo', 'frog', 'chess-knight', 'hat-wizard', 'crown', 'gem', 'star', 'heart', 'moon', 'sun', 'cloud',
-    'snowflake', 'tree', 'leaf', 'mountain', 'anchor', 'compass', 'feather', 'puzzle-piece', 'gamepad',
-    'dice', 'music', 'headphones', 'camera', 'graduation-cap', 'hat-cowboy', 'mug-hot', 'pizza-slice',
-    'burger', 'ice-cream',
-]
+AVATAR_BACKGROUNDS = setting('account.avatar_backgrounds')  # app/config/account.avatar_backgrounds.json
+AVATAR_BORDERS = setting('account.avatar_borders')  # app/config/account.avatar_borders.json
+AVATAR_ICONS = setting('account.avatar_icons')  # app/config/account.avatar_icons.json
 
 
 def get_rulezy_poses() -> list:
@@ -1449,10 +1425,17 @@ def get_user_contributions_data(user_id: int) -> dict:
     new_badges = evaluate_badges(stats)
     unlocked = UserBadge.query.filter_by(user_id=user_id).all()
 
+    # Secret badges aren't in the public catalog — send the ones this
+    # profile has, so they show up (and only them).
+    from .badges import badges_catalog_json
+    unlocked_keys = {b.badge_key for b in unlocked}
+    secret_badges = [b for b in badges_catalog_json(unlocked_keys) if b['secret']]
+
     return {
         "user_stats": stats.to_json(),
         "badges": [b.to_json() for b in unlocked],
         "new_badges": new_badges,
+        "secret_badges": secret_badges,
     }
 
 def recompute_gamification_batch(user_ids: list) -> int:

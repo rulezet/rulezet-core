@@ -644,9 +644,9 @@ mark.notif-search-hit {
                         <div class="notif-prefs-item-info">
                             <div class="notif-prefs-item-label">
                                 <i class="fa-solid fa-circle-check me-1" style="color:#198754;"></i>
-                                GitHub import/update finished
+                                Git import/update finished
                             </div>
-                            <div class="notif-prefs-item-sub">Notified when a GitHub import or update check you started finishes</div>
+                            <div class="notif-prefs-item-sub">Notified when a Git import or update check you started finishes</div>
                         </div>
                         <div class="form-check form-switch mb-0">
                             <input class="form-check-input" type="checkbox" v-model="prefs.job_done"
@@ -659,7 +659,7 @@ mark.notif-search-hit {
                                 <i class="fa-solid fa-arrows-rotate me-1" style="color:#0d6efd;"></i>
                                 Scheduled sync run finished
                             </div>
-                            <div class="notif-prefs-item-sub">Notified when a recurring GitHub Sync Schedule finishes a run</div>
+                            <div class="notif-prefs-item-sub">Notified when a recurring Git Sync Schedule finishes a run</div>
                         </div>
                         <div class="form-check form-switch mb-0">
                             <input class="form-check-input" type="checkbox" v-model="prefs.sync_run_finished"
@@ -754,9 +754,9 @@ const TYPE_OPTIONS = [
     { key: 'rule_update_found',   label: 'Rule updates',           icon: 'fa-solid fa-rotate',            types: ['rule_update_found'] },
     { key: 'jobs',                label: 'Jobs',                   icon: 'fa-solid fa-tasks',             types: ['job_created', 'job_finished', 'job_failed'] },
     { key: 'sessions',            label: 'Sessions',               icon: 'fa-solid fa-spinner',           types: ['session_running', 'session_done'] },
-    { key: 'github_import_done',  label: 'Imports',                icon: 'fa-brands fa-github',           types: ['github_import_done'] },
-    { key: 'github_update_done',  label: 'GitHub Updates',         icon: 'fa-solid fa-code-branch',       types: ['github_update_done'] },
-    { key: 'github_proposal',     label: 'GitHub Proposals',       icon: 'fa-brands fa-github',           types: ['github_proposal_submitted', 'github_proposal_approved', 'github_proposal_rejected', 'github_proposal_import_done'] },
+    { key: 'github_import_done',  label: 'Imports',                icon: 'fa-brands fa-git-alt',           types: ['github_import_done'] },
+    { key: 'github_update_done',  label: 'Git Updates',         icon: 'fa-solid fa-code-branch',       types: ['github_update_done'] },
+    { key: 'github_proposal',     label: 'Repository Proposals',       icon: 'fa-brands fa-git-alt',           types: ['github_proposal_submitted', 'github_proposal_approved', 'github_proposal_rejected', 'github_proposal_import_done'] },
     { key: 'github_token_invalid',label: 'GitHub Token',           icon: 'fa-solid fa-key',               types: ['github_token_invalid'] },
     { key: 'sync_run_finished',   label: 'Sync Runs',              icon: 'fa-solid fa-arrows-rotate',     types: ['sync_run_finished'] },
     { key: 'ownership',           label: 'Ownership',              icon: 'fa-solid fa-user-shield',       types: ['ownership_requested', 'ownership_approved', 'ownership_rejected'] },

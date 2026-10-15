@@ -15,7 +15,7 @@ See ~/Documents/Rulezet/IA-Integration-plan/AI_03_RULE_GENERATOR.md.
 import uuid as uuid_mod
 
 from app import db
-from app.core.db_class.db import AIGeneration
+from app.core.db_class.ai import AIGeneration
 
 
 def run_ai_generate_streaming(user, description: str, sample: str = None):

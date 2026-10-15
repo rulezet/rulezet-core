@@ -8,7 +8,8 @@ API's bulk_add); such a job belongs to the key's owner like any other.
 """
 import pytest
 
-from app.core.db_class.db import BackgroundJob, RuleTagAssociation
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.tag import RuleTagAssociation
 from tests_new.helpers.access import LOGIN, assert_outcome
 from tests_new.helpers.jobs import ADMIN_JOB_TYPE, add_log, make_job, run_next_job
 from tests_new.helpers.rules import make_rule

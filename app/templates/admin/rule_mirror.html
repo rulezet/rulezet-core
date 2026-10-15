@@ -31,12 +31,15 @@
         </p>
     </div>
 
+    {# Git Managers reach this page too — the admin menu is for admins only. #}
+    {% if current_user.is_admin() %}
     <div class="dr-nav mb-3" role="tablist">
         <span class="dr-nav__label" style="padding:.5rem .25rem;">Admin</span>
         <span class="dr-nav__sep"></span>
         {{ anav.admin_nav_toggle() }}
     </div>
     {{ anav.admin_nav_panel('rule_mirror') }}
+    {% endif %}
 
     <!-- ── How it works + official repo — link to doc page and to GitHub ─────────── -->
     <div class="mb-4 d-flex flex-wrap gap-2">
@@ -67,6 +70,7 @@
         </div>
     </div>
 
+    {% if current_user.is_admin() %}
     <div class="alert alert-info border-0 rounded-3 small">
         <i class="fa-solid fa-circle-info me-2"></i>
         Recurring syncs are scheduled the same way as every other admin job — create a
@@ -74,6 +78,7 @@
         <a href="/admin/tasks/">Workflows</a>. A scheduled task with no repository picked
         syncs every currently-enabled repository above.
     </div>
+    {% endif %}
 
 </div>
 
@@ -98,8 +103,8 @@
                 <div class="mb-3">
                     <label class="rms-form-label">Repository URL <span class="text-danger">*</span></label>
                     <input v-model="form.repo_url" type="text" class="form-control font-monospace"
-                           placeholder="https://github.com/your-org/your-rules-mirror">
-                    <div class="rms-form-hint">A GitHub repository this instance will push to. Can be empty/new.</div>
+                           placeholder="https://github.com/your-org/rules-mirror, https://gitlab.com/your-group/rules-mirror…">
+                    <div class="rms-form-hint">A git repository this instance will push to — GitHub, GitLab, Gitea / Forgejo, Bitbucket or any git server over HTTPS. Can be empty/new.</div>
                 </div>
 
                 <div class="mb-3">
@@ -109,15 +114,17 @@
 
                 <div class="mb-3">
                     <div class="rms-label-row">
-                        <label class="rms-form-label mb-0">GitHub token <span v-if="!editMode" class="text-danger">*</span></label>
+                        <label class="rms-form-label mb-0">Repository token <span v-if="!editMode" class="text-danger">*</span></label>
                         <button type="button" class="rms-help-btn" title="How do I get a token?" @click="openTokenHelp">?</button>
                     </div>
                     <input v-model="form.github_token" type="password" class="form-control font-monospace"
                            autocomplete="new-password"
-                           :placeholder="editMode ? 'Already set — leave blank to keep it' : 'Fine-grained PAT, scoped to this repo only'">
+                           :placeholder="editMode ? 'Already set — leave blank to keep it' : 'Access token with write access to this repo only'">
                     <div class="rms-form-hint">
                         Use a token dedicated to this one repository — not the same token used for
-                        GitHub rule import, and never one with broader access than necessary.
+                        rule import, and never one with broader access than necessary. GitLab: a project
+                        access token with the <code>write_repository</code> + <code>read_api</code> scopes
+                        (Developer role). Gitea / Forgejo: a token with repository write access.
                         Never shown again once saved.
                     </div>
                 </div>
@@ -148,15 +155,19 @@
         <div class="modal-content border-0 shadow-lg" style="background:var(--card-bg-color);">
             <div class="modal-header border-bottom">
                 <h5 class="modal-title fw-bold">
-                    <i class="fa-solid fa-key text-primary me-2"></i>Creating a GitHub token for Rulesets
+                    <i class="fa-solid fa-key text-primary me-2"></i>Creating a repository token for Rulesets
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-4">
                 <p class="text-muted" style="font-size:.85rem;">
-                    Rulesets pushes to one GitHub repository per configured entry. Use a fine-grained
-                    Personal Access Token scoped to that single repository — never a classic token
-                    with account-wide access.
+                    Rulesets pushes to one git repository per configured entry — GitHub, GitLab,
+                    Gitea / Forgejo, Bitbucket or any git server. The steps below are for GitHub:
+                    use a fine-grained Personal Access Token scoped to that single repository — never a
+                    classic token with account-wide access. On GitLab, create a <strong>project access
+                    token</strong> (Settings → Access tokens) with the Developer role and the
+                    <code>write_repository</code> + <code>read_api</code> scopes; on Gitea / Forgejo, an
+                    access token with repository write access.
                 </p>
 
                 <div class="rms-help-step">
@@ -208,7 +219,7 @@
                 <div class="rms-help-step">
                     <div class="rms-help-step-num">6</div>
                     <div class="rms-help-step-body">
-                        <strong>Paste it into the GitHub token field</strong>
+                        <strong>Paste it into the Repository token field</strong>
                         Rulezet stores it server-side and never displays it again once saved — the field
                         will only ever show a masked placeholder afterwards. To rotate it, generate a new
                         token on GitHub and paste it back in here; the old one can then be revoked.
@@ -218,8 +229,8 @@
                 <div class="alert alert-warning border-0 rounded-3 mt-3 mb-0 py-2 small">
                     <i class="fa-solid fa-triangle-exclamation me-1"></i>
                     Use a different token for every repository you configure here, and never reuse the
-                    token used elsewhere in Rulezet (e.g. GitHub rule import). If a token is ever
-                    compromised, revoke it directly from GitHub — Rulezet has no way to do that for you.
+                    token used elsewhere in Rulezet (e.g. rule import). If a token is ever
+                    compromised, revoke it directly on the git host — Rulezet has no way to do that for you.
                 </div>
             </div>
             <div class="modal-footer border-top">

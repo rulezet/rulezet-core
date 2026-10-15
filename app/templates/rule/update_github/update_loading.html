@@ -19,7 +19,7 @@
             <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
                 <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
-                <li class="breadcrumb-item"><a href="/rule/github/manage" class="text-decoration-none text-muted">GitHub Sources</a></li>
+                <li class="breadcrumb-item"><a href="/rule/github/manage" class="text-decoration-none text-muted">Git Sources</a></li>
                 <li class="breadcrumb-item active text-muted" aria-current="page">Update check</li>
             </ol>
         </nav>
@@ -28,7 +28,7 @@
             <div><h2 class="fw-bold mb-1">Update check</h2><div class="banner-accent"></div></div>
         </div>
         <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
-            [[ !is_finished ? 'Comparing your imported rules against their GitHub source, live.' : 'Review what changed, then accept or reject each update.' ]]
+            [[ !is_finished ? 'Comparing your imported rules against their git source, live.' : 'Review what changed, then accept or reject each update.' ]]
         </p>
     </div>
 
@@ -102,7 +102,7 @@
                     </div>
                     <div class="ul-hero-copy">
                         <p class="ul-hero-label">Up to date</p>
-                        <p class="ul-hero-text">[[ upToDate ]] of [[ totalChecked ]] checked rule<span v-if="totalChecked!==1">s</span> already match their GitHub source.</p>
+                        <p class="ul-hero-text">[[ upToDate ]] of [[ totalChecked ]] checked rule<span v-if="totalChecked!==1">s</span> already match their git source.</p>
                     </div>
                 </div>
             </div>
@@ -328,7 +328,7 @@
                     <i class="fas fa-circle-check"></i>
                     <div class="ul-action-copy">
                         <strong>Nothing to do</strong>
-                        <span>All checked rules already match their GitHub source.</span>
+                        <span>All checked rules already match their git source.</span>
                     </div>
                 </div>
             </div>

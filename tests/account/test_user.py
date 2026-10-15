@@ -100,7 +100,7 @@ def test_register_with_bad_password_too_long(client):
 def _verify_user(client, email):
     """Mark a user as email-verified so the web login gate passes."""
     from app import db
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     with client.application.app_context():
         user = User.query.filter_by(email=email).first()
         if user:
@@ -338,7 +338,7 @@ def test_oidc_callback_provisions_new_editor_user(client, monkeypatch):
     assert response.status_code == 302
     assert response.headers["Location"] == "/"
 
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     with client.application.app_context():
         user = User.query.filter_by(email="neweditor@example.com").first()
         assert user is not None
@@ -354,7 +354,7 @@ def test_oidc_callback_provisions_new_admin_user(client, monkeypatch):
     response = client.get("/account/oidc/authorize", follow_redirects=False)
     assert response.status_code == 302
 
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     with client.application.app_context():
         user = User.query.filter_by(email="newadmin@example.com").first()
         assert user is not None
@@ -368,7 +368,7 @@ def test_oidc_callback_denied_without_matching_group(client, monkeypatch):
     assert response.status_code == 302
     assert "/account/login" in response.headers["Location"]
 
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     with client.application.app_context():
         assert User.query.filter_by(email="outsider@example.com").first() is None
 
@@ -392,7 +392,7 @@ def test_oidc_callback_logs_in_existing_user_without_duplicating(client, monkeyp
     second = client.get("/account/oidc/authorize", follow_redirects=False)
     assert second.status_code == 302
 
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     with client.application.app_context():
         assert User.query.filter_by(email="repeat@example.com").count() == 1
 
@@ -427,7 +427,7 @@ def test_oidc_user_matching_requires_both_email_and_sub(client, monkeypatch):
     first = client.get("/account/oidc/authorize", follow_redirects=False)
     assert first.status_code == 302
 
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     with client.application.app_context():
         provisioned = User.query.filter_by(email="matchme@example.com").first()
         assert provisioned is not None
@@ -446,7 +446,7 @@ def test_oidc_user_matching_requires_both_email_and_sub(client, monkeypatch):
     assert second.status_code == 302
     assert "/account/login" in second.headers["Location"]
 
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     with client.application.app_context():
         # Still exactly one user for this email — the original — and no
         # second row was ever provisioned for sub-match-2.
@@ -468,7 +468,7 @@ def test_oidc_login_denied_when_email_taken_by_local_account(client, monkeypatch
     assert response.status_code == 302
     assert "/account/login" in response.headers["Location"]
 
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     with client.application.app_context():
         matches = User.query.filter_by(email="localonly@example.com").all()
         assert len(matches) == 1
@@ -483,7 +483,7 @@ def test_oidc_admin_rights_follow_idp_groups(client, monkeypatch):
     client.get("/account/oidc/authorize", follow_redirects=False)
     client.get("/account/logout", follow_redirects=False)
 
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     with client.application.app_context():
         assert User.query.filter_by(auth_data="sub-demote").first().admin is True
 
@@ -500,7 +500,7 @@ def test_oidc_email_change_at_idp_follows_the_same_account(client, monkeypatch):
     _enable_oidc(client, monkeypatch, email="new@example.com", sub="sub-mail", role="editor")
     client.get("/account/oidc/authorize", follow_redirects=False)
 
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     with client.application.app_context():
         assert User.query.filter_by(auth_data="sub-mail").count() == 1
         assert User.query.filter_by(auth_data="sub-mail").first().email == "new@example.com"
@@ -511,7 +511,7 @@ def test_oidc_keycloak_group_paths_match(client, monkeypatch):
     _enable_oidc(client, monkeypatch, email="path@example.com", sub="sub-path",
                  groups=["/" + app.config.get("OIDC_GROUP_ADMIN", "RulezetAdmin")])
     client.get("/account/oidc/authorize", follow_redirects=False)
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     with app.app_context():
         assert User.query.filter_by(auth_data="sub-path").first().admin is True
 
@@ -551,7 +551,7 @@ def test_sso_account_cannot_get_a_password_by_reset(client, monkeypatch):
     _enable_oidc(client, monkeypatch, email="nopass@example.com", sub="sub-nopass", role="editor")
     client.get("/account/oidc/authorize", follow_redirects=False)
 
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     from app.features.account import account_core
     with client.application.app_context():
         assert account_core.request_password_reset_core("nopass@example.com") is True
@@ -578,7 +578,7 @@ def test_login_rate_limit_survives_dropping_the_session_cookie(client):
 # ── SSO settings from Admin → Settings → Security ────────────────────────────
 
 def _admin_client(client):
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     with client.application.app_context():
         admin = User.query.filter_by(email="admin@admin.admin").first()
     with client.session_transaction() as sess:
@@ -608,7 +608,7 @@ def test_sso_settings_refuse_enabling_without_config_and_non_admins(client):
     c = _admin_client(client)
     assert c.post("/admin/settings/sso", json={"oidc_enabled": True}).status_code == 400
     c.get("/account/logout")
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     with client.application.app_context():
         neo = User.query.filter_by(email="neo@admin.admin").first()
     with client.session_transaction() as sess:

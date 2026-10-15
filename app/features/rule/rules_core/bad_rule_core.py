@@ -14,7 +14,12 @@ from flask_login import current_user
 from sqlalchemy.exc import SQLAlchemyError
 from app.features.rule.rule_core import get_updater_result_by_id
 from app import db
-from app.core.db_class.db import *
+from app.core.db_class.git import NewRule
+import datetime
+import json
+from app.core.db_class.ai import AIGeneration
+from app.core.db_class.rule import InvalidRuleModel, Rule
+from app.core.db_class.user import User
 
 
 def _can_manage_all_bad_rules() -> bool:

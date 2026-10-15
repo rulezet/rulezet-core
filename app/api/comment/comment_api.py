@@ -20,7 +20,7 @@ from flask_login import current_user
 from flask_restx import Namespace, Resource, fields
 from sqlalchemy import func
 
-from app.core.db_class.db import UnifiedComment, UnifiedCommentReaction
+from app.core.db_class.comment import UnifiedComment, UnifiedCommentReaction
 from app.core.utils.activity_log import log_activity
 from app.core.utils.utils import DB_ID_MAX, as_db_id, json_object
 from app import db
@@ -40,7 +40,10 @@ def _can_read_object(object_type, object_id) -> bool:
     — its comments are exactly as visible as the object itself (a private
     bundle's discussion is not public just because comments are a separate
     table)."""
-    from app.core.db_class.db import Rule, Bundle, BlogPost, RuleEditProposal
+    from app.core.db_class.blog import BlogPost
+    from app.core.db_class.bundle import Bundle
+    from app.core.db_class.rule import Rule
+    from app.core.db_class.rule_proposal import RuleEditProposal
     object_id = as_db_id(object_id)
     if not object_id:
         return False
@@ -69,7 +72,10 @@ def _user_can_read_object(user, object_type, object_id) -> bool:
     """Whether `user` (not necessarily the caller) can open the object — used
     to decide who may be notified about its thread. A private bundle's share
     link holders can't be known server-side, so only its owner and admins."""
-    from app.core.db_class.db import Rule, Bundle, BlogPost, RuleEditProposal
+    from app.core.db_class.blog import BlogPost
+    from app.core.db_class.bundle import Bundle
+    from app.core.db_class.rule import Rule
+    from app.core.db_class.rule_proposal import RuleEditProposal
     is_admin = user.is_admin()
     if object_type == 'rule':
         rule = db.session.get(Rule, object_id)
@@ -185,7 +191,7 @@ def _comment_context_link(comment):
 
     blog_slug = None
     if comment.object_type == 'blog_post':
-        from app.core.db_class.db import BlogPost
+        from app.core.db_class.blog import BlogPost
         blog_post = BlogPost.query.get(comment.object_id)
         blog_slug = blog_post.uuid if blog_post else None
 
@@ -295,7 +301,7 @@ class CommentList(Resource):
             link, title = None, ''
 
             if object_type == 'rule':
-                from app.core.db_class.db import Rule
+                from app.core.db_class.rule import Rule
                 rule = Rule.query.get(object_id)
                 log_activity("comment.add",
                              f"Added comment on rule '{rule.title if rule else object_id}'",
@@ -315,7 +321,7 @@ class CommentList(Resource):
                         notify_comment_reply(parent_comment.created_by, current_user.id, title, link)
 
             elif object_type == 'bundle':
-                from app.core.db_class.db import Bundle
+                from app.core.db_class.bundle import Bundle
                 bundle    = Bundle.query.get(object_id)
                 is_public = bool(bundle.access) if bundle else True
                 log_activity("bundle_comment.add",
@@ -339,7 +345,8 @@ class CommentList(Resource):
                             notify_comment_reply(parent_comment.created_by, current_user.id, title, link)
 
             elif object_type == 'proposal':
-                from app.core.db_class.db import RuleEditProposal, Rule
+                from app.core.db_class.rule import Rule
+                from app.core.db_class.rule_proposal import RuleEditProposal
                 proposal = RuleEditProposal.query.get(object_id)
                 if proposal:
                     rule  = Rule.query.get(proposal.rule_id)
@@ -350,7 +357,7 @@ class CommentList(Resource):
                                             comment_id=comment.id)
 
             elif object_type == 'blog_post':
-                from app.core.db_class.db import BlogPost
+                from app.core.db_class.blog import BlogPost
                 blog_post = BlogPost.query.get(object_id)
                 log_activity("blog_comment.add",
                              f"Added comment on blog post id={object_id}",
@@ -370,7 +377,7 @@ class CommentList(Resource):
             # Only existing users who can open the object hear about it — a
             # notification carries its title and link.
             if link:
-                from app.core.db_class.db import User
+                from app.core.db_class.user import User
                 mentioned_ids = {int(uid) for uid in re.findall(r'@\[[^\]\n]{1,200}\]\((\d{1,12})\)', content)}
                 for uid in sorted(mentioned_ids - {current_user.id}):
                     mentioned = db.session.get(User, uid)

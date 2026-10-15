@@ -1,7 +1,0 @@
-{
-  "auto_attach": ["tlp:clear", "PAP:CLEAR"],
-  "seed_on_init": [
-    { "namespace": "tlp" },
-    { "namespace": "PAP" }
-  ]
-}

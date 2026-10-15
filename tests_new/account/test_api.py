@@ -8,7 +8,8 @@ account.
 import pytest
 
 from app import db
-from app.core.db_class.db import RuleFavoriteUser, User
+from app.core.db_class.rule import RuleFavoriteUser
+from app.core.db_class.user import User
 from tests_new.helpers.account import captured_mails, make_sso_user, register_form
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.rules import make_rule

@@ -2,7 +2,7 @@ import datetime
 
 from flask import current_app
 
-from app.core.db_class.db import User
+from app.core.db_class.user import User
 from ... import db
 from ...core.utils.utils import generate_api_key
 

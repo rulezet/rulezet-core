@@ -10,7 +10,9 @@ from flask import current_app
 
 from app import db
 
-from app.core.db_class.db import Rule, RuleStatus, UpdateResult, User, NewRule, compute_rule_content_hash
+from app.core.db_class.git import NewRule, RuleStatus, UpdateResult
+from app.core.db_class.rule import compute_rule_content_hash, Rule
+from app.core.db_class.user import User
 from app.features.rule import rule_core as RuleModel
 
 
@@ -98,6 +100,10 @@ class Update_class:
         self._finalized    = False
         self._save_done    = Event()
         self._workers_done = 0
+        # Keep the clone cache (Manage Git → Clear cache) from being emptied
+        # while this update reads the repositories.
+        from app.features.rule.rule_format.utils_format.utils_import_update import hold_repo_cache
+        hold_repo_cache(self._save_done.is_set)
 
     # ------------------ MAIN METHODS ------------------
 

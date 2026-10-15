@@ -153,7 +153,7 @@
             <div class="d-flex gap-3 align-items-start">
               <div class="hiw-step-num">1</div>
               <div style="font-size:.88rem;">
-                <strong>On submission</strong> — pasting a rule, importing from JSON/ZIP, or a GitHub
+                <strong>On submission</strong> — pasting a rule, importing from JSON/ZIP, or a Git
                 import/sync. A rule that fails validation here is never created — it's filed as a
                 <a href="{{ url_for('rule.bad_rules_summary') }}">bad rule</a> instead, with the exact
                 errors attached, so it can be reviewed and fixed.
@@ -204,7 +204,7 @@
                 short, fixed set (a status enum, a UUID shape, a risk-score range, ...). A rule with
                 any error <strong>is not created</strong> at submission time — it becomes a bad rule
                 instead. Seeing this on an already-existing rule's page means the format's validator
-                was tightened after that rule was imported (e.g. a GitHub sync brought in older or
+                was tightened after that rule was imported (e.g. a Git sync brought in older or
                 looser content) — worth reviewing and fixing.
               </p>
               <span class="badge bg-danger-subtle text-danger">Shown as: "Rejected pattern present"</span>

@@ -79,8 +79,8 @@
         Bundles
       </a>
       <a class="sidebar-link" href="#feature-github" data-section="feature-github">
-        <i class="fa-brands fa-github" aria-hidden="true"></i>
-        GitHub Sync
+        <i class="fa-brands fa-git-alt" aria-hidden="true"></i>
+        Git Sync
       </a>
       <a class="sidebar-link" href="#feature-community" data-section="feature-community">
         <i class="fas fa-users" aria-hidden="true"></i>
@@ -555,7 +555,7 @@ flask db upgrade</code></pre>
         <section id="feature-rules" class="doc-section" aria-labelledby="feature-rules-title">
           <div class="eyebrow">Core Features</div>
           <h2 class="section-title" id="feature-rules-title">Rule Management</h2>
-          <p class="section-lead">The rule is the atomic unit of Rulezet. Everything else — bundles, ATT&amp;CK coverage, GitHub imports, similarity scoring — is built around it.</p>
+          <p class="section-lead">The rule is the atomic unit of Rulezet. Everything else — bundles, ATT&amp;CK coverage, Git imports, similarity scoring — is built around it.</p>
 
           <p class="doc-p">Creating or editing a rule opens the Smart Editor, a multi-mode interface that handles syntax highlighting for the rule's format, raw text entry, or Markdown for the description field. On save, the rule is validated by the format-specific parser; invalid rules are not dropped silently — see the callout below.</p>
 
@@ -638,7 +638,7 @@ flask db upgrade</code></pre>
 
           <ul class="doc-list">
             <li>The full rule list, sortable and filterable, with inline code previews.</li>
-            <li>A file-tree view of the bundle's structure — useful for mirroring repository layouts from GitHub imports.</li>
+            <li>A file-tree view of the bundle's structure — useful for mirroring repository layouts from Git imports.</li>
             <li>An ATT&amp;CK coverage matrix scoped to the bundle's rules only.</li>
             <li>A Pivotick graph showing rule relationships and coverage overlap.</li>
             <li>A comment thread for team discussion, with reactions and replies.</li>
@@ -654,11 +654,11 @@ flask db upgrade</code></pre>
           </div>
         </section>
 
-        <!-- ── GitHub Sync ── -->
+        <!-- ── Git Sync ── -->
         <section id="feature-github" class="doc-section" aria-labelledby="feature-github-title">
           <div class="eyebrow">Core Features</div>
-          <h2 class="section-title" id="feature-github-title">GitHub Import &amp; Sync</h2>
-          <p class="section-lead">Import detection rules from any public GitHub repository, then keep them up to date without manual effort.</p>
+          <h2 class="section-title" id="feature-github-title">Git Import &amp; Sync</h2>
+          <p class="section-lead">Import detection rules from any git repository — GitHub, GitLab, Gitea / Forgejo, Bitbucket or a self-hosted git server — then keep them up to date without manual effort. Private repositories work too once a token for their host is set in Admin → Settings.</p>
 
           <h3 class="subsection-title">Initial import</h3>
           <p class="doc-p">Point Rulezet at a repository URL and it handles the rest: clone, walk the file tree, detect the format of each file, validate it against the appropriate parser, and import in parallel across four workers. A background job tracks progress and notifies you when it's done.</p>
@@ -667,7 +667,7 @@ flask db upgrade</code></pre>
             <li>Deduplication by rule UUID — re-importing the same repository will not create duplicates.</li>
             <li>Invalid rules go to the Bad Rules queue rather than being silently skipped.</li>
             <li>Multi-format repositories work — Sigma, YARA, and Suricata files in the same repo are all imported.</li>
-            <li>ZIP archives are supported in addition to live GitHub clones.</li>
+            <li>ZIP archives are supported in addition to live git clones.</li>
           </ul>
 
           <h3 class="subsection-title">Update checks</h3>
@@ -859,7 +859,7 @@ flask db upgrade</code></pre>
             </div>
           </div>
 
-          <p class="doc-p">Trigger a GitHub import:</p>
+          <p class="doc-p">Trigger a Git import (any host):</p>
           <div class="code-block">
             <div class="code-block-header">
               <span class="code-block-lang">bash</span>
@@ -902,7 +902,7 @@ flask db upgrade</code></pre>
           <p class="doc-p">The background worker polls for new jobs every two seconds. Each job type has a registered handler. Job progress and logs are stored in the database and visible on the job detail page, with a live terminal-style log view.</p>
 
           <ul class="doc-list">
-            <li>GitHub repository imports (clone, detect, validate, import in parallel)</li>
+            <li>Git repository imports — GitHub, GitLab, Gitea… (clone, detect, validate, import in parallel)</li>
             <li>Similarity index rebuild (TF-IDF vectorisation + FAISS indexing)</li>
             <li>Connector sync pulls (fetching rules from remote Rulezet instances)</li>
             <li>Bulk rule operations (bulk delete, bulk download packaging)</li>
@@ -1000,7 +1000,7 @@ python3 manage.py deploy</code></pre>
               <div class="contrib-num" aria-hidden="true">4</div>
               <div class="contrib-body">
                 <strong><span class="inline-code">load_all_rule_formats()</span> auto-discovers it</strong>
-                No other changes needed. Restart the server and your format appears in the format selector, GitHub import pipeline, validation queue, and API.
+                No other changes needed. Restart the server and your format appears in the format selector, Git import pipeline, validation queue, and API.
               </div>
             </div>
           </div>

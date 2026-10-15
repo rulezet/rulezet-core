@@ -723,14 +723,14 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                     </ul>
                                 </div>
 
-                                <!-- GitHub source -->
+                                <!-- Git source (GitHub, GitLab, Gitea, …) -->
                                 <a v-if="currentRule.github_path"
                                    :href="githubBlobUrl(currentRule)"
                                    target="_blank" rel="noopener noreferrer"
                                    class="btn btn-sm rounded-pill px-3"
                                    style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
-                                   title="View source file on GitHub">
-                                    <i class="fab fa-github me-1"></i>GitHub
+                                   :title="'View source file on ' + gitProviderLabel(currentRule.source, currentRule.git_provider)">
+                                    <i :class="gitProviderIcon(currentRule.source, currentRule.git_provider)" class="me-1"></i>[[ gitProviderLabel(currentRule.source, currentRule.git_provider) ]]
                                 </a>
 
                                 <!-- Rulesets mirror(s) — server-rendered (not part of currentRule's
@@ -745,7 +745,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                    target="_blank" rel="noopener noreferrer"
                                    class="btn btn-sm rounded-pill px-3"
                                    style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
-                                   title="View this rule's mirrored folder on GitHub ({{ mirror_github_urls[0].name }})">
+                                   title="View this rule's mirrored folder ({{ mirror_github_urls[0].name }})">
                                     <i class="fa-solid fa-code-branch me-1"></i>Rulesets
                                 </a>
                                 {% elif mirror_github_urls|length > 1 %}
@@ -753,14 +753,14 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                     <button class="btn btn-sm rounded-pill px-3 dropdown-toggle"
                                             style="background:transparent; border:1px solid var(--border-color); color:var(--subtle-text-color);"
                                             data-bs-toggle="dropdown"
-                                            title="View this rule's mirrored folder on GitHub — pick a mirror">
+                                            title="View this rule's mirrored folder — pick a mirror">
                                         <i class="fa-solid fa-code-branch me-1"></i>Rulesets
                                     </button>
                                     <ul class="dropdown-menu shadow border-0" style="border-radius:12px; background:var(--card-bg-color);">
                                         {% for mirror in mirror_github_urls %}
                                         <li>
                                             <a class="dropdown-item small" href="{{ mirror.url }}" target="_blank" rel="noopener noreferrer" style="color:var(--text-color);">
-                                                <i class="fab fa-github me-2 opacity-50"></i>{{ mirror.name }}
+                                                <i class="{{ git_provider_icon(mirror.url) }} me-2 opacity-50"></i>{{ mirror.name }}
                                             </a>
                                         </li>
                                         {% endfor %}
@@ -1091,7 +1091,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                             <div class="fw-bold small mb-2"><span class="badge bg-secondary-subtle text-secondary me-1">20 pts</span>Traceability</div>
                                             <ul class="small text-muted mb-0 ps-3">
                                                 <li>Has an original UUID (10)</li>
-                                                <li>GitHub path known (5)</li>
+                                                <li>Git repository path known (5)</li>
                                                 <li>Source repository known (5)</li>
                                             </ul>
                                         </div>
@@ -1120,7 +1120,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                             <div class="fw-bold small mb-2"><span class="badge bg-secondary-subtle text-secondary me-1">25 pts</span>Validity</div>
                                             <ul class="small text-muted mb-0 ps-3">
                                                 <li>Passes format validation (15)</li>
-                                                <li>No pending failed GitHub update (10)</li>
+                                                <li>No pending failed Git update (10)</li>
                                             </ul>
                                         </div>
                                     </div>
@@ -1300,6 +1300,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
 
     import VulnerabilityDisplay from '/static/js/vulnerability/vulnerabilityDisplay.js';
     import TagDisplay from '/static/js/tags/tagDisplay.js';
+    import { repoTreeUrl, repoBlobUrl, gitProviderLabel, gitProviderIcon } from '/static/js/components/git-links.js';
     import FormatChip from '/static/js/rule/formatChip.js';
     import UserChip from '/static/js/components/UserChip.js';
     import CodeViewer from '/static/js/components/code-viewer.js';
@@ -1350,12 +1351,12 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                     const rest = path.slice(idx + marker.length).split('/');
                     path = rest.slice(2).join('/'); // drop <owner>/<repo[--branch]> segments
                 }
-                return rule.source.replace(/\.git$/, '') + '/blob/' + (rule.branch || 'HEAD') + '/' + path;
+                return repoBlobUrl(rule.source, rule.branch, path);
             }
 
             function githubSourceUrl(rule) {
                 if (!rule || !rule.source) return rule ? rule.source : '';
-                return rule.branch ? rule.source.replace(/\.git$/, '') + '/tree/' + rule.branch : rule.source;
+                return rule.branch ? repoTreeUrl(rule.source, rule.branch) : rule.source;
             }
 
             // ── Server-side data passed via window.__ vars ──────────────
@@ -1985,6 +1986,8 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                 Ownership,
                 favorite, animateClick,
                 githubBlobUrl,
+                gitProviderLabel,
+                gitProviderIcon,
                 githubSourceUrl,
                 current_user_is_admin,
                 message_list,

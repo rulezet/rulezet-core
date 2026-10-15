@@ -20,10 +20,10 @@ import re
 from collections import defaultdict
 
 from app import cache, db
-from app.core.db_class.db import (
-    Bundle, BundleNode, BundleRuleAssociation, BundleTagAssociation,
-    Rule, RuleAttackAssociation, RuleTagAssociation, Tag,
-)
+from app.core.db_class.attack import RuleAttackAssociation
+from app.core.db_class.bundle import Bundle, BundleNode, BundleRuleAssociation
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import BundleTagAssociation, RuleTagAssociation, Tag
 
 MAX_ITEMS = 200                 # per check, returned to the UI
 SYNTAX_CACHE_TTL = 7 * 24 * 3600

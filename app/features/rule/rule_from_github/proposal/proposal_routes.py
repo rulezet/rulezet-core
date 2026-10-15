@@ -60,7 +60,7 @@ def proposal_create():
         print(f"[proposal_routes] notify_github_proposal_submitted error: {e}")
 
     log_activity("github_proposal.create",
-                 f"Proposed importing GitHub repo '{proposal.repo_url}'",
+                 f"Proposed importing git repository '{proposal.repo_url}'",
                  target_type="github_proposal", target_uuid=proposal.uuid,
                  extra={"repo_url": proposal.repo_url, "branch": proposal.branch},
                  icon="fa-brands fa-github")
@@ -155,7 +155,7 @@ def proposal_bulk_decision():
 
     verb = "accepted" if decision == "accept" else "rejected"
     log_activity("github_proposal.decision",
-                 f"{verb.capitalize()} {len(proposals)} GitHub proposal(s)"
+                 f"{verb.capitalize()} {len(proposals)} repository proposal(s)"
                  + (f" (ownership: {ownership_mode})" if decision == "accept" else ""),
                  target_type="github_proposal",
                  extra={"uuids": [p.uuid for p in proposals], "decision": decision, "note": note},
@@ -181,7 +181,7 @@ def proposal_delete(uuid):
     repo_url = proposal.repo_url
     ProposalModel.delete_proposal(proposal)
 
-    log_activity("github_proposal.delete", f"Deleted GitHub proposal for '{repo_url}'",
+    log_activity("github_proposal.delete", f"Deleted repository proposal for '{repo_url}'",
                  target_type="github_proposal", icon="fa-brands fa-github")
     return jsonify({"message": "Proposal deleted.", "toast_class": "success-subtle"}), 200
 
@@ -199,6 +199,6 @@ def proposal_cancel(uuid):
     if not ok:
         return jsonify({"message": err, "toast_class": "danger-subtle"}), 400
 
-    log_activity("github_proposal.cancel", f"Cancelled GitHub proposal for '{proposal.repo_url}'",
+    log_activity("github_proposal.cancel", f"Cancelled repository proposal for '{proposal.repo_url}'",
                  target_type="github_proposal", icon="fa-brands fa-github")
     return jsonify({"message": "Proposal cancelled.", "toast_class": "success-subtle"}), 200

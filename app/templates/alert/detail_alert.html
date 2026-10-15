@@ -212,8 +212,8 @@ createApp({
         function reasonChip(r) {
             const [kind, ...rest] = r.split(':')
             const value = rest.join(':')
-            if (kind === 'github') {
-                return { cls: 'al-chip--github', icon: 'fa-brands fa-github', label: 'GitHub import' }
+            if (kind === 'github' || kind === 'git') {
+                return { cls: 'al-chip--github', icon: 'fa-brands fa-git-alt', label: 'Git import' }
             }
             const spec = CRITERIA_KINDS.find(k => k.key === REASON_KIND[kind])
             const icon = spec ? (spec.icon.startsWith('fa-brands') ? spec.icon : 'fa-solid ' + spec.icon) : 'fa-solid fa-check'

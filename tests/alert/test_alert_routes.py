@@ -8,7 +8,9 @@ import uuid
 import pytest
 
 from app import db
-from app.core.db_class.db import Alert, InstanceConfig, User
+from app.core.db_class.alert import Alert
+from app.core.db_class.connector import InstanceConfig
+from app.core.db_class.user import User
 from app.features.alert import alert_core as A
 
 
@@ -137,7 +139,7 @@ def test_preview_endpoint(owner_client):
 
 
 def test_user_actions_are_logged(app, owner_client):
-    from app.core.db_class.db import ActivityLog
+    from app.core.db_class.activity_log import ActivityLog
     alert_uuid = _create(owner_client)
     owner_client.post(f'/alert/{alert_uuid}/update', json={**PAYLOAD, 'name': 'Renamed'})
     owner_client.post(f'/alert/{alert_uuid}/toggle', json={'is_active': False})

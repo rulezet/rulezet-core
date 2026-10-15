@@ -48,6 +48,8 @@ export function createLevel(def, env) {
         wave: 0, waveQueue: [], waveDelay: 0,
         timer: def.duration || 0,
         endingT: 0,
+        // What the player did during the run — sent with the result (admin score tracking).
+        stats: { shots: {}, dashes: 0, bombs: 0, specials: 0, pickups: {}, killsBy: {}, weaponSwitches: 0 },
     };
 
     const weapons = WEAPONS.filter(w => (env.weapons || ['pulse']).includes(w.id));
@@ -172,6 +174,7 @@ export function createLevel(def, env) {
         if (P.cool > 0 || P.disarmed > 0) return;
         const rapid = P.buffs.rapid > 0 ? 0.5 : 1;
         P.cool = Math.max(3, Math.round(wp.rate * P.rateMul * rapid));
+        L.stats.shots[wp.id] = (L.stats.shots[wp.id] || 0) + 1;
         const dmg = wp.dmg * P.dmgMul * (P.buffs.overclock > 0 ? 2 : 1);
         for (let i = 0; i < wp.count; i++) {
             const off = wp.count > 1 ? (i - (wp.count - 1) / 2) * wp.spread : 0;
@@ -193,6 +196,7 @@ export function createLevel(def, env) {
         const l = Math.hypot(dx, dy) || 1;
         P.vx = dx / l * 15; P.vy = dy / l * 15;
         P.dashT = 12; P.inv = Math.max(P.inv, 16); P.dashCd = P.dashMax;
+        L.stats.dashes++;
         burst(P.x, P.y, 12, env.skin.glow, 3);
         Sfx.dash();
     }
@@ -200,6 +204,7 @@ export function createLevel(def, env) {
     function bomb() {
         if (P.bombs <= 0) { Sfx.deny(); return; }
         P.bombs--;
+        L.stats.bombs++;
         L.ebullets.length = 0;
         L.beams.forEach(b => { if (b.t < b.tele) b.cancel = true; });
         L.particles.push({ kind: 'ring', x: P.x, y: P.y, r: 20, max: 900, life: 40, t: 0, color: '#ffffff' });
@@ -214,6 +219,7 @@ export function createLevel(def, env) {
         const sp = env.skin.special;
         if (!sp || P.specialCd > 0) { if (sp) Sfx.deny(); return; }
         P.specialCd = P.specialMax;
+        L.stats.specials++;
         const c = env.skin.glow;
         const dmg = P.dmgMul * (P.buffs.overclock > 0 ? 2 : 1);
         if (sp.id === 'sweep') {
@@ -264,6 +270,7 @@ export function createLevel(def, env) {
         if (e.dead) return;
         e.dead = true;
         L.kills++;
+        L.stats.killsBy[e.type] = (L.stats.killsBy[e.type] || 0) + 1;
         L.comboT = 150; L.combo++;
         L.maxCombo = Math.max(L.maxCombo, L.combo);
         const mult = Math.min(8, 1 + Math.floor(L.combo / 5));
@@ -292,6 +299,7 @@ export function createLevel(def, env) {
 
     function collect(pk) {
         const def = PICKUPS[pk.type];
+        L.stats.pickups[pk.type] = (L.stats.pickups[pk.type] || 0) + 1;
         if (pk.type === 'byte') { L.levelBytes++; Sfx.pickup(); return; }
         if (pk.type === 'heal') { if (P.hp < P.maxHp) P.hp++; else L.score += 250; }
         else if (pk.type === 'bomb') { P.bombs = Math.min(P.maxBombs + 1, P.bombs + 1); }
@@ -412,6 +420,8 @@ export function createLevel(def, env) {
         L.result = {
             won, reason, stars: s.stars, crit: s.crit, score: L.score + (won ? Math.round(P.hp * 300 + L.levelBytes * 5) : 0),
             bytes, time: Math.round(L.t / 60), hits: L.hits, kills: L.kills, maxCombo: L.maxCombo, wave: L.wave,
+            hpLeft: P.hp, maxHp: P.maxHp, bombsLeft: P.bombs, stats: L.stats,
+            bossName: L.boss ? (L.boss.name || null) : null,
         };
         L.finished = true;
         L.finishT = 70;
@@ -489,9 +499,11 @@ export function createLevel(def, env) {
         if (input.actHit('dash') || (scheme === 'twin' && input.hit('Mouse2')) || (st.pad && st.pad.dash)) dash(mx, my);
         if (input.actHit('bomb') || (st.pad && st.pad.bomb)) bomb();
         if (input.actHit('special') || (st.pad && st.pad.special)) special();
+        const prevWeapon = P.weapon;
         weapons.forEach((wp, i) => { if (input.hit(`Digit${WEAPONS.indexOf(wp) + 1}`)) P.weapon = i; });
         if (input.actHit('weapon') || st.wheel > 0 || (st.pad && st.pad.next)) P.weapon = (P.weapon + 1) % weapons.length;
         if (st.wheel < 0 || (st.pad && st.pad.prev)) P.weapon = (P.weapon - 1 + weapons.length) % weapons.length;
+        if (P.weapon !== prevWeapon) L.stats.weaponSwitches++;
 
         if (P.cool > 0) P.cool--;
         if (P.inv > 0) P.inv--;

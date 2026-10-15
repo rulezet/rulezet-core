@@ -3,6 +3,8 @@
 
 <head>
     <meta charset="utf-8">
+    {# Points every ES module path at its versioned URL (static_versions.py) — must come before any module script. #}
+    <script type="importmap">{{ static_import_map() | tojson }}</script>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>{% block title %}RULEZET{% endblock %}</title>
 

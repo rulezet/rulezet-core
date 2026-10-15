@@ -126,6 +126,11 @@ def create_app(start_worker=True):
     from app.features.admin.task_scheduler.task_scheduler_routes import task_scheduler_blueprint
     from app.features.admin.rule_mirror.rule_mirror_routes import rule_mirror_blueprint
     from app.features.admin.media.media_routes import media_blueprint, media_static_blueprint
+    from app.features.admin.app_settings.app_settings_routes import app_settings_blueprint
+    from app.features.starfield.starfield import starfield_blueprint
+    from app.features.nightshift.nightshift import nightshift_blueprint
+    from app.features.vulnerability.vulnerability import vulnerability_blueprint
+    from app.features.rule.rule_from_github.git_settings.git_settings_routes import git_settings_blueprint
     from app.features.alert.alert import alert_blueprint
 
     app.register_blueprint(home_blueprint, url_prefix="/")
@@ -157,6 +162,11 @@ def create_app(start_worker=True):
     app.register_blueprint(rule_mirror_blueprint)
     app.register_blueprint(media_blueprint)
     app.register_blueprint(media_static_blueprint)
+    app.register_blueprint(app_settings_blueprint)
+    app.register_blueprint(starfield_blueprint)
+    app.register_blueprint(nightshift_blueprint)
+    app.register_blueprint(vulnerability_blueprint)
+    app.register_blueprint(git_settings_blueprint)
     app.register_blueprint(alert_blueprint, url_prefix='/alert')
 
     from app.api.api import api_blueprint
@@ -178,6 +188,27 @@ def create_app(start_worker=True):
 
     from app.features.account.oidc_core import register_oidc_client
     register_oidc_client(app)
+
+    # ── Static files: versioned URLs, cached for good (core/utils/static_versions.py) ──
+    from app.core.utils.static_versions import file_version, import_map
+
+    @app.url_defaults
+    def _version_static_urls(endpoint, values):
+        if endpoint == 'static' and 'filename' in values and 'v' not in values:
+            version = file_version(values['filename'])
+            if version:
+                values['v'] = version
+
+    app.jinja_env.globals['static_import_map'] = import_map
+
+    @app.after_request
+    def _cache_versioned_static(response):
+        # A versioned URL never changes content (a new file = a new ?v=), so the
+        # browser may keep it a year without asking again. Unversioned static
+        # URLs keep Flask's default (revalidate every time).
+        if request.endpoint == 'static' and request.args.get('v') and response.status_code == 200:
+            response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+        return response
 
     @app.after_request
     def set_security_headers(response):
@@ -245,7 +276,8 @@ def create_app(start_worker=True):
     @app.context_processor
     def inject_globals():
         from flask import current_app
-        from app.core.db_class.db import AIAgentConfig, InstanceConfig
+        from app.core.db_class.ai import AIAgentConfig
+        from app.core.db_class.connector import InstanceConfig
         chatbot_enabled = True
         try:
             cfg = AIAgentConfig.query.filter_by(agent_key='chatbot').first()
@@ -278,7 +310,7 @@ def create_app(start_worker=True):
         if not (_cu.is_authenticated and _cu.is_admin()):
             return 0
         try:
-            from app.core.db_class.db import BackgroundJob
+            from app.core.db_class.job import BackgroundJob
             return BackgroundJob.query.filter(
                 BackgroundJob.status.in_(('pending', 'running'))
             ).count()
@@ -286,6 +318,11 @@ def create_app(start_worker=True):
             return 0
 
     app.jinja_env.globals['admin_jobs_running_count'] = admin_jobs_running_count
+
+    def git_provider_icon(url, provider=None):
+        from app.features.rule.rule_format.utils_format.git_provider import PROVIDER_ICONS, detect_provider
+        return PROVIDER_ICONS.get(provider or detect_provider(url or ''), PROVIDER_ICONS['generic'])
+    app.jinja_env.globals['git_provider_icon'] = git_provider_icon
 
     def ai_pending_requests(target_type=None):
         """Pending AI analysis requests (users asking for a rule / bundle
@@ -298,7 +335,7 @@ def create_app(start_worker=True):
             return 0
         if not hasattr(g, '_ai_pending_requests'):
             try:
-                from app.core.db_class.db import AIAnalysisRequest
+                from app.core.db_class.ai import AIAnalysisRequest
                 rows = (db.session.query(AIAnalysisRequest.target_type, db.func.count(AIAnalysisRequest.id))
                         .filter(AIAnalysisRequest.status == 'pending')
                         .group_by(AIAnalysisRequest.target_type).all())
@@ -333,6 +370,18 @@ def create_app(start_worker=True):
             return jsonify({"error": "Forbidden."}), 403
         return render_template('access_denied.html'), 403
 
+    from flask_wtf.csrf import CSRFError
+
+    @app.errorhandler(CSRFError)
+    def csrf_error(e):
+        # A fetch() call (it sends the token in a header, or JSON) gets JSON it
+        # can show — not an HTML error page its response.json() chokes on.
+        if (request.headers.get('X-CSRFToken') is not None or request.is_json
+                or request.accept_mimetypes.best == 'application/json' or request.path.startswith('/api/')):
+            return jsonify({'success': False, 'toast_class': 'danger-subtle',
+                            'message': f'{e.description} Reload the page and try again.'}), 400
+        return e
+
     @app.errorhandler(404)
     def page_not_found(e):
         if request.path.startswith('/api/') or request.accept_mimetypes.best == 'application/json':
@@ -360,7 +409,7 @@ def _init_instance_config(app):
     """
     import uuid as _uuid_mod
     import datetime
-    from app.core.db_class.db import InstanceConfig
+    from app.core.db_class.connector import InstanceConfig
     with app.app_context():
         try:
             cfg = InstanceConfig.query.first()
@@ -394,7 +443,9 @@ def _start_telemetry(app):
     import time
     import uuid as _uuid_mod
     import requests as _req
-    from app.core.db_class.db import InstanceConfig, Rule, Bundle
+    from app.core.db_class.bundle import Bundle
+    from app.core.db_class.connector import InstanceConfig
+    from app.core.db_class.rule import Rule
 
     PING_URL      = os.environ.get('TELEMETRY_URL', 'https://rulezet.org/api/instance/register')
     STARTUP_DELAY = int(os.environ.get('TELEMETRY_STARTUP_DELAY', 90))

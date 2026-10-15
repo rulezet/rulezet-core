@@ -6,7 +6,8 @@ value stored as plain text — escaped when displayed, never interpreted.
 import pytest
 
 from app import db
-from app.core.db_class.db import BackgroundJob, Tag
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.tag import Tag
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.inputs import BAD_IDS, BLANK, EMPTY, INJECTIONS, ODD_CHARACTERS, TOO_LONG, WRONG_TYPES
 from tests_new.helpers.rules import make_rule

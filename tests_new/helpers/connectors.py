@@ -27,7 +27,8 @@ import pytest
 import requests
 
 from app import db
-from app.core.db_class.db import BackgroundJob, Connector
+from app.core.db_class.connector import Connector
+from app.core.db_class.job import BackgroundJob
 from tests_new.helpers.rules import yara_rule
 
 API = "/connector"

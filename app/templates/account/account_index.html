@@ -246,7 +246,7 @@
                     {% endif %}
                     {% if current_user.github_url %}
                     <a href="{{ current_user.github_url }}" target="_blank" rel="noopener" class="ud-profile-link ud-profile-link--clickable">
-                        <i class="fab fa-github"></i>[[ user.github_url ]]
+                        <i class="{{ git_provider_icon(current_user.github_url) }}"></i>[[ user.github_url ]]
                     </a>
                     {% endif %}
                     {% if current_user.twitter_url %}

@@ -6,7 +6,7 @@ stale in practice) whenever a new config was added."""
 
 import uuid as uuid_mod
 
-from app.core.db_class.db import User
+from app.core.db_class.user import User
 
 
 def _login(client, email):
@@ -18,7 +18,7 @@ def _login(client, email):
 
 
 def _make_tag(db, name, admin_id):
-    from app.core.db_class.db import Tag
+    from app.core.db_class.tag import Tag
     tag = Tag.query.filter_by(name=name).first()
     if tag:
         return tag
@@ -30,7 +30,8 @@ def _make_tag(db, name, admin_id):
 
 def test_combine_all_platform_tag_patterns_dedupes_by_tag_id(app):
     from app import db
-    from app.core.db_class.db import FieldParserConfig, User
+    from app.core.db_class.rule import FieldParserConfig
+    from app.core.db_class.user import User
     from app.features.rule.field_parser_core import combine_all_platform_tag_patterns
 
     with app.app_context():
@@ -65,7 +66,7 @@ def test_combine_all_platform_tag_patterns_dedupes_by_tag_id(app):
 
 
 def test_combine_all_platform_tag_patterns_no_configs(app):
-    from app.core.db_class.db import FieldParserConfig
+    from app.core.db_class.rule import FieldParserConfig
     from app.features.rule.field_parser_core import combine_all_platform_tag_patterns
 
     with app.app_context():
@@ -81,7 +82,9 @@ def test_combine_all_platform_tag_patterns_no_configs(app):
 
 def test_trigger_platform_tags_with_all_sentinel(app, client):
     from app import db
-    from app.core.db_class.db import FieldParserConfig, User, BackgroundJob
+    from app.core.db_class.job import BackgroundJob
+    from app.core.db_class.rule import FieldParserConfig
+    from app.core.db_class.user import User
     from app.features.rule.field_parser_core import ALL_PLATFORM_CONFIGS
 
     with app.app_context():
@@ -114,7 +117,9 @@ def test_trigger_platform_tags_forwards_rule_ids_and_format_filter(app, client):
     payload no matter what the client sent — the new "Select Rules" card on
     the Platform Tags tab needs these actually forwarded."""
     from app import db
-    from app.core.db_class.db import FieldParserConfig, User, BackgroundJob
+    from app.core.db_class.job import BackgroundJob
+    from app.core.db_class.rule import FieldParserConfig
+    from app.core.db_class.user import User
 
     with app.app_context():
         admin = User.query.filter_by(admin=True).first()
@@ -152,7 +157,8 @@ def test_trigger_platform_tags_forwards_rule_ids_and_format_filter(app, client):
 
 def test_trigger_platform_tags_rejects_bad_rule_ids_type(app, client):
     from app import db
-    from app.core.db_class.db import FieldParserConfig, User
+    from app.core.db_class.rule import FieldParserConfig
+    from app.core.db_class.user import User
 
     with app.app_context():
         admin = User.query.filter_by(admin=True).first()
@@ -175,7 +181,8 @@ def test_trigger_platform_tags_rejects_bad_rule_ids_type(app, client):
 
 def test_trigger_platform_tags_all_sentinel_fails_with_no_configs(app, client):
     from app import db
-    from app.core.db_class.db import FieldParserConfig, User
+    from app.core.db_class.rule import FieldParserConfig
+    from app.core.db_class.user import User
     from app.features.rule.field_parser_core import ALL_PLATFORM_CONFIGS
 
     with app.app_context():

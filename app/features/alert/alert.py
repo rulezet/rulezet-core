@@ -11,7 +11,10 @@ from flask import Blueprint, abort, jsonify, render_template, request
 from flask_login import current_user, login_required
 from sqlalchemy import func
 
-from app.core.db_class.db import Alert, AttackTechnique, Tag, User
+from app.core.db_class.alert import Alert
+from app.core.db_class.attack import AttackTechnique
+from app.core.db_class.tag import Tag
+from app.core.db_class.user import User
 from app.core.utils.activity_log import log_activity
 from app.core.utils.mail_status import is_email_available
 

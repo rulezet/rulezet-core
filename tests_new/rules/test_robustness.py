@@ -5,7 +5,8 @@ value stored as plain text — escaped when it is displayed, never executed.
 """
 import pytest
 
-from app.core.db_class.db import Rule, RuleEditProposal, RuleVote
+from app.core.db_class.rule import Rule, RuleVote
+from app.core.db_class.rule_proposal import RuleEditProposal
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.inputs import BAD_IDS, BLANK, EMPTY, INJECTIONS, ODD_CHARACTERS, TOO_LONG, WRONG_TYPES
 from tests_new.helpers.rules import edit_form, make_proposal, make_rule, new_rule_form, yara_rule
@@ -355,7 +356,7 @@ def test_edit_rule_to_a_blank_title_keeps_the_old_title(clients, users):
 
 
 def test_create_rule_with_an_unknown_tag_id_links_no_tag(clients):
-    from app.core.db_class.db import RuleTagAssociation
+    from app.core.db_class.tag import RuleTagAssociation
     form = new_rule_form(tags='[{"id": 999999}]')
 
     response = clients["owner"].post("/rule/create_rule", data=form)

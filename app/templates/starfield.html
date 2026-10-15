@@ -3,6 +3,7 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/starfield/starfield.css') }}">
+{% if is_admin %}<link rel="stylesheet" href="{{ url_for('static', filename='css/starfield/admin_scores.css') }}">{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -203,8 +204,183 @@
     </div>
     <p class="sf-footnote" id="sf-footnote"></p>
 </div>
+
+{% if is_admin %}
+{# Admin only (also checked server-side on every /starfield/admin route):
+   every player's runs, in detail. JS: static/js/starfield/adminScores.js #}
+<section class="sfa" id="sf-admin" v-cloak>
+    <div class="sfa-head">
+        <div class="sfa-head__icon"><i class="fa-solid fa-ranking-star"></i></div>
+        <div class="flex-grow-1">
+            <h3 class="sfa-title">Players <span class="sfa-badge">admin</span></h3>
+            <p class="sfa-sub">Every finished run is reported by the game. Scores are computed in the browser — a determined player could fake one.</p>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3" @click="load"><i class="fa-solid fa-rotate me-1"></i>Refresh</button>
+    </div>
+
+    <div v-if="loading" class="text-center py-4"><div class="spinner-border text-primary"></div></div>
+    <template v-else>
+        <div class="sfa-stats">
+            <div class="sfa-stat"><span class="sfa-stat__v">[[ players.length ]]</span><span class="sfa-stat__l">players</span></div>
+            <div class="sfa-stat"><span class="sfa-stat__v">[[ runsTotal ]]</span><span class="sfa-stat__l">runs</span></div>
+            <div class="sfa-stat"><span class="sfa-stat__v">[[ players.filter(p => p.user_id).length ]]</span><span class="sfa-stat__l">logged-in</span></div>
+            <div class="sfa-stat"><span class="sfa-stat__v">[[ topEndless.length ? fmt(topEndless[0].score) : '—' ]]</span><span class="sfa-stat__l">best endless</span></div>
+        </div>
+
+        <!-- Player list -->
+        <div v-if="!selected">
+            <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                <div class="dt-search">
+                    <i class="fas fa-search dt-search-icon"></i>
+                    <input class="dt-search-input" v-model="q" placeholder="Search a player…" aria-label="Search a player">
+                </div>
+                <label class="sfa-check"><input type="checkbox" v-model="hideAnon"> Logged-in players only</label>
+            </div>
+            <div class="dt-table-wrap">
+                <table class="dt-table">
+                    <thead class="dt-thead"><tr>
+                        <th v-for="c in PLAYER_COLS" :key="c.key" class="dt-th" :class="c.cls" @click="sortBy(c.key)" style="cursor:pointer;">
+                            [[ c.label ]] <i v-if="sortKey === c.key" :class="sortDir === 'asc' ? 'fa-solid fa-arrow-up' : 'fa-solid fa-arrow-down'" style="font-size:.65rem;"></i>
+                        </th>
+                    </tr></thead>
+                    <tbody>
+                        <tr v-for="p in sortedPlayers" :key="p.key" class="dt-row sfa-row" @click="openPlayer(p)">
+                            <td class="dt-td">
+                                <i :class="p.user_id ? 'fa-solid fa-user' : 'fa-solid fa-user-secret'" class="me-2 text-muted"></i>
+                                <strong>[[ p.name ]]</strong>
+                                <code v-if="!p.user_id" class="sfa-anon">[[ p.player_id.slice(0, 8) ]]</code>
+                            </td>
+                            <td class="dt-td text-center">[[ p.runs ]]</td>
+                            <td class="dt-td text-center">[[ p.win_rate ]]%</td>
+                            <td class="dt-td text-center">[[ p.levels_cleared ]]</td>
+                            <td class="dt-td text-center"><i class="fa-solid fa-star sfa-star"></i> [[ p.stars ]]</td>
+                            <td class="dt-td text-center">[[ p.best_endless ? fmt(p.best_endless.score) + ' (w' + p.best_endless.wave + ')' : '—' ]]</td>
+                            <td class="dt-td text-center">[[ p.kills ]]</td>
+                            <td class="dt-td"><span v-if="p.favorite_ship" class="sfa-ship" :class="'sfa-ship--' + p.favorite_ship">[[ SHIPS[p.favorite_ship] || p.favorite_ship ]]</span></td>
+                            <td class="dt-td">[[ DIFFS[p.difficulty] || '—' ]]</td>
+                            <td class="dt-td text-nowrap">[[ ago(p.last_played) ]]</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div v-if="!sortedPlayers.length" class="dt-empty"><p class="dt-empty-text">Nobody has played yet.</p></div>
+            </div>
+        </div>
+
+        <!-- One player in detail -->
+        <div v-else>
+            <button type="button" class="btn btn-sm btn-link text-decoration-none px-0 mb-2" @click="selected = null"><i class="fa-solid fa-arrow-left me-1"></i>All players</button>
+            <div class="sfa-player">
+                <i :class="selected.user_id ? 'fa-solid fa-user' : 'fa-solid fa-user-secret'"></i>
+                <div>
+                    <div class="sfa-player__name">[[ selected.name ]] <code v-if="!selected.user_id" class="sfa-anon">[[ selected.player_id ]]</code></div>
+                    <div class="sfa-sub">[[ selected.runs ]] runs · [[ selected.win_rate ]]% won · [[ selected.kills ]] kills · [[ fmtTime(selected.time_s) ]] played · first seen [[ ago(selected.first_played) ]]</div>
+                </div>
+            </div>
+
+            <div v-if="runsLoading" class="text-center py-4"><div class="spinner-border text-primary"></div></div>
+            <template v-else>
+                <div class="sfa-section">Campaign — best result per level</div>
+                <div class="sfa-map">
+                    <div v-for="w in 5" :key="w" class="sfa-world">
+                        <div class="sfa-world__name">World [[ w ]]</div>
+                        <div v-for="i in 6" :key="i" class="sfa-cell" :class="cellClass(w - 1, i - 1)" :title="cellTitle(w - 1, i - 1)">
+                            <span class="sfa-cell__lvl">[[ i === 5 ? 'Boss' : i === 6 ? 'Secret' : 'L' + i ]]</span>
+                            <span v-if="best(w - 1, i - 1)" class="sfa-cell__stars">
+                                <i v-for="s in 3" :key="s" class="fa-solid fa-star" :class="{ on: s <= best(w - 1, i - 1).stars }"></i>
+                            </span>
+                            <span class="sfa-cell__score">[[ best(w - 1, i - 1) ? fmt(best(w - 1, i - 1).score) : '—' ]]</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sfa-section">Every run ([[ runs.length ]])</div>
+                <div class="dt-table-wrap">
+                    <table class="dt-table">
+                        <thead class="dt-thead"><tr>
+                            <th class="dt-th">When</th><th class="dt-th">Level</th><th class="dt-th text-center">Result</th>
+                            <th class="dt-th text-end">Score</th><th class="dt-th text-center">Stars</th><th class="dt-th">Ship</th>
+                            <th class="dt-th">Difficulty</th><th class="dt-th text-center">Kills</th><th class="dt-th text-center">Hits</th>
+                            <th class="dt-th text-center">Combo</th><th class="dt-th text-center">Time</th><th class="dt-th"></th>
+                        </tr></thead>
+                        <tbody>
+                            <template v-for="r in runs" :key="r.uuid">
+                                <tr class="dt-row sfa-row" @click="openRun = openRun === r.uuid ? null : r.uuid">
+                                    <td class="dt-td text-nowrap">[[ when(r.created_at) ]]</td>
+                                    <td class="dt-td">
+                                        <span v-if="r.mode === 'endless'"><i class="fa-solid fa-infinity me-1"></i>Endless · wave [[ r.wave ]]</span>
+                                        <span v-else>W[[ r.world + 1 ]]·[[ r.level_index === 4 ? 'Boss' : r.level_index === 5 ? 'Secret' : 'L' + (r.level_index + 1) ]] — [[ r.level_name ]]
+                                            <span class="sfa-kind">[[ r.level_kind ]]</span></span>
+                                    </td>
+                                    <td class="dt-td text-center">
+                                        <span v-if="r.mode === 'endless'" class="sfa-res">—</span>
+                                        <span v-else :class="['sfa-res', r.won ? 'sfa-res--won' : 'sfa-res--lost']" :title="r.reason || ''">[[ r.won ? 'Won' : 'Lost' ]]</span>
+                                    </td>
+                                    <td class="dt-td text-end fw-semibold">[[ fmt(r.score) ]]</td>
+                                    <td class="dt-td text-center"><i v-for="s in 3" :key="s" class="fa-solid fa-star sfa-mini" :class="{ on: s <= r.stars }"></i></td>
+                                    <td class="dt-td"><span v-if="r.ship" class="sfa-ship" :class="'sfa-ship--' + r.ship">[[ SHIPS[r.ship] || r.ship ]]</span></td>
+                                    <td class="dt-td">[[ DIFFS[r.difficulty] || '—' ]]</td>
+                                    <td class="dt-td text-center">[[ r.kills ]]</td>
+                                    <td class="dt-td text-center">[[ r.hits ]]</td>
+                                    <td class="dt-td text-center">x[[ r.max_combo ]]</td>
+                                    <td class="dt-td text-center">[[ fmtTime(r.time_s) ]]</td>
+                                    <td class="dt-td text-center"><i class="fa-solid fa-chevron-down sfa-chev" :class="{ open: openRun === r.uuid }"></i></td>
+                                </tr>
+                                <tr v-if="openRun === r.uuid" class="sfa-detail-row">
+                                    <td colspan="12">
+                                        <div class="sfa-detail">
+                                            <div class="sfa-box">
+                                                <div class="sfa-box__t">Run</div>
+                                                <div v-if="r.reason">Lost: <strong>[[ r.reason ]]</strong></div>
+                                                <div v-if="r.details.boss_name">Boss: <strong>[[ r.details.boss_name ]]</strong></div>
+                                                <div>Shield left: <strong>[[ r.details.hp_left ]] / [[ r.details.max_hp ]]</strong></div>
+                                                <div>Bytes: <strong>+[[ r.bytes ]]</strong> · bombs left [[ r.details.bombs_left ]]</div>
+                                                <div>Controls: <strong>[[ r.controls || '—' ]]</strong><span v-if="r.details.assist"> · assist on</span></div>
+                                                <ul v-if="r.details.crit && r.details.crit.length" class="sfa-crit">
+                                                    <li v-for="c in r.details.crit" :key="c.label" :class="c.ok ? 'ok' : 'ko'">
+                                                        <i :class="c.ok ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i> [[ c.label ]]</li>
+                                                </ul>
+                                            </div>
+                                            <div class="sfa-box">
+                                                <div class="sfa-box__t">Actions</div>
+                                                <div>Dashes <strong>[[ r.details.dashes ]]</strong> · bombs <strong>[[ r.details.bombs ]]</strong> · ship power <strong>[[ r.details.specials ]]</strong></div>
+                                                <div>Weapon switches <strong>[[ r.details.weapon_switches ]]</strong></div>
+                                                <div class="sfa-box__t mt-2">Shots per weapon</div>
+                                                <div class="sfa-chips"><span v-for="(n, w) in r.details.shots" :key="w" class="sfa-chip">[[ WEAPONS[w] || w ]] <strong>[[ n ]]</strong></span>
+                                                    <span v-if="!Object.keys(r.details.shots || {}).length" class="text-muted">—</span></div>
+                                                <div class="sfa-box__t mt-2">Pickups</div>
+                                                <div class="sfa-chips"><span v-for="(n, k) in r.details.pickups" :key="k" class="sfa-chip">[[ k ]] <strong>[[ n ]]</strong></span>
+                                                    <span v-if="!Object.keys(r.details.pickups || {}).length" class="text-muted">—</span></div>
+                                            </div>
+                                            <div class="sfa-box">
+                                                <div class="sfa-box__t">Kills per malware</div>
+                                                <div class="sfa-chips"><span v-for="(n, k) in sortedCounts(r.details.kills_by)" :key="k" class="sfa-chip">[[ k ]] <strong>[[ n ]]</strong></span>
+                                                    <span v-if="!Object.keys(r.details.kills_by || {}).length" class="text-muted">—</span></div>
+                                            </div>
+                                            <div class="sfa-box">
+                                                <div class="sfa-box__t">Build at that time</div>
+                                                <div class="sfa-chips"><span v-for="w in r.details.weapons" :key="w" class="sfa-chip">[[ WEAPONS[w] || w ]]</span></div>
+                                                <div class="sfa-box__t mt-2">Upgrades</div>
+                                                <div class="sfa-chips"><span v-for="(lvl, u) in r.details.upgrades" :key="u" class="sfa-chip">[[ u ]] <strong>lv [[ lvl ]]</strong></span>
+                                                    <span v-if="!Object.keys(r.details.upgrades || {}).length" class="text-muted">none</span></div>
+                                                <div class="mt-2">Campaign: <strong>[[ r.details.campaign_stars ]]</strong> stars · [[ fmt(r.details.campaign_bytes) ]] bytes</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </template>
+        </div>
+    </template>
+</section>
+{% endif %}
 {% endblock %}
 
 {% block script %}
 <script type="module" src="{{ url_for('static', filename='js/starfield/main.js') }}"></script>
+{% if is_admin %}
+<script type="module" src="{{ url_for('static', filename='js/starfield/adminScores.js') }}"></script>
+{% endif %}
 {% endblock %}

@@ -69,7 +69,7 @@ def _tag_rule(client, rule_id, tag_name):
 def _tag_rule_db(app, tag_name, rule_id):
     """Direct DB insertion for tagging — mirrors init_db pattern."""
     from app import db
-    from app.core.db_class.db import Tag, RuleTagAssociation
+    from app.core.db_class.tag import RuleTagAssociation, Tag
 
     with app.app_context():
         tag = Tag.query.filter_by(name=tag_name).first()
@@ -568,7 +568,7 @@ def test_sort_most_likes(client):
 
     # Patch vote_up directly so we control ordering
     from app import db
-    from app.core.db_class.db import Rule
+    from app.core.db_class.rule import Rule
     with client.application.app_context():
         Rule.query.filter_by(title="SRTEST_LikesHigh").update({"vote_up": 999})
         Rule.query.filter_by(title="SRTEST_LikesLow").update({"vote_up": 1})

@@ -25,7 +25,7 @@ class PublicTestHistory(Resource):
         pagination = TesterModel.get_tests_for_rule(rule.id, current_user,
                                                      page=page, per_page=per_page)
 
-        from app.core.db_class.db import RuleTestResult
+        from app.core.db_class.rule_tester import RuleTestResult
         test_ids = [t.id for t in pagination.items if t.test_type == 'bulk']
         result_by_test = {}
         if test_ids:
@@ -49,7 +49,7 @@ class PublicTestHistory(Resource):
             if not t.is_public and not is_own and not is_admin:
                 item['user_id'] = None
             else:
-                from app.core.db_class.db import User
+                from app.core.db_class.user import User
                 u = User.query.get(t.user_id)
                 item['user'] = {
                     'id':       u.id,

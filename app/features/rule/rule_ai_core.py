@@ -15,15 +15,10 @@ On top of the rule itself (content, metadata, tags) it pulls:
 import json
 
 from app import db
-from app.core.db_class.db import (
-    AttackTechnique,
-    Bundle,
-    BundleRuleAssociation,
-    Rule,
-    RuleAttackAssociation,
-    RuleTagAssociation,
-    Tag,
-)
+from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
+from app.core.db_class.bundle import Bundle, BundleRuleAssociation
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import RuleTagAssociation, Tag
 
 CONTENT_CHARS     = 6000
 DESC_CHARS        = 1200

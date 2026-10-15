@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/taskWorkflowGraph.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/taskCanvas.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/taskForm.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/workflowRunTrace.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/jobs/jobs.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
 {% endblock %}
@@ -240,12 +241,14 @@
                                 <th class="dt-th">Triggered by</th>
                                 <th class="dt-th text-center">Status</th>
                                 <th class="dt-th text-center">Tasks</th>
+                                <th class="dt-th">Path</th>
+                                <th class="dt-th text-center">Duration</th>
                                 <th class="dt-th text-center">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="run in workflowRuns" :key="run.uuid" class="dt-row" style="cursor:pointer;"
-                                title="View this launch's progress and logs in the Tasks tab" @click="viewHistoryRunInTasksTab(run)">
+                                title="View this launch's execution path, timing and logs" @click="viewHistoryRunInTasksTab(run)">
                                 <td class="dt-td dt-td--checkbox" @click.stop>
                                     <input type="checkbox" class="dt-checkbox" :checked="selectedRunUuids.has(run.uuid)"
                                         @change="toggleRunSelection(run.uuid, $event.target.checked)" />
@@ -262,6 +265,18 @@
                                     </span>
                                 </td>
                                 <td class="dt-td text-center">[[ run.done_count ]]/[[ run.task_count ]] done<span v-if="run.failed_count > 0" class="text-danger"> · [[ run.failed_count ]] failed</span></td>
+                                <td class="dt-td">
+                                    <div class="wrt-mini-path">
+                                        <template v-for="(t, i) in run.tasks" :key="t.job_uuid || t.task_uuid">
+                                            <span v-if="i > 0" class="wrt-mini-path-link"></span>
+                                            <span class="wrt-mini-path-step" :class="'wrt-mini-path-step--' + t.status"
+                                                  :title="(i + 1) + '. ' + t.task_title + ' — ' + t.status + (t.duration_seconds != null ? ' (' + formatDuration(t.duration_seconds) + ')' : '')">
+                                                <i :class="taskTypeIcon(t.task_type)"></i>
+                                            </span>
+                                        </template>
+                                    </div>
+                                </td>
+                                <td class="dt-td text-center text-muted" style="font-size:.8rem;">[[ run.duration_seconds != null ? formatDuration(run.duration_seconds) : (run.status === 'running' ? '…' : '—') ]]</td>
                                 <td class="dt-td text-center" @click.stop>
                                     <button class="dt-action-btn" :disabled="!canRunWorkflow || workflowBusy"
                                             :title="workflowBusy ? 'Already running — wait for it to finish or stop it first' : (canRunWorkflow ? 'Re-run this workflow' : 'No active, independently-triggered task to start from')"
@@ -374,6 +389,7 @@
 
                     <task-workflow-graph v-else-if="taskViewMode === 'pipeline'" :schedules="graphSchedules" :task-types="taskTypes"
                         :live-status="liveStatus" :search-query="search" :focused-uuids="focusedTaskUuidsArray"
+                        :run-trace="activeRunUuid ? activeRunTrace : null"
                         @select="onNodeSelect" @edit="openEdit" @run="runNow" @delete="askDeleteTask">
                     </task-workflow-graph>
 
@@ -412,31 +428,28 @@
             </div>
         </div>
 
-        <!-- Run summary — the default view once a specific launch (live or
-             from History) has concluded and nothing is focused: a clean,
-             static per-task breakdown of exactly what happened. Click a row
-             to see that task's own log (same as clicking its graph node). -->
-        <div v-if="detailTab === 'tasks' && taskViewMode === 'pipeline' && activeRunView && activeRunView.status !== 'running' && !lastFocusedTaskUuid" id="task-run-summary-panel" class="card border-0 shadow-sm rounded-3 mt-4">
-            <div class="card-body p-3">
-                <div class="d-flex justify-content-between align-items-center mb-2">
+        <!-- Run trace — the execution path of the selected launch (live or
+             from History): every step in the order it ran, what triggered
+             it, how long it queued/ran, its last log line, and every task
+             that did not run with the reason. Click a step for its logs. -->
+        <div v-if="detailTab === 'tasks' && taskViewMode === 'pipeline' && activeRunUuid" id="task-run-trace-panel" class="card border-0 shadow-sm rounded-3 mt-4">
+            <div class="card-body p-3 p-md-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
                     <div class="d-flex align-items-center gap-2">
                         <div style="width:3px; height:14px; background:#0d6efd; border-radius:2px; flex-shrink:0;"></div>
                         <span class="fw-bold" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--subtle-text-color);">
-                            <i class="fa-solid fa-list-check me-1"></i>Run summary
+                            <i class="fa-solid fa-route me-1"></i>Run trace
                         </span>
                     </div>
-                    <span class="badge" :class="runStatusBadgeClass(activeRunView.status)">[[ activeRunView.status ]]</span>
+                    <button class="btn btn-sm btn-link text-decoration-none p-0" style="font-size:.75rem;" @click="activeRunUuid = null">
+                        <i class="fa-solid fa-xmark me-1"></i>Back to live view
+                    </button>
                 </div>
-                <div v-for="t in activeRunView.tasks" :key="t.job_uuid || t.task_uuid" class="rounded-3 border p-2 mb-2 d-flex align-items-center justify-content-between"
-                     :style="{ background: 'var(--light-bg-color)', cursor: t.job_uuid ? 'pointer' : 'default' }"
-                     @click="t.job_uuid && (focusedTaskUuids.clear(), focusedTaskUuids.add(t.task_uuid))">
-                    <span style="font-size:.85rem;">
-                        <i :class="taskTypeIcon(taskTypeOf(t.task_uuid))" class="me-2 text-muted"></i>[[ t.task_title ]]
-                    </span>
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="badge" :class="runStatusBadgeClass(t.status)">[[ t.status ]]</span>
-                        <i v-if="t.job_uuid" class="fa-solid fa-chevron-right text-muted" style="font-size:.7rem;"></i>
-                    </div>
+                <workflow-run-trace v-if="activeRunTrace" :trace="activeRunTrace" :task-types="taskTypes"
+                                    :focused-uuid="lastFocusedTaskUuid" @select="onTraceStepSelect">
+                </workflow-run-trace>
+                <div v-else class="text-center py-3 text-muted">
+                    <div class="spinner-border spinner-border-sm me-2" role="status"></div>Loading the run trace…
                 </div>
             </div>
         </div>
@@ -458,7 +471,8 @@
                 </div>
                 <p class="text-muted small mb-0">
                     <i class="fa-solid fa-ban me-1"></i>
-                    <template v-if="skippedTaskInfo.trigger_mode === 'after_task'">
+                    <template v-if="skipReasonFor(skippedTaskInfo.uuid)">[[ skipReasonFor(skippedTaskInfo.uuid) ]]</template>
+                    <template v-else-if="skippedTaskInfo.trigger_mode === 'after_task'">
                         This task didn't run in this launch — its condition
                         (<strong>[[ conditionLabel(skippedTaskInfo.depends_on_condition) ]]</strong> after
                         "<strong>[[ skippedTaskInfo.depends_on_schedule_title || 'its parent task' ]]</strong>")
@@ -706,8 +720,36 @@
                                             <input class="form-check-input" type="checkbox" :id="'opt_' + opt.key" v-model="form.extra_options[opt.key]">
                                             <label class="form-check-label" :for="'opt_' + opt.key" style="font-size:.85rem;">[[ opt.label ]]</label>
                                         </div>
+                                        <div v-else-if="opt.type === 'multiselect'">
+                                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                                <label class="form-label mb-0" style="font-size:.78rem;">[[ opt.label ]]<span v-if="isRequiredOption(opt)" class="required-marker">*</span></label>
+                                                <span class="task-form-multi-actions">
+                                                    <button type="button" class="btn btn-link btn-sm p-0" @click="form.extra_options[opt.key] = opt.options.map(o => o.value)">All</button>
+                                                    <span class="text-muted mx-1">·</span>
+                                                    <button type="button" class="btn btn-link btn-sm p-0" @click="form.extra_options[opt.key] = []">None</button>
+                                                </span>
+                                            </div>
+                                            <div class="task-form-multi">
+                                                <div v-for="o in opt.options" :key="o.value" class="form-check">
+                                                    <input class="form-check-input" type="checkbox" :id="'opt_' + opt.key + '_' + o.value"
+                                                           :value="o.value" v-model="form.extra_options[opt.key]">
+                                                    <label class="form-check-label" :for="'opt_' + opt.key + '_' + o.value">[[ o.label ]]</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div v-else-if="opt.type === 'saved_config'">
+                                            <label class="form-label mb-1" style="font-size:.78rem;">[[ opt.label ]]<span v-if="isRequiredOption(opt)" class="required-marker">*</span></label>
+                                            <select class="form-select form-select-sm" v-model="form.extra_options[opt.key]">
+                                                <option value="" disabled>Choose a saved config…</option>
+                                                <option v-if="opt.allow_all" value="ALL">Every saved config (combined)</option>
+                                                <option v-for="c in savedConfigs[opt.config_type] || []" :key="c.id" :value="c.id">[[ c.name ]]</option>
+                                            </select>
+                                            <p v-if="savedConfigs[opt.config_type] && !savedConfigs[opt.config_type].length" class="text-muted small mt-1 mb-0">
+                                                No saved config yet — create one on <a href="/account/admin/bulk_parse_fields" target="_blank">Bulk Parse Fields</a>.
+                                            </p>
+                                        </div>
                                         <div v-else>
-                                            <label class="form-label mb-1" style="font-size:.78rem;">[[ opt.label ]]</label>
+                                            <label class="form-label mb-1" style="font-size:.78rem;">[[ opt.label ]]<span v-if="isRequiredOption(opt)" class="required-marker">*</span></label>
                                             <input type="text" class="form-control form-control-sm" v-model="form.extra_options[opt.key]">
                                         </div>
                                     </div>
@@ -892,6 +934,7 @@
     import ScheduleRecurrencePicker from '/static/js/rule/scheduleRecurrencePicker.js';
     import TaskWorkflowGraph from '/static/js/admin/taskWorkflowGraph.js';
     import TaskCanvas from '/static/js/admin/taskCanvas.js';
+    import WorkflowRunTrace, { formatDuration } from '/static/js/admin/workflowRunTrace.js';
     import JobTracker from '/static/js/jobs/JobTracker.js';
     import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js';
     import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
@@ -909,6 +952,7 @@
             'schedule-recurrence-picker': ScheduleRecurrencePicker,
             'task-workflow-graph': TaskWorkflowGraph,
             'task-canvas': TaskCanvas,
+            'workflow-run-trace': WorkflowRunTrace,
             'job-tracker': JobTracker,
             'tags-displays-list': TagsDisplaysList,
             'vulnerability-displays-list': VulnerabilityDisplaysList,
@@ -1237,7 +1281,37 @@
                 const url = new URL(window.location.href);
                 if (val) url.searchParams.set('run', val); else url.searchParams.delete('run');
                 window.history.replaceState({}, '', url);
+                if (!activeRunTrace.value || activeRunTrace.value.uuid !== val) activeRunTrace.value = null;
+                loadActiveRunTrace();
             });
+
+            // ── Execution path of the selected launch — order, timing, why
+            // each task ran or was skipped. Drives the Run trace panel and
+            // the graph's "path taken" highlighting; refreshed with every
+            // live poll while that launch is still in flight.
+            const activeRunTrace = ref(null);
+            let traceRequestSeq = 0;
+            async function loadActiveRunTrace() {
+                const runUuid = activeRunUuid.value;
+                if (!runUuid || !activeWorkflow.value) { activeRunTrace.value = null; return; }
+                const seq = ++traceRequestSeq;
+                const res = await fetch(`/admin/tasks/workflows/${activeWorkflow.value.uuid}/runs/${runUuid}/trace`);
+                if (seq !== traceRequestSeq || runUuid !== activeRunUuid.value) return; // a newer request superseded this one
+                if (!res.ok) { activeRunTrace.value = null; return; }
+                activeRunTrace.value = (await res.json()).trace;
+            }
+            function onTraceStepSelect(taskUuid) {
+                skippedTaskInfo.value = null;
+                focusedTaskUuids.value.clear();
+                focusedTaskUuids.value.add(taskUuid);
+                nextTick(() => {
+                    document.getElementById('task-log-panel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                });
+            }
+            function skipReasonFor(taskUuid) {
+                const k = activeRunTrace.value ? activeRunTrace.value.skipped.find(x => x.task_uuid === taskUuid) : null;
+                return k ? k.reason : null;
+            }
 
             async function loadWorkflowRuns(page) {
                 if (!activeWorkflow.value) return;
@@ -1257,6 +1331,8 @@
                     const latest = workflowRuns.value[0];
                     if (latest && latest.status === 'running' && activeRunUuid.value !== latest.uuid) {
                         activeRunUuid.value = latest.uuid;
+                    } else if (activeRunUuid.value && (!activeRunTrace.value || activeRunTrace.value.status === 'running')) {
+                        loadActiveRunTrace();
                     }
                 } finally {
                     workflowRunsLoading.value = false;
@@ -1374,6 +1450,12 @@
             const workflowBusy = computed(() => launchingWorkflow.value || isWorkflowRunning.value);
 
             function jobUuidFor(taskUuid) {
+                // A launch is selected: only ITS job for that task counts —
+                // never a later run's log shown as if it belonged to it.
+                if (activeRunUuid.value && activeRunTrace.value) {
+                    const step = activeRunTrace.value.steps.find(st => st.task_uuid === taskUuid);
+                    return step ? step.job_uuid : null;
+                }
                 const live = liveStatus.value[taskUuid];
                 if (live && live.job_uuid) return live.job_uuid;
                 const task = graphSchedules.value.find(s => s.uuid === taskUuid);
@@ -1635,9 +1717,34 @@
                 targetJustChanged.value = false;
                 form.extra_options = {};
                 const def = selectedTaskDef.value;
-                if (def) (def.extra_options || []).forEach(opt => { form.extra_options[opt.key] = opt.default; });
+                if (def) (def.extra_options || []).forEach(opt => {
+                    form.extra_options[opt.key] = Array.isArray(opt.default) ? [...opt.default] : opt.default;
+                    if (opt.type === 'saved_config') loadSavedConfigs(opt.config_type);
+                });
                 if (def && def.target_picker === 'format_filter_only' && availableFormats.value.length === 0) loadFormats();
                 if (def && def.target_picker === 'connector_select' && availableConnectors.value.length === 0) loadConnectors();
+            }
+
+            // Saved Bulk Parse Fields configs, per config_type — feeds the
+            // 'saved_config' option type (Field Parser / Platform tagging).
+            const savedConfigs = reactive({});
+            async function loadSavedConfigs(configType) {
+                if (savedConfigs[configType]) return;
+                const res = await fetch(`/admin/tasks/field_configs?type=${encodeURIComponent(configType)}`);
+                if (res.ok) savedConfigs[configType] = (await res.json()).configs || [];
+            }
+
+            function isRequiredOption(opt) {
+                return !!(selectedTaskDef.value && (selectedTaskDef.value.required_options || []).includes(opt.key));
+            }
+            function missingRequiredOption() {
+                const def = selectedTaskDef.value;
+                if (!def) return null;
+                return (def.extra_options || []).find(opt => {
+                    if (!(def.required_options || []).includes(opt.key)) return false;
+                    const v = form.extra_options[opt.key];
+                    return v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+                }) || null;
             }
 
             async function loadFormats() {
@@ -1714,10 +1821,16 @@
                     connectorId.value = (s.target_payload || {}).connector_id || '';
                 }
                 if (selectedTaskDef.value && selectedTaskDef.value.target_picker === 'format_filter_only') {
-                    formatFilter.value = (s.target_payload || {}).format || '';
+                    formatFilter.value = (s.target_payload || {})[selectedTaskDef.value.format_key || 'format'] || '';
+                }
+                // Editing without re-picking rules must keep the saved target,
+                // not silently replace it with "everything".
+                if (selectedTaskDef.value && selectedTaskDef.value.target_picker === 'rule_list_select' && (s.target_payload || {}).filters) {
+                    ruleTargetPayload = { filters: s.target_payload.filters };
                 }
                 (selectedTaskDef.value ? selectedTaskDef.value.extra_options : []).forEach(opt => {
-                    form.extra_options[opt.key] = (s.target_payload || {})[opt.key] ?? opt.default;
+                    const saved = (s.target_payload || {})[opt.key];
+                    form.extra_options[opt.key] = saved ?? (Array.isArray(opt.default) ? [...opt.default] : opt.default);
                 });
             }
 
@@ -1726,18 +1839,23 @@
                 if (payload.filters && payload.filters.rule_ids) return `${payload.filters.rule_ids.length} rule(s)`;
                 if (payload.filters) return 'all rules matching saved filters';
                 if (payload.connector_id) return `connector #${payload.connector_id}`;
-                if (payload.format) return `format = ${payload.format}`;
+                if (payload.format || payload.format_filter) return `format = ${payload.format || payload.format_filter}`;
+                if (payload.url) return payload.url + (payload.branch ? ` (${payload.branch})` : '');
                 return 'no specific target (runs on everything)';
             }
 
             function buildTargetPayload() {
                 const def = selectedTaskDef.value;
                 if (!def) return {};
-                if (def.target_picker === 'rule_list_select') return ruleTargetPayload || {};
-                if (def.target_picker === 'format_filter_only') return formatFilter.value ? { format: formatFilter.value } : {};
-                if (def.target_picker === 'connector_select') return { connector_id: connectorId.value };
+                // Options always ride along — whatever the target picker
+                // (AI Rule Analysis has both a rule target and options).
                 const payload = {};
-                Object.assign(payload, form.extra_options);
+                if (def.target_picker === 'rule_list_select') Object.assign(payload, ruleTargetPayload || {});
+                if (def.target_picker === 'format_filter_only' && formatFilter.value) payload[def.format_key || 'format'] = formatFilter.value;
+                if (def.target_picker === 'connector_select') payload.connector_id = connectorId.value;
+                for (const [key, value] of Object.entries(form.extra_options)) {
+                    payload[key] = typeof value === 'string' ? value.trim() : value;
+                }
                 return payload;
             }
 
@@ -1747,6 +1865,8 @@
                 if (selectedTaskDef.value && selectedTaskDef.value.target_picker === 'connector_select' && !connectorId.value) {
                     create_message('Choose a connector.', 'danger-subtle'); return;
                 }
+                const missing = missingRequiredOption();
+                if (missing) { create_message(`"${missing.label}" is required.`, 'danger-subtle'); return; }
 
                 const targetPayload = buildTargetPayload();
 
@@ -1767,17 +1887,13 @@
                         body.run_once_at = currentRecurrence.run_once_at;
                     } else if (recurrenceMode.value === 'now') {
                         // "Now" never creates a schedule — fire a one-off job directly.
-                        const res = await fetch('/jobs/create', {
+                        const res = await fetch('/admin/tasks/run_adhoc', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                            body: JSON.stringify({
-                                job_type: (taskTypes.value[form.task_type] || {}).job_type,
-                                payload: targetPayload,
-                                label: `${form.title || taskTypeLabel(form.task_type)} — ${taskTypeLabel(form.task_type)}`,
-                            }),
+                            body: JSON.stringify({ task_type: form.task_type, target_payload: targetPayload, title: form.title }),
                         });
                         const data = await res.json();
-                        create_message(res.ok ? 'Job queued! Running in background…' : (data.message || data.error || 'Failed to queue job.'), res.ok ? 'success-subtle' : 'danger-subtle');
+                        create_message(data.message || 'Failed to queue job.', res.ok ? 'success-subtle' : 'danger-subtle');
                         if (res.ok) bootstrap.Modal.getInstance(document.getElementById('taskModal'))?.hide();
                         saving.value = false;
                         return;
@@ -1922,10 +2038,11 @@
                 askDeleteTask, confirmDeleteTask, undoDeleteTask, pendingDeleteTask, deletingTask, lastDeletedTask,
                 duplicateTask,
                 workflowRuns, workflowRunsLoading, workflowRunsPage, workflowRunsTotalPages,
-                activeRunUuid, activeRunView, loadWorkflowRuns, viewHistoryRunInTasksTab, runStatusBadgeClass,
+                activeRunUuid, activeRunView, activeRunTrace, onTraceStepSelect, skipReasonFor, formatDuration, loadWorkflowRuns, viewHistoryRunInTasksTab, runStatusBadgeClass,
                 selectedRunUuids, isAllRunsSelected, toggleRunSelection, toggleAllRunsSelection, bulkDeleteRuns,
                 form, formInstance, triggerKind, recurrenceMode, saving, editingSchedule,
                 availableFormats, availableConnectors, pickerSchedules, formatFilter, connectorId,
+                savedConfigs, isRequiredOption,
                 targetJustChanged, currentTargetSummary, selectedTaskDef,
                 onTaskTypeChange, loadPickerSchedules, onRecurrenceChange, onRuleTargetChange,
                 openCreate, openEdit, submitForm,

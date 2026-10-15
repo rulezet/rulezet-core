@@ -1,11 +1,12 @@
 import PaginationComponent from '/static/js/rule/paginationComponent.js';
+import { gitProviderIcon, gitProviderLabel } from '/static/js/components/git-links.js';
 
 /**
  * Repo picker for Sync Schedules — true "select all N matching this filter"
  * bulk selection (selectedUrls/excludedUrls/isAllSelectedMode), mirroring
  * app/static/js/rule/ruleSelectionTable.js's pattern (the one fully-working
  * "select all across pages" implementation in the codebase) adapted to
- * GitHub repo rows instead of Rule rows, and to *emit* the current
+ * git repo rows (GitHub, GitLab, Gitea…) instead of Rule rows, and to *emit* the current
  * selection instead of submitting it — the parent Sync Schedule form
  * combines it with title/description/recurrence into one create/update call.
  */
@@ -30,6 +31,8 @@ const RepoSelectionTable = {
             searchField: 'url',
             formatFilter: '',
             authorFilter: '',
+            providerFilter: '',
+            availableProviders: [],
 
             selectedUrls: new Set(this.initialSelectedUrls),
             excludedUrls: new Set(),
@@ -45,6 +48,7 @@ const RepoSelectionTable = {
                 search_field: this.searchField,
                 format: this.formatFilter || null,
                 author: this.authorFilter || null,
+                provider: this.providerFilter || null,
             };
         },
         selectedCount() {
@@ -60,7 +64,7 @@ const RepoSelectionTable = {
             const out = [];
             for (const url of this.selectedUrls) {
                 const repo = this.allLoadedRepos.get(url);
-                out.push({ url, rule_count: repo ? repo.rule_count : null });
+                out.push({ url, rule_count: repo ? repo.rule_count : null, git_provider: repo ? repo.git_provider : null });
                 if (out.length >= 100) break;
             }
             return out;
@@ -68,8 +72,14 @@ const RepoSelectionTable = {
     },
     mounted() {
         this.fetchRepos(1);
+        fetch('/rule/get_github_providers_usage')
+            .then(r => (r.ok ? r.json() : []))
+            .then(list => { this.availableProviders = list; })
+            .catch(() => {});
     },
     methods: {
+        gitProviderIcon,
+        gitProviderLabel,
         async fetchRepos(page) {
             this.loading = true;
             const params = new URLSearchParams({ page });
@@ -77,6 +87,7 @@ const RepoSelectionTable = {
             params.set('search_field', this.searchField);
             if (this.formatFilter) params.set('format', this.formatFilter);
             if (this.authorFilter) params.set('author', this.authorFilter);
+            if (this.providerFilter) params.set('provider', this.providerFilter);
 
             try {
                 const res = await fetch(this.apiEndpoint + '?' + params.toString());
@@ -95,6 +106,12 @@ const RepoSelectionTable = {
             } finally {
                 this.loading = false;
             }
+        },
+
+        setProvider(name) {
+            if (this.providerFilter === name) return;
+            this.providerFilter = name;
+            this.fetchRepos(1);
         },
 
         onSearchInput() {
@@ -178,7 +195,7 @@ const RepoSelectionTable = {
                 <div class="dt-search">
                     <i class="fas fa-search dt-search-icon"></i>
                     <input class="dt-search-input" type="text" placeholder="Search repository…"
-                        v-model="search" @input="onSearchInput" aria-label="Search GitHub repositories" />
+                        v-model="search" @input="onSearchInput" aria-label="Search git repositories" />
                 </div>
                 <input class="rl-fp-select" type="text" placeholder="Filter by author…"
                     v-model="authorFilter" @change="fetchRepos(1)" style="max-width:180px;" />
@@ -191,6 +208,20 @@ const RepoSelectionTable = {
                     <i class="fa-solid fa-xmark"></i><span>Clear selection</span>
                 </button>
             </div>
+        </div>
+
+        <div v-if="availableProviders.length > 1" class="ghf-hosts" role="group" aria-label="Filter by git host">
+            <span class="ghf-hosts__label">Host</span>
+            <button type="button" class="ghf-host" :class="{ 'ghf-host--active': !providerFilter }"
+                    :aria-pressed="!providerFilter" @click="setProvider('')">
+                <i class="fa-solid fa-layer-group"></i>All
+            </button>
+            <button v-for="p in availableProviders" :key="p.name" type="button" class="ghf-host"
+                    :class="{ 'ghf-host--active': providerFilter === p.name }"
+                    :aria-pressed="providerFilter === p.name" @click="setProvider(p.name)">
+                <i :class="p.icon"></i>[[ p.label ]]
+                <span class="ghf-host__count">[[ p.count ]]</span>
+            </button>
         </div>
 
         <div v-if="isAllSelectedMode" class="rl-filter-panel mb-3">
@@ -235,7 +266,10 @@ const RepoSelectionTable = {
                             <input type="checkbox" class="dt-checkbox" :checked="isRepoChecked(repo.url)"
                                 @change="updateSelection(repo.url, $event.target.checked)" />
                         </td>
-                        <td class="dt-td dt-td--truncate" style="max-width:320px;" :title="repo.url">[[ repo.url ]]</td>
+                        <td class="dt-td dt-td--truncate" style="max-width:320px;" :title="repo.url">
+                            <i :class="gitProviderIcon(repo.url, repo.git_provider)" class="me-2"
+                               :title="gitProviderLabel(repo.url, repo.git_provider)" style="color:var(--subtle-text-color);"></i>[[ repo.url ]]
+                        </td>
                         <td class="dt-td text-center">[[ repo.rule_count ]]</td>
                         <td class="dt-td">
                             <span v-for="fmt in repo.formats" :key="fmt" class="repo-fmt-badge">[[ fmt ]]</span>
@@ -248,8 +282,8 @@ const RepoSelectionTable = {
                 <div class="spinner-border spinner-border-sm"></div>
             </div>
             <div v-else-if="repos.length === 0" class="dt-empty">
-                <div class="dt-empty-icon"><i class="fa-brands fa-github"></i></div>
-                <p class="dt-empty-text">No GitHub-sourced repositories found.</p>
+                <div class="dt-empty-icon"><i class="fa-brands fa-git-alt"></i></div>
+                <p class="dt-empty-text">No imported git repositories found.</p>
             </div>
         </div>
 
@@ -266,13 +300,15 @@ const RepoSelectionTable = {
                             <th class="dt-th">Repository</th>
                             <th class="dt-th text-center">Auto-accept updates</th>
                             <th class="dt-th text-center">Auto-add new rules</th>
-                            <th class="dt-th text-center">Non-GitHub</th>
+                            <th class="dt-th text-center">Host</th>
                             <th class="dt-th dt-th--checkbox"></th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr v-for="item in manuallySelectedRepos" :key="item.url" class="dt-row">
-                            <td class="dt-td dt-td--truncate" style="max-width:320px;" :title="item.url">[[ item.url ]]</td>
+                            <td class="dt-td dt-td--truncate" style="max-width:320px;" :title="item.url">
+                                <i :class="gitProviderIcon(item.url, item.git_provider)" class="me-2" style="color:var(--subtle-text-color);"></i>[[ item.url ]]
+                            </td>
                             <td class="dt-td text-center">
                                 <input type="checkbox" class="dt-checkbox" :checked="repoSetting(item.url, 'auto_accept_update')"
                                     @change="updateRepoSetting(item.url, 'auto_accept_update', $event.target.checked)">
@@ -282,9 +318,9 @@ const RepoSelectionTable = {
                                     @change="updateRepoSetting(item.url, 'auto_add_new_rule', $event.target.checked)">
                             </td>
                             <td class="dt-td text-center">
-                                <input type="checkbox" class="dt-checkbox" :checked="repoSetting(item.url, 'is_generic_source')"
-                                    title="This repo isn't hosted on GitHub — skip GitHub API calls when syncing it"
-                                    @change="updateRepoSetting(item.url, 'is_generic_source', $event.target.checked)">
+                                <span class="small text-muted" :title="'Hosted on ' + gitProviderLabel(item.url, item.git_provider) + ' — detected from the URL'">
+                                    <i :class="gitProviderIcon(item.url, item.git_provider)" class="me-1"></i>[[ gitProviderLabel(item.url, item.git_provider) ]]
+                                </span>
                             </td>
                             <td class="dt-td text-center">
                                 <button class="dt-action-btn dt-action-btn--danger" @click="updateSelection(item.url, false)" title="Remove">

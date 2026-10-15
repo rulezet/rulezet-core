@@ -9,7 +9,9 @@ a nonexistent class and the icon disappears).
 import uuid
 
 from app import db
-from app.core.db_class.db import BackgroundJob, Tag, User
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.tag import Tag
+from app.core.db_class.user import User
 from app.features.jobs.job_handlers import handle_import_all_taxonomies, handle_import_all_galaxies
 from app.features.tags import tags_core
 

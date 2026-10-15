@@ -10,7 +10,9 @@ import uuid
 import pytest
 
 from app import db
-from app.core.db_class.db import Bundle, Rule, User
+from app.core.db_class.bundle import Bundle
+from app.core.db_class.rule import Rule
+from app.core.db_class.user import User
 
 #  ".test" is an RFC 2606 reserved TLD — WTForms' Email() validator rejects
 #  it outright, so this mirrors the codebase's own throwaway-domain style

@@ -1,0 +1,13 @@
+{
+  "label": "Git host icons",
+  "category": "Git sources",
+  "description": "Font Awesome class shown for each provider (server-rendered pages, logs, notifications).",
+  "public": true,
+  "value": {
+    "github": "fa-brands fa-github",
+    "gitlab": "fa-brands fa-gitlab",
+    "gitea": "fa-solid fa-mug-hot",
+    "bitbucket": "fa-brands fa-bitbucket",
+    "generic": "fa-brands fa-git-alt"
+  }
+}

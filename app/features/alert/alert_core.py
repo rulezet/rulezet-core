@@ -52,10 +52,14 @@ from sqlalchemy import and_, func, or_
 
 from app import db
 from app.core.utils.activity_log import log_activity
-from app.core.db_class.db import (
-    Alert, AlertMatch, AlertSweepState, Bundle, BundleTagAssociation, Notification,
-    Rule, RuleAttackAssociation, RuleTagAssociation, Tag, User,
-)
+from app.features.rule.rule_format.utils_format.git_provider import is_git_repo_url
+from app.core.db_class.alert import Alert, AlertMatch, AlertSweepState
+from app.core.db_class.attack import RuleAttackAssociation
+from app.core.db_class.bundle import Bundle
+from app.core.db_class.notification import Notification
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import BundleTagAssociation, RuleTagAssociation, Tag
+from app.core.db_class.user import User
 
 # ─── Limits ──────────────────────────────────────────────────────────────────
 
@@ -114,9 +118,12 @@ def _clean_keyword(value):
 
 
 def _clean_repo(value):
-    """Accepts owner/repo or a full GitHub URL; stored as lowercase owner/repo."""
+    """Accepts owner/repo (group/sub/repo on GitLab) or a full repository URL
+    on any git host; stored as the lowercase path, which matches that repo
+    whatever its host."""
     value = value.lower().rstrip('/')
-    value = re.sub(r'^(https?://)?(www\.)?github\.com/', '', value)
+    value = re.sub(r'^https?://[^/]+/', '', value)
+    value = re.sub(r'^(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)+/', '', value)  # host without scheme
     value = re.sub(r'\.git$', '', value)
     return value
 
@@ -132,7 +139,7 @@ def normalize_criteria(raw) -> dict:
         'formats':      _clean_list(raw.get('formats'), str.lower),
         'users':        [],
         'github_repos': _clean_list(raw.get('github_repos'), _clean_repo,
-                                    lambda v: re.match(r'^[a-z0-9_.-]+/[a-z0-9_.-]+$', v)),
+                                    lambda v: re.match(r'^[a-z0-9_.-]+(/[a-z0-9_.-]+)+$', v)),
     }
     for flag in CRITERIA_ANY_FLAGS:
         criteria[flag] = bool(raw.get(flag))
@@ -254,7 +261,7 @@ def _criteria_search_values(criteria) -> list:
     values = [str(v).lower() for field in CRITERIA_LIST_FIELDS if field != 'users'
               for v in criteria.get(field) or []]
     labels = {'cve_any': 'any cve', 'tag_any': 'any tag', 'attack_any': 'any att&ck technique',
-              'github_any': 'any github import'}
+              'github_any': 'any git import'}
     values += [label for flag, label in labels.items() if criteria.get(flag)]
     return values
 
@@ -402,7 +409,8 @@ def _rule_conditions(criteria, viewer_id=None) -> list:
     if criteria.get('github_repos'):
         conds.append(or_(*[Rule.source.ilike(f'%{r}%') for r in criteria['github_repos']]))
     if criteria.get('github_any'):
-        conds.append(or_(Rule.github_path.isnot(None), Rule.source.ilike('%github.com/%')))
+        from app.features.rule.github_repo_core import git_source_filter
+        conds.append(or_(Rule.github_path.isnot(None), git_source_filter()))
     return conds
 
 
@@ -522,8 +530,8 @@ def _matched_on_rules(criteria, rule_ids, viewer_id=None) -> dict:
         if owner in (criteria.get('users') or []):
             r.append(f'user:{owner}')
         r += [f'repo:{repo}' for repo in criteria.get('github_repos') or [] if repo in (source or '').lower()]
-        if criteria.get('github_any') and (github_path or 'github.com/' in (source or '').lower()):
-            r.append('github')
+        if criteria.get('github_any') and (github_path or is_git_repo_url(source)):
+            r.append('git')
     return reasons
 
 
@@ -895,7 +903,7 @@ def read_unsubscribe_token(token):
 
 
 def _public_base_url():
-    from app.core.db_class.db import InstanceConfig
+    from app.core.db_class.connector import InstanceConfig
     cfg = InstanceConfig.query.first()
     base = (current_app.config.get('INSTANCE_PUBLIC_URL') or (cfg.public_url if cfg else None)
             or f"http://{current_app.config.get('FLASK_URL', '127.0.0.1')}:{current_app.config.get('FLASK_PORT', 7009)}")
@@ -912,7 +920,7 @@ def _email_is_due(alert, now, last_user_email):
 
 
 def _emails_sent_since(since, user_id=None) -> int:
-    from app.core.db_class.db import AlertEmailLog
+    from app.core.db_class.alert import AlertEmailLog
     q = db.session.query(func.count(AlertEmailLog.id)).filter(AlertEmailLog.sent_at >= since)
     if user_id is not None:
         q = q.filter(AlertEmailLog.user_id == user_id)
@@ -985,7 +993,7 @@ def _send_alert_email(user, alerts, now):
     """True when sent, False when there was nothing to send, None on SMTP failure."""
     from flask_mail import Message
     from app import mail
-    from app.core.db_class.db import AlertEmailLog
+    from app.core.db_class.alert import AlertEmailLog
 
     base = _public_base_url()
     # Keep the email short: EMAIL_MAX_ITEMS items across every alert, filled

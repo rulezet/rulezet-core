@@ -8,7 +8,9 @@ rule they don't own — only a tag_ids-only payload is allowed through.
 import uuid
 
 from app import db
-from app.core.db_class.db import Rule, RuleTagAssociation, Tag, User
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import RuleTagAssociation, Tag
+from app.core.db_class.user import User
 from app.features.roles import roles_core
 
 

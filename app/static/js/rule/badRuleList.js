@@ -46,6 +46,7 @@ import PaginationComponent from '/static/js/rule/paginationComponent.js'
 import CodeViewer from '/static/js/components/code-viewer.js'
 import UserChip from '/static/js/components/UserChip.js'
 import { create_message } from '/static/js/toaster.js'
+import { gitProviderIcon } from '/static/js/components/git-links.js'
 
 const { ref, reactive, computed, onMounted, watch } = Vue
 
@@ -370,6 +371,7 @@ export default {
         })
 
         return {
+            gitProviderIcon,
             items, loading, currentPage, totalPages, totalRules, viewMode, expandedIds,
             filtersOpen, perPage,
             isSelectable, selectedIds, isSelected, toggleItem, allOnPageSelected, someOnPageSelected,
@@ -554,7 +556,7 @@ export default {
                         <i class="fas fa-link"></i><span>{{ rule.url || '—' }}</span>
                     </span>
                     <span v-if="rule.github_path" class="rl-meta-item" :title="rule.github_path">
-                        <i class="fa-brands fa-github"></i><span>{{ rule.github_path }}</span>
+                        <i :class="gitProviderIcon(rule.url, rule.git_provider)"></i><span>{{ rule.github_path }}</span>
                     </span>
                 </div>
                 <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-auto">

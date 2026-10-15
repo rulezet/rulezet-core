@@ -3,6 +3,7 @@ import GithubFilter from '/static/js/rule/github/githubFilter.js';
 import GithubActionModal from '/static/js/rule/github/githubActionModal.js';
 import JobTracker from '/static/js/jobs/JobTracker.js';
 import { message_list, create_message } from '/static/js/toaster.js'
+import { repoTreeUrl as gitTreeUrl, gitProviderIcon, gitProviderLabel } from '/static/js/components/git-links.js'
 
 // Columns hidden behind the column-picker (same pattern as ruleList.js) —
 // URL/Rules/Actions stay always visible, everything else is optional.
@@ -138,6 +139,8 @@ const GitHubSelectionTable = {
         document.removeEventListener('click', this.handleColPickerOutsideClick);
     },
     methods: {
+        gitProviderIcon,
+        gitProviderLabel,
         setSort(key) {
             if (this.sortKey === key) {
                 this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
@@ -219,7 +222,7 @@ const GitHubSelectionTable = {
 
         repoTreeUrl(item) {
             if (!item || !item.url) return item ? item.url : '';
-            return item.branch ? item.url.replace(/\.git$/, '') + '/tree/' + item.branch : item.url;
+            return item.branch ? gitTreeUrl(item.url, item.branch) : item.url;
         },
 
         toggleRow(key) {
@@ -467,12 +470,12 @@ const GitHubSelectionTable = {
             @loading="val => loading = val">
             <template #toolbar-extra>
                 <button v-if="isAdmin" class="dt-toolbar-btn" :disabled="resyncing"
-                        @click="resyncGithubRepos" title="Full recompute of the GitHub repo registry from current rule data">
+                        @click="resyncGithubRepos" title="Full recompute of the git repository registry from current rule data">
                     <i class="fas fa-rotate" :class="{ 'fa-spin': resyncing }"></i>
                     <span>[[ resyncing ? 'Resyncing…' : 'Resync' ]]</span>
                 </button>
                 <button v-if="isAdmin" class="dt-toolbar-btn" :disabled="backfilling"
-                        @click="backfillBranches" title="Backfill missing branch info for older imports, from each repo's real GitHub default branch">
+                        @click="backfillBranches" title="Backfill missing branch info for older imports, from each repo's real default branch (GitHub, GitLab, Gitea…)">
                     <i class="fas fa-code-branch" :class="{ 'fa-spin': backfilling }"></i>
                     <span>[[ backfilling ? 'Starting…' : 'Backfill branches' ]]</span>
                 </button>
@@ -596,10 +599,10 @@ const GitHubSelectionTable = {
                             </td>
                             <td class="dt-td">
                                 <div v-if="!isRepoGroupContinuation(index)" class="d-flex align-items-center">
-                                    <div class="bg-light rounded p-2 me-3 flex-shrink-0">
-                                        <i class="fab fa-github fa-lg"></i>
+                                    <div class="ghst-icon-box rounded p-2 me-3 flex-shrink-0" :title="gitProviderLabel(item.url, item.git_provider)">
+                                        <i :class="gitProviderIcon(item.url, item.git_provider)" class="fa-lg"></i>
                                     </div>
-                                    <div class="fw-bold text-dark" style="white-space:nowrap;">
+                                    <div class="fw-bold" style="white-space:nowrap;color:var(--text-color);">
                                         [[ item.url ]]
                                         <span v-if="isRepoGroupStart(index)"
                                               class="badge bg-primary-soft text-primary rounded-pill ms-1"
@@ -627,7 +630,7 @@ const GitHubSelectionTable = {
                             </td>
                             <td v-show="colVisible.branches" class="dt-td">
                                 <span v-if="item.branch"
-                                      class="badge bg-light text-muted fw-normal border-0"
+                                      class="badge ghst-chip fw-normal border-0"
                                       style="font-size:.7rem;"
                                       :title="item.branches.length > 1 ? 'This repo has rules from ' + item.branches.length + ' branches — this row is just ' + item.branch : 'Rules from this repo were imported from this branch'">
                                     <i class="fas fa-code-branch me-1" style="font-size:.65rem;"></i>[[ item.branch ]]
@@ -636,16 +639,16 @@ const GitHubSelectionTable = {
                             </td>
                             <td v-show="colVisible.license" class="dt-td" @click.stop>
                                 <span v-for="lic in (item.licensesExpanded ? item.licenses : (item.licenses || []).slice(0, 10))" :key="lic"
-                                      class="badge bg-light text-muted fw-normal border-0 me-1"
+                                      class="badge ghst-chip fw-normal border-0 me-1"
                                       style="font-size:.7rem;">[[ lic ]]</span>
                                 <button v-if="item.licenses && item.licenses.length > 10 && !item.licensesExpanded"
-                                        class="badge bg-light text-muted fw-normal border-0"
+                                        class="badge ghst-chip fw-normal border-0"
                                         style="font-size:.7rem;cursor:pointer;"
                                         @click="item.licensesExpanded = true">
                                     +[[ item.licenses.length - 10 ]]
                                 </button>
                                 <button v-else-if="item.licenses && item.licenses.length > 10"
-                                        class="badge bg-light text-muted fw-normal border-0"
+                                        class="badge ghst-chip fw-normal border-0"
                                         style="font-size:.7rem;cursor:pointer;"
                                         @click="item.licensesExpanded = false">
                                     <i class="fas fa-angle-up"></i>
@@ -687,7 +690,7 @@ const GitHubSelectionTable = {
                                                     <div class="text-danger mb-3">
                                                         <i class="fas fa-exclamation-triangle fa-3x"></i>
                                                     </div>
-                                                    <p class="mb-0 text-dark">
+                                                    <p class="mb-0 ghst-text">
                                                         Delete all rules for:<br>
                                                         <strong class="text-break">[[ item.url ]]</strong>?
                                                     </p>
@@ -779,7 +782,7 @@ const GitHubSelectionTable = {
                                                            style="font-size:0.7rem">Detected Formats</small>
                                                     <div class="d-flex flex-wrap gap-1">
                                                         <span v-for="fmt in item.formats" :key="fmt"
-                                                              class="badge border text-dark fw-normal">
+                                                              class="badge border ghst-text fw-normal">
                                                             [[ fmt ]]
                                                         </span>
                                                         <span v-if="!item.formats.length"
@@ -790,7 +793,7 @@ const GitHubSelectionTable = {
                                                     <div class="d-flex flex-wrap gap-1">
                                                         <span v-for="br in item.branches" :key="br"
                                                               class="badge fw-normal"
-                                                              :class="br === item.branch ? 'bg-primary text-white' : 'border text-dark'"
+                                                              :class="br === item.branch ? 'bg-primary text-white' : 'border ghst-text'"
                                                               :title="br === item.branch ? 'This row' : ''">
                                                             <i class="fas fa-code-branch me-1" style="font-size:.6rem;"></i>[[ br ]]
                                                         </span>
@@ -815,7 +818,7 @@ const GitHubSelectionTable = {
                                                            style="font-size:0.7rem">Repository Link</small>
                                                     <a :href="repoTreeUrl(item)" target="_blank"
                                                        class="btn btn-sm btn-outline-dark w-100 text-truncate">
-                                                        <i class="fab fa-github me-2"></i>Open on GitHub
+                                                        <i :class="gitProviderIcon(item.url, item.git_provider)" class="me-2"></i>Open on [[ gitProviderLabel(item.url, item.git_provider) ]]
                                                     </a>
                                                 </div>
                                             </div>
@@ -858,7 +861,7 @@ const GitHubSelectionTable = {
                                                             <span class="badge rounded-pill"
                                                                   :class="item.last_import.bad_rules > 0
                                                                       ? 'bg-danger text-white'
-                                                                      : 'bg-light text-muted px-3'">
+                                                                      : 'ghst-chip px-3'">
                                                                 [[ item.last_import.bad_rules ]]
                                                             </span>
                                                         </div>
@@ -926,7 +929,7 @@ const GitHubSelectionTable = {
 
             <div v-if="githubUrls.length === 0 && !loading" class="dt-empty">
                 <i class="fas fa-search dt-empty-icon"></i>
-                <p class="dt-empty-text">No GitHub URLs found matching your search.</p>
+                <p class="dt-empty-text">No repositories found matching your search.</p>
             </div>
         </div>
 

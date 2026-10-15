@@ -6,11 +6,12 @@ import uuid as uuid_module
 from sqlalchemy import or_
 
 from ... import db
-from ...core.db_class.db import (
-    BlogPost, BlogPostTagAssociation, BlogPostRuleAssociation,
-    BlogPostBundleAssociation, BlogPostAttackAssociation, Tag,
-    purge_unified_comments,
+from app.core.db_class.blog import (
+    BlogPost, BlogPostAttackAssociation, BlogPostBundleAssociation, BlogPostRuleAssociation,
+    BlogPostTagAssociation,
 )
+from app.core.db_class.comment import purge_unified_comments
+from app.core.db_class.tag import Tag
 
 
 # ── Slug helpers ───────────────────────────────────────────────────────────────
@@ -266,7 +267,8 @@ def export_post_json(post: BlogPost, base_url: str) -> dict:
     Rule/bundle associations are included as reference objects (uuid + label)
     so a receiving instance can match them if the same content exists.
     """
-    from ...core.db_class.db import Rule, Bundle
+    from app.core.db_class.bundle import Bundle
+    from app.core.db_class.rule import Rule
 
     base = base_url.rstrip('/')
 

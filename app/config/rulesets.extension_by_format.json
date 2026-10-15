@@ -1,0 +1,21 @@
+{
+  "label": "File extension per format",
+  "category": "Rulesets mirror",
+  "description": "Extension of the rule file written in the mirror repository, per format.",
+  "public": false,
+  "value": {
+    "yara": "yar",
+    "sigma": "yml",
+    "suricata": "rules",
+    "zeek": "zeek",
+    "wazuh": "xml",
+    "nse": "nse",
+    "crs": "conf",
+    "nova": "nov",
+    "splunk": "yml",
+    "elastic": "toml",
+    "kql": "kql",
+    "atr": "toml",
+    "plum": "yaml"
+  }
+}

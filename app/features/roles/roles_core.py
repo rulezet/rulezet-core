@@ -4,7 +4,8 @@ import datetime
 from sqlalchemy import or_
 
 from app import db
-from app.core.db_class.db import Permission, Role, RolePermission, UserRole, User
+from app.core.db_class.role import Permission, Role, RolePermission, UserRole
+from app.core.db_class.user import User
 
 
 # ─── Permission catalog ──────────────────────────────────────────────────────
@@ -34,8 +35,8 @@ DEFAULT_PERMISSIONS = [
     },
     {
         "key": "github.manage",
-        "label": "Manage GitHub imports",
-        "description": "Import/update/sync GitHub repos, decide import proposals, "
+        "label": "Manage Git imports",
+        "description": "Import/update/sync git repositories (GitHub, GitLab, Gitea…), manage the Rulesets mirrors, decide import proposals, "
                         "and manage bad rules from any source.",
     },
 ]
@@ -61,8 +62,10 @@ DEFAULT_ROLES = [
         "permission_keys": ["ai.use"],
     },
     {
-        "name": "GitHub Manager",
-        "description": "Full control over GitHub import/update/sync and proposals, "
+        "name": "Git Manager",
+        # Renamed in place on startup — same role, same members.
+        "legacy_names": ["GitHub Manager"],
+        "description": "Full control over Git import/update/sync (GitHub, GitLab, Gitea…), the Rulesets mirrors and proposals, "
                         "plus access to all bad rules.",
         "permission_keys": ["github.manage"],
     },
@@ -73,7 +76,10 @@ def seed_default_permissions_and_roles():
     """Idempotent — safe to call on every app startup (see app/__init__.py)."""
     for perm in DEFAULT_PERMISSIONS:
         existing = Permission.query.filter_by(key=perm["key"]).first()
-        if not existing:
+        if existing:
+            existing.label = perm["label"]
+            existing.description = perm["description"]
+        else:
             db.session.add(Permission(
                 uuid=str(uuid_mod.uuid4()),
                 key=perm["key"],
@@ -84,6 +90,13 @@ def seed_default_permissions_and_roles():
 
     for role_def in DEFAULT_ROLES:
         role = Role.query.filter_by(name=role_def["name"]).first()
+        for old_name in role_def.get("legacy_names", []):
+            old = Role.query.filter_by(name=old_name).first()
+            if old and not role:
+                old.name = role_def["name"]
+                old.description = role_def["description"]
+                db.session.commit()
+                role = old
         if not role:
             role = Role(
                 uuid=str(uuid_mod.uuid4()),

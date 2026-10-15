@@ -1,0 +1,83 @@
+/* Starfield admin panel (templates/starfield.html, admins only). */
+.sfa {
+    max-width: 1280px;
+    margin: 1.5rem auto 3rem;
+    padding: 1.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, .06);
+}
+.sfa-head { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.25rem; }
+.sfa-head__icon {
+    display: grid; place-items: center; width: 46px; height: 46px; flex-shrink: 0;
+    border-radius: 12px; background: rgba(13, 110, 253, .1); color: #0d6efd; font-size: 1.2rem;
+}
+.sfa-title { margin: 0; font-size: 1.2rem; font-weight: 700; }
+.sfa-badge {
+    margin-left: .4rem; padding: .1rem .5rem; border-radius: 999px; vertical-align: middle;
+    background: rgba(220, 53, 69, .1); color: #dc3545; font-size: .65rem; font-weight: 700; text-transform: uppercase;
+}
+.sfa-sub { margin: .15rem 0 0; font-size: .82rem; color: var(--subtle-text-color); }
+.sfa-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; margin-bottom: 1.25rem; }
+.sfa-stat { padding: .75rem 1rem; border-radius: 10px; background: var(--light-bg-color); }
+.sfa-stat__v { display: block; font-size: 1.35rem; font-weight: 700; }
+.sfa-stat__l { font-size: .75rem; color: var(--subtle-text-color); }
+.sfa-check { display: inline-flex; align-items: center; gap: .4rem; font-size: .84rem; color: var(--subtle-text-color); }
+.sfa-row { cursor: pointer; }
+.sfa-anon { margin-left: .4rem; font-size: .7rem; color: var(--subtle-text-color); }
+.sfa-star { color: #f5b301; }
+.sfa-ship { padding: .12rem .55rem; border-radius: 999px; font-size: .72rem; font-weight: 600; background: var(--light-bg-color); }
+.sfa-ship--yara     { background: rgba(110, 168, 255, .15); color: #3d7fe0; }
+.sfa-ship--suricata { background: rgba(255, 122, 92, .15);  color: #e0603f; }
+.sfa-ship--sigma    { background: rgba(75, 224, 138, .15);  color: #239b5c; }
+.sfa-ship--zeek     { background: rgba(160, 107, 255, .15); color: #7d4ce0; }
+
+.sfa-player { display: flex; align-items: center; gap: .9rem; margin-bottom: 1rem; }
+.sfa-player > i { font-size: 1.6rem; color: #0d6efd; }
+.sfa-player__name { font-size: 1.1rem; font-weight: 700; }
+.sfa-section {
+    margin: 1.25rem 0 .6rem; font-size: .72rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .05em; color: var(--subtle-text-color);
+}
+
+/* Campaign map: 5 worlds × 6 levels */
+.sfa-map { display: grid; gap: .5rem; }
+.sfa-world { display: grid; grid-template-columns: 80px repeat(6, minmax(0, 1fr)); gap: .4rem; align-items: stretch; }
+.sfa-world__name { display: flex; align-items: center; font-size: .78rem; font-weight: 600; color: var(--subtle-text-color); }
+.sfa-cell {
+    display: flex; flex-direction: column; align-items: center; gap: .1rem;
+    padding: .4rem .25rem; border: 1px solid var(--border-color); border-radius: 8px; font-size: .72rem;
+}
+.sfa-cell__lvl { font-weight: 700; }
+.sfa-cell__score { color: var(--subtle-text-color); }
+.sfa-cell__stars i { font-size: .62rem; color: var(--border-color); }
+.sfa-cell__stars i.on { color: #f5b301; }
+.sfa-cell--none { opacity: .45; border-style: dashed; }
+.sfa-cell--lost { background: rgba(220, 53, 69, .06); border-color: rgba(220, 53, 69, .25); }
+.sfa-cell--won  { background: rgba(25, 135, 84, .06); border-color: rgba(25, 135, 84, .3); }
+.sfa-cell--s3   { background: rgba(245, 179, 1, .1); border-color: rgba(245, 179, 1, .45); }
+@media (max-width: 768px) {
+    .sfa-world { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .sfa-world__name { grid-column: 1 / -1; }
+}
+
+/* Runs */
+.sfa-kind { margin-left: .35rem; padding: .05rem .4rem; border-radius: 6px; background: var(--light-bg-color); font-size: .68rem; color: var(--subtle-text-color); }
+.sfa-res { font-size: .75rem; font-weight: 700; }
+.sfa-res--won  { color: #198754; }
+.sfa-res--lost { color: #dc3545; }
+.sfa-mini { font-size: .62rem; color: var(--border-color); }
+.sfa-mini.on { color: #f5b301; }
+.sfa-chev { font-size: .7rem; color: var(--subtle-text-color); transition: transform .15s; }
+.sfa-chev.open { transform: rotate(180deg); }
+.sfa-detail-row td { padding: 0 .75rem 1rem; border-top: 0; background: var(--light-bg-color); }
+.sfa-detail { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .75rem; padding-top: .5rem; }
+.sfa-box { padding: .75rem .9rem; border: 1px solid var(--border-color); border-radius: 10px; background: var(--card-bg-color); font-size: .8rem; line-height: 1.6; }
+.sfa-box__t { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--subtle-text-color); margin-bottom: .25rem; }
+.sfa-chips { display: flex; flex-wrap: wrap; gap: .3rem; }
+.sfa-chip { padding: .08rem .5rem; border-radius: 999px; background: var(--light-bg-color); font-size: .72rem; }
+.sfa-crit { list-style: none; margin: .4rem 0 0; padding: 0; }
+.sfa-crit .ok { color: #198754; }
+.sfa-crit .ko { color: #dc3545; }

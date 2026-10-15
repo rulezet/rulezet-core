@@ -157,7 +157,7 @@ def library_references(root, rel):
     """Where a library image is used: code files mentioning its path (or, in
     Python, its quoted file name — e.g. the formats catalog), and blog posts
     using it as their cover."""
-    from app.core.db_class.db import BlogPost
+    from app.core.db_class.blog import BlogPost
     static_path = f'{LIBRARY_ROOTS[root][1][-1]}/{rel}'          # images/formats/yara.png
     name = os.path.basename(rel)
     quoted = (f'"{name}"', f"'{name}'")
@@ -363,7 +363,7 @@ def _remove_from_library(root, rel):
 def rename_library(root, rel, new_name):
     """Rename a library image (same folder, same extension). Blog covers that
     used it follow; code references are the caller's to update (listed)."""
-    from app.core.db_class.db import BlogPost
+    from app.core.db_class.blog import BlogPost
     rel = _check_rel(root, rel)
     path = resolve_library(root, rel)
     if not path:
@@ -393,7 +393,7 @@ def rename_library(root, rel, new_name):
 
 def delete_library(root, rel):
     """Delete a library image. Blog covers that used it are cleared."""
-    from app.core.db_class.db import BlogPost
+    from app.core.db_class.blog import BlogPost
     rel = _check_rel(root, rel)
     if not resolve_library(root, rel):
         raise ValueError('File not found.')
@@ -448,7 +448,10 @@ def save_processed_library(root, rel, png, mode, name=None):
 
 def _owners(category):
     """filename / relative path -> what it belongs to, for one category."""
-    from app.core.db_class.db import User, BlogPost, BlogPostFile, Workspace, WorkspaceFile, PivotickBackground
+    from app.core.db_class.blog import BlogPost, BlogPostFile
+    from app.core.db_class.pivotick import PivotickBackground
+    from app.core.db_class.user import User
+    from app.core.db_class.workspace import Workspace, WorkspaceFile
     owners = {}
     if category == 'avatars':
         for u in User.query.filter(User.profile_picture.isnot(None)).all():
@@ -497,7 +500,10 @@ def list_uploads():
 
 def delete_upload(category, rel):
     """Delete an uploaded file and what points at it in the database."""
-    from app.core.db_class.db import User, BlogPost, BlogPostFile, Workspace, WorkspaceFile, PivotickBackground
+    from app.core.db_class.blog import BlogPost, BlogPostFile
+    from app.core.db_class.pivotick import PivotickBackground
+    from app.core.db_class.user import User
+    from app.core.db_class.workspace import Workspace, WorkspaceFile
     path = safe_path(upload_dir(category), rel)
     if category == 'avatars':
         for u in User.query.filter_by(profile_picture=rel).all():

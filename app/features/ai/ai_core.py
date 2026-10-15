@@ -27,6 +27,7 @@ import requests as http_requests
 from flask import current_app
 
 import app.features.ai.agents as _agents_pkg
+from app.core.utils.app_settings import setting
 
 
 # ─── Exceptions ──────────────────────────────────────────────────────────────
@@ -82,7 +83,7 @@ def _legacy_ollama_settings():
     (set from the AI admin) wins; each empty field falls back to config.py's
     OLLAMA_URL / OLLAMA_MODEL. Only used to seed the first AIProvider (and
     as a fallback while the ai_provider table isn't migrated yet)."""
-    from app.core.db_class.db import InstanceConfig
+    from app.core.db_class.connector import InstanceConfig
 
     cfg = None
     try:
@@ -233,7 +234,7 @@ def _provider_from_row(row):
 def _seed_default_provider():
     """First provider = the Ollama this instance was already using."""
     from app import db
-    from app.core.db_class.db import AIProvider
+    from app.core.db_class.ai import AIProvider
     legacy = _legacy_ollama_settings()
     row = AIProvider(
         uuid=str(uuid_mod.uuid4()), name='Ollama (default)', kind='ollama',
@@ -250,7 +251,7 @@ def get_active_provider():
     call; falls back to the legacy Ollama settings if the table isn't
     migrated yet. Needs an app context."""
     from app import db
-    from app.core.db_class.db import AIProvider
+    from app.core.db_class.ai import AIProvider
     try:
         row = AIProvider.query.filter_by(is_active=True).first()
         if row is None:
@@ -276,19 +277,7 @@ def get_active_provider():
 # its calls (client.usage), run() turns them into a cost and stores it on
 # the AIExecutionLog row. USD per million tokens, Anthropic list prices
 # (Sept 2026); a provider's own price fields override them.
-CLAUDE_PRICES = {
-    'claude-fable-5-1':  (10.0, 50.0),
-    'claude-fable-5':    (10.0, 50.0),
-    'claude-opus-5-5':   (4.0, 20.0),
-    'claude-opus-5':     (5.0, 25.0),
-    'claude-opus-4-8':   (5.0, 25.0),
-    'claude-opus-4-7':   (5.0, 25.0),
-    'claude-opus-4-6':   (5.0, 25.0),
-    'claude-sonnet-5-5': (2.0, 10.0),
-    'claude-sonnet-5':   (2.0, 10.0),
-    'claude-sonnet-4-6': (3.0, 15.0),
-    'claude-haiku-4-5':  (1.0, 5.0),
-}
+CLAUDE_PRICES = setting('ai.claude_prices')  # app/config/ai.claude_prices.json
 
 
 def price_for(provider, model):
@@ -326,7 +315,7 @@ def month_spend(provider_id):
     """This calendar month (UTC): {'spent', 'calls', 'input_tokens', 'output_tokens'}."""
     from sqlalchemy import func
     from app import db
-    from app.core.db_class.db import AIExecutionLog
+    from app.core.db_class.ai import AIExecutionLog
     now = datetime.datetime.now(datetime.timezone.utc)
     start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     spent, calls, tok_in, tok_out = db.session.query(
@@ -1028,7 +1017,7 @@ def check_rate_limit(user_id, agent_key, max_per_hour):
     max_per_hour=None and are governed by the concurrency slot instead."""
     if max_per_hour is None or not user_id:
         return True
-    from app.core.db_class.db import AIExecutionLog
+    from app.core.db_class.ai import AIExecutionLog
     cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
     count = AIExecutionLog.query.filter(
         AIExecutionLog.user_id == user_id,
@@ -1121,7 +1110,7 @@ class AIAgent(ABC):
         or empty.
         """
         from app import db
-        from app.core.db_class.db import AIAgentConfig, AIExecutionLog
+        from app.core.db_class.ai import AIAgentConfig, AIExecutionLog
 
         started = time.monotonic()
         agent_config = AIAgentConfig.query.filter_by(agent_key=self.config_key).first()

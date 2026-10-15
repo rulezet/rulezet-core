@@ -10,7 +10,7 @@ from the submitter, never from the pasted JSON.
 """
 import json
 
-from app.core.db_class.db import Rule
+from app.core.db_class.rule import Rule
 
 VALID_PAYLOAD = {
     "title": "JSON Import Test Rule",
@@ -78,7 +78,7 @@ def test_user_id_is_forced_to_submitter_not_spoofable(client, app):
         rule = Rule.query.filter_by(title=VALID_PAYLOAD["title"]).first()
         assert rule is not None
         assert rule.user_id != 999999
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         t = User.query.filter_by(email="t@t.t").first()
         assert rule.user_id == t.id
 
@@ -192,7 +192,7 @@ def test_admin_can_also_import(client, app):
     import_json(client, payload)
 
     with app.app_context():
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
         admin = User.query.filter_by(email="admin@admin.admin").first()
         rule = Rule.query.filter_by(title="Admin Imported Rule").first()
         assert rule is not None

@@ -50,8 +50,12 @@ import requests
 from git import Repo, GitCommandError
 
 from app import db
-from app.core.db_class.db import ActivityLog, Rule, RuleMirrorConfig
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.git import RuleMirrorConfig
+from app.core.db_class.rule import Rule
 from app.core.utils.activity_log import log_activity
+from app.features.rule.rule_format.utils_format import git_provider
+from app.core.utils.app_settings import setting
 
 # One dirname() short of the repo root would land this under app/data/
 # instead of the top-level data/ used by every other regenerable-mirror
@@ -64,12 +68,7 @@ LOCAL_REPO_ROOT = os.path.join(ROOT_DIR, 'data', 'rule_mirror_repo')
 # Cosmetic only (so a plain `git clone` gets working syntax highlighting) —
 # never used for anything that affects correctness. Formats not listed here
 # fall back to '.txt'.
-_EXTENSION_BY_FORMAT = {
-    'yara': 'yar', 'sigma': 'yml', 'suricata': 'rules', 'zeek': 'zeek',
-    'wazuh': 'xml', 'nse': 'nse', 'crs': 'conf', 'nova': 'nov',
-    'splunk': 'yml', 'elastic': 'toml', 'kql': 'kql', 'atr': 'toml',
-    'plum': 'yaml',
-}
+_EXTENSION_BY_FORMAT = setting('rulesets.extension_by_format')  # app/config/rulesets.extension_by_format.json
 
 # Loose allow-list for the license_verified flag in metadata.yaml — not a
 # gate on whether a rule gets mirrored (everything active/public does),
@@ -158,7 +157,7 @@ def _find_existing_rule_dir(base_path: str, rule) -> str:
 
 
 def _public_url_for(rule) -> str:
-    from app.core.db_class.db import InstanceConfig
+    from app.core.db_class.connector import InstanceConfig
     cfg = InstanceConfig.query.first()
     base = (cfg.public_url if cfg and cfg.public_url else 'https://rulezet.org').rstrip('/')
     return f"{base}/rule/detail_rule/{rule.id}"
@@ -444,7 +443,7 @@ def delete_config(config: RuleMirrorConfig) -> tuple:
     active" and "a sync job active for this config" are the same check in
     practice — simpler and can't miss the sweep case.
     """
-    from app.core.db_class.db import BackgroundJob
+    from app.core.db_class.job import BackgroundJob
     active_sync = BackgroundJob.query.filter(
         BackgroundJob.job_type == 'rule_git_mirror_sync',
         BackgroundJob.status.in_(['pending', 'running']),
@@ -469,7 +468,7 @@ def delete_config(config: RuleMirrorConfig) -> tuple:
 
 
 def get_mirror_github_urls(rule) -> list:
-    """GitHub URL(s) for this rule's own folder in the Rulesets mirror
+    """Web URL(s) — GitHub, GitLab, Gitea… — for this rule's own folder in the Rulesets mirror
     (the "View on GitHub" link on a rule's detail page) — the reverse of
     _rule_relative_dir/_link_file_for, which write the same layout from
     the mirror side.
@@ -508,7 +507,7 @@ def get_mirror_github_urls(rule) -> list:
             continue
         links.append({
             'name': config.name,
-            'url':  f"https://github.com/{slug}/tree/{config.branch}/{rel_dir}",
+            'url':  git_provider.tree_url(config.repo_url, config.branch, rel_dir),
         })
     return links
 
@@ -520,9 +519,9 @@ def _local_repo_dir(config: RuleMirrorConfig) -> str:
 
 
 def _repo_slug(repo_url: str) -> str:
-    """'https://github.com/org/repo(.git)' -> 'org/repo'."""
-    m = re.search(r'github\.com[:/]+([^/]+/[^/.]+)', repo_url or '')
-    return m.group(1) if m else repo_url
+    """'https://<any git host>/org/repo(.git)' -> 'org/repo' (GitLab:
+    'group/sub/repo')."""
+    return git_provider.split_repo_url(repo_url)[1] or repo_url
 
 
 def _ensure_local_repo(config: RuleMirrorConfig) -> Repo:
@@ -538,7 +537,7 @@ def _ensure_local_repo(config: RuleMirrorConfig) -> Repo:
     if os.path.isdir(os.path.join(local_dir, '.git')):
         repo = Repo(local_dir)
     else:
-        plain_url = f"https://github.com/{_repo_slug(config.repo_url)}.git"
+        plain_url = git_provider.plain_remote_url(config.repo_url)
         repo = Repo.init(local_dir, initial_branch=config.branch)
         repo.create_remote('origin', plain_url)
 
@@ -563,14 +562,13 @@ def _set_authenticated_remote(repo: Repo, config: RuleMirrorConfig):
     GitPython's config writer, NOT a `git remote set-url` subprocess call)
     so it never appears as a process argument. Cleared again right after
     use — see _clear_authenticated_remote."""
-    slug = _repo_slug(config.repo_url)
-    authed_url = f"https://x-access-token:{config.github_token}@github.com/{slug}.git"
+    authed_url = git_provider.authed_remote_url(config.repo_url, config.github_token)
     with repo.config_writer() as cw:
         cw.set_value('remote "origin"', 'url', authed_url)
 
 
 def _clear_authenticated_remote(repo: Repo, config: RuleMirrorConfig):
-    plain_url = f"https://github.com/{_repo_slug(config.repo_url)}.git"
+    plain_url = git_provider.plain_remote_url(config.repo_url)
     with repo.config_writer() as cw:
         cw.set_value('remote "origin"', 'url', plain_url)
 
@@ -637,30 +635,11 @@ def test_config(config: RuleMirrorConfig) -> tuple:
 
     slug = _repo_slug(config.repo_url)
     if not slug or '/' not in slug:
-        return _fail("Repository URL doesn't look like a GitHub repo (expected https://github.com/org/repo).")
+        return _fail("Repository URL doesn't look like a git repository (expected https://host/org/repo).")
 
-    try:
-        resp = requests.get(
-            f'https://api.github.com/repos/{slug}',
-            headers={
-                'Authorization': f'Bearer {config.github_token}',
-                'Accept': 'application/vnd.github+json',
-            },
-            timeout=10,
-        )
-    except requests.RequestException as e:
-        return _fail(f"Network error reaching GitHub: {e}")
-
-    if resp.status_code == 401:
-        return _fail("GitHub rejected the token (401 Bad credentials).")
-    if resp.status_code == 404:
-        return _fail(f"Repository '{slug}' not found, or the token can't see it.")
-    if resp.status_code != 200:
-        return _fail(f"GitHub API returned {resp.status_code}.")
-
-    data = resp.json()
-    if not (data.get('permissions') or {}).get('push'):
-        return _fail("Token can see the repository but doesn't have write (push) access to it.")
+    ok, message, _ = git_provider.check_push_access(config.repo_url, config.github_token)
+    if not ok:
+        return _fail(message)
 
     config.is_verified = True
     config.last_error = None
@@ -688,45 +667,28 @@ def get_repo_info(config: RuleMirrorConfig) -> tuple:
 
     slug = _repo_slug(config.repo_url)
     if not slug or '/' not in slug:
-        return False, "Repository URL doesn't look like a GitHub repo (expected https://github.com/org/repo)."
+        return False, "Repository URL doesn't look like a git repository (expected https://host/org/repo)."
 
-    try:
-        resp = requests.get(
-            f'https://api.github.com/repos/{slug}',
-            headers={
-                'Authorization': f'Bearer {config.github_token}',
-                'Accept': 'application/vnd.github+json',
-            },
-            timeout=10,
-        )
-    except requests.RequestException as e:
-        return False, f"Network error reaching GitHub: {e}"
-
-    if resp.status_code == 401:
-        return False, "GitHub rejected the token (401 Bad credentials)."
-    if resp.status_code == 404:
-        return False, f"Repository '{slug}' not found, or the token can't see it."
-    if resp.status_code != 200:
-        return False, f"GitHub API returned {resp.status_code}."
-
-    data = resp.json()
-    license_info = data.get('license') or {}
-    owner = data.get('owner') or {}
+    ok, message, meta = git_provider.check_push_access(config.repo_url, config.github_token)
+    if meta is None:
+        return False, message
     return True, {
-        'full_name':      data.get('full_name', slug),
-        'description':    data.get('description'),
-        'html_url':       data.get('html_url', f'https://github.com/{slug}'),
-        'owner_login':    owner.get('login'),
-        'owner_avatar':   owner.get('avatar_url'),
-        'private':        data.get('private', False),
-        'default_branch': data.get('default_branch'),
-        'pushed_at':      data.get('pushed_at'),
-        'updated_at':     data.get('updated_at'),
-        'size_kb':        data.get('size', 0),
-        'stargazers':     data.get('stargazers_count', 0),
-        'open_issues':    data.get('open_issues_count', 0),
-        'license':        license_info.get('spdx_id') or license_info.get('name'),
-        'has_push_access': bool((data.get('permissions') or {}).get('push')),
+        'provider':       git_provider.detect_provider(config.repo_url),
+        'provider_label': git_provider.PROVIDER_LABELS[git_provider.detect_provider(config.repo_url)],
+        'full_name':      meta.get('full_name') or slug,
+        'description':    meta.get('description'),
+        'html_url':       meta.get('repo_url') or git_provider.normalize_repo_url(config.repo_url),
+        'owner_login':    meta.get('author'),
+        'owner_avatar':   meta.get('author_avatar'),
+        'private':        meta.get('private', False),
+        'default_branch': meta.get('default_branch'),
+        'pushed_at':      meta.get('pushed_at'),
+        'updated_at':     meta.get('updated_at'),
+        'size_kb':        meta.get('size_kb', 0),
+        'stargazers':     meta.get('stars', 0),
+        'open_issues':    meta.get('open_issues', 0),
+        'license':        meta.get('license') or meta.get('license_name'),
+        'has_push_access': bool(meta.get('has_push_access', ok)),
     }
 
 

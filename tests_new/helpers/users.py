@@ -16,7 +16,8 @@ import uuid
 from werkzeug.security import generate_password_hash
 
 from app import db
-from app.core.db_class.db import Permission, Role, RolePermission, User, UserRole
+from app.core.db_class.role import Permission, Role, RolePermission, UserRole
+from app.core.db_class.user import User
 
 ROLES = ("anonymous", "user", "owner", "admin")
 

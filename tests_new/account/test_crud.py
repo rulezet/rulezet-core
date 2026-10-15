@@ -10,7 +10,9 @@ import io
 import pytest
 
 from app import db
-from app.core.db_class.db import Connector, Rule, RuleFavoriteUser, User
+from app.core.db_class.connector import Connector
+from app.core.db_class.rule import Rule, RuleFavoriteUser
+from app.core.db_class.user import User
 from app.features.account import account_core
 from tests_new.helpers.account import (
     NEW_PASSWORD, captured_mails, cookie, drop_cookie, enable_oidc, give_email_change_token, give_reset_token, link_token,

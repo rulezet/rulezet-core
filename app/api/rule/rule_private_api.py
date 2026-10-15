@@ -7,10 +7,10 @@ import json
 from flask_restx import Resource, Namespace
 
 from app.api.utils.rule_validation import *
-from app.core.db_class.db import Rule
+from app.core.db_class.rule import Rule
 
 from app.features.rule.rule_format.main_format import extract_rule_from_repo, verify_syntax_rule_by_format
-from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, delete_existing_repo_folder, generic_repo_metadata, github_repo_metadata, valider_repo_github
+from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, delete_existing_repo_folder, repo_cache_in_use, generic_repo_metadata, github_repo_metadata, valider_repo_github
 from app.core.utils import utils
 from app.core.utils.decorators import api_required
 from app.core.utils.activity_log import log_activity
@@ -364,14 +364,14 @@ class FavoriteRule(Resource):
 @rule_private_ns.route('/import_rules_from_github')
 @rule_private_ns.doc(
     description="""
-Import detection rules of **any supported format** (e.g., YARA, Sigma, Suricata) from a **GitHub repository** into the system.  
+Import detection rules of **any supported format** (e.g., YARA, Sigma, Suricata) from a **git repository** — GitHub, GitLab, Gitea / Forgejo, Bitbucket or any git server — into the system.  
 **Only admin users** are allowed to perform this operation.
 
 ### Query Parameters
 
 | Parameter | Type   | Required | Description |
 |-----------|--------|----------|-------------|
-| url       | string | Yes      | URL of the GitHub repository containing the rules to import. Must be a valid GitHub repository URL. |
+| url       | string | Yes      | URL of the git repository containing the rules to import (any host; private repositories need a token for their host in Manage Git → Git tokens & hosts). |
 | license   | string | Yes      | License to apply to the imported rules (e.g., MIT, GPL). |
 
 ### Headers
@@ -430,14 +430,14 @@ curl -X POST http://127.0.0.1:7009/api/rule/private/import_rules_from_github \
 class ImportRulesFromGithub(Resource):
     @api_required
     @rule_private_ns.doc(params={
-    "url": "Required. URL of the repository to import rules from",
+    "url": "Required. URL of the git repository to import rules from — GitHub, GitLab, Gitea / Forgejo, Bitbucket or any git server (host detected from the URL)",
     "license": "Required. License to apply to the imported rules (e.g., MIT, GPL)",
     "branch": "Optional. Branch to clone (default branch if omitted).",
-    "is_generic_source": "Optional. Set true for a non-GitHub git host (GitLab, Gitea, self-hosted, …) — "
-                          "skips the GitHub REST API checks and uses a plain git clone instead.",
+    "is_generic_source": "Optional, legacy. The host is detected from the URL; true additionally "
+                          "accepts a flat https://host/repo URL (some plain git servers).",
     })
     def post(self):
-        """Import rules of any supported format from a GitHub repository (admin only)"""
+        """Import rules of any supported format from a git repository — GitHub, GitLab, Gitea… (admin only)"""
         user = utils.get_user_from_api(request.headers)
         if not user:
             return {"success": False, "message": "Unauthorized"}, 403
@@ -483,7 +483,8 @@ class ImportRulesFromGithub(Resource):
         if branch:
             info['branch'] = branch
         try:
-            bad_rules, imported, skipped = asyncio.run(extract_rule_from_repo(repo_dir, info , user))
+            with repo_cache_in_use():
+                bad_rules, imported, skipped = asyncio.run(extract_rule_from_repo(repo_dir, info , user))
             delete_existing_repo_folder("Rules_Github")
             log_activity(
                 "github.import_started",

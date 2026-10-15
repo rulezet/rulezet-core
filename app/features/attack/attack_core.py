@@ -16,7 +16,8 @@ import yaml as _yaml
 from pathlib import Path
 
 from ... import db
-from ...core.db_class.db import AttackTechnique, RuleAttackAssociation, Rule
+from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
+from app.core.db_class.rule import Rule
 
 # ── Read ──────────────────────────────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ def get_techniques_for_bundles_batch(bundle_ids: list, max_per_bundle: int = 5) 
     """Return {bundle_id: [technique_json, ...]} for a list of bundle IDs (top N by rule count)."""
     if not bundle_ids:
         return {}
-    from app.core.db_class.db import BundleRuleAssociation
+    from app.core.db_class.bundle import BundleRuleAssociation
 
     br_rows = (
         db.session.query(BundleRuleAssociation.bundle_id, BundleRuleAssociation.rule_id)
@@ -208,7 +209,7 @@ def _refresh_rule_quality_score(rule_id: int) -> None:
     where it's idiomatic), so this needs a full recompute, not just the
     engagement-boost-only refresh used for votes/favorites."""
     try:
-        from app.core.db_class.db import Rule
+        from app.core.db_class.rule import Rule
         from app.features.rule.rule_quality.quality_score_core import recompute_rule_quality_score
         rule = Rule.query.get(rule_id)
         if rule:
@@ -617,7 +618,7 @@ def get_global_coverage() -> dict:
     ATT&CK coverage across ALL active rules (same format as bundle_core.get_attack_coverage).
     Used by the global heatmap page.
     """
-    from app.core.db_class.db import RuleAttackAssociation, AttackTechnique
+    from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
 
     # rule_id -> {id, name, uuid}
     rule_rows = (
@@ -692,7 +693,7 @@ def get_analytics_data() -> dict:
     """
     Admin analytics: top techniques, coverage % per tactic, totals.
     """
-    from app.core.db_class.db import RuleAttackAssociation, AttackTechnique
+    from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
     from sqlalchemy import func, cast, Text
 
     # Top 20 techniques by rule count
@@ -776,7 +777,7 @@ def get_coverage_gaps() -> list:
     Return techniques with 0 rule associations, grouped by tactic.
     Excludes deprecated techniques.
     """
-    from app.core.db_class.db import RuleAttackAssociation, AttackTechnique
+    from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
 
     covered_ids = {
         r.technique_id

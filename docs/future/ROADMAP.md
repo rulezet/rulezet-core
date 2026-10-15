@@ -45,7 +45,37 @@ code to make it lighter, faster and easier to contribute to.
 Done feature by feature, each step shipped on its own, never a big-bang
 rewrite.
 
-## 1. Sightings — "I saw this rule fire"
+## 1. Rule Workbench — a full environment for every rule
+
+**Major rework.** Creating or editing a rule stops being a form: it becomes a
+workspace where the rule is written, tested, scored and shipped without
+leaving the page — one environment per rule.
+
+- **Editor that knows the format** — syntax highlighting, snippets and
+  templates per format, live validation as you type; tags, ATT&CK techniques
+  and CVEs edited alongside the content.
+- **Test as you write** — samples, logs and captures run against the rule in
+  place (rule tester drivers / the Lab); matches, true and false positives
+  shown line by line; test sets saved with the rule and re-run on every change.
+- **An AI companion per rule** — Rulezy drafts, explains, fixes and suggests
+  tests for the rule in front of you, in any format, with the shared
+  "thinking steps" UI.
+- **Live score** — the quality score and its checklist update on every change;
+  duplicates and similar rules spotted before publishing.
+- **Shortcuts to external tools** — CyberChef, VirusTotal, regex101, Sigma
+  converters, the format's documentation, opened with the rule's own strings,
+  hashes and fields.
+- **Draft → test → review → publish** — versions, diff, edit proposals and
+  review from the same place; one click to a bundle, a workspace or a
+  connector once ready.
+
+Replaces today's create and edit pages for every format; the bulk paths (Git
+import, ZIP, JSON, parse) stay as entry points into the workbench. Built on the
+existing pieces (SmartEditor, rule tester drivers, AI agents, quality score,
+history, edit proposals). Shipped in steps: editor and live validation, then
+in-place testing, then the AI companion and the external shortcuts.
+
+## 2. Sightings — "I saw this rule fire"
 
 MISP's sightings, applied to rules. Anyone using a rule reports, in one click
 or through the API:
@@ -66,7 +96,7 @@ button on the rule page, `POST /api/rule/<uuid>/sighting`, aggregates on the
 rule and bundle pages. It is also the lightweight version of the connectors'
 "Learn" level — a sensor agent later posts sightings automatically.
 
-## 2. CVE response kit
+## 3. CVE response kit
 
 When a critical CVE drops, `/cve/CVE-YYYY-NNNN` gathers automatically:
 
@@ -81,14 +111,14 @@ generator, bundles) — what's missing is the page that assembles them. The use
 case where teams need rules *now*; a natural fit with CIRCL's
 Vulnerability-Lookup.
 
-## 3. Connectors per format
+## 4. Connectors per format
 
 See [README.md](README.md) and [connectors/](connectors/). Deliver curated
 bundles / workspaces to the real tools natively, verify on the tool, learn from
 production. First step: a per-bundle Suricata feed
 (`/bundle/<uuid>/feed/suricata.rules`) excluding health-check failures.
 
-## 4. Rulezet Lab
+## 5. Rulezet Lab
 
 See [testing_lab.md](testing_lab.md). Per-format test environments (pcap
 replay, malware and clean corpora, attack logs) run every rule, measure
@@ -96,7 +126,7 @@ detection / false positives / cost, give a Lab score fed into the quality
 score, detect regressions between versions. Supersedes the current Rule
 Tester (deprecated; its format drivers are kept as the Lab's execution layer).
 
-## 5. `rulezet-validate` GitHub Action
+## 6. `rulezet-validate` GitHub Action
 
 Teams keeping rules as code add a GitHub Action: on every pull request, their
 rules are validated with Rulezet's own parsers and health checks (syntax,
@@ -112,7 +142,7 @@ Build: a public validation API (`POST /api/rule/validate` with a batch of
 files) + a small Action repository calling it (or running the parsers in a
 container).
 
-## 6. Coverage gap analysis — "what don't I detect?"
+## 7. Coverage gap analysis — "what don't I detect?"
 
 The user describes their context: sector, threats targeting them (an APT
 group, a MISP event, a threat report), their stack (Windows / Linux, web,
@@ -125,7 +155,7 @@ cloud…). Rulezet maps it onto ATT&CK and the catalog and shows:
 Builds on the ATT&CK matrix and mappings, MISP integration, bundles, the AI
 generator; a workspace could hold the profile.
 
-## 7. Cross-format rule families
+## 8. Cross-format rule families
 
 Link equivalent rules across formats — this Suricata, Sigma and YARA rule
 detect the same threat — into a family, using similarity and linked rules
@@ -133,7 +163,7 @@ detect the same threat — into a family, using similarity and linked rules
 rule shows "also available for Splunk / Elastic / Sentinel". A rule page then
 answers "what do I use in *my* tool?".
 
-## 8. Signed releases and verified publishers
+## 9. Signed releases and verified publishers
 
 Bundle releases signed with the publisher's key; a "verified publisher" badge
 (CIRCL, known vendors, trusted contributors); feeds served with their

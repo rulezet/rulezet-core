@@ -10,7 +10,8 @@ import itertools
 import uuid
 
 from app import db
-from app.core.db_class.db import BackgroundJob, MispServer
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.misp import MispServer
 
 API_KEY = "misp-secret-api-key-0123456789abcdef"
 
@@ -111,7 +112,7 @@ def values(misp_object, relation):
 
 def add_to_bundle(bundle, *rules):
     """Put `rules` in `bundle` (the bundle ↔ rule link the editor creates)."""
-    from app.core.db_class.db import BundleRuleAssociation
+    from app.core.db_class.bundle import BundleRuleAssociation
     for rule in rules:
         db.session.add(BundleRuleAssociation(bundle_id=bundle.id, rule_id=rule.id))
     db.session.commit()

@@ -7,7 +7,8 @@ import uuid
 import pytest
 
 from app import db
-from app.core.db_class.db import Connector, User
+from app.core.db_class.connector import Connector
+from app.core.db_class.user import User
 
 
 # ── Auth helper ───────────────────────────────────────────────────────────────

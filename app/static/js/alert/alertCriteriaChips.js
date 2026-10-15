@@ -17,14 +17,14 @@ export const CRITERIA_KINDS = [
     { key: 'keywords',     label: 'Keyword',   icon: 'fa-magnifying-glass', cls: 'al-chip--keyword' },
     { key: 'formats',      label: 'Format',    icon: 'fa-file-code',      cls: 'al-chip--format' },
     { key: 'users',        label: 'User',      icon: 'fa-user',           cls: 'al-chip--user' },
-    { key: 'github_repos', label: 'Repo',      icon: 'fa-brands fa-github', cls: 'al-chip--github al-chip--mono' },
+    { key: 'github_repos', label: 'Repo',      icon: 'fa-brands fa-git-alt', cls: 'al-chip--github al-chip--mono' },
 ]
 
 export const ANY_FLAGS = [
     { key: 'cve_any',    list: 'cves',         label: 'any CVE' },
     { key: 'tag_any',    list: 'tags',         label: 'any tag' },
     { key: 'attack_any', list: 'attacks',      label: 'any ATT&CK technique' },
-    { key: 'github_any', list: 'github_repos', label: 'any GitHub import' },
+    { key: 'github_any', list: 'github_repos', label: 'any git import' },
 ]
 
 export default {

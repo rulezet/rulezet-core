@@ -31,10 +31,11 @@ import git
 import requests
 
 from app import db
-from app.core.db_class.db import (
+from app.core.db_class.git import (
     GithubProposal, GithubSyncSchedule, GithubSyncScheduleRepo, ImporterResult, NewRule, RuleStatus,
-    RuleUpdateHistory, UpdateResult,
+    UpdateResult,
 )
+from app.core.db_class.rule import RuleUpdateHistory
 from tests_new.helpers.rules import make_rule, yara_rule
 
 GITHUB = "https://github.com"

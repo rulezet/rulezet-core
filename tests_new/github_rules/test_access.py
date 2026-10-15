@@ -19,10 +19,11 @@ import zipfile
 
 import pytest
 
-from app.core.db_class.db import (
-    BackgroundJob, GithubProposal, GithubSyncRun, GithubSyncSchedule, ImporterResult, Rule,
-    RuleUpdateHistory, UpdateResult,
+from app.core.db_class.git import (
+    GithubProposal, GithubSyncRun, GithubSyncSchedule, ImporterResult, UpdateResult,
 )
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.rule import Rule, RuleUpdateHistory
 from tests_new.helpers.access import FORBIDDEN, LOGIN, OK, Outcome, assert_outcome, matrix
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.github import (

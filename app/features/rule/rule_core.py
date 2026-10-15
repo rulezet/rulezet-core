@@ -20,7 +20,22 @@ from sqlalchemy.orm import aliased
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, ValidationResult, load_all_rule_formats
 
 from ... import db
-from ...core.db_class.db import *
+from sqlalchemy import func
+from app.core.db_class.attack import RuleAttackAssociation
+from app.core.db_class.comment import RuleCommentReaction
+from app.core.db_class.rule_relation import RuleRelation
+from app.core.db_class.user import User
+from app.core.db_class.bundle import BundleRuleAssociation
+from app.core.db_class.comment import Comment, purge_unified_comments
+from app.core.db_class.git import GithubRepo, ImporterResult, NewRule, RuleStatus, UpdateResult
+from app.core.db_class.report import RepportRule
+from app.core.db_class.rule import (
+    compute_rule_content_hash, FormatRule, RequestOwnerRule, Rule, RuleFavoriteUser, RuleScope,
+    RuleUpdateHistory, RuleVote,
+)
+from app.core.db_class.rule_proposal import RuleEditComment, RuleEditContribution, RuleEditProposal
+from app.core.db_class.similarity import RuleSimilarity, SimilarResult
+from app.core.db_class.tag import RuleTagAssociation, Tag
 
 from ..account import account_core as AccountModel
 from app.core.utils.utils import bump_version
@@ -415,17 +430,12 @@ def count_deleted_rules() -> int:
     return Rule.query.filter(Rule.is_deleted == True).count()
 
 
-# Default tags automatically attached to every new rule — loaded from config/default_tags.json
-def _load_default_tag_names() -> list:
-    try:
-        from pathlib import Path
-        config_path = Path(__file__).parents[3] / "config" / "default_tags.json"
-        with open(config_path) as f:
-            return json.load(f).get("auto_attach", [])
-    except Exception:
-        return ["tlp:clear", "pap:clear"]
-
-_DEFAULT_TAG_NAMES = _load_default_tag_names()
+def _default_tag_names() -> list:
+    """Tags automatically attached to every new rule — `auto_attach` of the
+    tags.defaults setting (app/config/tags.defaults.json, editable in
+    Admin → Configuration)."""
+    from app.core.utils.app_settings import get_setting
+    return get_setting('tags.defaults').get('auto_attach', [])
 
 
 def _attach_default_tags(rule, user_id):
@@ -434,7 +444,7 @@ def _attach_default_tags(rule, user_id):
         row.tag_id
         for row in RuleTagAssociation.query.filter_by(rule_id=rule.id).all()
     }
-    for name in _DEFAULT_TAG_NAMES:
+    for name in _default_tag_names():
         tag = Tag.query.filter(Tag.name.ilike(name)).first()
         if tag and tag.id not in existing_ids:
             db.session.add(RuleTagAssociation(
@@ -1112,22 +1122,19 @@ def get_rule_history_count(rule_id) -> int:
     ).count()
 
 from urllib.parse import urlparse
-from app.features.rule.rule_format.utils_format.utils_import_update import get_github_host
 
 def is_valid_github_url(url: str) -> bool:
     """
-    Check if a URL is a valid GitHub URL.
+    Check if a URL is a git repository URL (GitHub, GitLab, Gitea, any known
+    git host) — name kept for callers.
     """
-    try:
-        parsed = urlparse(url)
-        return parsed.scheme in ('http', 'https') and parsed.netloc == get_github_host()
-    except Exception:
-        return False
+    from app.features.rule.rule_format.utils_format.git_provider import is_git_repo_url
+    return is_git_repo_url(url)
 
 def get_sources_from_ids(rule_ids: List[int]) -> List[str]:
     """
     Given a list of rule IDs, retrieve the 'source' for each rule from the DB,
-    but only if the source is a valid GitHub URL and not already added.
+    but only if the source is a git repository URL and not already added.
     Returns a deduplicated list of sources.
     """
     if not rule_ids:
@@ -1428,8 +1435,9 @@ def get_all_rule_update(search=None, rule_type=None, sourceFilter=None) -> List[
         query = query.filter(Rule.format == rule_type)
 
     if sourceFilter:
+        # A bare "owner/repo" matches that repo on any git host.
         if not sourceFilter.startswith("http"):
-            sourceFilter = f"https://{get_github_host()}/{sourceFilter}"
+            sourceFilter = "/" + sourceFilter.strip("/")
 
         sourceFilter = sourceFilter.rstrip("/")
         if sourceFilter.endswith(".git"):
@@ -2461,7 +2469,7 @@ def filter_rules(search=None, search_field="all", author=None, sort_by=None, rul
             query = query.filter(False)
 
     if attacks:
-        from app.core.db_class.db import RuleAttackAssociation as _RAA
+        from app.core.db_class.attack import RuleAttackAssociation as _RAA
         upper = [a.upper() for a in attacks]
         query = query.filter(
             Rule.id.in_(
@@ -2510,7 +2518,7 @@ def filter_rules(search=None, search_field="all", author=None, sort_by=None, rul
         )
 
     if workspace_uuid:
-        from app.core.db_class.db import WorkspaceRule, Workspace
+        from app.core.db_class.workspace import Workspace, WorkspaceRule
         from sqlalchemy import false as _false
         ws = Workspace.query.filter_by(uuid=workspace_uuid).first()
         if ws:
@@ -2520,7 +2528,7 @@ def filter_rules(search=None, search_field="all", author=None, sort_by=None, rul
             query = query.filter(_false())
 
     if exclude_workspace_uuid:
-        from app.core.db_class.db import WorkspaceRule, Workspace
+        from app.core.db_class.workspace import Workspace, WorkspaceRule
         ex_ws = Workspace.query.filter_by(uuid=exclude_workspace_uuid).first()
         if ex_ws:
             ex_ids = [wr.rule_id for wr in WorkspaceRule.query.filter_by(workspace_id=ex_ws.id).all()]
@@ -2637,13 +2645,8 @@ def filter_rules_owner_github(search=None, author=None, sort_by=None, rule_type=
     if source:    
         query = query.filter(Rule.source.ilike(f"%{source.lower()}%"))
 
-    _gh_host = get_github_host()
-    github_patterns = [f'%https://{_gh_host}/%', f'%http://{_gh_host}/%', f'%{_gh_host}/%']
-    query = query.filter(
-        or_(
-            Rule.source.ilike(pattern) for pattern in github_patterns
-        )
-    )
+    from app.features.rule.github_repo_core import git_source_filter
+    query = query.filter(git_source_filter())
 
     # Tri
     if sort_by == "newest":
@@ -2764,7 +2767,7 @@ def delete_comment(comment_id) -> bool:
 
 
 def add_reaction_to_rule_comment(comment_id, user_id, reaction_type):
-    from app.core.db_class.db import RuleCommentReaction
+    from app.core.db_class.comment import RuleCommentReaction
     comment = get_comment_by_id(comment_id)
     if not comment:
         return False, "Comment not found"
@@ -3483,21 +3486,22 @@ def get_all_format() -> list[dict]:
     formats = FormatRule.query.all()
     return [fmt.to_json() for fmt in formats]
 
-def get_all_github_urls_matching(search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None):
-    """Unpaginated list of distinct GitHub source URLs matching the same
-    filters as get_optimized_github_data — backs 'select all N matching this
-    filter' bulk actions (Sync Schedule repo picker), where the full matching
-    set (not just the current page) must be resolved server-side."""
-    github_pattern = r'^https?://(www\.)?github\.com/[\w\-_]+/[\w\-_]+'
-    author_expr = func.substring(Rule.source, r'github\.com/([^/]+)')
+def get_all_github_urls_matching(search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, provider_filter: str = None):
+    """Unpaginated list of distinct git repository URLs (any host) matching
+    the same filters as get_optimized_github_data — backs 'select all N
+    matching this filter' bulk actions (Sync Schedule repo picker), where the
+    full matching set (not just the current page) must be resolved server-side."""
+    author_expr = func.substring(Rule.source, r'^https?://[^/]+/([^/]+)')
     query = db.session.query(Rule.source.label("url")).filter(
-        Rule.source.op('~')(github_pattern), Rule.is_deleted == False
+        _git_source_filter(), Rule.is_deleted == False
     )
 
     if format_filter:
         query = query.filter(Rule.format == format_filter)
     if author_filter:
         query = query.filter(author_expr.ilike(f"%{author_filter}%"))
+    if provider_filter:
+        query = query.filter(Rule.git_provider == provider_filter)
     if search:
         if search_field == 'url':
             query = query.filter(Rule.source.ilike(f"%{search}%"))
@@ -3516,10 +3520,9 @@ def get_all_github_urls_matching(search: str = None, search_field: str = 'url', 
 
 # Shared by get_optimized_github_data() and the facet-usage helpers below —
 # a repo's rules are whatever matches this against Rule.source.
-_GITHUB_URL_PATTERN = r'^https?://(www\.)?github\.com/[\w\-_]+/[\w\-_]+'
 
 
-def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, author_names: list = None, editor_names: list = None, license_filter: str = None, conflicts_only: bool = False, sort: str = None, sort_dir: str = 'asc'):
+def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, author_names: list = None, editor_names: list = None, license_filter: str = None, conflicts_only: bool = False, sort: str = None, sort_dir: str = 'asc', provider_filter: str = None):
     """Paginates AND filters/sorts entirely off GithubRepo (a small,
     incrementally-synced table — see github_repo_core.py) instead of
     running a live GROUP BY / per-rule scan over the whole Rule table.
@@ -3567,6 +3570,9 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
             Rule.source == GithubRepo.url, Rule.is_deleted == False,
             Rule.user_id == User.id, editor_col.in_(editor_names)
         )))
+
+    if provider_filter:
+        query = query.filter(GithubRepo.git_provider == provider_filter)
 
     if license_filter:
         query = query.filter(GithubRepo.license_counts[license_filter].as_integer() > 0)
@@ -3642,6 +3648,7 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
 
         base_row = {
             "url": url,
+            "git_provider": repo.git_provider,
             "author": repo.author,
             "formats": sorted((repo.format_counts or {}).keys()),
             "licenses": sorted((repo.license_counts or {}).keys()),
@@ -3701,14 +3708,19 @@ def get_github_authors_usage(search_query: str = None):
     return [{"name": r.author, "count": r.count} for r in rows if r.author]
 
 
+def _git_source_filter():
+    from app.features.rule.github_repo_core import git_source_filter
+    return git_source_filter()
+
+
 def get_github_editors_usage(search_query: str = None):
-    """Distinct Rulezet users who own rules imported from a GitHub repo, with
+    """Distinct Rulezet users who own rules imported from a git repo, with
     counts — feeds the Editor mode of MultiPersonFilter on the same page."""
     editor_col = func.coalesce(User.username, func.concat(User.first_name, ' ', User.last_name))
     query = (
         db.session.query(editor_col.label('name'), func.count(Rule.id).label('count'))
         .join(User, User.id == Rule.user_id)
-        .filter(Rule.source.op('~')(_GITHUB_URL_PATTERN), Rule.is_deleted == False)
+        .filter(_git_source_filter(), Rule.is_deleted == False)
     )
 
     if search_query:
@@ -3733,9 +3745,17 @@ def get_github_licenses_usage():
             for name, count in sorted(totals.items(), key=lambda kv: kv[1], reverse=True)]
 
 
+def get_github_providers_usage():
+    """[{name, label, icon, count}] — repositories per git host type."""
+    from app.features.rule.rule_format.utils_format.git_provider import PROVIDER_LABELS, PROVIDER_ICONS
+    rows = (db.session.query(GithubRepo.git_provider, func.count(GithubRepo.id))
+            .group_by(GithubRepo.git_provider).all())
+    return [{"name": p, "label": PROVIDER_LABELS.get(p, p), "icon": PROVIDER_ICONS.get(p), "count": c}
+            for p, c in sorted(rows, key=lambda r: -r[1]) if p]
+
+
 def get_rule_count_by_github_page(page: int = 1, search: str = None):
-        """Return paginated list of GitHub URLs with how many rules are linked to each."""
-        github_pattern = r'^https?://(www\.)?github\.com/[\w\-_]+/[\w\-_]+'
+        """Return paginated list of git repository URLs (any host) with how many rules are linked to each."""
 
         query = (
             db.session.query(
@@ -3743,7 +3763,7 @@ def get_rule_count_by_github_page(page: int = 1, search: str = None):
                 func.count(Rule.id).label("rule_count")
             )
             .filter(Rule.source.isnot(None))
-            .filter(Rule.source.op('~')(github_pattern))
+            .filter(_git_source_filter())
             .filter(Rule.is_deleted == False)
         )
 
@@ -3854,7 +3874,7 @@ def build_rules_data_table_query(search=None, sort=None,
     )
 
     if ids:
-        from app.core.db_class.db import Rule as _Rule
+        from app.core.db_class.rule import Rule as _Rule
         query = query.filter(_Rule.id.in_(ids))
 
     query = apply_presence_filters(query, has_cve=has_cve, has_tags=has_tags,
@@ -3866,7 +3886,7 @@ def build_rules_data_table_query(search=None, sort=None,
         query = query.filter(Rule.quality_score.isnot(None), Rule.quality_score <= quality_score_max)
 
     if has_ai_analysis:
-        from app.core.db_class.db import AIGeneration
+        from app.core.db_class.ai import AIGeneration
         analyzed_rule_ids = db.session.query(AIGeneration.rule_id).filter(
             AIGeneration.agent_key == 'rule_analysis',
             AIGeneration.rule_id.isnot(None),
@@ -3874,7 +3894,7 @@ def build_rules_data_table_query(search=None, sort=None,
         query = query.filter(Rule.id.in_(analyzed_rule_ids))
 
     if has_relations:
-        from app.core.db_class.db import RuleRelation
+        from app.core.db_class.rule_relation import RuleRelation
         related_rule_ids = db.session.query(RuleRelation.source_rule_id).union(
             db.session.query(RuleRelation.target_rule_id)
         )
@@ -3898,7 +3918,8 @@ def serialize_rules_for_data_table(rules: list, current_user_obj=None) -> list:
     entirely, like a validation job's quarantine result.
     """
     import json as _json
-    from app.core.db_class.db import RuleAttackAssociation, AttackTechnique as _AT, RuleVote as _RV
+    from app.core.db_class.attack import AttackTechnique as _AT, RuleAttackAssociation
+    from app.core.db_class.rule import RuleVote as _RV
 
     rule_ids = [r.id for r in rules]
     tags_by_rule = get_tags_for_rules_batch(rule_ids)
@@ -4094,13 +4115,14 @@ def get_all_rule_by_url_github(url: str = None, current_user_: User = None, bran
 
 
 def get_all_rule_by_github_url_page(search: str = None, page: int = 1):
-    """Get paginated list of Rules whose source matches a specific GitHub project URL and belong to the current user."""
+    """Get paginated list of Rules whose source is a git repository (any host) and belong to the current user."""
+    from app.features.rule.github_repo_core import git_source_filter
     per_page = 10
 
-    # Base query: only rules that have a GitHub source and belong to the current user
+    # Base query: only rules imported from a git repository, owned by the current user
     query = _active().filter(
         Rule.source.isnot(None),
-        Rule.source.ilike(f"%{get_github_host()}%"),
+        git_source_filter(),
         Rule.user_id == current_user.id
     )
 
@@ -4579,7 +4601,7 @@ def search_rules_by_cve_patterns(vulnerabilities: list[str]) -> dict:
 
     all_rules = query.order_by(Rule.last_modif.desc()).all()
 
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     user_ids = {r.user_id for r in all_rules if r.user_id}
     submitters_by_id = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()} if user_ids else {}
 
@@ -5085,9 +5107,10 @@ def count_rules_by_url(url):
     return _active().filter(Rule.source == url.strip()).count()
 
 def get_all_github_sources(exclude_urls=None):
-    """Returns unique active GitHub repository URLs (excludes trash)."""
+    """Returns unique active git repository URLs, any host (excludes trash)."""
+    from app.features.rule.github_repo_core import git_source_filter
     query = db.session.query(Rule.source).distinct()
-    query = query.filter(Rule.source.like(f'https://{get_github_host()}/%'))
+    query = query.filter(git_source_filter())
     query = query.filter(Rule.is_deleted == False)
     if exclude_urls:
         query = query.filter(Rule.source.notin_(exclude_urls))

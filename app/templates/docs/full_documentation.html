@@ -309,7 +309,7 @@
             <div class="flow-step">
               <div class="flow-num">3</div>
               <div><div class="flow-title"><span>Reduce the chaos of scattered open-source detection content</span></div>
-              <div class="flow-desc"><span>Import from GitHub once, and the rule lives in a structured, searchable, versioned home from then on.</span></div></div>
+              <div class="flow-desc"><span>Import from a git repository (GitHub, GitLab…) once, and the rule lives in a structured, searchable, versioned home from then on.</span></div></div>
             </div>
             <div class="flow-step">
               <div class="flow-num">4</div>
@@ -506,7 +506,7 @@
               <div class="flow-desc">Fill in the create-rule form — title, format, license, source, description, content — and Rulezet validates it against the chosen format's rules before saving. Two default tags, <span class="inline-code">tlp:clear</span> and <span class="inline-code">pap:clear</span>, are attached automatically so every rule starts from a known, shareable classification.</div>
             </div></div>
             <div class="flow-step"><div class="flow-num">2</div><div>
-              <div class="flow-title">GitHub import</div>
+              <div class="flow-title">Git import</div>
               <div class="flow-desc">Point Rulezet at a repository and it walks the tree, extracts every rule it can find across every format present, and validates each one individually. A rule that fails validation doesn't get silently dropped — it lands in the Bad Rules queue instead (chapter 8), where the person who ran the import can review and fix it.</div>
             </div></div>
           </div>
@@ -519,7 +519,7 @@
           <div class="usecase-card">
             <div class="usecase-avatar"><i class="fas fa-cloud-arrow-down"></i></div>
             <div><div class="usecase-role">Bootstrapping a team's presence</div>
-            <div class="usecase-text">A team imports their entire existing GitHub rule repository in one operation instead of recreating years of work rule by rule.</div></div>
+            <div class="usecase-text">A team imports their entire existing rule repository (GitHub, GitLab, self-hosted…) in one operation instead of recreating years of work rule by rule.</div></div>
           </div>
 
           <h3 class="subsection-title"><i class="fas fa-list-check"></i> What you can do with a rule once it exists</h3>
@@ -569,7 +569,7 @@
           <div class="usecase-card">
             <div class="usecase-avatar"><i class="fas fa-broom"></i></div>
             <div><div class="usecase-role">Cleaning up after a bulk import</div>
-            <div class="usecase-text">A 500-rule GitHub import completes; three rules land in the Bad Rules queue with clear parser errors, and a similarity scan flags eleven pairs that turn out to be the same detection logic imported from two different upstream repositories.</div></div>
+            <div class="usecase-text">A 500-rule Git import completes; three rules land in the Bad Rules queue with clear parser errors, and a similarity scan flags eleven pairs that turn out to be the same detection logic imported from two different upstream repositories.</div></div>
           </div>
 
           <div class="callout callout-red">
@@ -1228,7 +1228,7 @@
         <section id="ch23" class="doc-section" aria-labelledby="ch23-title">
           <div class="eyebrow"><span class="chapter-num">23</span> · Feature Guide</div>
           <h2 class="section-title" id="ch23-title">Background Jobs &amp; Async Operations</h2>
-          <p class="section-lead">Several operations across this report — bulk transfers, GitHub imports, similarity scans, connector pulls — are slow by nature. This is what keeps them visible and safe instead of freezing the interface.</p>
+          <p class="section-lead">Several operations across this report — bulk transfers, Git imports, similarity scans, connector pulls — are slow by nature. This is what keeps them visible and safe instead of freezing the interface.</p>
 
           <div class="why-panel">
             <div class="why-panel-label"><i class="fas fa-circle-question"></i> Why</div>
@@ -1242,7 +1242,7 @@
           <div class="usecase-card">
             <div class="usecase-avatar"><i class="fas fa-spinner"></i></div>
             <div><div class="usecase-role">Watching real progress</div>
-            <div class="usecase-text">A 500-rule GitHub import shows live progress instead of a blank, unresponsive screen for several minutes.</div></div>
+            <div class="usecase-text">A 500-rule Git import shows live progress instead of a blank, unresponsive screen for several minutes.</div></div>
           </div>
           <div class="usecase-card">
             <div class="usecase-avatar"><i class="fas fa-pause"></i></div>
@@ -1250,7 +1250,7 @@
             <div class="usecase-text">A large bulk ownership transfer is paused partway through and resumed later, continuing from where it left off rather than reprocessing rules already handled.</div></div>
           </div>
 
-          <p class="doc-p">This mechanism underlies operations described throughout this report: bulk tag add/remove, GitHub rule deletion, activity log cleanup, MISP data refresh, trash restore/purge, connector pulls, bulk ownership transfer, ATT&amp;CK data refresh and bulk parsing, bulk field parsing, and CVE-based blog draft generation — each covered in its own chapter; this one is about the shared mechanism they all run on.</p>
+          <p class="doc-p">This mechanism underlies operations described throughout this report: bulk tag add/remove, Git source rule deletion, activity log cleanup, MISP data refresh, trash restore/purge, connector pulls, bulk ownership transfer, ATT&amp;CK data refresh and bulk parsing, bulk field parsing, and CVE-based blog draft generation — each covered in its own chapter; this one is about the shared mechanism they all run on.</p>
 
           <div class="callout callout-amber">
             <div class="callout-icon"><i class="fas fa-triangle-exclamation"></i></div>
@@ -1647,7 +1647,7 @@
                 <tr><td>1</td><td>Foreword</td><td>Homepage hero.</td></tr>
                 <tr><td>3</td><td>What Is Rulezet</td><td>"Recent Rules" card grid on the homepage.</td></tr>
                 <tr><td>6</td><td>Accounts &amp; Roles</td><td>Registration form, login form, profile page with API key section.</td></tr>
-                <tr><td>7</td><td>Rule Management</td><td>Create-rule form, GitHub import flow, a full rule detail page.</td></tr>
+                <tr><td>7</td><td>Rule Management</td><td>Create-rule form, Git import flow, a full rule detail page.</td></tr>
                 <tr><td>8</td><td>Validation &amp; Similarity</td><td>Bad Rules queue, a rule's similar-rules panel, admin similarity-scan results.</td></tr>
                 <tr><td>9</td><td>Edit Proposals</td><td>Propose-edit form, diff view, proposal comment thread.</td></tr>
                 <tr><td>10</td><td>Ownership &amp; Requests</td><td>Requests page (user view), requests page (admin view), a bulk-grant request detail page.</td></tr>

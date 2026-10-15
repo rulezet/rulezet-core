@@ -965,7 +965,8 @@ def test_legacy_sid_collision_shows_live_warning_on_detail_page(client, app):
     with app.app_context():
         import datetime, uuid as uuid_mod
         from app import db
-        from app.core.db_class.db import Rule, User
+        from app.core.db_class.rule import Rule
+        from app.core.db_class.user import User
         user = User.query.filter_by(admin=True).first()
         second = Rule(
             user_id=user.id, format="suricata", title="Legacy collision second rule",

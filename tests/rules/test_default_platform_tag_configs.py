@@ -58,7 +58,9 @@ def test_insert_default_platform_tag_configs_falls_back_to_any_admin(app):
     instead of silently doing nothing."""
     import uuid as uuid_mod
     from app import db
-    from app.core.db_class.db import FieldParserConfig, Tag, User
+    from app.core.db_class.rule import FieldParserConfig
+    from app.core.db_class.tag import Tag
+    from app.core.db_class.user import User
     from app.core.utils.init_db import insert_default_platform_tag_configs
 
     with app.app_context():

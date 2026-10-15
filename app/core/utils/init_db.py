@@ -6,7 +6,9 @@ from pathlib import Path
 from flask_login import current_user
 
 from app.features.account.account_core import get_admin_user
-from ..db_class.db import FormatRule, Rule, User, db
+from app import db
+from app.core.db_class.rule import FormatRule, Rule
+from app.core.db_class.user import User
 from .utils import generate_api_key
 
 
@@ -184,7 +186,8 @@ def insert_default_platform_tag_configs():
       still get whatever does resolve instead of nothing at all.
     """
     from app.features.rule.field_parser_core import validate_platform_tag_config
-    from ..db_class.db import FieldParserConfig, Tag
+    from app.core.db_class.rule import FieldParserConfig
+    from app.core.db_class.tag import Tag
 
     fixture_path = Path(__file__).parent / "default_platform_tag_configs.json"
     if not fixture_path.exists():
@@ -245,7 +248,8 @@ def insert_default_ai_agent_configs():
     it silently re-enabled by this migration. Only 'chatbot' has a concrete
     AIAgent today — the other three keys are pre-seeded so the admin AI hub
     has something to show/edit as each one ships (AI_02/AI_03/AI_04)."""
-    from ..db_class.db import AIAgentConfig, InstanceConfig
+    from app.core.db_class.ai import AIAgentConfig
+    from app.core.db_class.connector import InstanceConfig
 
     cfg = InstanceConfig.query.first()
     chatbot_enabled = cfg.chatbot_enabled if cfg else True
@@ -273,7 +277,8 @@ def insert_default_ai_agent_configs():
 
 
 def seed_default_tags(admin_user):
-    """Initialize MISP taxonomy submodule and import seed namespaces from config/default_tags.json."""
+    """Initialize MISP taxonomy submodule and import the seed namespaces of the
+    tags.defaults setting (app/config/tags.defaults.json)."""
     from app.features.tags.tags_core import (
         add_tags_from_misp_taxonomy,
         get_all_taxonomy_uuids_from_disk,
@@ -301,12 +306,8 @@ def seed_default_tags(admin_user):
     except Exception as e:
         print(f"  {W}submodule{R}  could not init: {e}")
 
-    config_path = Path("config/default_tags.json")
-    try:
-        with open(config_path) as f:
-            config = json.load(f)
-    except Exception:
-        config = {}
+    from app.core.utils.app_settings import get_setting
+    config = get_setting('tags.defaults')
 
     seed_namespaces = [s["namespace"] for s in config.get("seed_on_init", [])]
     if not seed_namespaces:

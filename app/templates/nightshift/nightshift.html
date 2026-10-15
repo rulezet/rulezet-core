@@ -1,0 +1,247 @@
+{% extends 'base.html' %}
+{% block title %}Night Shift{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/nightshift/nightshift.css') }}">
+{% endblock %}
+
+{% block content %}
+{#
+  Night Shift — a hidden Rulezet game (not linked anywhere). The player is
+  the only SOC analyst on duty and closes each case with a real YARA rule,
+  tested server-side. Logic in app/static/js/nightshift/ (ES modules), the
+  cases and the scoring in app/features/nightshift/.
+#}
+<div class="ns-wrapper" id="ns-app" v-cloak>
+    <div class="ns-room">
+        <canvas class="ns-rain" id="ns-rain" aria-hidden="true"></canvas>
+        <div class="ns-room__bar">
+            <div class="ns-clock" :title="t('clock')"><i class="fa-regular fa-clock"></i> [[ clock ]]</div>
+            <div class="ns-room__title">NIGHT SHIFT <span v-if="caseData">· [[ tr(caseData.title) ]]</span></div>
+            <div class="ns-room__actions">
+                <button class="ns-icon" @click="toggleLang" :title="t('language')">[[ lang.toUpperCase() ]]</button>
+                <div class="ns-mug" :title="t('coffee')"><i class="fa-solid fa-mug-hot"></i><span :style="{ height: coffee + '%' }"></span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═════════ TITLE ═════════ -->
+    <section v-if="screen === 'title'" class="ns-screen ns-title">
+        <div class="ns-title__kicker">[[ t('kicker') ]]</div>
+        <h1>NIGHT SHIFT</h1>
+        <p class="ns-title__sub">[[ t('tagline') ]]</p>
+        <div class="ns-badge-in">
+            <div class="ns-badge-in__card">
+                <i class="fa-solid fa-id-badge"></i>
+                <div>
+                    <div class="ns-badge-in__label">[[ t('analyst') ]]</div>
+                    <div class="ns-badge-in__name">[[ playerName || t('anonymous') ]]</div>
+                </div>
+            </div>
+            <button class="ns-btn ns-btn--primary" @click="startCase('1-invoice')" :disabled="busy">
+                <i class="fa-solid fa-door-open me-2"></i>[[ t('badge_in') ]]
+            </button>
+        </div>
+        <p v-if="error" class="ns-error">[[ error ]]</p>
+    </section>
+
+    <!-- ═════════ DESK ═════════ -->
+    <section v-else-if="screen === 'desk' && caseData" class="ns-desk">
+        <!-- alert ticket -->
+        <div class="ns-alert" :class="'ns-alert--' + caseData.alert.severity">
+            <span class="ns-alert__id">[[ caseData.alert.id ]]</span>
+            <span class="ns-alert__sev">[[ caseData.alert.severity ]]</span>
+            <span class="ns-alert__src">[[ caseData.alert.source ]] · [[ caseData.alert.host ]]</span>
+            <span class="ns-alert__text">[[ tr(caseData.alert.summary) ]]</span>
+        </div>
+
+        <div class="ns-desk__grid">
+            <!-- main monitor: the tools -->
+            <div class="ns-monitor">
+                <div class="ns-tabs" role="tablist">
+                    <button v-for="tab in tabs" :key="tab.key" role="tab" :aria-selected="tool === tab.key"
+                            :class="['ns-tab', { 'ns-tab--active': tool === tab.key }]" @click="tool = tab.key">
+                        <i :class="tab.icon"></i> [[ t(tab.key) ]]
+                    </button>
+                </div>
+
+                <!-- Mail -->
+                <div v-if="tool === 'mail'" class="ns-pane">
+                    <article v-for="m in caseData.tools.mail" :key="m.key" class="ns-mail" :class="{ 'ns-pinned': isPinned(m.key) }">
+                        <header class="ns-mail__head">
+                            <div><strong>[[ m.subject ]]</strong></div>
+                            <button class="ns-pin" @click="pin(m.key)" :title="t('pin')"><i class="fa-solid fa-thumbtack"></i></button>
+                        </header>
+                        <div class="ns-meta">[[ t('from') ]] [[ m.from ]] · [[ m.time ]]<br>[[ t('to') ]] [[ m.to ]]</div>
+                        <pre class="ns-mail__body">[[ m.body ]]</pre>
+                        <div v-if="m.attachment" class="ns-attachment" @click="openFile(m.attachment)">
+                            <i class="fa-solid fa-paperclip me-1"></i>[[ m.attachment ]]
+                        </div>
+                    </article>
+                </div>
+
+                <!-- Files -->
+                <div v-if="tool === 'files'" class="ns-pane ns-files">
+                    <ul class="ns-files__list">
+                        <li v-for="f in caseData.tools.files" :key="f.key"
+                            :class="{ 'ns-files__item--active': file && file.key === f.key, 'ns-pinned': isPinned(f.key) }"
+                            @click="file = f">
+                            <i class="fa-regular fa-file-lines me-1"></i>[[ f.name ]]
+                        </li>
+                    </ul>
+                    <div v-if="file" class="ns-file">
+                        <div class="ns-file__head">
+                            <div>
+                                <strong>[[ file.name ]]</strong>
+                                <div class="ns-meta">[[ file.origin ]] · [[ file.size ]] [[ t('bytes') ]]<br>sha256 [[ file.sha256 ]]</div>
+                            </div>
+                            <button class="ns-pin" @click="pin(file.key)" :title="t('pin')"><i class="fa-solid fa-thumbtack"></i></button>
+                        </div>
+                        <div class="ns-hint-line">[[ t('strings_hint') ]]</div>
+                        <ol class="ns-strings">
+                            <li v-for="(line, i) in file.lines" :key="i"
+                                :class="{ 'ns-pinned': isPinned('line:' + file.sample + ':' + i) }"
+                                @click="pin('line:' + file.sample + ':' + i)">[[ line || ' ' ]]</li>
+                        </ol>
+                    </div>
+                    <div v-else class="ns-empty">[[ t('pick_file') ]]</div>
+                </div>
+
+                <!-- Logs -->
+                <div v-if="tool === 'logs'" class="ns-pane">
+                    <div class="ns-log-filters">
+                        <input v-model="logQuery" class="ns-input" :placeholder="t('search_logs')" :aria-label="t('search_logs')">
+                        <select v-model="logHost" class="ns-input" :aria-label="t('host')">
+                            <option value="">[[ t('all_hosts') ]]</option>
+                            <option v-for="h in logHosts" :key="h" :value="h">[[ h ]]</option>
+                        </select>
+                    </div>
+                    <table class="ns-logs">
+                        <tbody>
+                            <tr v-for="l in filteredLogs" :key="l.key" :class="{ 'ns-pinned': isPinned(l.key) }" @click="pin(l.key)">
+                                <td class="ns-logs__time">[[ l.time ]]</td>
+                                <td class="ns-logs__host">[[ l.host ]]</td>
+                                <td class="ns-logs__src">[[ l.source ]]</td>
+                                <td class="ns-logs__text">[[ l.text ]]</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div v-if="!filteredLogs.length" class="ns-empty">[[ t('no_logs') ]]</div>
+                </div>
+            </div>
+
+            <!-- side: Rulezy + evidence board -->
+            <aside class="ns-side">
+                <div class="ns-rulezy">
+                    <img src="{{ url_for('static', filename='images/rulezy/reflexion.png') }}" alt="Rulezy" class="ns-rulezy__img">
+                    <div class="ns-rulezy__bubble" aria-live="polite">
+                        <p v-for="(line, i) in rulezySay" :key="i">[[ line ]]</p>
+                    </div>
+                </div>
+                <div class="ns-rulezy__actions">
+                    <button v-if="introStep < introLines.length - 1" class="ns-btn ns-btn--small" @click="introStep++">
+                        [[ t('next') ]] <i class="fa-solid fa-chevron-right ms-1"></i>
+                    </button>
+                    <button class="ns-btn ns-btn--small" @click="askHint" :disabled="busy || run.hints_used >= caseData.rulezy.hint_count">
+                        <i class="fa-solid fa-lightbulb me-1"></i>[[ t('hint') ]] ([[ caseData.rulezy.hint_count - run.hints_used ]]) · −150
+                    </button>
+                </div>
+                <div v-if="run.hints && run.hints.length" class="ns-hints">
+                    <div v-for="(h, i) in run.hints" :key="i" class="ns-hints__item"><i class="fa-solid fa-lightbulb me-1"></i>[[ tr(h) ]]</div>
+                </div>
+
+                <div class="ns-board">
+                    <div class="ns-board__title"><i class="fa-solid fa-thumbtack me-1"></i>[[ t('board') ]]
+                        <span class="ns-board__req">[[ requiredPinned ]]/[[ caseData.evidence.required.length ]] [[ t('key_evidence') ]]</span>
+                    </div>
+                    <div v-if="!run.evidence.length" class="ns-empty">[[ t('board_empty') ]]</div>
+                    <ul v-else class="ns-board__list">
+                        <li v-for="k in run.evidence" :key="k" @click="pin(k)" :title="t('unpin')">[[ evidenceLabel(k) ]]</li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+
+        <!-- rule editor: fill the blanks -->
+        <div class="ns-editor">
+            <div class="ns-editor__title"><i class="fa-solid fa-code me-1"></i>[[ t('your_rule') ]] — YARA</div>
+            <div class="ns-code">
+                <div>rule [[ caseData.rule.name ]]</div>
+                <div>{</div>
+                <div class="ns-code__in">strings:</div>
+                <div class="ns-code__in2">$a = "<input v-model="blanks.a" class="ns-blank" maxlength="64" placeholder="____" aria-label="$a" spellcheck="false">"</div>
+                <div class="ns-code__in2">$b = "<input v-model="blanks.b" class="ns-blank" maxlength="64" placeholder="____" aria-label="$b" spellcheck="false">"</div>
+                <div class="ns-code__in">condition:</div>
+                <div class="ns-code__in2">
+                    <select v-model="blanks.condition" class="ns-blank ns-blank--select" aria-label="condition">
+                        <option value="" disabled>____</option>
+                        <option v-for="c in caseData.rule.conditions" :key="c" :value="c">[[ c ]]</option>
+                    </select>
+                </div>
+                <div>}</div>
+            </div>
+            <div class="ns-editor__actions">
+                <button class="ns-btn" @click="check(false)" :disabled="busy || !ruleReady"><i class="fa-solid fa-flask me-1"></i>[[ t('test') ]]</button>
+                <button class="ns-btn ns-btn--primary" @click="check(true)" :disabled="busy || !ruleReady"><i class="fa-solid fa-rocket me-1"></i>[[ t('deploy') ]]</button>
+                <span class="ns-meta">[[ t('tests_run') ]]: [[ run.tests ]] · [[ t('failed_deploys') ]]: [[ run.failed_deploys ]]</span>
+            </div>
+            <p v-if="error" class="ns-error">[[ error ]]</p>
+            <div v-if="result && result.error" class="ns-result ns-result--ko"><i class="fa-solid fa-triangle-exclamation me-1"></i>[[ result.error ]]</div>
+            <table v-if="result && result.samples" class="ns-samples">
+                <thead><tr><th>[[ t('sample') ]]</th><th>[[ t('expected') ]]</th><th>[[ t('rule_said') ]]</th><th></th></tr></thead>
+                <tbody>
+                    <tr v-for="s in result.samples" :key="s.id" :class="s.ok ? 'ns-ok' : 'ns-ko'">
+                        <td>[[ s.name ]]</td>
+                        <td>[[ s.expect === 'match' ? t('malicious') : t('benign') ]]</td>
+                        <td>[[ s.matched ? t('match') : t('silent') ]]</td>
+                        <td><i :class="s.ok ? 'fa-solid fa-check' : 'fa-solid fa-xmark'"></i></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- ═════════ CASE CLOSED ═════════ -->
+    <section v-else-if="screen === 'closed' && caseData" class="ns-screen ns-closed">
+        <div class="ns-title__kicker">[[ caseData.alert.id ]] · [[ clock ]]</div>
+        <h2>[[ t('case_closed') ]] — [[ tr(caseData.title) ]]</h2>
+        <div class="ns-stars">
+            <i v-for="n in 3" :key="n" :class="n <= run.stars ? 'fa-solid fa-star' : 'fa-regular fa-star'"></i>
+        </div>
+        <div class="ns-rulezy ns-rulezy--end">
+            <img src="{{ url_for('static', filename='images/rulezy/simple.png') }}" alt="Rulezy" class="ns-rulezy__img">
+            <div class="ns-rulezy__bubble"><p>[[ closingLine ]]</p></div>
+        </div>
+        <div v-if="details.variants && details.variants.length" class="ns-variants">
+            <div v-for="v in details.variants" :key="v.id" :class="v.matched ? 'ns-ok' : 'ns-ko'">
+                <i :class="v.matched ? 'fa-solid fa-shield-halved' : 'fa-solid fa-person-running'" class="me-1"></i>
+                [[ t('hidden_variant') ]] [[ v.name ]] — [[ v.matched ? t('caught') : t('missed') ]]
+            </div>
+        </div>
+        <table class="ns-score">
+            <tbody>
+                <tr><td>[[ t('s_closed') ]]</td><td>[[ details.closed ]]</td></tr>
+                <tr><td>[[ t('s_quality') ]]</td><td>[[ details.quality ]]</td></tr>
+                <tr><td>[[ t('s_investigation') ]] <small>([[ details.bonus_found ]]/[[ details.bonus_total ]] [[ t('bonus_clues') ]])</small></td><td>[[ details.investigation ]]</td></tr>
+                <tr><td>[[ t('s_speed') ]]</td><td>[[ details.speed ]]</td></tr>
+                <tr v-if="details.hints"><td>[[ t('s_hints') ]]</td><td>[[ details.hints ]]</td></tr>
+                <tr v-if="details.failed_deploys"><td>[[ t('s_failed') ]]</td><td>[[ details.failed_deploys ]]</td></tr>
+                <tr class="ns-score__total"><td>[[ t('total') ]]</td><td>[[ run.score ]]</td></tr>
+            </tbody>
+        </table>
+        <p v-if="details.side_clues" class="ns-meta"><i class="fa-solid fa-print me-1"></i>[[ tr(caseData.rulezy.lines.printer) ]]</p>
+        <pre class="ns-final-rule">[[ run.rule ]]</pre>
+        <div class="ns-closed__next">
+            <p class="ns-meta">[[ t('next_case_soon') ]]</p>
+            <button class="ns-btn" @click="startCase(caseData.id)" :disabled="busy"><i class="fa-solid fa-rotate-left me-1"></i>[[ t('replay') ]]</button>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+    window.NS_PLAYER_NAME = {{ (current_user.first_name if current_user.is_authenticated else '') | tojson }};
+</script>
+<script type="module" src="{{ url_for('static', filename='js/nightshift/main.js') }}"></script>
+{% endblock %}

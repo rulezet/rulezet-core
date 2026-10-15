@@ -49,7 +49,7 @@
       </div>
     </div>
     <p class="text-muted mb-0" style="max-width:640px; font-size:.95rem;">
-      Deleted rules are hidden everywhere on the platform. Restore them to make them visible again, or permanently delete them to free up space. Rules deleted from the same GitHub source share a batch and can be restored together.
+      Deleted rules are hidden everywhere on the platform. Restore them to make them visible again, or permanently delete them to free up space. Rules deleted from the same git repository share a batch and can be restored together.
     </p>
   </div>
 
@@ -96,7 +96,7 @@
 
         <div class="col-lg-3 col-md-4">
           <label class="form-label small fw-semibold mb-1">
-            <i class="fa-brands fa-github me-1 text-primary"></i>GitHub batch
+            <i class="fa-brands fa-git-alt me-1 text-primary"></i>Git batch
           </label>
           <select v-model="batchFilter" @change="fetchRules(1)" class="form-select form-select-sm">
             <option value="">All / individual</option>
@@ -121,9 +121,9 @@
 
   <!-- Batch restore banner -->
   <div v-if="batchFilter" class="alert alert-info d-flex align-items-center gap-3 py-2 px-3 mb-3 rounded-3 border-0" style="font-size:.85rem;">
-    <i class="fa-brands fa-github fa-lg text-primary"></i>
+    <i class="fa-brands fa-git-alt fa-lg text-primary"></i>
     <div>
-      Filtering GitHub batch — <strong>[[ batchRulesCount ]] rules</strong> deleted together.
+      Filtering Git batch — <strong>[[ batchRulesCount ]] rules</strong> deleted together.
     </div>
     <div class="d-flex gap-2 ms-auto flex-wrap">
       <button @click="restoreBatch(batchFilter)" class="btn btn-sm btn-success rounded-pill">
@@ -176,7 +176,7 @@
               <i class="fa-solid fa-file-code me-1"></i>Format
             </th>
             <th class="py-3" style="color:var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">
-              <i class="fa-brands fa-github me-1"></i>Source
+              <i class="fa-brands fa-git-alt me-1"></i>Source
             </th>
             <th class="py-3" style="color:var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">
               <i class="fa-regular fa-clock me-1"></i>Deleted at
@@ -185,7 +185,7 @@
               <i class="fa-solid fa-user me-1"></i>By
             </th>
             <th class="py-3 text-center" style="width:40px; color:var(--subtle-text-color); font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; border:none;">
-              <i class="fa-brands fa-github" title="GitHub batch"></i>
+              <i class="fa-brands fa-git-alt" title="Git batch"></i>
             </th>
             <th class="py-3" style="width:110px; border:none;"></th>
           </tr>
@@ -242,7 +242,7 @@
                       :title="rule.source"
                       @click="sourceFilter = rule.source; fetchRules(1)"
                       style="color:var(--subtle-text-color); font-size:.75rem;">
-                  <i class="fa-brands fa-github me-1 opacity-60"></i>[[ shortSource(rule.source) ]]
+                  <i :class="gitProviderIcon(rule.source, rule.git_provider)" class="me-1 opacity-60"></i>[[ shortSource(rule.source) ]]
                 </span>
                 <span v-else style="color:var(--subtle-text-color); font-size:.75rem;">—</span>
               </td>
@@ -260,7 +260,7 @@
                       style="background:var(--light-bg-color); color:var(--subtle-text-color); font-size:.65rem; border:1px solid var(--border-color);"
                       @click="batchFilter = rule.delete_batch_uuid; fetchRules(1)"
                       title="Click to show entire batch">
-                  <i class="fa-brands fa-github"></i>
+                  <i class="fa-brands fa-git-alt"></i>
                 </span>
               </td>
 
@@ -383,7 +383,7 @@
 
           <!-- Source -->
           <div v-if="contentRule.source" class="mb-3 d-flex align-items-center gap-2">
-            <i class="fa-brands fa-github" style="color:var(--subtle-text-color);"></i>
+            <i class="fa-brands fa-git-alt" style="color:var(--subtle-text-color);"></i>
             <a :href="sourceLink(contentRule)" target="_blank" rel="noreferrer"
                class="small text-truncate" style="color:#0d6efd; max-width:500px;">
               [[ contentRule.source ]]
@@ -420,6 +420,7 @@
 <script type="module">
 import PaginationComponent from '/static/js/rule/paginationComponent.js'
 import { create_message }  from '/static/js/toaster.js'
+import { repoTreeUrl, gitProviderIcon } from '/static/js/components/git-links.js'
 const { createApp, ref, computed, watch, nextTick, onMounted } = Vue
 const csrf = document.querySelector('input[name="csrf_token"]')?.value || ''
 
@@ -474,7 +475,7 @@ createApp({
 
     function sourceLink(rule) {
       if (!rule || !rule.source) return rule ? rule.source : ''
-      return rule.branch ? rule.source.replace(/\.git$/, '') + '/tree/' + rule.branch : rule.source
+      return rule.branch ? repoTreeUrl(rule.source, rule.branch) : rule.source
     }
 
     // Highlight code when modal opens
@@ -640,6 +641,7 @@ createApp({
     onMounted(() => { fetchRules(1); fetchFormats() })
 
     return {
+        gitProviderIcon,
       rules, batches, totalCount, total, totalPages, page, loading,
       search, fmtFilter, batchFilter, sourceFilter, deletedFrom, deletedTo,
       formats, selectedIds, contentRule, codeEl,

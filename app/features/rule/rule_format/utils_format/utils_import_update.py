@@ -1,9 +1,13 @@
 #---------------------------------------------------------------------------------------For_all_rules_types----------------------------------------------------------------------------------------------------------#
 
+import contextlib
+import fcntl
 import os
 import re
 import shutil
 import subprocess
+import threading
+import time
 from urllib.parse import urlparse
 from flask_login import current_user
 import datetime
@@ -12,6 +16,9 @@ from urllib.parse import urlparse
 from git import Repo
 import requests
 
+from app.features.rule.rule_format.utils_format import git_provider
+from app.features.rule.rule_format.utils_format.git_provider import get_github_host  # noqa: F401 (re-exported)
+
 
 def _github_auth_headers() -> dict:
     """Authorization header for GitHub API calls, if GITHUB_TOKEN is configured.
@@ -19,14 +26,6 @@ def _github_auth_headers() -> dict:
     under normal admin usage (repeated imports/branch checks/metadata lookups)."""
     token = os.environ.get('GITHUB_TOKEN')
     return {'Authorization': f'Bearer {token}'} if token else {}
-
-
-def get_github_host() -> str:
-    """Hostname that rule-import features treat as "GitHub" — github.com by
-    default, or a self-hosted GitHub Enterprise Server / offline mirror when
-    GITHUB_HOST is configured (Admin -> Server Settings -> Security)."""
-    host = os.environ.get('GITHUB_HOST', 'github.com').strip().strip('/')
-    return host or 'github.com'
 
 
 def get_github_api_base() -> str:
@@ -92,6 +91,67 @@ def get_repo_name_from_url(repo_url):
   
 
 RULES_GITHUB_DIR = "app/rule_from_github/Rules_Github"
+
+# ── Clone cache lock ──
+# Every import / update holds a SHARED lock on this file for as long as it
+# uses the clones; clearing the cache needs the EXCLUSIVE lock, so it is
+# refused while anything is reading a clone, and an import started during a
+# clear waits for it to finish. flock() works across the gunicorn workers and
+# the job worker, and the OS drops the lock if a process dies.
+_CACHE_LOCK_FILE = os.path.join(os.path.dirname(RULES_GITHUB_DIR), '.clone_cache.lock')
+CLONE_LEASE_SECONDS = 300          # from the clone until the import / update session takes over
+MAX_CACHE_HOLD_SECONDS = 6 * 3600  # a session that never finishes can't block the clear forever
+
+
+def _open_cache_lock(mode):
+    os.makedirs(os.path.dirname(_CACHE_LOCK_FILE), exist_ok=True)
+    handle = open(_CACHE_LOCK_FILE, 'a')
+    try:
+        fcntl.flock(handle, mode)
+    except BaseException:
+        handle.close()
+        raise
+    return handle
+
+
+def _release_cache_lock(handle):
+    try:
+        fcntl.flock(handle, fcntl.LOCK_UN)
+    finally:
+        handle.close()
+
+
+@contextlib.contextmanager
+def repo_cache_in_use():
+    """Hold the clone cache for the duration of the block."""
+    handle = _open_cache_lock(fcntl.LOCK_SH)
+    try:
+        yield
+    finally:
+        _release_cache_lock(handle)
+
+
+def hold_repo_cache(done=None, max_seconds=MAX_CACHE_HOLD_SECONDS):
+    """Hold the clone cache from now until done() returns True (checked every
+    2 s) or max_seconds have passed — for imports / updates whose threads
+    outlive the call that started them."""
+    handle = _open_cache_lock(fcntl.LOCK_SH)
+
+    def _wait():
+        deadline = time.monotonic() + max_seconds
+        try:
+            while time.monotonic() < deadline:
+                try:
+                    if done is not None and done():
+                        return
+                except Exception:
+                    return
+                time.sleep(2)
+        finally:
+            _release_cache_lock(handle)
+
+    threading.Thread(target=_wait, daemon=True, name='clone-cache-hold').start()
+
 # A git branch name as a user may type it: no ".." (path escape), no leading
 # "-" (read as an option by `git checkout <branch>`) or "/".
 _BRANCH_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._/+-]{0,199}$')
@@ -124,15 +184,16 @@ def clone_or_access_repo(repo_url, branch=None, is_generic_source=False):
     If *branch* is specified the repo is cloned on that branch and cached in a
     separate directory so it does not collide with the default-branch clone.
 
-    is_generic_source=True skips the GitHub-API accessibility pre-check
-    (is_github_repo_accessible) — that check only works against github.com's
-    REST API, so for a non-GitHub git host it would always fail even for a
-    perfectly clonable repo. The clone itself (git protocol, not GitHub's
-    API) already reports a clear error via its own except block below if the
-    repo genuinely isn't reachable.
+    Works with any git host (GitHub, GitLab, Gitea/Forgejo, Bitbucket, plain
+    git): the host's token, if one is configured, is sent by git itself (see
+    git_provider.git_env). is_generic_source is kept for older callers — the
+    host is detected from the URL now.
     """
     base_dir = RULES_GITHUB_DIR
     os.makedirs(base_dir, exist_ok=True)
+    # Covers the clone and the few calls until the import / update session
+    # takes the cache over (see hold_repo_cache).
+    hold_repo_cache(max_seconds=CLONE_LEASE_SECONDS)
 
     if branch and not is_valid_branch_name(branch):
         raise Exception(f"Invalid branch name: '{str(branch)[:80]}'.")
@@ -145,19 +206,23 @@ def clone_or_access_repo(repo_url, branch=None, is_generic_source=False):
     # Every part comes from user input: sanitised, and the result must stay
     # under base_dir (a URL ending in "/../.." must not escape it).
     dir_suffix = f"--{_safe_path_part(branch)}" if branch else ""
-    repo_dir = os.path.join(base_dir, _safe_path_part(owner), _safe_path_part(name) + dir_suffix)
+    # GitHub clones keep their historical owner/repo layout; any other host
+    # gets its own top folder so the same owner/repo on two hosts can't collide.
+    host = git_provider.split_repo_url(repo_url)[0]
+    host_dir = [] if git_provider.detect_provider(repo_url) == 'github' else [_safe_path_part(host)]
+    repo_dir = os.path.join(base_dir, *host_dir, _safe_path_part(owner), _safe_path_part(name) + dir_suffix)
     if not _inside(base_dir, repo_dir):
         raise Exception("Invalid repository path.")
 
     existe = os.path.exists(repo_dir)
     if not existe:
-        if not is_generic_source:
+        if git_provider.detect_provider(repo_url) == 'github':
             status, msg = is_github_repo_accessible(repo_url)
             if not status:
                 raise Exception(f"The repo {repo_url} is not accessible: {msg}")
         try:
             kwargs = {"branch": branch, "depth": 1} if branch else {"depth": 1}
-            Repo.clone_from(repo_url, repo_dir, **kwargs)
+            Repo.clone_from(repo_url, repo_dir, env=git_provider.git_env(repo_url), **kwargs)
         except Exception as e:
             # Remove the partially-created directory so a retry starts fresh
             if os.path.exists(repo_dir):
@@ -168,21 +233,19 @@ def clone_or_access_repo(repo_url, branch=None, is_generic_source=False):
                 raise Exception(f"Branch '{branch}' does not exist in this repository.")
             if "Repository not found" in err or "not found" in err.lower():
                 raise Exception("Repository not found or not accessible. Check the URL.")
-            if "Authentication failed" in err:
-                raise Exception("Authentication failed — the repository may be private.")
+            if "Authentication failed" in err or "could not read Username" in err:
+                raise Exception("Authentication failed — the repository may be private. Add a token for this host in Manage Git → Git tokens & hosts.")
             raise Exception(f"Clone failed: {err.split('stderr:')[-1].strip()[:200]}")
     else:
-        # Repo already cached — make sure we are on the right branch and up-to-date
-        if branch:
-            try:
-                repo = Repo(repo_dir)
-                repo.git.checkout(branch)
-                repo.remotes.origin.pull()
-            except Exception as e:
-                err = str(e)
-                if "did not match any" in err or "pathspec" in err or "not found" in err.lower():
-                    raise Exception(f"Branch '{branch}' does not exist in this repository.")
-                raise Exception(f"Error switching to branch '{branch}': {err.split('stderr:')[-1].strip()[:200]}")
+        # Repo already cached — bring it to the remote's latest commit, or
+        # start over with a fresh clone when that fails (a re-import must
+        # never read stale files).
+        ok, message = refresh_clone(repo_dir, repo_url, branch)
+        if not ok:
+            if branch and ("couldn't find remote ref" in message or "not found" in message.lower()):
+                raise Exception(f"Branch '{branch}' does not exist in this repository.")
+            shutil.rmtree(repo_dir, ignore_errors=True)
+            return clone_or_access_repo(repo_url, branch=branch, is_generic_source=is_generic_source)
 
     return repo_dir, existe
 
@@ -200,11 +263,11 @@ def _clean_github_error(response) -> str:
             when = f"in {mins} min" if mins < 60 else f"in {mins // 60}h {mins % 60}m"
         else:
             when = "soon"
-        token_hint = "" if os.environ.get('GITHUB_TOKEN') else " Add a GITHUB_TOKEN (Admin → Settings) to raise it from 60 to 5000 requests/hour."
+        token_hint = "" if os.environ.get('GITHUB_TOKEN') else " Add a GITHUB_TOKEN (Manage Git → Git tokens & hosts) to raise it from 60 to 5000 requests/hour."
         return f"GitHub API rate limit exceeded — resets {when}.{token_hint}"
 
     if response.status_code == 401:
-        return "GITHUB_TOKEN was rejected by GitHub (401 Bad credentials) — it is invalid or revoked. Generate a new one at https://github.com/settings/tokens and update it in Admin → Settings."
+        return "GITHUB_TOKEN was rejected by GitHub (401 Bad credentials) — it is invalid or revoked. Generate a new one at https://github.com/settings/tokens and update it in Manage Git → Git tokens & hosts."
 
     # Secondary rate limit / abuse detection (a 403 without
     # X-RateLimit-Remaining: 0 — GitHub uses Retry-After for this one).
@@ -254,7 +317,12 @@ def get_github_repo_live_info(repo_url: str) -> dict:
     Each of the 4 calls fails independently — a repo-info failure doesn't
     block the other three, matching the old client-side Promise.allSettled
     behavior. Returns {'repo', 'repo_error', 'commits', 'branches',
-    'contributors'}."""
+    'contributors'}.
+
+    Non-GitHub hosts (GitLab, Gitea, …) go through git_provider.repo_live_info,
+    which returns the same shape."""
+    if git_provider.detect_provider(repo_url) != 'github':
+        return git_provider.repo_live_info(repo_url)
     clean = repo_url.rstrip('/')
     if clean.endswith('.git'):
         clean = clean[:-4]
@@ -298,8 +366,69 @@ def get_github_repo_live_info(repo_url: str) -> dict:
     if resp is not None and resp.status_code == 200:
         contributors = resp.json()
 
-    return {'repo': repo, 'repo_error': repo_error, 'commits': commits,
+    return {'provider': 'github', 'provider_label': 'GitHub',
+            'repo': repo, 'repo_error': repo_error, 'commits': commits,
             'branches': branches, 'contributors': contributors}
+
+def repo_cache_stats():
+    """Size of the local clone cache (RULES_GITHUB_DIR) and how many clones it holds."""
+    size, repos = 0, 0
+    if not os.path.isdir(RULES_GITHUB_DIR):
+        return {'size_bytes': 0, 'repos': 0}
+    for root, dirs, files in os.walk(RULES_GITHUB_DIR):
+        if '.git' in dirs:
+            repos += 1
+        for f in files:
+            try:
+                size += os.lstat(os.path.join(root, f)).st_size
+            except OSError:
+                pass
+    return {'size_bytes': size, 'repos': repos}
+
+
+def list_cached_clones():
+    """Every clone in the cache (folders holding a .git), sorted."""
+    clones = []
+    if os.path.isdir(RULES_GITHUB_DIR):
+        for root, dirs, _files in os.walk(RULES_GITHUB_DIR):
+            if '.git' in dirs:
+                clones.append(root)
+                dirs[:] = []          # don't walk into the clone itself
+    return sorted(clones)
+
+
+@contextlib.contextmanager
+def repo_cache_exclusive():
+    """Yield True with the clone cache to ourselves (nothing imports or
+    updates meanwhile), or False when an import / update is using it."""
+    try:
+        handle = _open_cache_lock(fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        yield False
+        return
+    try:
+        yield True
+    finally:
+        _release_cache_lock(handle)
+
+
+def clear_repo_cache():
+    """Delete every clone kept after an import or update — they are cloned
+    again the next time they are needed. Returns the stats of what was
+    removed, or None when an import / update is using the cache right now."""
+    with repo_cache_exclusive() as free:
+        if not free:
+            return None
+        removed = repo_cache_stats()
+        if os.path.isdir(RULES_GITHUB_DIR):
+            for entry in os.listdir(RULES_GITHUB_DIR):
+                path = os.path.join(RULES_GITHUB_DIR, entry)
+                if os.path.isdir(path) and not os.path.islink(path):
+                    shutil.rmtree(path, ignore_errors=True)
+                else:
+                    os.remove(path)
+        return removed
+
 
 def delete_existing_repo_folder(local_dir):
     """Delete the existing folder if it exists — only ever a clone under
@@ -317,11 +446,13 @@ def delete_existing_repo_folder(local_dir):
 #################
 
 def get_github_branches(repo_url: str) -> tuple[list[str], str | None]:
-    """Return (branch_names, error_message) for a GitHub repository.
+    """Return (branch_names, error_message) for a repository on any git host
+    (GitHub through its API, every other host through `git ls-remote`).
 
     error_message is None on success, a string on failure.
     """
-    import os
+    if git_provider.detect_provider(repo_url) != 'github':
+        return git_provider.list_branches(repo_url)
     clean = repo_url.rstrip('/')
     if clean.endswith('.git'):
         clean = clean[:-4]
@@ -432,6 +563,9 @@ def github_repo_metadata(repo_url: str, selected_license: str) -> dict:
     Returns:
         dict: Extracted repository metadata.
     """
+    if git_provider.detect_provider(repo_url) != 'github':
+        return git_provider.repo_metadata(repo_url, selected_license)
+
     # --- Build API URL ---
     api_url = github_repo_to_api_url(repo_url)
 
@@ -447,66 +581,57 @@ def github_repo_metadata(repo_url: str, selected_license: str) -> dict:
 
 def generic_repo_metadata(repo_url: str, selected_license: str, user) -> dict:
     """
-    Metadata for a non-GitHub ("generic source") repository — same shape as
-    extract_github_repo_metadata()'s output, filled locally instead of via
-    an API call that would only work against github.com. Rule formats' own
-    parse_metadata() only ever reads author/license/repo_url off this dict
-    (see e.g. splunk_format.py, sigma_format.py) — everything else is left
-    None/empty since there's no generic way to fetch it.
+    Metadata for a repository on any git host — same shape as
+    extract_github_repo_metadata()'s output. Read from the host's API when it
+    has one (GitLab, Gitea/Forgejo, Bitbucket, GitHub), otherwise filled from
+    the URL itself (owner, name). Rule formats' own parse_metadata() only
+    ever reads author/license/repo_url off this dict.
     """
-    return {
-        "id": None,
-        "name": get_repo_name_from_url(repo_url),
-        "full_name": get_repo_name_from_url(repo_url),
-        "private": None,
-        "author": getattr(user, "first_name", None) or "Unknown",
-        "author_url": None,
-        "author_avatar": None,
-        "repo_url": repo_url,
-        "api_url": None,
-        "description": None,
-        "homepage": None,
-        "language": None,
-        "topics": [],
-        "created_at": None,
-        "updated_at": None,
-        "pushed_at": None,
-        "license": selected_license,
-        "license_name": selected_license,
-        "stars": 0,
-        "watchers": 0,
-        "forks": 0,
-        "open_issues": 0,
-        "default_branch": None,
-        "visibility": None,
-        "archived": False,
-        "disabled": False,
-    }
+    return git_provider.repo_metadata(repo_url, selected_license, user)
 
 
 def valider_repo_github(repo_url: str, is_generic_source: bool = False) -> bool:
     """
-    Vérifie qu'une chaîne est bien une URL de dépôt valide.
+    Is this a repository URL the server may clone / query? The server fetches
+    it, so this is also the SSRF gate:
 
-    is_generic_source=True skips the github.com/GITHUB_HOST hostname check —
-    any http(s) URL with a non-trivial path is accepted, since the actual
-    clone (GitPython) works against any git remote regardless of host.
+    - always refused: credentials in the URL (user@host — also the
+      "github.com@evil.example" trick), localhost and any private, loopback,
+      link-local or reserved IP address (cloud metadata at 169.254.169.254…);
+    - accepted: a known git host — GitHub (and GITHUB_HOST), GitLab, Codeberg,
+      Bitbucket…, plus the hosts declared in Manage Git → Git tokens & hosts (GIT_HOSTS /
+      GIT_HOST_TOKENS); see git_provider.is_known_git_host;
+    - any other host only when the caller explicitly marks it as a generic
+      git server (is_generic_source=True) — a self-hosted server by name.
+
+    Path: /owner/repo (GitLab may nest groups); is_generic_source=True also
+    accepts a flat /repo, which some plain git servers use.
     """
+    import ipaddress
     try:
         parsed = urlparse(repo_url)
-        if parsed.scheme not in ("http", "https"):
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
             return False
-        if not is_generic_source and parsed.netloc != get_github_host():
+        if '@' in parsed.netloc:
+            return False
+        host = parsed.hostname.lower().rstrip('.')
+        if host == 'localhost' or host.endswith('.localhost'):
+            return False
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            ip = None
+        if ip is not None and (ip.is_private or ip.is_loopback or ip.is_link_local
+                               or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            return False
+        if not is_generic_source and not git_provider.is_known_git_host(host):
             return False
         path_parts = [p for p in parsed.path.split('/') if p]
-        # GitHub-shaped URLs are always /owner/repo (2 segments); a generic
-        # git host may nest a repo under groups/subgroups (GitLab) or use a
-        # flat name, so only require a non-empty path there.
         min_parts = 1 if is_generic_source else 2
         if len(path_parts) < min_parts:
             return False
         return True
-    except Exception as e:
+    except Exception:
         return False
 
 def get_licst_license() -> list:
@@ -518,19 +643,43 @@ def get_licst_license() -> list:
                 licenses.append(line)
     return licenses
 
-def git_pull_repo(repo_dir):
+def _git(repo_dir, *args, env=None, timeout=120):
+    return subprocess.run(["git", "-C", repo_dir, *args], env=env, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, text=True, timeout=timeout)
+
+
+def refresh_clone(repo_dir, repo_url=None, branch=None):
+    """Make a cached clone exactly the remote's latest commit: fetch the tip of
+    its branch, `reset --hard` onto it and drop untracked files. Unlike `git
+    pull`, this works on the shallow (--depth 1) clones kept here and can't
+    stop on a merge or a local change. Returns (ok, message)."""
     try:
-        result = subprocess.run(
-            ["git", "-C", repo_dir, "pull"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=True,
-            timeout=120,
-        )
-        return True
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        return False
+        if repo_url is None:
+            repo_url = _git(repo_dir, "remote", "get-url", "origin", timeout=10).stdout.strip()
+        if not branch:
+            branch = _git(repo_dir, "rev-parse", "--abbrev-ref", "HEAD", timeout=10).stdout.strip()
+        if not branch or branch == 'HEAD' or not is_valid_branch_name(branch):
+            return False, 'Unknown branch.'
+        env = {**os.environ, **git_provider.git_env(repo_url or '')}
+        fetched = _git(repo_dir, "fetch", "--depth", "1", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}", env=env)
+        if fetched.returncode != 0:
+            return False, fetched.stderr.strip()[:300]
+        for args in (("checkout", "-q", "-f", "-B", branch, f"origin/{branch}"),
+                     ("reset", "-q", "--hard", f"origin/{branch}"),
+                     ("clean", "-q", "-fdx")):
+            done = _git(repo_dir, *args, env=env, timeout=60)
+            if done.returncode != 0:
+                return False, done.stderr.strip()[:300]
+        return True, 'Up to date.'
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return False, str(e)[:300]
+
+
+def git_pull_repo(repo_dir, repo_url=None):
+    """Bring a cached clone to the remote's latest commit (see refresh_clone) —
+    with the host's token when repo_url is given (read from the clone's own
+    remote otherwise)."""
+    return refresh_clone(repo_dir, repo_url)[0]
 
 
 def get_repo_head_sha(repo_dir):

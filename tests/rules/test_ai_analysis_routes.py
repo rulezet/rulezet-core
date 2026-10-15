@@ -7,7 +7,9 @@ visibility/delete moderation levers.
 import uuid
 
 from app import db
-from app.core.db_class.db import AIGeneration, Rule, User
+from app.core.db_class.ai import AIGeneration
+from app.core.db_class.rule import Rule
+from app.core.db_class.user import User
 
 
 def _login(client, user):
@@ -97,7 +99,7 @@ def test_models_ok_for_admin_even_when_ollama_unreachable(app, client):
 
 
 def test_models_returns_configured_default_model(app, client):
-    from app.core.db_class.db import AIAgentConfig
+    from app.core.db_class.ai import AIAgentConfig
 
     with app.app_context():
         admin = User.query.filter_by(email="admin@admin.admin").first()

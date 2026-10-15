@@ -15,7 +15,7 @@
             <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
                 <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
-                <li class="breadcrumb-item"><a href="/rule/github/manage" class="text-decoration-none text-muted">Manage GitHub</a></li>
+                <li class="breadcrumb-item"><a href="/rule/github/manage" class="text-decoration-none text-muted">Manage Git</a></li>
                 <li class="breadcrumb-item active text-muted" aria-current="page">Sync run</li>
             </ol>
         </nav>
@@ -110,7 +110,7 @@
                 class="dr-nav__item" :class="{ active: idx === 0 }"
                 :id="'repo-tab-' + idx" data-bs-toggle="tab" :data-bs-target="'#repo-pane-' + idx"
                 type="button" role="tab" :aria-selected="idx === 0">
-                <i class="fa-brands fa-github"></i>
+                <i :class="gitProviderIcon(repo.repo_url, repo.git_provider)"></i>
                 <span>[[ shortRepoName(repo.repo_url) ]]</span>
                 <span v-if="repoBadgeCount(repo) > 0" class="dr-nav__badge">[[ repoBadgeCount(repo) ]]</span>
             </button>
@@ -172,6 +172,7 @@
 
 {% block script %}
 <script type="module">
+    import { gitProviderIcon } from '/static/js/components/git-links.js'
     const { createApp, ref, computed } = Vue
 
     const runUuid = '{{ run_uuid }}'
@@ -240,6 +241,7 @@
             poll()
 
             return {
+                gitProviderIcon,
                 pageReady, scheduleTitle, isFinished, repos, jobDone, jobTotal, jobPct,
                 doneRepos, errorRepos, successRate, totalAutoAccepted, totalAutoRejected, totalAutoAdded,
                 runFinishedAt, shortRepoName, repoBadgeCount, repoStatusIcon, repoLogType,

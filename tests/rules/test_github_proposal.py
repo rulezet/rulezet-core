@@ -6,7 +6,8 @@ Tests for GitHub import proposals (non-admin request -> admin bulk review):
 - Direct GitHub/ZIP import routes are now admin-only (closing the gap where
   non-admins could previously call them despite the UI hiding the form).
 """
-from app.core.db_class.db import User, GithubProposal
+from app.core.db_class.git import GithubProposal
+from app.core.db_class.user import User
 
 
 def _login(client, email):
@@ -67,7 +68,7 @@ def test_cannot_propose_the_same_repo_twice(client, app):
 
 def test_cannot_propose_a_repo_already_in_rulezet(client, app):
     from app import db
-    from app.core.db_class.db import Rule
+    from app.core.db_class.rule import Rule
 
     with app.app_context():
         rule = Rule.query.filter_by(source="test").first()

@@ -6,7 +6,9 @@ and any number of revisions can be attached to it.
 """
 
 from app import db
-from app.core.db_class.db import Rule, RuleEditProposal, User
+from app.core.db_class.rule import Rule
+from app.core.db_class.rule_proposal import RuleEditProposal
+from app.core.db_class.user import User
 
 
 def _login(client, email, password):

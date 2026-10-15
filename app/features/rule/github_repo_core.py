@@ -1,9 +1,9 @@
 """
 github_repo_core.py — Incremental sync for the GithubRepo registry.
 
-GithubRepo caches, per distinct GitHub repo URL referenced by active
+GithubRepo caches, per distinct git repository URL (GitHub, GitLab, Gitea…) referenced by active
 (non-deleted) rules, its rule_count plus per-repo format/license/CVE/
-similarity-conflict aggregates — so the GitHub Sources list
+similarity-conflict aggregates — so the Git Sources list
 (/rule/github/list_github_url) can paginate/filter/sort/search against a
 small indexed table instead of a live GROUP BY over the whole Rule table
 (which took 1.3-1.4s per page load on this instance's ~368k-row corpus).
@@ -53,21 +53,49 @@ import datetime
 from sqlalchemy.exc import IntegrityError
 
 from ... import db
-from ...core.db_class.db import Rule, GithubRepo
+from app.core.db_class.git import GithubRepo
+from app.core.db_class.rule import Rule
 
-# Same pattern already used by get_optimized_github_data()/get_all_github_sources()
-# for "is this a GitHub repo URL" — kept identical so GithubRepo tracks
-# exactly the same set of sources the old live query did.
-_GITHUB_URL_PATTERN = re.compile(r'^https?://(www\.)?github\.com/([\w\-_]+)/([\w\-_]+)')
+from app.features.rule.rule_format.utils_format import git_provider
+
+
+# GithubRepo tracks every git repository rules were imported from — GitHub,
+# GitLab, Gitea/Forgejo, Bitbucket or any self-hosted git server. A source
+# counts when it is a URL on a known git host (git_provider.known_hosts():
+# the public ones + GITHUB_HOST + GIT_HOSTS / GIT_HOST_TOKENS), or when rules
+# were imported from it (Rule.github_path is set: the file the rule came
+# from inside the repo) — which covers hosts nobody configured.
 
 
 def _extract_author(url: str) -> str:
-    m = _GITHUB_URL_PATTERN.match(url or '')
-    return m.group(2) if m else None
+    return git_provider.repo_owner(url)
+
+
+def _is_imported_source(url: str) -> bool:
+    return db.session.query(
+        Rule.query.filter(Rule.source == url, Rule.github_path.isnot(None)).exists()
+    ).scalar()
 
 
 def is_github_source(url: str) -> bool:
-    return bool(url and _GITHUB_URL_PATTERN.match(url))
+    """Is *url* a git repository source (any host)? Name kept for callers."""
+    if not url or not url.startswith(('http://', 'https://')):
+        return False
+    host = git_provider.split_repo_url(url)[0].removeprefix('www.')
+    return host in git_provider.known_hosts() or _is_imported_source(url)
+
+
+def git_source_filter():
+    """SQL condition matching the same sources as is_github_source() —
+    plain LIKEs, so it runs on Postgres and SQLite alike."""
+    from sqlalchemy import or_, and_
+    host_patterns = []
+    for host in sorted(git_provider.known_hosts()):
+        host_patterns += [f'https://{host}/%', f'http://{host}/%', f'https://www.{host}/%']
+    return or_(
+        *[Rule.source.ilike(p) for p in host_patterns],
+        and_(Rule.github_path.isnot(None), Rule.source.like('http%')),
+    )
 
 
 def _rule_has_cve(cve_id) -> bool:
@@ -317,13 +345,13 @@ def sync_conflict_counts() -> dict:
     edit/delete sites into, since it's itself a batch/corpus-wide
     recompute, not a per-rule side effect."""
     from sqlalchemy import func
-    from ...core.db_class.db import RuleSimilarity
+    from app.core.db_class.similarity import RuleSimilarity
 
     rows = (
         db.session.query(Rule.source, func.count(func.distinct(Rule.id)))
         .join(RuleSimilarity, RuleSimilarity.rule_id == Rule.id)
         .filter(RuleSimilarity.score > 0.99, Rule.is_deleted == False,
-                Rule.source.op('~')(r'^https?://(www\.)?github\.com/[\w\-_]+/[\w\-_]+'))
+                git_source_filter())
         .group_by(Rule.source)
         .all()
     )
@@ -348,11 +376,10 @@ def rebuild_github_repos_from_rules() -> dict:
 
     Returns {'repos': N, 'rules_counted': N} for a confirmation message.
     """
-    from sqlalchemy import func
-    from ...core.db_class.db import RuleSimilarity
+    from sqlalchemy import func, or_
+    from app.core.db_class.similarity import RuleSimilarity
 
-    github_pattern = r'^https?://(www\.)?github\.com/[\w\-_]+/[\w\-_]+'
-    active_github = (Rule.source.op('~')(github_pattern), Rule.is_deleted == False)
+    active_github = (git_source_filter(), Rule.is_deleted == False)
 
     count_rows = (
         db.session.query(Rule.source, func.count(Rule.id))
@@ -423,6 +450,13 @@ def rebuild_github_repos_from_rules() -> dict:
         repo.branch_counts   = branch_counts_by_url.get(source, {})
         repo.cve_count       = cve_count_by_url.get(source, 0)
         repo.conflict_count  = conflict_count_by_url.get(source, 0)
+        # Recomputed here too so a host declared later in Admin → Settings
+        # (GIT_HOSTS, e.g. a self-hosted GitLab) is reflected on the repo and
+        # its rules after a Resync.
+        provider = git_provider.detect_provider(source)
+        repo.git_provider = provider
+        Rule.query.filter(Rule.source == source, or_(Rule.git_provider.is_(None), Rule.git_provider != provider)) \
+            .update({'git_provider': provider}, synchronize_session=False)
 
     # Prune rows for sources that no longer have any active rules.
     for url, repo in existing.items():
@@ -476,7 +510,7 @@ def backfill_rule_branches_from_default(progress_cb=None) -> dict:
         row[0] for row in
         db.session.query(Rule.source).filter(
             Rule.is_deleted == False, Rule.branch.is_(None),
-            Rule.source.op('~')(_GITHUB_URL_PATTERN.pattern),
+            git_source_filter(),
         ).distinct().all()
     ]
 
@@ -489,6 +523,21 @@ def backfill_rule_branches_from_default(progress_cb=None) -> dict:
     for i, url in enumerate(urls):
         checked = i + 1
         try:
+            if git_provider.detect_provider(url) != 'github':
+                # GitLab, Gitea, plain git…: their API (or `git ls-remote
+                # --symref HEAD`) says which branch is the default.
+                default_branch = git_provider.default_branch(url)
+                if not default_branch:
+                    errors.append(f"{url}: could not read the default branch")
+                    continue
+                updated = Rule.query.filter(
+                    Rule.source == url, Rule.is_deleted == False, Rule.branch.is_(None)
+                ).update({'branch': default_branch}, synchronize_session=False)
+                db.session.commit()
+                if updated:
+                    repos_updated += 1
+                    rules_updated += updated
+                continue
             resp = requests.get(github_repo_to_api_url(url), headers=_github_auth_headers(), timeout=8)
             # GitHub sends these on every response, success or failure —
             # stop as soon as the quota hits 0 instead of logging one 403

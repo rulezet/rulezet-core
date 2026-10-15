@@ -1,5 +1,6 @@
 from app import db
-from app.core.db_class.db import Rule, RuleRelation
+from app.core.db_class.rule import Rule
+from app.core.db_class.rule_relation import RuleRelation
 from app.features.rule_relation.rule_relation_core import resolve_and_link_relations
 
 

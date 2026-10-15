@@ -19,6 +19,25 @@ purple/orange) so a new badge tile matches the rest of the page instead
 of introducing a new palette.
 """
 
+def _starfield_played(g) -> bool:
+    from app.core.db_class.starfield import StarfieldRun
+    return StarfieldRun.query.filter_by(user_id=g.user_id).first() is not None
+
+
+def _starfield_all_bosses(g) -> bool:
+    """Beat the boss (level index 4) of every one of the 5 worlds."""
+    from app.core.db_class.starfield import StarfieldRun
+    from app import db
+    worlds = (db.session.query(StarfieldRun.world)
+              .filter_by(user_id=g.user_id, mode='level', level_index=4, won=True)
+              .distinct().all())
+    return len({w for (w,) in worlds}) >= 5
+
+
+# Secret badges ('secret': True) — tied to the hidden game at /starfield. They
+# are never listed (How to earn points, a profile's locked badges): a
+# profile only shows one once it's unlocked, and the wording never names
+# the game. Keep it that way — the game is an easter egg.
 BADGES = [
     {
         'key': 'bronze_contributor',
@@ -122,16 +141,50 @@ BADGES = [
             (g.rule_tests_contributed or 0) > 0 and (g.attack_mappings_contributed or 0) > 0
         ),
     },
+    {
+        'key': 'anomaly_detected',
+        'name': 'Anomaly Detected',
+        'description': 'You noticed something no index points to. Some say the stars here are not just decoration.',
+        'icon': 'fas fa-eye',
+        'color': 'purple',
+        'rulezy_pose': 'lookup',
+        'secret': True,
+        'check': _starfield_played,
+    },
+    {
+        'key': 'zero_day_hunter',
+        'name': 'Zero-Day Hunter',
+        'description': 'Five threats were waiting where no menu leads. You hunted every one of them down, and the graph went quiet.',
+        'icon': 'fas fa-user-astronaut',
+        'color': 'gold',
+        'rulezy_pose': 'armcross',
+        'secret': True,
+        'check': _starfield_all_bosses,
+    },
 ]
 
 BADGES_BY_KEY = {b['key']: b for b in BADGES}
 
 
-def badges_catalog_json() -> list:
-    """Badge catalog without the check() lambdas — safe to serialize for
-    the API / the "How to earn points" page."""
+def secret_badges_json() -> list:
+    """The secret badges, for the "Hidden badges" teaser on How to earn
+    points — name and cryptic description only, never how to get them."""
     return [
         {'key': b['key'], 'name': b['name'], 'description': b['description'],
          'icon': b['icon'], 'color': b['color'], 'rulezy_pose': b['rulezy_pose']}
+        for b in BADGES if b.get('secret')
+    ]
+
+
+def badges_catalog_json(unlocked_keys=None) -> list:
+    """Badge catalog without the check() lambdas — safe to serialize for
+    the API / the "How to earn points" page. Secret badges are left out,
+    except the ones in *unlocked_keys* (the badges of the profile shown)."""
+    unlocked_keys = set(unlocked_keys or ())
+    return [
+        {'key': b['key'], 'name': b['name'], 'description': b['description'],
+         'icon': b['icon'], 'color': b['color'], 'rulezy_pose': b['rulezy_pose'],
+         'secret': bool(b.get('secret'))}
         for b in BADGES
+        if not b.get('secret') or b['key'] in unlocked_keys
     ]

@@ -24,7 +24,7 @@ _cache: dict[str, dict[str, Any]] | None = None
 
 
 def _load_cache() -> dict[str, dict[str, Any]]:
-    from app.core.db_class.db import LogActionDefinition
+    from app.core.db_class.activity_log import LogActionDefinition
     rows = LogActionDefinition.query.all()
     return {
         r.action_key: {
@@ -50,7 +50,7 @@ def get_override(action_key: str) -> dict[str, Any] | None:
 # ── Listing for the admin manager UI ──────────────────────────────────────────
 
 def _all_known_action_keys() -> set[str]:
-    from app.core.db_class.db import ActivityLog, LogActionDefinition
+    from app.core.db_class.activity_log import ActivityLog, LogActionDefinition
     from app import db
 
     keys = set(ICONS) | set(TITLES) | set(PUBLIC_ACTIONS)
@@ -60,7 +60,7 @@ def _all_known_action_keys() -> set[str]:
 
 
 def _usage_counts() -> dict[str, int]:
-    from app.core.db_class.db import ActivityLog
+    from app.core.db_class.activity_log import ActivityLog
     from app import db
     from sqlalchemy import func
     return dict(
@@ -129,7 +129,7 @@ def list_all_actions(
 
 def save_override(action_key: str, icon: str | None, title: str | None,
                    is_public: bool | None, user_id: int | None) -> dict[str, Any]:
-    from app.core.db_class.db import LogActionDefinition
+    from app.core.db_class.activity_log import LogActionDefinition
     from app import db
 
     row = LogActionDefinition.query.filter_by(action_key=action_key).first()
@@ -146,7 +146,7 @@ def save_override(action_key: str, icon: str | None, title: str | None,
 
 
 def reset_override(action_key: str) -> bool:
-    from app.core.db_class.db import LogActionDefinition
+    from app.core.db_class.activity_log import LogActionDefinition
     from app import db
 
     row = LogActionDefinition.query.filter_by(action_key=action_key).first()
@@ -162,7 +162,7 @@ def set_visibility(action_key: str, is_public: bool, user_id: int | None) -> dic
     """Flip only is_public for one action — used by the inline table toggle,
     so it never touches a custom icon/title someone already set via the edit
     modal (unlike save_override, which overwrites all three fields)."""
-    from app.core.db_class.db import LogActionDefinition
+    from app.core.db_class.activity_log import LogActionDefinition
     from app import db
 
     row = LogActionDefinition.query.filter_by(action_key=action_key).first()
@@ -179,7 +179,7 @@ def set_visibility(action_key: str, is_public: bool, user_id: int | None) -> dic
 def bulk_set_visibility(action_keys: list[str], is_public: bool, user_id: int | None) -> int:
     """Same as set_visibility, for every action_key in one commit — backs the
     Log Definitions table's bulk "Set public/private" action."""
-    from app.core.db_class.db import LogActionDefinition
+    from app.core.db_class.activity_log import LogActionDefinition
     from app import db
 
     action_keys = [k for k in dict.fromkeys(action_keys) if k]

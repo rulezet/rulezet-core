@@ -7,7 +7,9 @@ pages, the shared config/model/execution-log APIs, and the
 import uuid
 
 from app import db
-from app.core.db_class.db import AIAgentConfig, AIExecutionLog, AIGeneration, AIModelConfig, Rule, User
+from app.core.db_class.ai import AIAgentConfig, AIExecutionLog, AIGeneration, AIModelConfig
+from app.core.db_class.rule import Rule
+from app.core.db_class.user import User
 
 
 def _login(client, user):

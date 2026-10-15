@@ -23,6 +23,9 @@ const GithubFilter = {
         const searchField     = Vue.ref(_p('search_field', 'url'))
         const selectedFormat  = Vue.ref(_p('format'))
         const selectedLicense = Vue.ref(_p('license'))
+        const selectedProvider = Vue.ref(_p('provider'))
+        const availableProviders = Vue.ref([]);
+        const providersTotal = Vue.computed(() => availableProviders.value.reduce((n, p) => n + p.count, 0));
         const conflictsOnly   = Vue.ref(_p('conflicts_only') === 'true')
         const personFilter    = Vue.ref({
             mode:   _p('person_mode', 'author'),
@@ -55,6 +58,12 @@ const GithubFilter = {
                 availableFormats.value = [];
             }
             try {
+                const res = await fetch('/rule/get_github_providers_usage');
+                availableProviders.value = res.ok ? await res.json() : [];
+            } catch (e) {
+                availableProviders.value = [];
+            }
+            try {
                 const res = await fetch('/rule/get_github_licenses_usage');
                 availableLicenses.value = res.ok ? await res.json() : [];
             } catch (e) {
@@ -70,6 +79,7 @@ const GithubFilter = {
             _upd('search_field',   searchField.value !== 'url' ? searchField.value : null)
             _upd('format',         selectedFormat.value || null)
             _upd('license',        selectedLicense.value || null)
+            _upd('provider',       selectedProvider.value || null)
             _upd('conflicts_only', conflictsOnly.value ? 'true' : null)
             _upd('page',           currentPage.value > 1 ? currentPage.value : null)
             if (props.sortKey) { p.set('sort', props.sortKey); p.set('dir', props.sortDir) }
@@ -99,6 +109,7 @@ const GithubFilter = {
                 search_field: searchField.value,
                 format: selectedFormat.value,
                 license: selectedLicense.value || '',
+                provider: selectedProvider.value || '',
                 conflicts_only: conflictsOnly.value ? 'true' : 'false',
             });
             if (props.sortKey) {
@@ -154,11 +165,17 @@ const GithubFilter = {
             if (props.autoFetch) fetchUrls(currentPage.value);
         });
 
+        function setProvider(name) {
+            if (selectedProvider.value === name) return
+            selectedProvider.value = name
+            fetchUrls(1)
+        }
+
         return {
             searchQuery,
             searchField,
             selectedFormat,
-            selectedLicense,
+            selectedLicense, selectedProvider, availableProviders, providersTotal, setProvider,
             conflictsOnly,
             personFilter,
             searchIsLoading,
@@ -207,6 +224,21 @@ const GithubFilter = {
                     <span v-if="activeFilterCount > 0" class="rl-filter-badge ms-1">[[ activeFilterCount ]]</span>
                 </button>
             </div>
+        </div>
+
+        <div v-if="availableProviders.length > 1" class="ghf-hosts" role="group" aria-label="Filter by git host">
+            <span class="ghf-hosts__label">Host</span>
+            <button type="button" class="ghf-host" :class="{ 'ghf-host--active': !selectedProvider }"
+                    :aria-pressed="!selectedProvider" @click="setProvider('')">
+                <i class="fa-solid fa-layer-group"></i>All
+                <span class="ghf-host__count">[[ providersTotal ]]</span>
+            </button>
+            <button v-for="p in availableProviders" :key="p.name" type="button" class="ghf-host"
+                    :class="{ 'ghf-host--active': selectedProvider === p.name }"
+                    :aria-pressed="selectedProvider === p.name" @click="setProvider(p.name)">
+                <i :class="p.icon"></i>[[ p.label ]]
+                <span class="ghf-host__count">[[ p.count ]]</span>
+            </button>
         </div>
 
         <div v-show="filtersOpen" class="rl-filter-panel">

@@ -7,7 +7,8 @@ tag is ever minted in a MISP taxonomy / galaxy namespace; at most 25 per rule.
 """
 import pytest
 
-from app.core.db_class.db import Rule, RuleTagAssociation, Tag
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import RuleTagAssociation, Tag
 from app.features.tags import imported_tags_core
 from app.features.tags.imported_tags_core import IMPORTED_SOURCE, MAX_TAGS_PER_RULE
 from tests_new.helpers.rules import new_rule_form

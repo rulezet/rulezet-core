@@ -91,6 +91,8 @@ const MultiSourceFilter = {
             const n = name.toUpperCase();
             if (n.includes("GITHUB")) return "fab fa-github";
             if (n.includes("GITLAB")) return "fab fa-gitlab";
+            if (n.includes("BITBUCKET")) return "fab fa-bitbucket";
+            if (n.includes("CODEBERG") || n.includes("GITEA") || n.includes("FORGEJO")) return "fa-solid fa-mug-hot";
             return "fas fa-code-branch";
         };
 

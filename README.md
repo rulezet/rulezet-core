@@ -301,7 +301,7 @@ This software is licensed under the [GNU Affero General Public License version 3
 
 ```
 Copyright (C) 2025-2026 CIRCL - Computer Incident Response Center Luxembourg
-Copyright (C) 2025-2026 Theo Geffe
+Copyright (C) 2025-2026 Thëo GEFFE @ CIRCL
 ```
 
 ---

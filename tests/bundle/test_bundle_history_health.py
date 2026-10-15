@@ -2,7 +2,7 @@
 pre-deployment health checks."""
 
 from app import db
-from app.core.db_class.db import BundleHistory
+from app.core.db_class.bundle import BundleHistory
 
 from bundle_helpers import (D, F, R, SURICATA, admin, login, make_bundle, make_rule, other, owner,
                             save_structure, tag)
@@ -91,7 +91,7 @@ def test_health_detects_collisions_dependencies_and_marking(client, app):
         y1 = make_rule("Y1", "yara", "rule Same_Name { condition: true }")
         y2 = make_rule("Y2", "yara", "rule Same_Name { condition: false }")
         red = make_rule("Red", "yara", "rule Red_Rule { condition: true }")
-        from app.core.db_class.db import RuleTagAssociation
+        from app.core.db_class.tag import RuleTagAssociation
         import uuid
         db.session.add(RuleTagAssociation(uuid=str(uuid.uuid4()), rule_id=red.id, tag_id=tag("tlp:red").id, user_id=owner().id))
         db.session.commit()
@@ -178,7 +178,7 @@ def test_health_edit_opens_the_bundle_editor_for_managers_only(client, app):
 def test_marking_without_bundle_tlp_only_flags_restricted_rules(client, app):
     """Regression: a bundle with no TLP/PAP tag flagged every rule carrying
     tlp:clear / tlp:white (i.e. every rule, since tlp:clear is auto-attached)."""
-    from app.core.db_class.db import RuleTagAssociation
+    from app.core.db_class.tag import RuleTagAssociation
     import uuid
     with app.app_context():
         clear = make_rule("clear", "yara", "rule clear_r { condition: true }")

@@ -8,7 +8,8 @@ from uuid import uuid4
 from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, load_all_rule_formats
 
 from ..... import db
-from .....core.db_class.db import ImporterResult, User
+from app.core.db_class.git import ImporterResult, InvalidRuleModel
+from app.core.db_class.user import User
 from app.features.rule import rule_core as RuleModel
 from app.features.rule.rules_core import bad_rule_core as BadRuleModel
 from flask import current_app
@@ -37,6 +38,12 @@ class Session_class:
         self._finalized    = False
         self._save_done    = Event()  # set once save_info() has completed
         self._workers_done = 0        # how many worker threads have exited
+        # Bad rules saved before this import started (see _drop_stale_bad_rules)
+        self._bad_rule_id_floor = None
+        # Keep the clone cache (Manage Git → Clear cache) from being emptied
+        # while this import reads the repository.
+        from app.features.rule.rule_format.utils_format.utils_import_update import hold_repo_cache
+        hold_repo_cache(lambda: self._save_done.is_set() or getattr(self, 'phase', None) == 'error')
 
         # 'preparing' (repo not cloned/accessed yet) -> 'scanning' (walking the
         # repo, building the job queue) -> 'importing' (worker threads running)
@@ -121,6 +128,11 @@ class Session_class:
         that cost is only ever paid for files that are actually rules.
         """
         repo_real = os.path.realpath(self.repo_dir)
+        self.scanned_paths = set()   # every rule-candidate file, for _drop_stale_bad_rules
+        try:
+            self._bad_rule_id_floor = db.session.query(db.func.max(InvalidRuleModel.id)).scalar() or 0
+        except Exception:
+            self._bad_rule_id_floor = None   # no cleanup rather than a wrong one
         file_queue = Queue()
         job_lock = Lock()
         job_index = [0]  # boxed so scan workers can bump it under job_lock
@@ -147,28 +159,36 @@ class Session_class:
 
                     # When multiple formats share an extension (e.g. ATR + Sigma on .yml),
                     # use each format's detect() method on the file content to pick the
-                    # right one. Falls back to the first candidate if none self-identify.
+                    # right one.
+                    detected = []
                     if len(candidates) > 1:
                         try:
                             with open(filepath, 'r', encoding='utf-8', errors='replace') as _fh:
                                 _sample = _fh.read(8192)
                             detected = [ri for ri in candidates
                                         if hasattr(ri, 'detect') and ri.detect(_sample)]
-                            rule_instance = detected[0] if detected else candidates[0]
                         except Exception:
-                            rule_instance = candidates[0]
-                    else:
-                        rule_instance = candidates[0]
+                            detected = []
+                    # Try the detected format first, then every other candidate:
+                    # a file no format recognised (e.g. a long comment banner
+                    # before the rule) goes to the first one that actually
+                    # extracts rules from it, instead of being dropped silently.
+                    ordered = detected + [ri for ri in candidates if ri not in detected]
 
                     # Read + split into individual rule texts now (once) so each queue
                     # item is one RULE, not one file — a file can hold dozens of rules,
                     # and progress must reflect rules actually processed, not files
                     # dequeued (dequeuing a file is instant; parsing/validating/writing
                     # every rule inside it is what takes time).
-                    try:
-                        extracted_rules = rule_instance.extract_rules_from_file(filepath)
-                    except Exception:
-                        continue
+                    rule_instance, extracted_rules = None, []
+                    for ri in ordered:
+                        try:
+                            extracted_rules = ri.extract_rules_from_file(filepath)
+                        except Exception:
+                            extracted_rules = []
+                        if extracted_rules:
+                            rule_instance = ri
+                            break
 
                     if not extracted_rules:
                         continue
@@ -220,6 +240,7 @@ class Session_class:
 
                 filepath = os.path.join(root, file)
                 rel_path = os.path.relpath(filepath, self.repo_dir)
+                self.scanned_paths.add(rel_path)
                 file_queue.put((filepath, rel_path, candidates))
 
         for _ in workers:
@@ -421,7 +442,26 @@ class Session_class:
         resolve_and_link_relations(rule_instance, raw_text, metadata, new_rule,
                                     self._correlation_seen, lock=self._relation_lock)
 
+    def _drop_stale_bad_rules(self):
+        """A re-import replaces this repository's bad rules from earlier imports:
+        those whose file was just read again (re-saved below if still invalid,
+        with the current content) or no longer exists in the repository."""
+        repo_url = (self.info or {}).get('repo_url')
+        floor = self._bad_rule_id_floor
+        if not repo_url or floor is None or not self.repo_dir:
+            return
+        scanned = getattr(self, 'scanned_paths', set())
+        stale = InvalidRuleModel.query.filter(InvalidRuleModel.url == repo_url, InvalidRuleModel.id <= floor).all()
+        for bad in stale:
+            path = bad.github_path or ''
+            if path in scanned or not os.path.exists(os.path.join(self.repo_dir, path)):
+                db.session.delete(bad)
+
     def save_info(self):
+        try:
+            self._drop_stale_bad_rules()
+        except Exception:
+            db.session.rollback()   # never fail the import's summary over this cleanup
         result_entry = ImporterResult(
             uuid=str(self.uuid),
             info=json.dumps(self.info),

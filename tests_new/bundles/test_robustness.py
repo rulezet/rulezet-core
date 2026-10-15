@@ -8,10 +8,11 @@ import json
 
 import pytest
 
-from app.core.db_class.db import (
-    Bundle, BundleNode, BundleNote, BundleRelease, BundleRuleAssociation, BundleTagAssociation, BundleVote,
-    UserConfig,
+from app.core.db_class.bundle import (
+    Bundle, BundleNode, BundleNote, BundleRelease, BundleRuleAssociation, BundleVote,
 )
+from app.core.db_class.tag import BundleTagAssociation
+from app.core.db_class.user import UserConfig
 from app.features.bundle import bundle_core as BundleModel
 from app.features.bundle import bundle_layout_core as BundleLayoutModel
 from tests_new.helpers.bundles import (

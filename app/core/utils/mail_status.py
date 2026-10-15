@@ -21,7 +21,7 @@ _UNSET = object()
 def email_status(instance_config=_UNSET) -> dict:
     """`instance_config` lets a caller that already loaded the InstanceConfig
     row (e.g. the global template context processor) skip a second query."""
-    from app.core.db_class.db import InstanceConfig
+    from app.core.db_class.connector import InstanceConfig
 
     enabled = True
     try:

@@ -24,6 +24,7 @@ import PaginationComponent from '/static/js/rule/paginationComponent.js'
 import UserChip            from '/static/js/components/UserChip.js'
 import { apiFetch }        from '/static/js/constants.js'
 import { create_message }  from '/static/js/toaster.js'
+import { gitProviderIcon } from '/static/js/components/git-links.js'
 
 const { ref, reactive, computed, watch, onMounted, onUnmounted } = Vue
 
@@ -279,7 +280,7 @@ export default {
                 <!-- Links -->
                 <div v-if="user.github_url || user.twitter_url || user.website_url" class="ul-card-links">
                     <a v-if="user.github_url"  :href="user.github_url"  class="ul-link-btn" target="_blank" rel="noopener">
-                        <i class="fab fa-github"></i>
+                        <i :class="gitProviderIcon(user.github_url)"></i>
                     </a>
                     <a v-if="user.twitter_url" :href="user.twitter_url" class="ul-link-btn" target="_blank" rel="noopener">
                         <i class="fab fa-twitter"></i>
@@ -759,6 +760,7 @@ export default {
         })
 
         return {
+            gitProviderIcon,
             items, total, totalPages, loading,
             viewMode, page, perPage, perPageModel, sortKey, sortDir, cardSort,
             search, adminFilter, connFilter, verifFilter,

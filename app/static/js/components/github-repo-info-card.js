@@ -1,10 +1,11 @@
 /**
- * GithubRepoInfoCard — collapsible "live GitHub repository info" card:
+ * GithubRepoInfoCard — collapsible "live repository info" card, for a repo
+ * on any git host (GitHub, GitLab, Gitea / Forgejo, Bitbucket, plain git):
  * owner/name/description, KPI strip (stars/forks/issues/watchers/size),
  * info cells (language/license/branch/dates), topics, recent commits,
  * branches and top contributors. Fetches through Rulezet's own
  * /rule/github/repo_live_info proxy on first expand (server-side,
- * authenticated with GITHUB_TOKEN) — NOT a direct browser call to
+ * authenticated with the host's token) — NOT a direct browser call to
  * api.github.com: that used to cap every visitor at 60 req/hour and, on a
  * rate-limit hit, echo that visitor's own public IP back in GitHub's raw
  * error body.
@@ -13,10 +14,12 @@
  * any page needing this exact panel doesn't duplicate the markup/JS.
  *
  * Props:
- *   repo-url        (String)  — required; e.g. https://github.com/owner/repo(.git)
+ *   repo-url        (String)  — required; e.g. https://gitlab.com/group/repo(.git)
  *   start-expanded   (Boolean) — default false
  *   branch           (String)  — optional; when set, repo/commits links point at this branch instead of the default
  */
+import { repoTreeUrl as gitTreeUrl, repoCommitsUrl, gitProviderLabel, gitProviderIcon } from '/static/js/components/git-links.js';
+
 const { ref, computed } = Vue;
 
 function fmtNum(n) {
@@ -66,8 +69,8 @@ const GithubRepoInfoCard = {
                 const data = await res.json();
 
                 ghLoading.value = false;
-                if (data.repo) ghRepo.value = data.repo;
-                else ghError.value = data.repo_error || data.message || 'GitHub API error.';
+                if (data.repo) { ghRepo.value = data.repo; ghError.value = data.repo_notice || null; }
+                else ghError.value = data.repo_error || data.message || 'Repository API error.';
 
                 commitsLoading.value = false;
                 commits.value = data.commits || [];
@@ -98,11 +101,11 @@ const GithubRepoInfoCard = {
 
         const repoTreeUrl = computed(() => {
             if (!ghRepo.value) return null;
-            return props.branch ? ghRepo.value.html_url + '/tree/' + props.branch : ghRepo.value.html_url;
+            return props.branch ? gitTreeUrl(ghRepo.value.html_url, props.branch) : ghRepo.value.html_url;
         });
         const commitsUrl = computed(() => {
             if (!ghRepo.value) return null;
-            return props.branch ? ghRepo.value.html_url + '/commits/' + props.branch : ghRepo.value.html_url + '/commits';
+            return repoCommitsUrl(ghRepo.value.html_url, props.branch);
         });
 
         return {
@@ -112,15 +115,17 @@ const GithubRepoInfoCard = {
             branches, branchesLoading,
             contributors, contributorsLoading,
             fmtNum, fmtSize, fmtDate,
-            repoTreeUrl, commitsUrl,
+            repoTreeUrl, commitsUrl, gitTreeUrl,
+            providerLabel: gitProviderLabel(props.repoUrl),
+            providerIcon: gitProviderIcon(props.repoUrl),
         };
     },
     template: `
     <div class="card border-0 shadow-sm mb-4" style="background:var(--card-bg-color);">
         <div class="card-header border-bottom py-3" style="background:var(--card-bg-color);">
             <button class="gh-toggle-btn" @click="toggleGh" :aria-expanded="ghExpanded">
-                <i class="fa-brands fa-github" style="font-size:1rem;color:var(--subtle-text-color);"></i>
-                <span class="fw-semibold" style="font-size:.9rem;">GitHub Repository info</span>
+                <i :class="providerIcon" style="font-size:1rem;color:var(--subtle-text-color);"></i>
+                <span class="fw-semibold" style="font-size:.9rem;">[[ providerLabel ]] Repository info</span>
                 <span v-if="ghLoading" class="spinner-border spinner-border-sm text-secondary ms-1"></span>
                 <i class="fa-solid fa-chevron-down gh-chevron" :class="{ 'gh-chevron--open': ghExpanded }"></i>
             </button>
@@ -297,7 +302,7 @@ const GithubRepoInfoCard = {
                                  class="d-flex align-items-center gap-2 px-3 py-2 rounded-2"
                                  style="background:var(--light-bg-color);border:1px solid var(--border-color);">
                                 <i class="fa-solid fa-code-branch" style="font-size:.75rem;color:var(--subtle-text-color);flex-shrink:0;"></i>
-                                <a :href="ghRepo.html_url + '/tree/' + b.name" target="_blank" rel="noreferrer"
+                                <a :href="gitTreeUrl(ghRepo.html_url, b.name)" target="_blank" rel="noreferrer"
                                    class="text-decoration-none fw-medium flex-grow-1"
                                    style="font-size:.82rem;font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                     [[ b.name ]]

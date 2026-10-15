@@ -10,7 +10,10 @@ import uuid
 import pytest
 
 from app import db
-from app.core.db_class.db import BackgroundJob, Rule, RuleTagAssociation, Tag, User
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import RuleTagAssociation, Tag
+from app.core.db_class.user import User
 from app.features.tags.imported_tags_core import extract_native_tags, IMPORTED_SOURCE
 
 ISSUE_EXAMPLE = """rule ExampleRule : malware ransomware windows

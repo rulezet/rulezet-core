@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+{% block title %}Git tokens & hosts — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_section_card.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/rule-kit.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5" id="main-container" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-key banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/github/manage" class="text-decoration-none text-muted">Manage Git</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Git tokens &amp; hosts</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-key"></i></div>
+            <div><h2 class="fw-bold mb-1">Git tokens &amp; hosts</h2><div class="banner-accent"></div></div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:680px;font-size:.95rem;">
+            The access tokens and hosts used to import, update and sync rules from Git repositories. Saved in the
+            server's settings and applied at once. A token is never shown again once saved.
+        </p>
+    </div>
+
+    <div v-if="loading" class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    <template v-else>
+        <!-- GitHub -->
+        <div class="h-card">
+            <div class="h-card__header">
+                <div class="h-card__accent"></div>
+                <i class="fa-brands fa-github kit-head-icon"></i>
+                <span class="h-card__title">GitHub</span>
+            </div>
+            <div class="h-card__body">
+                <div class="gs-row">
+                    <div class="gs-row__label">
+                        <div class="fw-semibold">GitHub token</div>
+                        <div class="gs-hint">Raises the GitHub API limit from 60 to 5,000 requests/hour and gives access to private repositories.
+                            A fine-grained token with read access to repository contents is enough.</div>
+                    </div>
+                    <div class="gs-row__value">
+                        <span :class="['gs-state', cfg.github_token_set ? 'gs-state--ok' : 'gs-state--off']">
+                            <i :class="cfg.github_token_set ? 'fa-solid fa-circle-check' : 'fa-regular fa-circle'"></i>
+                            [[ cfg.github_token_set ? 'Set' : 'Not set' ]]
+                        </span>
+                        <button type="button" class="kit-btn" @click="edit('GITHUB_TOKEN')"><i class="fa-solid fa-pen me-1"></i>[[ cfg.github_token_set ? 'Replace' : 'Add' ]]</button>
+                        <button v-if="cfg.github_token_set" type="button" class="kit-btn" @click="testGithub" :disabled="testing">
+                            <span v-if="testing" class="spinner-border spinner-border-sm me-1"></span>
+                            <i v-else class="fa-solid fa-plug-circle-check me-1"></i>Test
+                        </button>
+                    </div>
+                </div>
+                <div v-if="test" :class="['gs-test', test.error ? 'gs-test--ko' : 'gs-test--ok']">
+                    <template v-if="test.error"><i class="fa-solid fa-triangle-exclamation me-1"></i>[[ test.error ]]</template>
+                    <template v-else><i class="fa-solid fa-circle-check me-1"></i>Token accepted — [[ test.remaining ]] / [[ test.limit ]] API requests left this hour.</template>
+                </div>
+                <div v-if="editing === 'GITHUB_TOKEN'" class="gs-edit">
+                    <input v-model="draft" type="password" class="form-control font-monospace" autocomplete="new-password"
+                           placeholder="github_pat_… or ghp_…" aria-label="GitHub token">
+                    <button type="button" class="kit-btn" @click="save('GITHUB_TOKEN')" :disabled="!draft || saving"><i class="fa-solid fa-check me-1"></i>Save</button>
+                    <button type="button" class="kit-btn kit-btn--muted" @click="cancel">Cancel</button>
+                </div>
+                <details class="gs-help">
+                    <summary><i class="fa-solid fa-circle-question me-1"></i>How do I generate this token?</summary>
+                    <p class="fw-semibold mb-1 mt-2">Why</p>
+                    <p class="gs-hint">Rulezet calls the GitHub API with it: fetching branches and repository details when importing
+                        rules, updates and syncs of private repositories, and filing issues on <code>rulezet/rulezet-core</code>
+                        when an admin turns a comment into an issue. Without it those calls are rate-limited (60/hour) or disabled.</p>
+                    <p class="fw-semibold mb-1">How (recommended — fine-grained token)</p>
+                    <ol class="gs-hint ps-3">
+                        <li>Go to <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a>.</li>
+                        <li>Set an <strong>expiration</strong> date — every admin is alerted if the token expires or gets rejected, so a short expiry is fine.</li>
+                        <li><strong>Repository access</strong>: the repositories you import from (and <code>rulezet-core</code> for issues).</li>
+                        <li><strong>Permissions → Repository permissions</strong>: <strong>Contents: Read</strong> (and <strong>Issues: Read and write</strong> for issue filing). Everything else "No access".</li>
+                        <li>Click <strong>Generate token</strong> and copy it — GitHub only shows it once.</li>
+                    </ol>
+                    <p class="fw-semibold mb-1">Simpler alternative — classic token</p>
+                    <p class="gs-hint mb-0">At <a href="https://github.com/settings/tokens/new" target="_blank" rel="noopener">github.com/settings/tokens/new</a>
+                        with just the <code>repo</code> scope checked. Broader, but needs no organization approval.</p>
+                </details>
+
+                <div class="gs-row">
+                    <div class="gs-row__label">
+                        <div class="fw-semibold">GitHub host</div>
+                        <div class="gs-hint">github.com, or a GitHub Enterprise Server host (its API at https://&lt;host&gt;/api/v3).</div>
+                    </div>
+                    <div class="gs-row__value">
+                        <code>[[ cfg.github_host ]]</code>
+                        <button type="button" class="kit-btn" @click="edit('GITHUB_HOST', cfg.github_host)"><i class="fa-solid fa-pen me-1"></i>Change</button>
+                    </div>
+                </div>
+                <div v-if="editing === 'GITHUB_HOST'" class="gs-edit">
+                    <input v-model="draft" type="text" class="form-control font-monospace" placeholder="github.com" aria-label="GitHub host">
+                    <button type="button" class="kit-btn" @click="save('GITHUB_HOST')" :disabled="!draft || saving"><i class="fa-solid fa-check me-1"></i>Save</button>
+                    <button type="button" class="kit-btn kit-btn--muted" @click="cancel">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Other git hosts -->
+        <div class="h-card">
+            <div class="h-card__header">
+                <div class="h-card__accent"></div>
+                <i class="fa-brands fa-git-alt kit-head-icon"></i>
+                <span class="h-card__title">GitLab, Gitea / Forgejo, other git hosts</span>
+            </div>
+            <div class="h-card__body">
+                <div class="gs-row">
+                    <div class="gs-row__label">
+                        <div class="fw-semibold">Other git hosts</div>
+                        <div class="gs-hint">gitlab.com, codeberg.org, bitbucket.org and hosts named gitlab / gitea / forgejo are known already.
+                            Add your own, comma separated, with their type when the name doesn't tell it
+                            (<code>gitlab</code>, <code>gitea</code>, <code>bitbucket</code>, <code>github</code> or <code>generic</code> for plain git, no API):
+                            <code>git.corp.lan=gitlab, code.example.org=gitea</code>.</div>
+                    </div>
+                    <div class="gs-row__value">
+                        <code>[[ cfg.git_hosts || 'none' ]]</code>
+                        <button type="button" class="kit-btn" @click="edit('GIT_HOSTS', cfg.git_hosts)"><i class="fa-solid fa-pen me-1"></i>Change</button>
+                    </div>
+                </div>
+                <div v-if="editing === 'GIT_HOSTS'" class="gs-edit">
+                    <input v-model="draft" type="text" class="form-control font-monospace" placeholder="git.corp.lan=gitlab, code.example.org=gitea" aria-label="Other git hosts">
+                    <button type="button" class="kit-btn" @click="save('GIT_HOSTS')" :disabled="saving"><i class="fa-solid fa-check me-1"></i>Save</button>
+                    <button type="button" class="kit-btn kit-btn--muted" @click="cancel">Cancel</button>
+                </div>
+
+                <div class="gs-row">
+                    <div class="gs-row__label">
+                        <div class="fw-semibold">Tokens per host</div>
+                        <div class="gs-hint">For private repositories and repository details on these hosts. One <code>host=token</code> per host,
+                            comma separated — replaces the whole list. GitLab: a personal or project access token with
+                            read_repository and read_api; Gitea / Forgejo: a token with repository read access.
+                            The token for the GitHub host stays in <strong>GitHub token</strong> above.</div>
+                    </div>
+                    <div class="gs-row__value">
+                        <span v-if="cfg.git_token_hosts.length" class="gs-state gs-state--ok"><i class="fa-solid fa-circle-check"></i>[[ cfg.git_token_hosts.join(', ') ]]</span>
+                        <span v-else class="gs-state gs-state--off"><i class="fa-regular fa-circle"></i>None</span>
+                        <button type="button" class="kit-btn" @click="edit('GIT_HOST_TOKENS')"><i class="fa-solid fa-pen me-1"></i>Replace</button>
+                    </div>
+                </div>
+                <div v-if="editing === 'GIT_HOST_TOKENS'" class="gs-edit">
+                    <input v-model="draft" type="password" class="form-control font-monospace" autocomplete="new-password"
+                           placeholder="gitlab.com=glpat-…, git.corp.lan=…" aria-label="Tokens per host">
+                    <button type="button" class="kit-btn" @click="save('GIT_HOST_TOKENS')" :disabled="saving"><i class="fa-solid fa-check me-1"></i>Save</button>
+                    <button type="button" class="kit-btn kit-btn--muted" @click="cancel">Cancel</button>
+                </div>
+
+                <div v-if="cfg.hosts_detected.length" class="mt-3">
+                    <div class="kit-sub">Hosts declared</div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span v-for="h in cfg.hosts_detected" :key="h.host" class="gs-host"><code>[[ h.host ]]</code> · [[ h.provider ]]</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Clone cache -->
+        <div class="h-card">
+            <div class="h-card__header">
+                <div class="h-card__accent"></div>
+                <i class="fa-solid fa-hard-drive kit-head-icon"></i>
+                <span class="h-card__title">Clone cache</span>
+            </div>
+            <div class="h-card__body">
+                <div class="gs-row">
+                    <div class="gs-row__label">
+                        <div class="fw-semibold">Cloned repositories</div>
+                        <div class="gs-hint">Every repository imported or updated is kept on the server, so the next update doesn't
+                            download it again. <strong>Pull all</strong> fetches the latest commits of every clone (before re-importing
+                            a repository that changed, for instance); <strong>Clear cache</strong> frees the disk space — each
+                            repository is simply cloned again the next time it is needed. Both are refused while a Git import or
+                            update is running, and an import started meanwhile waits for them.</div>
+                    </div>
+                    <div class="gs-row__value">
+                        <span v-if="!cache" class="spinner-border spinner-border-sm text-secondary"></span>
+                        <span v-else class="gs-state" :class="cache.repos ? 'gs-state--ok' : 'gs-state--off'">
+                            <i class="fa-solid fa-box-archive"></i>[[ cache.repos ]] clone[[ cache.repos === 1 ? '' : 's' ]] · [[ formatSize(cache.size_bytes) ]]
+                        </span>
+                        <button type="button" class="kit-btn" @click="pullAll" :disabled="pulling || !cache || !cache.repos">
+                            <span v-if="pulling" class="spinner-border spinner-border-sm me-1"></span>
+                            <i v-else class="fa-solid fa-code-pull-request me-1"></i>Pull all
+                        </button>
+                        <button type="button" :class="['kit-btn', confirmClear ? 'kit-btn--danger' : '']" @click="clearCache"
+                                :disabled="clearing || !cache || !cache.repos">
+                            <span v-if="clearing" class="spinner-border spinner-border-sm me-1"></span>
+                            <i v-else class="fa-solid fa-broom me-1"></i>[[ confirmClear ? 'Click again to clear' : 'Clear cache' ]]
+                        </button>
+                    </div>
+                </div>
+                <div v-if="pullJob" class="gs-test gs-test--ok">
+                    <i class="fa-solid fa-code-pull-request me-1"></i>Pull running in the background —
+                    <a :href="'/jobs/detail/' + pullJob">follow it on its job page</a>.
+                </div>
+            </div>
+        </div>
+    </template>
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module" src="{{ url_for('static', filename='js/rule/github/gitSettings.js') }}"></script>
+{% endblock %}

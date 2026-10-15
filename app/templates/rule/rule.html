@@ -119,7 +119,7 @@
       </div>
     </div>
     <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
-      Manually submit a rule, parse existing content, or import from GitHub / ZIP.
+      Manually submit a rule, parse existing content, or import from a Git repository (GitHub, GitLab…) / ZIP.
     </p>
   </div>
 
@@ -134,7 +134,7 @@
       <i class="fas fa-wand-magic-sparkles"></i><span>Parse</span>
     </a>
     <a href="#" class="dr-nav__item" :class="activeTab === 'github' ? 'active' : ''" @click.prevent="activeTab = 'github'">
-      <i class="fab fa-github"></i><span>GitHub</span>
+      <i class="fa-brands fa-git-alt"></i><span>Git</span>
     </a>
     <a href="#" class="dr-nav__item" :class="activeTab === 'zip' ? 'active' : ''" @click.prevent="activeTab = 'zip'">
       <i class="fas fa-file-zipper"></i><span>Zip</span>
@@ -386,18 +386,18 @@
       </div>
     </div>
 
-    <!-- ── Tab 3 : GitHub URL ── -->
+    <!-- ── Tab 3 : Git repository URL ── -->
     <div v-show="activeTab === 'github'">
       <div class="card border-0 card_detail border-top shadow-lg mb-4" style="border-radius: 12px;">
-        <div class="card-watermark-detail"><i class="fab fa-github"></i></div>
+        <div class="card-watermark-detail"><i class="fa-brands fa-git-alt"></i></div>
         <div class="card-body p-4" style="position: relative; z-index: 1;">
         <div class="d-flex align-items-center gap-2 mb-1">
           <div class="h-card__accent"></div>
           <h6 class="mb-0 fw-bold text-uppercase" style="font-size:.78rem;letter-spacing:.04em;color:var(--text-color);">
-            <i class="fab fa-github me-1" style="color:#0d6efd;"></i>Import from GitHub
+            <i class="fa-brands fa-git-alt me-1" style="color:#0d6efd;"></i>Import from a Git repository
           </h6>
         </div>
-        <p class="text-muted mb-3" style="font-size:.83rem;margin-left:1.3rem;">Clone a repository and bulk-import all supported detection rules.</p>
+        <p class="text-muted mb-3" style="font-size:.83rem;margin-left:1.3rem;">Clone a repository — GitHub, GitLab, Gitea / Forgejo, Bitbucket or any git server — and bulk-import all supported detection rules.</p>
         <hr style="border-color:var(--border-color);margin:0 0 1rem;">
 
         <!-- Info callout -->
@@ -407,7 +407,7 @@
             The importer walks every file in the repository and tries to parse each one using the matching format engine.
             Rules that fail validation are saved in <strong>Bad Rules</strong> for manual review rather than discarded.
             {% if not (current_user.is_admin() or current_user.has_permission('github.manage')) %}
-            Direct GitHub import is restricted to admins and GitHub Managers, so submit a proposal instead —
+            Direct Git import is restricted to admins and Git Managers, so submit a proposal instead —
             it'll be reviewed and, if accepted, the repository will be imported for you.
             {% endif %}
           </div>
@@ -417,7 +417,7 @@
         <!-- ── GitHub API rate-limit banner — big and hard to miss when
              actually exhausted, since it explains an otherwise-confusing
              import failure. Silent (no banner at all) when healthy. ── -->
-        <div v-if="rateLimitStatus && rateLimitStatus.error"
+        <div v-if="!isGenericSource && rateLimitStatus && rateLimitStatus.error"
              class="d-flex align-items-center gap-3 p-3 mb-4 rounded-3"
              style="background:rgba(220,53,69,.1);border:2px solid rgba(220,53,69,.35);">
           <i class="fas fa-key" style="color:#dc3545;font-size:1.4rem;flex-shrink:0;"></i>
@@ -429,7 +429,7 @@
             <i class="fas fa-rotate me-1"></i>Recheck
           </button>
         </div>
-        <div v-else-if="rateLimitStatus && rateLimitStatus.remaining === 0"
+        <div v-else-if="!isGenericSource && rateLimitStatus && rateLimitStatus.remaining === 0"
              class="d-flex align-items-center gap-3 p-3 mb-4 rounded-3"
              style="background:rgba(220,53,69,.1);border:2px solid rgba(220,53,69,.35);">
           <i class="fas fa-triangle-exclamation" style="color:#dc3545;font-size:1.4rem;flex-shrink:0;"></i>
@@ -444,7 +444,7 @@
             <i class="fas fa-rotate me-1"></i>Recheck
           </button>
         </div>
-        <div v-else-if="rateLimitStatus && !rateLimitStatus.error"
+        <div v-else-if="!isGenericSource && rateLimitStatus && !rateLimitStatus.error"
              class="d-flex align-items-center gap-2 mb-3" style="font-size:.75rem;color:var(--subtle-text-color);">
           <i class="fa-brands fa-github"></i>
           <span>GitHub API: [[ rateLimitStatus.remaining ]]/[[ rateLimitStatus.limit ]] requests remaining</span>
@@ -457,21 +457,18 @@
           <div class="mb-3">
             <div class="d-flex align-items-center gap-1 mb-1">
               <label class="form-label-styled mb-0" for="url">Repository URL<span class="req-badge">required</span></label>
-              <i class="rf-label-hint" data-tip="Must be a public GitHub repository URL ending in .git.">?</i>
+              <i class="rf-label-hint" data-tip="Any git repository: GitHub, GitLab, Gitea / Forgejo, Bitbucket or a self-hosted git server. Private repositories need a token for their host (Manage Git → Git tokens & hosts).">?</i>
             </div>
             <div class="input-group">
               <span class="input-group-text" style="background:var(--light-bg-color);border-color:var(--border-color);color:var(--muted-text-color,#6c757d);">
-                <i class="fab fa-github"></i>
+                <i class="fa-brands fa-git-alt"></i>
               </span>
               <input type="text" name="url" class="form-control" id="url"
-                placeholder="https://github.com/your_username/project.git" v-model="url">
+                placeholder="https://gitlab.com/group/project.git, https://github.com/owner/project…" v-model="url">
             </div>
             <div id="github-url-error" class="form-hint" style="color:#dc3545;"></div>
-            <div class="form-check mt-2">
-              <input type="checkbox" class="form-check-input" id="isGenericSource" v-model="isGenericSource">
-              <label class="form-check-label" for="isGenericSource" style="font-size:.83rem;">
-                This isn't hosted on GitHub (GitLab, Gitea, self-hosted, …)
-              </label>
+            <div v-if="detectedHost" class="form-hint mt-1" style="font-size:.75rem;">
+              <i class="fa-solid fa-circle-check me-1" style="color:#198754;"></i>Detected host: <strong>[[ detectedHost ]]</strong>
             </div>
           </div>
 
@@ -490,8 +487,8 @@
                 <div class="spinner-border spinner-border-sm text-primary" style="width:14px;height:14px;border-width:2px;"></div>
               </span>
             </div>
-            <!-- Branch suggestions (GitHub only — a generic source has no API to list them from) -->
-            <div v-if="!isGenericSource && availableBranches.length > 0" class="d-flex flex-wrap gap-1 mt-2">
+            <!-- Branch suggestions (any git host) -->
+            <div v-if="availableBranches.length > 0" class="d-flex flex-wrap gap-1 mt-2">
               <button v-for="b in availableBranches" :key="b" type="button"
                       @click="branch = b"
                       :class="['btn btn-xs rounded-pill px-2 py-1', branch === b ? 'btn-primary' : 'btn-outline-secondary']"
@@ -499,7 +496,7 @@
                 <i class="fas fa-code-branch me-1" style="font-size:.65rem;"></i>[[ b ]]
               </button>
             </div>
-            <div v-if="!isGenericSource && branchesError" class="form-hint mt-1" style="color:#dc3545;font-size:.75rem;">
+            <div v-if="branchesError" class="form-hint mt-1" style="color:#dc3545;font-size:.75rem;">
               <i class="fas fa-triangle-exclamation me-1"></i>[[ branchesError ]]
             </div>
           </div>
@@ -532,20 +529,17 @@
           <div class="mb-3">
             <div class="d-flex align-items-center gap-1 mb-1">
               <label class="form-label-styled mb-0" for="proposal-url">Repository URL<span class="req-badge">required</span></label>
-              <i class="rf-label-hint" data-tip="Must be a public GitHub repository URL ending in .git.">?</i>
+              <i class="rf-label-hint" data-tip="Any git repository: GitHub, GitLab, Gitea / Forgejo, Bitbucket or a self-hosted git server. Private repositories need a token for their host (Manage Git → Git tokens & hosts).">?</i>
             </div>
             <div class="input-group">
               <span class="input-group-text" style="background:var(--light-bg-color);border-color:var(--border-color);color:var(--muted-text-color,#6c757d);">
-                <i class="fab fa-github"></i>
+                <i class="fa-brands fa-git-alt"></i>
               </span>
               <input type="text" name="proposal-url" class="form-control" id="proposal-url"
-                placeholder="https://github.com/your_username/project.git" v-model="url">
+                placeholder="https://gitlab.com/group/project.git, https://github.com/owner/project…" v-model="url">
             </div>
-            <div class="form-check mt-2">
-              <input type="checkbox" class="form-check-input" id="proposalIsGenericSource" v-model="isGenericSource">
-              <label class="form-check-label" for="proposalIsGenericSource" style="font-size:.83rem;">
-                This isn't hosted on GitHub (GitLab, Gitea, self-hosted, …)
-              </label>
+            <div v-if="detectedHost" class="form-hint mt-1" style="font-size:.75rem;">
+              <i class="fa-solid fa-circle-check me-1" style="color:#198754;"></i>Detected host: <strong>[[ detectedHost ]]</strong>
             </div>
           </div>
 
@@ -564,7 +558,7 @@
                 <div class="spinner-border spinner-border-sm text-primary" style="width:14px;height:14px;border-width:2px;"></div>
               </span>
             </div>
-            <div v-if="!isGenericSource && availableBranches.length > 0" class="d-flex flex-wrap gap-1 mt-2">
+            <div v-if="availableBranches.length > 0" class="d-flex flex-wrap gap-1 mt-2">
               <button v-for="b in availableBranches" :key="b" type="button"
                       @click="branch = b"
                       :class="['btn btn-xs rounded-pill px-2 py-1', branch === b ? 'btn-primary' : 'btn-outline-secondary']"
@@ -605,7 +599,7 @@
           <div v-if="myProposalsLoading" class="text-center py-3">
             <div class="spinner-border spinner-border-sm text-primary"></div>
           </div>
-          <p v-else-if="myProposals.length === 0" class="text-muted" style="font-size:.85rem;">You haven't submitted any GitHub proposals yet.</p>
+          <p v-else-if="myProposals.length === 0" class="text-muted" style="font-size:.85rem;">You haven't submitted any repository proposals yet.</p>
           <div v-else class="d-flex flex-column gap-2">
             <div v-for="p in myProposals" :key="p.uuid" class="d-flex align-items-center gap-2 p-2 rounded-3" style="background:var(--light-bg-color);border:1px solid var(--border-color);">
               <span :class="['gp-status-badge', 'gp-status-badge--' + p.status]">[[ p.status ]]</span>
@@ -692,7 +686,7 @@
         <div class="admin-gate">
           <div><i class="fas fa-lock"></i></div>
           <p class="fw-semibold mb-1" style="color:var(--text-color);">Admin access required</p>
-          <p class="mb-3" style="font-size:.83rem;">Importing rules from a ZIP file is restricted to admins and GitHub Managers.</p>
+          <p class="mb-3" style="font-size:.83rem;">Importing rules from a ZIP file is restricted to admins and Git Managers.</p>
           <a href="/account/login" class="btn btn-primary btn-sm" style="border-radius:8px;">Sign in as admin</a>
         </div>
         {% endif %}
@@ -887,6 +881,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
 
       const { createApp, ref, computed, onMounted, watch } = Vue;
       import { message_list, create_message } from '/static/js/toaster.js';
+      import { gitProvider, gitProviderLabel } from '/static/js/components/git-links.js';
       import VulnerabilityInput from '/static/js/vulnerability/vulnerabilityInput.js';
       import SmartEditor from '/static/js/components/smart-editor.js';
       import TagInput from '/static/js/tags/tagInput.js';
@@ -913,7 +908,11 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                   'deep-validate-suricata': DeepValidateSuricata,
             },
             setup() {
-                  const requestedTab = new URLSearchParams(window.location.search).get('tab');
+                  const pageParams   = new URLSearchParams(window.location.search);
+                  const requestedTab = pageParams.get('tab');
+                  // Prefill from a link (e.g. the CVE response kit): ?format=sigma&cve=CVE-…&prompt=…
+                  const requestedCve    = (pageParams.get('cve') || '').trim().toUpperCase();
+                  const requestedPrompt = (pageParams.get('prompt') || '').slice(0, 2000);
                   const activeTab = ref(VALID_TABS.includes(requestedTab) ? requestedTab : 'manual');
 
                   // Keep ?tab= in sync so a reload (or a copy-pasted link) lands
@@ -926,7 +925,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                   });
 
                   const manualContent = ref(window.__manual_content || '');
-                  const manualFormat  = ref(window.__manual_format  || '');
+                  const manualFormat  = ref(window.__manual_format  || (pageParams.get('format') || '').toLowerCase());
                   const manualLicense = ref(window.__manual_license || '');
                   const parseContent  = ref('');
                   const jsonContent = ref('');
@@ -958,7 +957,12 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                   const selectedLicense = ref("");
                   const url              = ref("");
                   const branch           = ref("");
-                  const isGenericSource  = ref(false);
+                  // Host detected from the URL — sent along so older code paths
+                  // that still read is_generic_source behave.
+                  const isGenericSource  = computed(() => url.value.trim() !== '' && gitProvider(url.value.trim()) !== 'github');
+                  const detectedHost     = computed(() => {
+                        try { return new URL(url.value.trim()).hostname ? gitProviderLabel(url.value.trim()) : ''; } catch { return ''; }
+                  });
                   const availableBranches = ref([]);
                   const branchesLoading  = ref(false);
                   const branchesError    = ref("");
@@ -971,11 +975,11 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                         branchesError.value     = "";
                         clearTimeout(_branchDebounce);
                         const trimmed = val.trim();
-                        // Only a real github.com URL — not "github.com" anywhere in the string
-                        // (https://evil.example/github.com/x would have passed).
-                        let host = '';
-                        try { host = new URL(trimmed).hostname.toLowerCase(); } catch { return; }
-                        if (host !== 'github.com' && host !== 'www.github.com') return;
+                        // Any git host (GitHub, GitLab, Gitea, …) — the server lists
+                        // the branches with `git ls-remote` or the host's API.
+                        let parsed;
+                        try { parsed = new URL(trimmed); } catch { return; }
+                        if (!/^https?:$/.test(parsed.protocol) || parsed.pathname.split('/').filter(Boolean).length < 2) return;
                         _branchDebounce = setTimeout(async () => {
                               const requestId = ++_branchRequestId;
                               branchesLoading.value = true;
@@ -1020,7 +1024,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                   }
 
                   // ── Generate with AI (Beta) ──────────────────────────────
-                  const aiGenDescription = ref('');
+                  const aiGenDescription = ref(requestedPrompt);
                   const aiGenSample      = ref('');
                   const aiGenBusy        = ref(false);
                   const aiGenSteps       = ref([]);
@@ -1156,7 +1160,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                         importError.value = "";
                         $("#github-url-error").text("");
                         if (!url.value.trim()) {
-                              $("#github-url-error").text("Please provide a GitHub repository URL.");
+                              $("#github-url-error").text("Please provide a git repository URL.");
                               is_loading.value = false;
                               return;
                         }
@@ -1244,9 +1248,13 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                         is_loading_zip.value = false;
                   }
 
-                  const detectedVulnerabilities = ref([]);
+                  const detectedVulnerabilities = ref(/^[A-Z0-9][A-Z0-9-]{3,40}$/.test(requestedCve) ? [requestedCve] : []);
                   const selectedTags = ref([]);
-                  const selectedAttacks = ref([]);
+                  // ?attack=T1003&attack_name=… (technique page's "Write it" links)
+                  const requestedAttack = (pageParams.get('attack') || '').trim().toUpperCase();
+                  const selectedAttacks = ref(/^T\d{4}(\.\d{3})?$/.test(requestedAttack)
+                        ? [{ technique_id: requestedAttack, name: (pageParams.get('attack_name') || requestedAttack).slice(0, 200), tactic_keys: [] }]
+                        : []);
                   const selectedRelatedRules = ref([]);
 
                   const formData = Vue.reactive({
@@ -1297,7 +1305,6 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                                     branch.value = "";
                                     selectedLicense.value = "";
                                     proposalMessage.value = "";
-                                    isGenericSource.value = false;
                                     fetchMyProposals();
                               }
                         } catch (e) {
@@ -1391,6 +1398,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                         url,
                         branch,
                         isGenericSource,
+                        detectedHost,
                         availableBranches,
                         branchesLoading,
                         branchesError,

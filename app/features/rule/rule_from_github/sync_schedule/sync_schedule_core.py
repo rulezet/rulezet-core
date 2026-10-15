@@ -9,7 +9,7 @@ import uuid as _uuid_mod
 from flask import current_app
 
 from app import db
-from app.core.db_class.db import GithubSyncSchedule, GithubSyncScheduleRepo
+from app.core.db_class.git import GithubSyncSchedule, GithubSyncScheduleRepo
 from app.features.rule import rule_core as RuleModel
 from app.features.rule.rule_format.utils_format.utils_import_update import valider_repo_github
 
@@ -110,6 +110,7 @@ def resolve_repo_urls(repo_mode, repo_filters, selected_repo_urls, excluded_repo
             search_field=repo_filters.get('search_field', 'url'),
             format_filter=repo_filters.get('format'),
             author_filter=repo_filters.get('author'),
+            provider_filter=repo_filters.get('provider'),
         )
         excluded = set(excluded_repo_urls or [])
         return [u for u in all_urls if u not in excluded]

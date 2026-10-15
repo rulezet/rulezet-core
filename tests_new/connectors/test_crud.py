@@ -11,9 +11,12 @@ import json
 import pytest
 
 from app import db
-from app.core.db_class.db import (
-    ActivityLog, Bundle, BundleRuleAssociation, Connector, Rule, RuleTagAssociation, RuleUpdateHistory, Tag, User,
-)
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.bundle import Bundle, BundleRuleAssociation
+from app.core.db_class.connector import Connector
+from app.core.db_class.rule import Rule, RuleUpdateHistory
+from app.core.db_class.tag import RuleTagAssociation, Tag
+from app.core.db_class.user import User
 from tests_new.helpers.connectors import (  # noqa: F401
     API, REMOTE_URL, connector_form, make_connector, make_system_connector, no_network, pull_jobs, remote,
     remote_bundle, remote_rule, run_pull,

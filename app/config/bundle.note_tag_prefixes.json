@@ -1,0 +1,22 @@
+{
+  "label": "Bundle note tag prefixes",
+  "category": "Bundles",
+  "description": "Tag namespaces offered on bundle notes, in this order.",
+  "public": false,
+  "python_type": "tuple",
+  "value": [
+    "false-positive:",
+    "use-case-applicability:",
+    "incident-disposition:",
+    "misp-workflow:analysis=",
+    "workflow:",
+    "priority-level:",
+    "detection-engineering:",
+    "hunt-ex:",
+    "cti-evaluation:",
+    "estimative-language:",
+    "admiralty-scale:",
+    "information-origin:",
+    "ioc:"
+  ]
+}

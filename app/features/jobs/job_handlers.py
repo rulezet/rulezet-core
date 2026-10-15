@@ -25,7 +25,12 @@ from pathlib import Path
 
 from app.features.jobs.job_worker import register_handler
 from app import db
-from app.core.db_class.db import Rule, Tag, RuleTagAssociation, BackgroundJob, BackgroundJobLog, ActivityLog, RequestOwnerRule, User, GithubProposal
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.git import GithubProposal
+from app.core.db_class.job import BackgroundJob, BackgroundJobLog
+from app.core.db_class.rule import RequestOwnerRule, Rule
+from app.core.db_class.tag import RuleTagAssociation, Tag
+from app.core.db_class.user import User
 from app.features.rule.rule_core import _wipe_rule_children, create_rule_history, add_contributor
 from app.core.utils.activity_log import log_activity
 
@@ -680,7 +685,7 @@ def handle_github_repo_resync(job, app):
     page's admin "Resync" button, wrapped as a schedulable/background job
     (see app.features.rule.github_repo_core.rebuild_github_repos_from_rules
     for the write-site list this repairs drift against)."""
-    log_job(job, 'Resyncing GitHub repo registry from current rule data…', level='info', event='start')
+    log_job(job, 'Resyncing git repository registry from current rule data…', level='info', event='start')
     from app.features.rule.github_repo_core import rebuild_github_repos_from_rules
     result = rebuild_github_repos_from_rules()
     job.total = result['repos']
@@ -688,6 +693,218 @@ def handle_github_repo_resync(job, app):
     db.session.commit()
     log_job(job, f"Done — {result['repos']} repo(s), {result['rules_counted']} rule(s) counted.",
             level='success', event='done')
+
+
+# ─── relink_rules ──────────────────────────────────────────────────────────────
+
+# Formats whose rules link to each other automatically: Wazuh (if_sid /
+# if_matched_sid parents), Kunai (shared hash), YARA (rules a condition names).
+RELINK_FORMATS = ('wazuh', 'kunai', 'yara')
+
+
+@register_handler('relink_rules')
+def handle_relink_rules(job, app):
+    """Look again for the links between rules already in the database — the
+    same detection an import runs, for rules imported before their parent
+    (Wazuh), in another import than their peers (Kunai) or before the rule
+    they name (YARA). Only adds links: existing ones (manual or automatic)
+    are kept and never duplicated.
+
+    Payload: formats (list, default all of RELINK_FORMATS), source (optional,
+    a repository URL — only that source's rules).
+    """
+    from app.core.db_class.rule import Rule
+    from app.core.db_class.rule_relation import RuleRelation
+    from app.features.rule.rule_core import _active
+    from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, load_all_rule_formats
+    from app.features.rule.rule_format.available_format.yara_format import sync_yara_dependency_relations
+    from app.features.rule_relation.rule_relation_core import resolve_and_link_relations
+
+    payload = job.payload or {}
+    formats = [f for f in (payload.get('formats') or RELINK_FORMATS) if f in RELINK_FORMATS]
+    source = (payload.get('source') or '').strip() or None
+    if not formats:
+        log_job(job, 'No format to relink.', level='error', event='failed')
+        job.status, job.error = 'failed', 'No format to relink.'
+        db.session.commit()
+        return
+
+    load_all_rule_formats()
+    instances = {ri.format: ri for ri in (cls() for cls in RuleType.__subclasses__()) if ri.format in formats}
+
+    query = _active().filter(Rule.format.in_(formats))
+    if source:
+        query = query.filter(Rule.source == source)
+    rule_ids = [rid for (rid,) in query.with_entities(Rule.id).order_by(Rule.format, Rule.id).all()]
+    job.total = len(rule_ids)
+    db.session.commit()
+    links_before = RuleRelation.query.count()
+    log_job(job, f"Looking for links between {len(rule_ids)} rule(s) — {', '.join(formats)}"
+                 f"{f' from {source}' if source else ''}…", level='info', event='start')
+
+    # One map for the whole run: Kunai rules sharing a hash are linked even
+    # when they came in through different imports.
+    correlation_seen = {}
+    errors = 0
+    for i, rule_id in enumerate(rule_ids, start=1):
+        if i % 50 == 0 and _is_cancelled(job):
+            log_job(job, f'Cancelled after {job.done}/{job.total} rule(s).', level='warning', event='cancelled')
+            return
+        rule = db.session.get(Rule, rule_id)
+        try:
+            if rule.format == 'yara':
+                sync_yara_dependency_relations(rule)
+            elif rule.format in instances:
+                metadata = {'format': rule.format, 'source': rule.source, 'title': rule.title,
+                            'github_path': rule.github_path, 'branch': rule.branch}
+                resolve_and_link_relations(instances[rule.format], rule.to_string or '', metadata, rule,
+                                           correlation_seen)
+        except Exception as e:
+            db.session.rollback()
+            errors += 1
+            if errors <= 20:
+                log_job(job, f'Rule {rule_id} ({rule.format}) skipped: {str(e)[:200]}', level='warning', event='progress')
+        job.done = i
+        if i % 50 == 0 or i == len(rule_ids):
+            db.session.commit()
+            if i % 500 == 0:
+                log_job(job, f'{i}/{len(rule_ids)} — {RuleRelation.query.count() - links_before} new link(s) so far.',
+                        level='info', event='progress')
+
+    created = RuleRelation.query.count() - links_before
+    log_job(job, f'Done — {created} new link(s) across {len(rule_ids)} rule(s)'
+                 f"{f', {errors} rule(s) skipped on an error' if errors else ''}.",
+            level='warning' if errors else 'success', event='done')
+
+
+# ─── git_cache_pull ────────────────────────────────────────────────────────────
+
+@register_handler('git_cache_pull')
+def handle_git_cache_pull(job, app):
+    """`git pull` every clone kept in the clone cache (Manage Git → Git tokens
+    & hosts → Pull all), so the next re-import or update reads the latest
+    files. Holds the cache exclusively: refused while an import / update is
+    reading a clone, and imports / updates started meanwhile wait for it."""
+    import os as _os
+    from app.features.rule.rule_format.utils_format.utils_import_update import (
+        RULES_GITHUB_DIR, git_pull_repo, list_cached_clones, repo_cache_exclusive,
+    )
+    with repo_cache_exclusive() as free:
+        if not free:
+            message = 'A Git import or update is using the cache right now — try again once it is done.'
+            log_job(job, message, level='error', event='failed')
+            job.status = 'failed'
+            job.error = message
+            db.session.commit()
+            return
+        clones = list_cached_clones()
+        job.total = len(clones)
+        db.session.commit()
+        log_job(job, f'Pulling {len(clones)} cached clone(s)…', level='info', event='start')
+        failed = 0
+        for path in clones:
+            if _is_cancelled(job):
+                log_job(job, f'Cancelled after {job.done}/{job.total}.', level='warning', event='cancelled')
+                return
+            name = _os.path.relpath(path, RULES_GITHUB_DIR)
+            if git_pull_repo(path):
+                log_job(job, f'{name} — up to date', level='info', event='progress')
+            else:
+                failed += 1
+                log_job(job, f'{name} — could not be refreshed (repository gone, token rejected or branch removed) — it will be cloned again on its next import',
+                        level='warning', event='progress')
+            job.done += 1
+            db.session.commit()
+    level = 'warning' if failed else 'success'
+    log_job(job, f'Done — {len(clones) - failed} pulled, {failed} failed.', level=level, event='done')
+
+
+# ─── github_import ─────────────────────────────────────────────────────────────
+
+@register_handler('github_import')
+def handle_github_import(job, app):
+    """Import every rule of a git repository — the GitHub Import page's
+    import (clone → scan → validate/import, bad rules kept for review,
+    result stored in the import history), as a background/schedulable job.
+    Runs the same Session_class with its worker threads and mirrors its
+    counters into the job's progress, so a re-run on a schedule just adds
+    whatever is new in the repo (existing rules are skipped as duplicates).
+
+    Payload: url (required), branch, license, is_generic_source.
+    """
+    import time as _time
+    from app.features.rule.rule_from_github.import_rule import session_class as SessionModel
+    from app.features.rule.rule_format.utils_format.utils_import_update import (
+        clone_or_access_repo, github_repo_metadata, generic_repo_metadata, valider_repo_github,
+    )
+
+    payload    = job.payload or {}
+    repo_url   = (payload.get('url') or '').strip()
+    branch     = (payload.get('branch') or '').strip() or None
+    license_   = (payload.get('license') or '').strip() or None
+    is_generic = bool(payload.get('is_generic_source'))
+
+    def _fail(message):
+        log_job(job, message, level='error', event='failed')
+        job.status = 'failed'
+        job.error  = message
+        db.session.commit()
+
+    if not valider_repo_github(repo_url, is_generic_source=is_generic):
+        return _fail(f'Invalid repository URL: {repo_url or "(empty)"}')
+
+    user = User.query.get(job.created_by)
+    if not user:
+        return _fail('The user who launched this import no longer exists.')
+
+    branch_label = f' (branch {branch})' if branch else ''
+    log_job(job, f'Cloning {repo_url}{branch_label}…', level='info', event='start')
+    repo_dir, _ = clone_or_access_repo(repo_url, branch=branch, is_generic_source=is_generic)
+    if not repo_dir:
+        return _fail('Failed to clone or access the repository.')
+
+    try:
+        info = (generic_repo_metadata(repo_url, license_, user) if is_generic
+                else github_repo_metadata(repo_url, license_))
+    except Exception as e:
+        return _fail(f'Could not read the repository metadata: {e}')
+    if branch:
+        info['branch'] = branch
+
+    session = SessionModel.Session_class(repo_dir, user, info)
+    log_job(job, 'Scanning the repository for rules…', level='info', event='scan')
+    session.start(app_obj=app, user_obj=user)
+    job.total = session.total
+    db.session.commit()
+    log_job(job, f'Found {session.total} rule(s) — importing.', level='info', event='progress')
+
+    log_activity("github.import_started",
+                 f"Started Git import from '{repo_url}'{branch_label} (scheduled task)",
+                 target_type="github_import", target_uuid=session.uuid,
+                 extra={"url": repo_url, "branch": branch, "job_uuid": job.uuid},
+                 is_public=True, icon="fa-brands fa-github", actor_id=user.id)
+
+    last_report = 0
+    while not session._save_done.wait(timeout=2):
+        if _is_cancelled(job):
+            session.jobs.queue.clear()   # workers drain and finalize on their own
+            session._save_done.wait(timeout=60)
+            log_job(job, f'Cancelled — {session.imported} imported, {session.skipped} skipped, '
+                         f'{session.bad_rules} bad before stopping.', level='warning', event='cancelled')
+            return
+        job.done = session.imported + session.skipped + session.bad_rules
+        db.session.commit()
+        if _time.monotonic() - last_report > 15:
+            last_report = _time.monotonic()
+            log_job(job, f'{job.done}/{job.total} — {session.imported} imported, {session.skipped} skipped, '
+                         f'{session.bad_rules} bad.', level='info', event='progress')
+
+    job.done = job.total
+    db.session.commit()
+    level = 'warning' if session.bad_rules and not session.imported else 'success'
+    log_job(job, f'Done — {session.imported} imported, {session.skipped} skipped (already there), '
+                 f'{session.bad_rules} bad rule(s) kept for review. Details in the Git import history.',
+            level=level, event='done')
 
 
 # ─── github_repo_branch_backfill ───────────────────────────────────────────────
@@ -699,7 +916,7 @@ def handle_github_repo_branch_backfill(job, app):
     (never a hardcoded "main" guess — see
     github_repo_core.backfill_rule_branches_from_default). Background job
     since it's one HTTP request per distinct repo in the registry."""
-    log_job(job, 'Looking up each repo\'s default branch on GitHub…', level='info', event='start')
+    log_job(job, 'Looking up each repo\'s default branch on its git host…', level='info', event='start')
     from app.features.rule.github_repo_core import backfill_rule_branches_from_default
 
     def _progress(done, total):
@@ -859,7 +1076,7 @@ def handle_update_misp_data(job, app):
       Step 2 — update ALREADY-IMPORTED taxonomies only (add new tags, skip existing)
       Step 3 — update ALREADY-IMPORTED galaxies only (add new clusters, skip existing)
     """
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     from app.features.tags import tags_core
 
     user = User.query.get(job.created_by)
@@ -962,7 +1179,7 @@ def handle_import_all_taxonomies(job, app):
     """Import every taxonomy found on disk — brand new ones included.
     add_tags_from_misp_taxonomy() already skips a namespace that's already
     imported, so this is safe to re-run."""
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     from app.features.tags import tags_core
 
     user = User.query.get(job.created_by)
@@ -1008,7 +1225,7 @@ def handle_import_all_galaxies(job, app):
     """Import every galaxy found on disk — brand new ones included.
     add_tags_from_misp_galaxy() already skips a type that's already
     imported, so this is safe to re-run."""
-    from app.core.db_class.db import User
+    from app.core.db_class.user import User
     from app.features.tags import tags_core
 
     user = User.query.get(job.created_by)
@@ -1189,7 +1406,9 @@ def handle_connector_pull(job, app):
     import datetime
     import requests as http_requests
     from concurrent.futures import ThreadPoolExecutor
-    from app.core.db_class.db import Connector, Rule, RuleTagAssociation
+    from app.core.db_class.connector import Connector
+    from app.core.db_class.rule import Rule
+    from app.core.db_class.tag import RuleTagAssociation
     from app.features.connector.connector_core import (
         _get_or_create_shadow_user, _upsert_rule, _upsert_bundle,
         _extract_tag_family, build_tag_cache,
@@ -1207,7 +1426,7 @@ def handle_connector_pull(job, app):
     t_start      = _time.monotonic()
 
     with app.app_context():
-        from app.core.db_class.db import BackgroundJob as BJ
+        from app.core.db_class.job import BackgroundJob as BJ
         job = BJ.query.filter_by(uuid=job_uuid).first()
         connector = Connector.query.get(connector_id)
         if not connector or not connector.is_active:
@@ -1226,7 +1445,7 @@ def handle_connector_pull(job, app):
             headers['X-API-KEY'] = connector.api_key_outbound
         # Identify this instance on the remote so it can track pull history
         try:
-            from app.core.db_class.db import InstanceConfig as _IC
+            from app.core.db_class.connector import InstanceConfig as _IC
             import os as _os
             _cfg = _IC.query.first()
             if _cfg:
@@ -1436,7 +1655,7 @@ def handle_connector_pull(job, app):
         attack_install_triggered = False  # only trigger the install job once
 
         # ── Check if ATT&CK data is installed ─────────────────────────────────
-        from app.core.db_class.db import AttackTechnique as _ATK
+        from app.core.db_class.attack import AttackTechnique as _ATK
         if not _ATK.query.first():
             log_job(job,
                     "ATT&CK technique database is empty — queuing an install now. "
@@ -2538,7 +2757,7 @@ def handle_bulk_new_rules_decision(job, app):
             get_valid_new_rules_by_sid, reject_all_new_rules_by_sid,
             import_single_new_rule,
         )
-        from app.core.db_class.db import User
+        from app.core.db_class.user import User
 
         if action == 'reject':
             reject_all_new_rules_by_sid(sid)
@@ -3049,7 +3268,7 @@ def handle_github_proposal_bulk_import(job, app):
 
     log_job(job, f"Done — processed {done}/{job.total} proposal(s).", level='success', event='done')
     log_activity('admin.github_proposal_bulk_import',
-                 f"Imported {done} accepted GitHub proposal(s) (ownership: {ownership_mode})",
+                 f"Imported {done} accepted repository proposal(s) (ownership: {ownership_mode})",
                  target_type='job', target_id=job.id, target_uuid=job.uuid,
                  actor_id=job.created_by,
                  extra={'proposal_uuids': proposal_uuids, 'ownership_mode': ownership_mode})
@@ -3088,7 +3307,7 @@ def handle_bulk_parse_attack_rules(job, app):
     offset   = payload.get('_resume_offset', 0)
 
     from app.features.attack.attack_core import _extract_technique_ids
-    from app.core.db_class.db import AttackTechnique, RuleAttackAssociation
+    from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
     import datetime as _dt
 
     # Build query
@@ -3199,6 +3418,23 @@ def handle_bulk_parse_fields(job, app):
     fields_config = payload.get('fields_config', {})
     rescan_cve    = bool(payload.get('rescan_cve'))
     offset        = payload.get('_resume_offset', 0)
+
+    # A scheduled task (Admin Task Scheduler) points at a saved config
+    # instead of carrying its own copy — read it now, so an edit on the
+    # Bulk Parse Fields page applies to the next run.
+    if payload.get('config_id') and not fields_config:
+        from app.features.rule.field_parser_core import get_config, CONFIG_TYPE_FIELD_PARSER
+        cfg = get_config(payload.get('config_id'), config_type=CONFIG_TYPE_FIELD_PARSER)
+        if not cfg:
+            log_job(job, f"Field Parser config #{payload.get('config_id')} not found (deleted?) — aborting.",
+                    level='error', event='error')
+            job.status = 'failed'
+            job.error  = 'Config not found'
+            db.session.commit()
+            return
+        fields_config = cfg.config or {}
+        if offset == 0:
+            log_job(job, f'Using saved Field Parser config "{cfg.name}".', level='info', event='config')
 
     enabled_fields = [k for k, v in fields_config.items() if v.get('enabled')]
     if not enabled_fields and not rescan_cve:
@@ -3970,7 +4206,8 @@ def handle_blog_from_cve(job, app):
 
     with app.app_context():
         import requests as _req
-        from app.core.db_class.db import BlogPost, Bundle
+        from app.core.db_class.blog import BlogPost
+        from app.core.db_class.bundle import Bundle
         from app.features.blog.blog_core import _sync_tags, _sync_rules, _sync_bundles, _make_slug
 
         post = BlogPost.query.get(post_id)
@@ -4166,7 +4403,7 @@ def handle_blog_from_cve(job, app):
 @register_handler('rule_test_bulk')
 def handle_rule_test_bulk(job, app):
     import time as _time
-    from app.core.db_class.db import RuleTest
+    from app.core.db_class.rule_tester import RuleTest
     from app.features.rule_tester import rule_tester_core as TesterModel
     from app.features.rule_tester.drivers import registry
 
@@ -4375,7 +4612,7 @@ def handle_github_sync_schedule_run(job, app):
     (a per-rule progress bar across N repos would reintroduce the exact
     "0→N jump" bug the whole GitHub import/update rework started from).
     """
-    from app.core.db_class.db import GithubSyncSchedule, GithubSyncRun, GithubSyncRunRepo
+    from app.core.db_class.git import GithubSyncRun, GithubSyncRunRepo, GithubSyncSchedule
     from app.features.rule.rule_core import (
         get_updater_result, get_rule_update_list_filtered, accept_all_update,
         get_valid_new_rules_by_sid, import_single_new_rule,
@@ -4517,7 +4754,7 @@ def handle_velociraptor_push(job, app):
         server_id : int — local VelociraptorServer.id to push to
         rule_id   : int — local Rule.id to generate the artifact from
     """
-    from app.core.db_class.db import VelociraptorServer
+    from app.core.db_class.velociraptor import VelociraptorServer
     from app.features.rule import rule_core as RuleModel
     from app.features.velociraptor import velociraptor_core as VelociraptorModel
     from app.features.rule.exporters.velociraptor_exporter import (
@@ -4601,7 +4838,7 @@ def handle_misp_push(job, app):
         bundle_id : int — local Bundle.id to build the event from (bundle push)
         push_type : 'object' | 'event' — bundles only support 'event'
     """
-    from app.core.db_class.db import MispServer
+    from app.core.db_class.misp import MispServer
     from app.features.rule import rule_core as RuleModel
     from app.features.bundle import bundle_core as BundleModel
     from app.features.misp import misp_connector_core as MispModel
@@ -4909,7 +5146,8 @@ def handle_rule_analysis(job, app):
     import time as _time
     from types import SimpleNamespace
 
-    from app.core.db_class.db import AIGeneration, AttackTechnique, RuleAttackAssociation
+    from app.core.db_class.ai import AIGeneration
+    from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
     from app.features.ai.ai_core import get_agent
 
     payload = job.payload or {}
@@ -5183,7 +5421,8 @@ def _bundle_step(job, stage, text, level='info'):
 
 @register_handler('ai_bundle_analysis')
 def handle_bundle_analysis(job, app):
-    from app.core.db_class.db import AIGeneration, Bundle
+    from app.core.db_class.ai import AIGeneration
+    from app.core.db_class.bundle import Bundle
     from app.features.ai.ai_core import get_agent
     from app.features.bundle.bundle_ai_core import build_bundle_context
 

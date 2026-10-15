@@ -1,0 +1,286 @@
+{% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
+{% block title %}Configuration — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/app_settings.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 mt-3" id="main-container" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-sliders banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Configuration</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-sliders"></i></div>
+            <div><h2 class="fw-bold mb-1">Configuration</h2><div class="banner-accent"></div></div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:720px;font-size:.95rem;">
+            Every list, table and label of the application. Each editable one is a JSON file in
+            <code>app/config/</code> — add a file there and it appears here. A change made on this page is kept in the
+            database; the file stays the default, one click away.
+        </p>
+    </div>
+
+    <div class="dr-nav mb-3" role="tablist" aria-label="Configuration sections">
+        <button type="button" :class="['dr-nav__item border-0', { active: tab === 'settings' }]" @click="openSettings(false)">
+            <i class="fa-solid fa-sliders"></i><span>Settings</span>
+            <span class="dr-nav__badge">[[ settings.length ]]</span>
+        </button>
+        <button type="button" :class="['dr-nav__item border-0', { active: tab === 'code' }]" @click="setTab('code')">
+            <i class="fa-solid fa-code"></i><span>Values in the code</span>
+            <span class="dr-nav__badge">[[ constants.length ]]</span>
+        </button>
+        <button type="button" :class="['dr-nav__item border-0', { active: tab === 'files' }]" @click="setTab('files')">
+            <i class="fa-solid fa-file-code"></i><span>Data files</span>
+            <span class="dr-nav__badge">[[ dataFiles.length ]]</span>
+        </button>
+        <span class="dr-nav__sep"></span>
+        <span class="dr-nav__label" style="padding:.5rem .25rem;">Admin</span>
+        {{ anav.admin_nav_toggle() }}
+    </div>
+    {{ anav.admin_nav_panel('configuration') }}
+
+    <div v-if="loading" class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+
+    <!-- ── Editable settings: categories on the left, cards on the right ── -->
+    <div v-else-if="tab === 'settings'" class="as-layout">
+        <aside class="as-side">
+            <div class="dt-search mb-3">
+                <i class="fas fa-search dt-search-icon"></i>
+                <input class="dt-search-input" type="text" v-model="q" placeholder="Search…" aria-label="Search settings">
+            </div>
+            <button type="button" class="as-side__item" :class="{ active: !category }" @click="category = null">
+                <i class="fa-solid fa-layer-group"></i><span>All</span>
+                <span class="as-side__count">[[ visibleSettings(null).length ]]</span>
+            </button>
+            <button v-for="cat in categories" :key="cat" type="button" class="as-side__item"
+                    :class="{ active: category === cat }" @click="category = cat">
+                <i :class="categoryIcon(cat)"></i><span>[[ cat ]]</span>
+                <span class="as-side__count">[[ visibleSettings(cat).length ]]</span>
+            </button>
+            <label class="as-switch mt-3"><input type="checkbox" v-model="modifiedOnly"> Changed only ([[ modifiedCount ]])</label>
+            <div class="as-howto mt-3">
+                <div class="fw-semibold mb-1"><i class="fa-solid fa-plus me-1"></i>New setting</div>
+                Add <code>app/config/&lt;key&gt;.json</code> with <code>label</code>, <code>category</code>,
+                <code>description</code>, <code>public</code> and <code>value</code>, then read it in the code with
+                <code>setting('&lt;key&gt;')</code>.
+            </div>
+        </aside>
+
+        <div class="as-main">
+            <article v-for="s in visibleSettings(category)" :key="s.key" :id="'setting-' + s.key"
+                     class="as-card" :class="{ 'as-card--modified': s.overridden }">
+                <div class="as-card__accent"></div>
+                <header class="as-card__head">
+                    <span class="as-card__icon"><i :class="categoryIcon(s.category)"></i></span>
+                    <div class="min-w-0 flex-grow-1">
+                        <div class="as-card__label">[[ s.label ]]</div>
+                        <div class="as-card__meta">
+                            <code>[[ s.key ]]</code>
+                            <span class="as-dot">·</span><span>[[ s.kind ]]</span>
+                            <span class="as-dot">·</span><span>[[ itemCount(s.value) ]] item(s)</span>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-1 flex-shrink-0 flex-wrap justify-content-end">
+                        <span v-if="s.public" class="as-pill as-pill--api" :title="'Readable by anyone at /api/config/settings/' + s.key">
+                            <i class="fa-solid fa-globe"></i> Public API
+                        </span>
+                        <span v-if="s.file_changed" class="as-pill as-pill--update" title="The JSON file changed since this setting was edited"><i class="fa-solid fa-code-merge"></i> File updated</span>
+                        <span v-if="s.overridden" class="as-pill as-pill--modified"><i class="fa-solid fa-pen"></i> Changed</span>
+                        <span v-else class="as-pill"><i class="fa-solid fa-file-code"></i> File value</span>
+                    </div>
+                </header>
+                <p v-if="s.description" class="as-card__desc">[[ s.description ]]</p>
+                <div v-if="s.file_changed" class="as-merge">
+                    <i class="fa-solid fa-code-merge"></i>
+                    <div class="flex-grow-1">
+                        <strong>The file was updated since your change.</strong>
+                        The value in use is a merge: the new file, with your own changes applied on top
+                        (new entries from the update included). Check it in <em>Compare</em>, then keep it — or go back to the file.
+                    </div>
+                    <div class="d-flex gap-2 flex-shrink-0">
+                        <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" @click="acceptMerge(s)" :disabled="drafts[s.key].busy">
+                            <i class="fa-solid fa-check me-1"></i>Keep the merge
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="resetSetting(s)" :disabled="drafts[s.key].busy">
+                            Use the file
+                        </button>
+                    </div>
+                </div>
+                <div v-if="s.error" class="as-error"><i class="fa-solid fa-triangle-exclamation me-1"></i>[[ s.error ]]</div>
+
+                <!-- View / edit / compare -->
+                <div class="as-modes">
+                    <button type="button" :class="['as-mode', { active: mode(s) === 'view' }]" @click="setMode(s, 'view')">
+                        <i class="fa-solid fa-eye"></i> Value
+                    </button>
+                    <button type="button" :class="['as-mode', { active: mode(s) === 'edit' }]" @click="setMode(s, 'edit')">
+                        <i class="fa-solid fa-pen-to-square"></i> Edit
+                    </button>
+                    <button v-if="s.overridden" type="button" :class="['as-mode', { active: mode(s) === 'diff' }]" @click="setMode(s, 'diff')">
+                        <i class="fa-solid fa-code-compare"></i> Compare with the file
+                    </button>
+                    <button type="button" :class="['as-mode', { active: mode(s) === 'history' }]" @click="setMode(s, 'history')">
+                        <i class="fa-solid fa-clock-rotate-left"></i> History
+                    </button>
+                </div>
+
+                <code-viewer v-if="mode(s) === 'view'" :code="pretty(s.value)" language="json"
+                             :title="s.key + '.json'" max-height="360px"></code-viewer>
+
+                <div v-else-if="mode(s) === 'edit'">
+                    <smart-editor v-model="drafts[s.key].text" mode="code" language="json"
+                                  min-height="220px" max-height="480px"></smart-editor>
+                    <div v-if="draftError(s)" class="as-error"><i class="fa-solid fa-circle-exclamation me-1"></i>[[ draftError(s) ]]</div>
+                    <div class="as-card__actions">
+                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="cancelEdit(s)">Cancel</button>
+                        <button type="button" class="btn btn-sm btn-primary rounded-pill px-3"
+                                @click="saveSetting(s)" :disabled="!isDirty(s) || !!draftError(s) || drafts[s.key].busy">
+                            <span v-if="drafts[s.key].busy" class="spinner-border spinner-border-sm me-1"></span>
+                            <i v-else class="fa-solid fa-check me-1"></i>Save
+                        </button>
+                    </div>
+                </div>
+
+                <div v-else-if="mode(s) === 'history'" class="as-history">
+                    <div v-if="!history[s.key]" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
+                    <p v-else-if="!history[s.key].length" class="text-muted small mb-0">Never changed from this page — the value is the file's.</p>
+                    <div v-else v-for="(h, i) in history[s.key]" :key="h.id" class="as-history__item">
+                        <div class="as-history__head" @click="openVersion[s.key] = openVersion[s.key] === h.id ? null : h.id">
+                            <span :class="['as-history__action', 'as-history__action--' + h.action]">[[ ACTION_LABELS[h.action] || h.action ]]</span>
+                            <span class="as-history__when">[[ formatDate(h.created_at) ]]</span>
+                            <span v-if="h.user" class="as-history__who"><i class="fa-solid fa-user me-1"></i>[[ h.user ]]</span>
+                            <span v-if="i === 0" class="as-pill">Latest</span>
+                            <span class="ms-auto d-flex gap-2" @click.stop>
+                                <button v-if="i > 0" type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3"
+                                        @click="restoreVersion(s, h)" :disabled="drafts[s.key].busy">
+                                    <i class="fa-solid fa-rotate-left me-1"></i>Restore
+                                </button>
+                            </span>
+                            <i class="fa-solid fa-chevron-down as-chevron" :class="{ 'as-chevron--open': openVersion[s.key] === h.id }"></i>
+                        </div>
+                        <code-viewer v-if="openVersion[s.key] === h.id" :code="pretty(h.value)" language="json"
+                                     :title="s.key + ' — ' + formatDate(h.created_at)" max-height="300px"></code-viewer>
+                    </div>
+                </div>
+
+                <diff-viewer v-else :key="s.key + JSON.stringify(s.value)"
+                             :initial-left="pretty(s.default)" :initial-right="pretty(s.value)"
+                             left-label="File value" right-label="Current value"></diff-viewer>
+
+                <footer class="as-card__foot">
+                    <span class="as-source" :title="s.file"><i class="fa-regular fa-file-code me-1"></i>[[ s.file ]]</span>
+                    <button v-if="s.overridden" type="button" class="btn btn-sm btn-link text-decoration-none p-0"
+                            @click="resetSetting(s)" :disabled="drafts[s.key].busy">
+                        <i class="fa-solid fa-rotate-left me-1"></i>Reset to the file value
+                    </button>
+                </footer>
+            </article>
+            <div v-if="!visibleSettings(category).length" class="dt-empty">
+                <div class="dt-empty-icon"><i class="fa-solid fa-sliders"></i></div>
+                <p class="dt-empty-text">No setting matches.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Everything written in the code ── -->
+    <section v-else-if="tab === 'code'">
+        <div class="as-toolbar">
+            <div class="dt-search">
+                <i class="fas fa-search dt-search-icon"></i>
+                <input class="dt-search-input" type="text" v-model="q" placeholder="Name or file…" aria-label="Search constants">
+            </div>
+            <div class="as-seg" role="group" aria-label="Status">
+                <button v-for="opt in STATUS_FILTERS" :key="opt.key" type="button"
+                        :class="['as-seg__btn', { active: statusFilter === opt.key }]" @click="statusFilter = opt.key">
+                    [[ opt.label ]] <span class="as-seg__count">[[ statusCount(opt.key) ]]</span>
+                </button>
+            </div>
+        </div>
+        <div class="as-note mb-3">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>Read straight from the source files, so this list is always complete. <strong>Read-only</strong> values
+            are part of the code's logic (parser keywords, sort columns, statuses, upload types…) — changing one needs a
+            code change, as editing it here could break a feature or open a security hole.</span>
+        </div>
+        <div class="dt-table-wrap">
+            <table class="dt-table">
+                <thead class="dt-thead">
+                    <tr>
+                        <th class="dt-th">Name</th>
+                        <th class="dt-th">File</th>
+                        <th class="dt-th text-center">Type</th>
+                        <th class="dt-th text-center">Items</th>
+                        <th class="dt-th">Status</th>
+                        <th class="dt-th" style="width:32px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template v-for="c in filteredConstants" :key="c.file + c.name">
+                        <tr class="dt-row as-row" :class="{ 'as-row--open': openRow === c.file + c.name }" @click="toggleRow(c)">
+                            <td class="dt-td"><code class="as-name">[[ c.name ]]</code></td>
+                            <td class="dt-td as-file">[[ c.file ]]<span class="as-line">:[[ c.line ]]</span></td>
+                            <td class="dt-td text-center"><span class="as-type">[[ c.type ]]</span></td>
+                            <td class="dt-td text-center">[[ c.items ?? '—' ]]</td>
+                            <td class="dt-td">
+                                <a v-if="c.setting_key" href="#" class="as-pill as-pill--editable text-decoration-none"
+                                   @click.prevent.stop="goToSetting(c.setting_key)">
+                                    <i class="fa-solid fa-pen"></i> Editable
+                                </a>
+                                <span v-else class="as-pill"><i class="fa-solid fa-lock"></i> Read-only</span>
+                            </td>
+                            <td class="dt-td text-center"><i class="fa-solid fa-chevron-down as-chevron"></i></td>
+                        </tr>
+                        <tr v-if="openRow === c.file + c.name" class="as-preview-row">
+                            <td colspan="6">
+                                <code-viewer :code="c.preview" language="python" :title="c.file + ':' + c.line"
+                                             max-height="320px"></code-viewer>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+            <div v-if="!filteredConstants.length" class="dt-empty"><p class="dt-empty-text">Nothing matches.</p></div>
+        </div>
+    </section>
+
+    <!-- ── Data files ── -->
+    <div v-else class="as-layout">
+        <aside class="as-side">
+            <div class="as-side__title">Files shipped with the code</div>
+            <button v-for="f in dataFiles" :key="f.file" type="button" class="as-side__item as-side__item--file"
+                    :class="{ active: openFile && openFile.file === f.file }" @click="viewFile(f)">
+                <i :class="f.file.endsWith('.json') ? 'fa-solid fa-file-code' : 'fa-solid fa-file-lines'"></i>
+                <span class="as-side__name" :title="f.file">[[ f.file.split('/').pop() ]]</span>
+                <span class="as-side__count">[[ (f.bytes / 1024).toFixed(1) ]] KB</span>
+            </button>
+        </aside>
+        <div class="as-main">
+            <div v-if="fileLoading" class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+            <code-viewer v-else-if="openFile" :code="openFile.content"
+                         :language="openFile.file.endsWith('.json') ? 'json' : 'text'"
+                         :title="openFile.file" max-height="70vh"></code-viewer>
+            <div v-else class="dt-empty">
+                <div class="dt-empty-icon"><i class="fa-solid fa-file-code"></i></div>
+                <p class="dt-empty-text">Pick a file on the left to read it.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module" src="{{ url_for('static', filename='js/admin/appSettings.js') }}"></script>
+{% endblock %}

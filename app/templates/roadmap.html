@@ -19,49 +19,69 @@
               'Size: split the largest files by responsibility — the rule blueprint and core, the job handlers, the models, the biggest templates and components',
               'Dead code removed, one consistent way to do each thing (permissions, pagination, errors, logs), the new test suite finished and run in CI',
               'Shipped feature by feature — never a big-bang rewrite']},
-  {'n': 1, 'key': 'sightings', 'icon': 'fa-eye', 'title': 'Sightings — "I saw this rule fire"',
+  {'n': 1, 'key': 'workbench', 'icon': 'fa-toolbox', 'title': 'Rule Workbench — a full environment for every rule',
+   'effort': 'Large', 'status': 'planned', 'major': True,
+   'pitch': 'Creating or editing a rule stops being a form: it becomes a workspace where the rule is written, tested, scored and shipped — without leaving the page.',
+   'pillars': [
+     {'icon': 'fa-code', 'title': 'Editor that knows the format',
+      'text': 'Syntax highlighting, snippets and templates per format, live validation as you type, the rule\'s tags, ATT&CK techniques and CVEs edited alongside.'},
+     {'icon': 'fa-flask-vial', 'title': 'Test as you write',
+      'text': 'Samples, logs and captures run against the rule in place — matches, true and false positives shown line by line; test sets saved with the rule and re-run on every change.'},
+     {'icon': 'fa-robot', 'title': 'An AI companion per rule',
+      'text': 'Rulezy drafts, explains, fixes and suggests tests for the rule in front of you, in any format, with the same thinking steps as today.'},
+     {'icon': 'fa-gauge-high', 'title': 'Live score',
+      'text': 'The quality score and its checklist update on every change; duplicates and similar rules are spotted before publishing, not after.'},
+     {'icon': 'fa-arrow-up-right-from-square', 'title': 'Shortcuts to external tools',
+      'text': 'CyberChef, VirusTotal, regex101, Sigma converters, the format\'s documentation… opened with the rule\'s own strings, hashes and fields.'},
+     {'icon': 'fa-code-branch', 'title': 'Draft → test → review → publish',
+      'text': 'Versions, diff, edit proposals and review from the same place; one-click to a bundle, a workspace or a connector once it is ready.'},
+   ],
+   'points': ['Replaces today\'s create and edit pages for every format, keeping the bulk paths (Git import, ZIP, JSON, parse) as entry points into the workbench',
+              'Built on the existing pieces: SmartEditor, the rule tester drivers, the AI agents, the quality score, the history and edit proposals',
+              'Shipped in steps: the editor and live validation first, then in-place testing, then the AI companion and the external shortcuts']},
+  {'n': 2, 'key': 'sightings', 'icon': 'fa-eye', 'title': 'Sightings — "I saw this rule fire"',
    'effort': 'Small', 'status': 'idea',
    'pitch': 'The signal that is missing today: does this rule work in real life?',
    'points': ['Report in one click or through the API: true positive, false positive (with the kind of environment), deployed in production',
               'Feeds the quality score, "most deployed" and "noisiest" sorts, and nudges towards a note or an edit proposal when false positives pile up',
               'Rule and bundle pages show it: "deployed by 14 teams, 3 false-positive reports"']},
-  {'n': 2, 'key': 'cve-kit', 'icon': 'fa-bug', 'title': 'CVE response kit',
-   'effort': 'Medium', 'status': 'idea',
+  {'n': 3, 'key': 'cve-kit', 'icon': 'fa-bug', 'title': 'CVE response kit',
+   'effort': 'Medium', 'status': 'progress',
    'pitch': 'When a critical vulnerability drops, every rule for it — in hours, in one place.',
-   'points': ['A page per CVE: every linked rule across formats, and the gaps ("no Sigma rule yet")',
-              'One-click AI drafts for the missing formats, a ready-made bundle to download or subscribe to',
-              'An alert when a new rule for it is published — built with Vulnerability-Lookup']},
-  {'n': 3, 'key': 'connectors', 'icon': 'fa-plug', 'title': 'Connectors per format',
+   'points': ['Live: a page per CVE or GHSA (/vulnerability/) — details from Vulnerability-Lookup (CVSS, EPSS, known exploitation), every linked rule across formats, and the gaps ("no Sigma rule yet")',
+              'Live: download every rule as a zip, make it a ready-made bundle in one click, get an alert when a new rule for it is published',
+              'Live: one-click AI draft for YARA; next, AI drafts for the other missing formats (Sigma, Suricata…)']},
+  {'n': 4, 'key': 'connectors', 'icon': 'fa-plug', 'title': 'Connectors per format',
    'effort': 'Small → large', 'status': 'progress',
    'pitch': 'Rulezet becomes the place your tools get their rules from — and learn from.',
    'points': ['Deliver: a curated bundle, release or workspace reaches the tool natively — a feed, an API push, a package',
               'Verify: the tool itself checks what was deployed (does it load on this version?) and reports back',
               'Learn: anonymous counters from production improve the rules',
               'Suricata first: a global suricata-update feed already exists; next, a feed per bundle without the rules failing the health checks']},
-  {'n': 4, 'key': 'lab', 'icon': 'fa-flask', 'title': 'Rulezet Lab',
+  {'n': 5, 'key': 'lab', 'icon': 'fa-flask', 'title': 'Rulezet Lab',
    'effort': 'Large', 'status': 'idea',
    'pitch': 'Prove what each rule detects, before it reaches production — and give it a score.',
    'points': ['Per format, a controlled environment: replayed network captures, known malware and known-clean files, attack logs',
               'Detection, false positives and cost measured for every rule and every version — regressions caught automatically',
               'A Lab score on each rule, added to its quality score',
               'Replaces the current Rule Tester, which will be deprecated']},
-  {'n': 5, 'key': 'github-action', 'icon': 'fa-github', 'brand': True, 'title': 'rulezet-validate GitHub Action',
+  {'n': 6, 'key': 'github-action', 'icon': 'fa-github', 'brand': True, 'title': 'rulezet-validate GitHub Action',
    'effort': 'Medium', 'status': 'idea',
    'pitch': 'Rulezet inside the repositories where teams keep their detection rules as code.',
    'points': ['Every pull request validated with Rulezet\'s own parsers and health checks — syntax, duplicate ids, missing dependencies',
               'Annotations directly on the diff; optional publication to a bundle on merge']},
-  {'n': 6, 'key': 'coverage', 'icon': 'fa-crosshairs', 'title': 'Coverage gap analysis',
+  {'n': 7, 'key': 'coverage', 'icon': 'fa-crosshairs', 'title': 'Coverage gap analysis',
    'effort': 'Medium → large', 'status': 'idea',
    'pitch': 'From "searching rules" to "knowing what to deploy".',
    'points': ['Describe your context — sector, threats targeting you (an APT group, a MISP event, a report), your stack',
               'See which ATT&CK techniques are covered and which are not, per format',
               'Get a recommended bundle and AI drafts to fill the gaps']},
-  {'n': 7, 'key': 'families', 'icon': 'fa-diagram-project', 'title': 'Cross-format rule families',
+  {'n': 8, 'key': 'families', 'icon': 'fa-diagram-project', 'title': 'Cross-format rule families',
    'effort': 'Medium', 'status': 'idea',
    'pitch': 'One threat, every format: "what do I use in my tool?"',
    'points': ['Equivalent Suricata, Sigma and YARA rules linked into one family',
               'Sigma converted to SIEM queries: "also available for Splunk, Elastic, Sentinel"']},
-  {'n': 8, 'key': 'signed', 'icon': 'fa-signature', 'title': 'Signed releases & verified publishers',
+  {'n': 9, 'key': 'signed', 'icon': 'fa-signature', 'title': 'Signed releases & verified publishers',
    'effort': 'Medium', 'status': 'idea',
    'pitch': 'Trust for automated deployment.',
    'points': ['Bundle releases and feeds signed with the publisher\'s key',
@@ -139,7 +159,7 @@
         <!-- Items -->
         <div class="col-lg-9">
             {% for it in items %}
-            <section id="{{ it.key }}" class="rm-item {% if it.foundation %}rm-item--foundation{% endif %}">
+            <section id="{{ it.key }}" class="rm-item {% if it.foundation %}rm-item--foundation{% endif %}{% if it.major %} rm-item--major{% endif %}">
                 <div class="rm-item__head">
                     <span class="rm-item__num">{{ it.n }}</span>
                     <span class="rm-item__icon"><i class="{{ 'fa-brands' if it.brand else 'fa-solid' }} {{ it.icon }}"></i></span>
@@ -154,6 +174,22 @@
                 </div>
                 {% if it.foundation %}
                 <div class="rm-foundation-note"><i class="fa-solid fa-layer-group me-1"></i>Foundation — runs alongside every other item.</div>
+                {% endif %}
+                {% if it.major %}
+                <div class="rm-major-note"><i class="fa-solid fa-star me-1"></i>Major rework — the next big step for contributors.</div>
+                {% endif %}
+                {% if it.pillars %}
+                <div class="rm-pillars">
+                    {% for pl in it.pillars %}
+                    <div class="rm-pillar">
+                        <span class="rm-pillar__icon"><i class="fa-solid {{ pl.icon }}"></i></span>
+                        <div>
+                            <div class="rm-pillar__title">{{ pl.title }}</div>
+                            <p class="rm-pillar__text">{{ pl.text }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
                 {% endif %}
                 <ul class="rm-points">
                     {% for p in it.points %}<li>{{ p }}</li>{% endfor %}

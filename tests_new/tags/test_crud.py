@@ -9,7 +9,11 @@ taxonomies / galaxies are imported as public, active tags.
 import pytest
 
 from app import db
-from app.core.db_class.db import ActivityLog, BackgroundJob, Bundle, BundleTagAssociation, Rule, RuleTagAssociation, Tag
+from app.core.db_class.activity_log import ActivityLog
+from app.core.db_class.bundle import Bundle
+from app.core.db_class.job import BackgroundJob
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import BundleTagAssociation, RuleTagAssociation, Tag
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.rules import make_rule
 from tests_new.helpers.tags import (

@@ -6,7 +6,7 @@ from flask_restx import Namespace, Resource
 from sqlalchemy import or_
 
 from ... import db
-from ...core.db_class.db import ActivityLog
+from app.core.db_class.activity_log import ActivityLog
 
 log_ns = Namespace('log', description='Activity logs — admin only')
 

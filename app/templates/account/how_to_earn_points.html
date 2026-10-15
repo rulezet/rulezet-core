@@ -105,6 +105,31 @@
                 </div>
                 {% endfor %}
             </div>
+
+            {% if secret_badges %}
+            <h6 class="fw-bold mt-4 mb-1"><i class="fa-solid fa-user-secret me-2" style="color:var(--subtle-text-color);"></i>Hidden badges</h6>
+            <p class="text-muted small mb-3">Nobody will tell you how to get these. Look around.</p>
+            <div class="ud-badge-grid">
+                {% for badge in secret_badges %}
+                {% set found = badge.key in my_badge_keys %}
+                <div class="ud-badge-tile ud-badge-tile--{{ badge.color }}{% if not found %} ud-badge-tile--locked{% endif %}" title="{{ badge.description }}">
+                    <div class="ud-badge-tile__icon-wrap">
+                        {% if found and mascot_enabled %}
+                        <img src="{{ url_for('static', filename='images/rulezy/' + badge.rulezy_pose + '.png') }}" alt="" class="ud-badge-tile__icon">
+                        {% elif found %}
+                        <i class="{{ badge.icon }}" style="font-size:1.2rem;"></i>
+                        {% else %}
+                        <i class="fa-solid fa-question" style="font-size:1.2rem;color:var(--subtle-text-color);"></i>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <div class="ud-badge-tile__name">{{ badge.name }}{% if found %} <i class="fa-solid fa-check text-success ms-1" title="Unlocked"></i>{% endif %}</div>
+                        <div class="ud-badge-tile__desc">{{ badge.description }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
     </div>
 

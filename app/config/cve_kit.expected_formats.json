@@ -1,0 +1,7 @@
+{
+  "label": "CVE response kit — formats expected for a CVE",
+  "category": "CVE response kit",
+  "description": "Formats the CVE page checks for: a format in this list with no rule for the CVE is shown as a gap (\"no Sigma rule yet\"). Formats outside the list still appear when a rule exists.",
+  "public": true,
+  "value": ["yara", "sigma", "suricata", "nse", "crs", "elastic", "splunk", "kql"]
+}

@@ -17,10 +17,11 @@ import json
 from collections import Counter
 
 from app import db
-from app.core.db_class.db import (
-    AttackTechnique, Bundle, BundleNode, BundleNote, BundleRelease, BundleRuleAssociation,
-    BundleTagAssociation, Rule, RuleAttackAssociation, RuleTagAssociation, Tag, User,
-)
+from app.core.db_class.attack import AttackTechnique, RuleAttackAssociation
+from app.core.db_class.bundle import Bundle, BundleNode, BundleNote, BundleRelease, BundleRuleAssociation
+from app.core.db_class.rule import Rule
+from app.core.db_class.tag import BundleTagAssociation, RuleTagAssociation, Tag
+from app.core.db_class.user import User
 
 RULE_DIGEST_CHARS = 4500
 STRUCTURE_CHARS   = 900

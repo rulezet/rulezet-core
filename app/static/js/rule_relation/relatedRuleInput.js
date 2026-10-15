@@ -46,7 +46,7 @@ import RuleList from '/static/js/rule/ruleList.js';
 import RuleHoverPreview from '/static/js/rule_relation/ruleHoverPreview.js';
 import { create_message } from '/static/js/toaster.js';
 
-// Keep in sync with RULE_RELATION_TYPES in app/core/db_class/db.py — this
+// Keep in sync with RULE_RELATION_TYPES in app/core/db_class/rule_relation.py — this
 // is the manual-link vocabulary; auto-detected links (Wazuh if_sid, Kunai
 // rule() composition, ...) use their own format-specific kind instead and
 // never go through this picker.
