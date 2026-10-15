@@ -26,7 +26,7 @@ def test_public_case_hides_the_answers(app):
     with app.app_context():
         for case in NightshiftModel.list_cases():
             public = json.dumps(NightshiftModel.public_case(case))
-            assert 'reference' not in public
+            assert '"reference"' not in public      # the key, not the word (setup.ps1's $ErrorActionPreference)
             for v in case['corpus']['hidden_variants']:
                 assert v['id'] not in public and v['name'] not in public
 

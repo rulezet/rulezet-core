@@ -112,7 +112,10 @@ class Update_class:
         if self.mode == "by_url":
             cp = 0
             try:
-                repo_dir, exists = clone_or_access_repo(self.repo_sources, branch=self.branch, is_generic_source=self.is_generic_source)
+                # refresh=False: the clone's commit is noted below *before*
+                # git_pull_repo brings it up to date, to diff the two.
+                repo_dir, exists = clone_or_access_repo(self.repo_sources, branch=self.branch,
+                                                        is_generic_source=self.is_generic_source, refresh=False)
             except Exception as e:
                 # Unreachable repo, unknown branch… — report it as this
                 # check's result instead of raising out of the request (500)

@@ -178,7 +178,7 @@ def _inside(base_dir, path) -> bool:
     return os.path.realpath(path).startswith(base + os.sep)
 
 
-def clone_or_access_repo(repo_url, branch=None, is_generic_source=False):
+def clone_or_access_repo(repo_url, branch=None, is_generic_source=False, refresh=True):
     """Clone or access the repository from a git URL.
 
     If *branch* is specified the repo is cloned on that branch and cached in a
@@ -236,10 +236,11 @@ def clone_or_access_repo(repo_url, branch=None, is_generic_source=False):
             if "Authentication failed" in err or "could not read Username" in err:
                 raise Exception("Authentication failed — the repository may be private. Add a token for this host in Manage Git → Git tokens & hosts.")
             raise Exception(f"Clone failed: {err.split('stderr:')[-1].strip()[:200]}")
-    else:
+    elif refresh:
         # Repo already cached — bring it to the remote's latest commit, or
         # start over with a fresh clone when that fails (a re-import must
-        # never read stale files).
+        # never read stale files). An update passes refresh=False: it notes
+        # the clone's commit first, then refreshes it itself to diff the two.
         ok, message = refresh_clone(repo_dir, repo_url, branch)
         if not ok:
             if branch and ("couldn't find remote ref" in message or "not found" in message.lower()):
