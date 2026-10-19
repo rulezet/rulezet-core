@@ -1,0 +1,54 @@
+"""The rule editor's server side (/editor-api, app/features/editor): logged-in users only,
+answers from this Rulezet (its compiler and its rules), never from rulezet.org."""
+from tests_new.helpers.rules import make_rule, yara_rule
+
+VALID = 'rule editor_ok { strings: $a = "abcd" condition: $a }'
+BROKEN = 'rule editor_broken {\n  condition:\n    $missing\n}'
+
+
+def test_anonymous_is_refused(clients):
+    res = clients["anonymous"].post("/editor-api/validate", json={"format": "yara", "content": VALID})
+    assert res.status_code == 401
+    assert clients["anonymous"].get("/editor-api/rules?format=yara&q=x").status_code == 401
+    assert clients["anonymous"].get("/editor-api/assets/rulezet-editor.js").status_code == 401
+
+
+def test_validate_uses_rulezet_compiler(clients):
+    ok = clients["user"].post("/editor-api/validate", json={"format": "yara", "content": VALID})
+    assert ok.status_code == 200 and ok.json["valid"] is True
+    bad = clients["user"].post("/editor-api/validate", json={"format": "yara", "content": BROKEN})
+    assert bad.status_code == 200 and bad.json["valid"] is False
+    assert bad.json["items"][0]["severity"] == "error"
+
+
+def test_validate_unknown_format_is_404(clients):
+    res = clients["user"].post("/editor-api/validate", json={"format": "not-a-format", "content": "x"})
+    assert res.status_code == 404
+
+
+def test_rule_lookup_reads_the_database(clients, users):
+    rule = make_rule(users.owner, title="Editor_Lookup_Rule", to_string=yara_rule("Editor_Lookup_Rule"))
+    found = clients["user"].get("/editor-api/rules?format=yara&q=Lookup")
+    assert [r["name"] for r in found.json["results"]] == ["Editor_Lookup_Rule"]
+    one = clients["user"].get("/editor-api/rules/Editor_Lookup_Rule?format=yara")
+    assert one.status_code == 200 and one.json["uuid"] == rule.uuid
+    assert clients["user"].get("/editor-api/rules/Nope?format=yara").status_code == 404
+
+
+def test_deleted_rules_are_not_suggested(clients, users):
+    rule = make_rule(users.owner, title="Editor_Deleted_Rule", to_string=yara_rule("Editor_Deleted_Rule"))
+    rule.is_deleted = True
+    from app import db
+    db.session.commit()
+    assert clients["user"].get("/editor-api/rules?format=yara&q=Editor_Deleted").json["results"] == []
+
+
+def test_editor_assets_are_served(clients):
+    res = clients["user"].get("/editor-api/assets/rulezet-editor.js")
+    assert res.status_code == 200 and b"RulezetEditor" in res.data
+
+
+def test_create_page_has_the_yara_editor_tab(clients):
+    page = clients["user"].get("/rule/create_rule?tab=yara_editor")
+    assert page.status_code == 200
+    assert b"yara-editor-panel" in page.data

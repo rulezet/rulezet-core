@@ -112,7 +112,7 @@ def _sync_submodules() -> None:
     """Bring tracked-branch submodules up to their remote tip.
 
     Mirrors update.sh's submodule step: rulezet-cast, misp-taxonomies,
-    misp-galaxy and rulezet-validation float to their remote branch on every
+    misp-galaxy, rulezet-validation and rulezet-editor float to their remote branch on every
     update (--remote) since we want their latest content automatically —
     rulezet-validation in particular used to require a separate manual pull
     on prod; pivotick stays pinned to the committed submodule ref (its dist
@@ -121,11 +121,11 @@ def _sync_submodules() -> None:
     --remote; refreshed via the admin UI instead).
     """
     run(["git", "submodule", "update", "--init", "--recursive",
-         "app/modules/rulezet-validation"])
+         "app/modules/rulezet-validation", "app/modules/rulezet-editor"])
     result = subprocess.run(
         ["git", "submodule", "update", "--remote", "app/modules/rulezet-cast",
          "app/modules/misp-taxonomies", "app/modules/misp-galaxy",
-         "app/modules/rulezet-validation"],
+         "app/modules/rulezet-validation", "app/modules/rulezet-editor"],
         cwd=ROOT,
     )
     if result.returncode != 0:
@@ -548,6 +548,7 @@ def cmd_init() -> None:
     info("Initialising Git submodules…")
     run(["git", "submodule", "update", "--init", "--recursive", "--depth", "1",
          "app/modules/rulezet-validation"])
+    run(["git", "submodule", "update", "--init", "--recursive", "app/modules/rulezet-editor"])
     ok("Submodules initialised")
 
     info("Installing Python dependencies…")
@@ -668,8 +669,24 @@ def _run_gunicorn_with_worker(flaskenv: str, port: str, reload: bool = False) ->
                     proc.kill()
 
 
+def _ensure_editor() -> None:
+    """The rule editor (app/modules/rulezet-editor) is a submodule installed editable by
+    requirements.txt. A checkout made before it existed has neither: fetch and install it
+    here so start-dev / start-prod never boot without it."""
+    editor = os.path.join(ROOT, "app", "modules", "rulezet-editor")
+    if not os.path.isfile(os.path.join(editor, "pyproject.toml")):
+        info("Fetching the rule editor submodule (app/modules/rulezet-editor)…")
+        run(["git", "submodule", "update", "--init", "--recursive", "app/modules/rulezet-editor"])
+    probe = subprocess.run([PYTHON, "-c", "import rulezet_editor"], cwd=ROOT, env=_venv_env(),
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if probe.returncode != 0:
+        info("Installing the rule editor (pip install -e app/modules/rulezet-editor)…")
+        run([PIP, "install", "-e", "./app/modules/rulezet-editor"])
+
+
 def cmd_start_dev() -> None:
     _check_venv()
+    _ensure_editor()
     port = os.environ.get("FLASK_PORT", "7009")
     url = f"http://{os.environ.get('FLASK_URL', '127.0.0.1')}:{port}"
     header(f"Starting Rulezet v{app_version()} (development)")
@@ -681,6 +698,7 @@ def cmd_start_dev() -> None:
 
 def cmd_start_prod() -> None:
     _check_venv()
+    _ensure_editor()
 
     # 1. Backup
     cmd_backup()

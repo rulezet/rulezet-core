@@ -1,6 +1,16 @@
 #!/bin/bash
 
+# The rule editor is a submodule installed editable (requirements.txt): fetch / install it
+# when this checkout predates it.
+function ensure_editor {
+    if [ ! -f app/modules/rulezet-editor/pyproject.toml ]; then
+        git submodule update --init --recursive app/modules/rulezet-editor
+    fi
+    python3 -c "import rulezet_editor" 2>/dev/null || pip install -e ./app/modules/rulezet-editor
+}
+
 function launch {
+    ensure_editor
     export FLASKENV="development"
     python3 app.py
 }

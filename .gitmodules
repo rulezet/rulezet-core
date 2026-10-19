@@ -28,3 +28,6 @@
 	path = app/modules/pivograph
 	url = https://github.com/ecrou-exact/project-graph.git
 	ignore = dirty
+[submodule "app/modules/rulezet-editor"]
+	path = app/modules/rulezet-editor
+	url = https://github.com/rulezet/rulezet-editor.git

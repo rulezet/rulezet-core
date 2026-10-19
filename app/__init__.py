@@ -132,6 +132,7 @@ def create_app(start_worker=True):
     from app.features.vulnerability.vulnerability import vulnerability_blueprint
     from app.features.rule.rule_from_github.git_settings.git_settings_routes import git_settings_blueprint
     from app.features.alert.alert import alert_blueprint
+    from app.features.editor.editor import editor_blueprint
 
     app.register_blueprint(home_blueprint, url_prefix="/")
     app.register_blueprint(account_blueprint, url_prefix="/account")
@@ -168,6 +169,7 @@ def create_app(start_worker=True):
     app.register_blueprint(vulnerability_blueprint)
     app.register_blueprint(git_settings_blueprint)
     app.register_blueprint(alert_blueprint, url_prefix='/alert')
+    app.register_blueprint(editor_blueprint, url_prefix='/editor-api')
 
     from app.api.api import api_blueprint
 
