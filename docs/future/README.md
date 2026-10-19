@@ -6,7 +6,12 @@ step is to make Rulezet useful **where the rules actually run** — the sensor,
 the SIEM, the scanner, the EDR — and to bring what happens there back into
 Rulezet.
 
+
 **→ The full roadmap of big features is in [ROADMAP.md](ROADMAP.md).**
+
+**→ First, the standalone editor base every format plugs into: [rulezet_editor.md](rulezet_editor.md).**
+
+**→ The YARA editor (first format of the Rule Workbench): [yara_editor.md](yara_editor.md).**
 
 This folder collects that direction: one file per rule format, describing how
 a Rulezet **connector** could link the format's real tooling to Rulezet and
