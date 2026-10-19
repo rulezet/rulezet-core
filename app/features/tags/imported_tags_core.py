@@ -49,6 +49,7 @@ FORMAT_TAG_SOURCES: dict[str, str] = {
     "nse":      "categories = {…}",
     "wazuh":    "<group> names",
     "kql":      "// tags: header comment",
+    "plum":     "tags: list (namespace:value)",
 }
 
 
@@ -240,6 +241,7 @@ _EXTRACTORS = {
     "nse":      _extract_nse,
     "wazuh":    _extract_wazuh,
     "kql":      _extract_kql,
+    "plum":     _extract_sigma,           # same `tags:` list at the top level
 }
 
 
@@ -268,20 +270,53 @@ def _now():
 _reserved_cache = {"names": None}
 
 
+def _taxonomy_tag_names(namespace: str, path: str) -> set:
+    """Every tag a MISP taxonomy defines: `ns:predicate` and
+    `ns:predicate="value"` (lower case)."""
+    import json
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return set()
+    names = set()
+    for pred in data.get("predicates") or []:
+        p = str(pred.get("value") or "").lower()
+        if p:
+            names.add(f"{namespace}:{p}")
+    for entry in data.get("values") or []:
+        p = str(entry.get("predicate") or "").lower()
+        for v in entry.get("entry") or []:
+            val = str(v.get("value") or "").lower()
+            if p and val:
+                names.add(f'{namespace}:{p}="{val}"')
+                names.add(f"{namespace}:{p}={val}")
+    return names
+
+
 def reserved_namespaces() -> set:
-    """Namespaces an imported tag may never be *created* in: every MISP
-    taxonomy (installed or not — a squatted "tlp:red" would block the
-    taxonomy's later import, tag names being unique) and the galaxies."""
+    """Namespaces an imported tag may never be *created* in: the galaxies."""
+    return {"misp-galaxy"}
+
+
+def reserved_tag_names() -> set:
+    """Names an imported tag may never be *created* with: every tag a MISP
+    taxonomy defines (installed or not — a squatted "tlp:red" would block the
+    taxonomy's later import, tag names being unique). Only the taxonomy's own
+    tags are reserved, not its whole namespace: Plum's "type:proxy" is fine
+    next to the "type" taxonomy (type:osint…)."""
     if _reserved_cache["names"] is None:
         import os
-        names = {"misp-galaxy"}
+        names = set()
         try:
-            names |= {d.lower() for d in os.listdir(MISP_TAXONOMIES_DIR)
-                      if os.path.isdir(os.path.join(MISP_TAXONOMIES_DIR, d))}
+            for d in os.listdir(MISP_TAXONOMIES_DIR):
+                path = os.path.join(MISP_TAXONOMIES_DIR, d, "machinetag.json")
+                if os.path.isfile(path):
+                    names |= _taxonomy_tag_names(d.lower(), path)
         except OSError:
             pass
-        names |= {(ns or "").lower() for (ns,) in db.session.query(Tag.namespace)
-                  .filter(Tag.source == "Taxonomy").distinct() if ns}
+        names |= {(n or "").lower() for (n,) in db.session.query(Tag.name)
+                  .filter(Tag.source == "Taxonomy") if n}
         _reserved_cache["names"] = names
     return _reserved_cache["names"]
 
@@ -304,7 +339,8 @@ def get_or_create_imported_tag(name: str, user_id: int | None, cache: dict | Non
     if tag is not None:
         usable = bool(tag.is_active) and (tag.visibility or "").lower() == "public"
         result = tag if usable else None
-    elif user_id and name.split(":", 1)[0] in reserved_namespaces() and ":" in name:
+    elif user_id and ":" in name and (name.split(":", 1)[0] in reserved_namespaces()
+                                      or name in reserved_tag_names()):
         result = None                     # never mint a tag in a taxonomy / galaxy namespace
     elif user_id:
         now = _now()
