@@ -207,3 +207,58 @@ def create_rule_from_portable(rule_dict: dict, user, record_activity: bool = Tru
             except Exception:
                 pass
     return new_rule, message
+
+
+# Fields an import can update on a rule that already exists here (same uuid).
+UPDATABLE_FIELDS = ("title", "format", "version", "license", "author", "source", "description", "to_string", "cve_id")
+
+
+def rule_changes(rule_dict: dict, existing: Rule) -> list:
+    """Labels of the fields the import would change on `existing`."""
+    def current(key):
+        if key == "cve_id":
+            return _vuln_list(existing.cve_id)
+        return (getattr(existing, key) or "").strip()
+    changed = []
+    for key, label in IMPORT_FIELDS:
+        if key not in UPDATABLE_FIELDS:
+            continue
+        new = rule_dict.get(key)
+        if key != "cve_id":
+            new = (new or "").strip()
+            if not new:          # an empty field never blanks the existing value
+                continue
+        if new != current(key):
+            changed.append(label)
+    return changed
+
+
+def update_rule_from_portable(rule_dict: dict, existing: Rule, user) -> tuple[bool, str]:
+    """Bring an existing rule up to date with the imported one (history entry
+    included). Refused when the new content is another rule's."""
+    from app.features.rule import rule_core as RuleModel
+
+    content = (rule_dict.get("to_string") or "").strip()
+    other = RuleModel.get_rule_by_content(content)
+    if other is not None and other.id != existing.id:
+        return False, f'its new content is already rule "{other.title}"'
+    old_content = existing.to_string
+    old_snapshot = RuleModel.rule_metadata_snapshot(existing)
+    form = {key: (rule_dict.get(key) or getattr(existing, key)) for key in UPDATABLE_FIELDS if key != "cve_id"}
+    form["cve_id"] = rule_dict.get("cve_id") or _vuln_list(existing.cve_id)
+    form["original_uuid"] = existing.original_uuid
+    ok, rule = RuleModel.edit_rule_core(form, existing.id)
+    if not ok:
+        return False, "update failed"
+    new_snapshot = RuleModel.rule_metadata_snapshot(rule)
+    content_changed = (old_content or "").strip() != (rule.to_string or "").strip()
+    RuleModel.create_rule_history({
+        "id": rule.id, "title": rule.title, "success": True, "manual_submit": False,
+        "message": "Updated from a bundle JSON import",
+        "new_content": rule.to_string, "old_content": old_content,
+        "old_snapshot": old_snapshot, "new_snapshot": new_snapshot,
+        "change_type": ("mixed" if new_snapshot != old_snapshot else "content") if content_changed else "metadata",
+    })
+    if user.id != rule.user_id:
+        RuleModel.add_contributor(user.id, rule.id)
+    return True, ""

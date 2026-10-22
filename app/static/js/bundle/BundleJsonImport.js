@@ -4,7 +4,9 @@
  * Paste a bundle export (Download → Bundle JSON on another instance), click
  * "Review import": a modal summarises what will be created — bundle fields,
  * every rule (new / already here / invalid), structure, notes, AI analyses,
- * releases — before anything is written. Server side: bundle_portable.py.
+ * releases — before anything is written. When the bundle already exists here
+ * (imported before, or the same instance) the modal offers to update it in
+ * place instead of creating a copy. Server side: bundle_portable.py.
  */
 import SmartEditor from '/static/js/components/smart-editor.js';
 import RuleImportPreview from '/static/js/components/RuleImportPreview.js';
@@ -12,6 +14,7 @@ import { create_message } from '/static/js/toaster.js';
 
 const ACTIONS = {
     create:   { label: 'New — will be created', icon: 'fa-circle-plus', cls: 'bji-badge--create' },
+    update:   { label: 'Already here — will be updated', icon: 'fa-rotate', cls: 'bji-badge--update' },
     existing: { label: 'Already here — reused', icon: 'fa-triangle-exclamation', cls: 'bji-badge--existing' },
     invalid:  { label: 'Invalid — skipped', icon: 'fa-circle-xmark', cls: 'bji-badge--invalid' },
     trash:    { label: 'In the trash — skipped', icon: 'fa-trash', cls: 'bji-badge--invalid' },
@@ -23,14 +26,17 @@ export default {
     delimiters: ['[[', ']]'],
     data() {
         return { open: false, raw: '', loading: false, importing: false, error: '', preview: null,
-                 name: '', expanded: null, ACTIONS };
+                 name: '', mode: 'create', expanded: null, ACTIONS };
     },
     computed: {
         canImport() {
             return this.preview && this.name.trim() && !this.importing;
         },
         nameTaken() {
-            return this.preview && this.preview.bundle.name_taken && this.name.trim() === this.preview.bundle.name;
+            if (!this.preview) return false;
+            const eb = this.preview.existing_bundle;
+            if (this.mode === 'update') return !!(eb && eb.name_taken && this.name.trim() === this.preview.bundle.name);
+            return this.preview.bundle.name_taken && this.name.trim() === this.preview.bundle.name;
         },
     },
     methods: {
@@ -53,6 +59,8 @@ export default {
                 if (!data.success) { this.error = data.message || 'Preview failed.'; return; }
                 this.preview = data.preview;
                 this.name = data.preview.bundle.name;
+                const eb = data.preview.existing_bundle;
+                this.mode = eb && eb.can_update ? 'update' : 'create';
                 this.expanded = null;
                 bootstrap.Modal.getOrCreateInstance(this.$refs.modal).show();
             } catch {
@@ -67,12 +75,12 @@ export default {
                 const res = await fetch('/bundle/import_json', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
-                    body: JSON.stringify({ bundle_json: this.raw, name: this.name.trim() }),
+                    body: JSON.stringify({ bundle_json: this.raw, name: this.name.trim(), mode: this.mode }),
                 });
                 const data = await res.json().catch(() => ({}));
                 if (!data.success) { create_message(data.message || 'Import failed.', 'danger-subtle'); return; }
                 const r = data.report;
-                create_message(`Bundle imported — ${r.created.length} rule(s) created, ${r.reused.length} reused, ${r.skipped.length} skipped.`, 'success-subtle');
+                create_message(`Bundle ${r.mode === 'update' ? 'updated' : 'imported'} — ${r.created.length} rule(s) created, ${r.updated.length} updated, ${r.reused.length} unchanged, ${r.skipped.length} skipped.`, 'success-subtle');
                 window.location.href = data.url;
             } catch {
                 create_message('Import failed.', 'danger-subtle');
@@ -117,7 +125,8 @@ export default {
                     <div class="modal-body">
                         <div class="bji-kpis">
                             <div class="bji-kpi"><strong>[[ preview.counts.create ]]</strong><span>rules to create</span></div>
-                            <div class="bji-kpi bji-kpi--warn"><strong>[[ preview.counts.existing ]]</strong><span>already here</span></div>
+                            <div class="bji-kpi bji-kpi--upd"><strong>[[ preview.counts.update ]]</strong><span>rules to update</span></div>
+                            <div class="bji-kpi bji-kpi--warn"><strong>[[ preview.counts.existing ]]</strong><span>already here, unchanged</span></div>
                             <div class="bji-kpi bji-kpi--err"><strong>[[ preview.counts.invalid + preview.counts.trash ]]</strong><span>skipped</span></div>
                             <div class="bji-kpi"><strong>[[ preview.structure.folders ]] / [[ preview.structure.files ]]</strong><span>folders / files</span></div>
                             <div class="bji-kpi"><strong>[[ preview.notes ]]</strong><span>notes</span></div>
@@ -125,11 +134,26 @@ export default {
                             <div class="bji-kpi"><strong>[[ preview.releases.length ]]</strong><span>releases</span></div>
                         </div>
 
+                        <div v-if="preview.existing_bundle" class="bji-existing">
+                            <div class="fw-semibold mb-1"><i class="fa-solid fa-triangle-exclamation me-1"></i>This bundle already exists here:
+                                <a :href="'/bundle/detail/' + preview.existing_bundle.id" target="_blank" rel="noopener">[[ preview.existing_bundle.name ]]</a>
+                                <span class="text-muted fw-normal">— owner [[ preview.existing_bundle.owner ]], [[ preview.existing_bundle.rules ]] rule(s),
+                                [[ preview.existing_bundle.notes ]] note(s)<template v-if="preview.existing_bundle.releases.length">, releases [[ preview.existing_bundle.releases.join(', ') ]]</template></span></div>
+                            <label class="bji-mode" v-if="preview.existing_bundle.can_update">
+                                <input type="radio" value="update" v-model="mode">
+                                <div><strong>Update the existing bundle</strong><small>Name, description, visibility, tags, rules and tree replaced by the JSON's; changed rules updated (with history); notes, AI analyses and releases it doesn't have yet are added. Nothing else is deleted.</small></div>
+                            </label>
+                            <label class="bji-mode">
+                                <input type="radio" value="create" v-model="mode">
+                                <div><strong>Create a new copy</strong><small>A separate bundle under your account, the existing one is left untouched.</small></div>
+                            </label>
+                        </div>
+
                         <h6 class="bji-h">Bundle</h6>
                         <div class="rounded-3 border p-3 mb-3" style="background:var(--light-bg-color);">
                             <label class="bc-label">Name</label>
                             <input class="form-control mb-1" :class="{ 'is-invalid': nameTaken }" v-model="name" maxlength="255">
-                            <div v-if="nameTaken" class="invalid-feedback d-block">You already have a bundle with this name — change it to import.</div>
+                            <div v-if="nameTaken" class="invalid-feedback d-block">[[ mode === 'update' ? 'The owner already has another bundle with this name' : 'You already have a bundle with this name' ]] — change it to import.</div>
                             <div class="bji-meta mt-2">
                                 <span><i class="fa-solid" :class="preview.bundle.access ? 'fa-globe' : 'fa-lock'"></i>[[ preview.bundle.access ? 'Public' : 'Private' ]]</span>
                                 <span v-if="preview.bundle.instance"><i class="fa-solid fa-server"></i>From [[ preview.bundle.instance ]]</span>
@@ -149,7 +173,7 @@ export default {
 
                         <h6 class="bji-h">Rules ([[ preview.rules.length ]])</h6>
                         <div v-if="preview.counts.existing" class="alert alert-warning py-2 px-3" style="font-size:.82rem;">
-                            <i class="fa-solid fa-triangle-exclamation me-1"></i>[[ preview.counts.existing ]] rule(s) already exist on this instance — they are linked to the new bundle as they are, not duplicated.
+                            <i class="fa-solid fa-triangle-exclamation me-1"></i>[[ preview.counts.existing + preview.counts.update ]] rule(s) already exist on this instance — they are linked, not duplicated[[ preview.counts.update ? '; ' + preview.counts.update + ' of them changed and will be updated' : '' ]].
                         </div>
                         <div class="bji-rules">
                             <div v-for="(r, i) in preview.rules" :key="r.ref + i" class="bji-rule">
@@ -157,6 +181,7 @@ export default {
                                     <span class="bji-badge" :class="ACTIONS[r.action].cls"><i class="fa-solid" :class="ACTIONS[r.action].icon"></i>[[ ACTIONS[r.action].label ]]</span>
                                     <span class="bji-rule-title">[[ r.title || '(untitled)' ]]</span>
                                     <span v-if="r.action === 'invalid'" class="bji-rule-err">[[ r.error ]]</span>
+                                    <span v-if="r.action === 'update'" class="bji-rule-changes">changes: [[ r.changes.join(', ') ]]</span>
                                     <i v-if="r.preview" class="fa-solid ms-auto" :class="expanded === i ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
                                 </button>
                                 <div v-if="expanded === i && r.preview" class="p-3">
@@ -168,7 +193,7 @@ export default {
                     <div class="modal-footer">
                         <button type="button" class="bd-btn bd-btn--ghost" data-bs-dismiss="modal">Cancel</button>
                         <button type="button" class="bd-btn bd-btn--primary" :disabled="!canImport || nameTaken" @click="doImport">
-                            <i class="fa-solid" :class="importing ? 'fa-spinner fa-spin' : 'fa-plus'"></i><span>Create the bundle</span>
+                            <i class="fa-solid" :class="importing ? 'fa-spinner fa-spin' : 'fa-plus'"></i><span>[[ mode === 'update' ? 'Update the bundle' : 'Create the bundle' ]]</span>
                         </button>
                     </div>
                 </div>

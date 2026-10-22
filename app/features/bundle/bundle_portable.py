@@ -10,6 +10,12 @@ Format ("rulezet-bundle", version 1):
     ai_analyses agent_key, content, meta, model, is_public, created_at
     releases    version, title, notes, snapshot (rule ids remapped on import)
 
+A bundle already imported (its source uuid is kept in remote_bundle_uuid)
+or the same bundle on its own instance can be updated in place instead of
+copied: fields, tags, rules, tree replaced; notes, AI analyses and releases
+not there yet added. Rules found by uuid whose content/fields changed are
+updated (with a history entry).
+
 Votes, views, comments and history belong to the source instance's users
 and are not carried over. On import every rule is checked like a manual
 submission: a rule that already exists here (same uuid or content) is reused
@@ -27,7 +33,8 @@ from app.core.db_class.ai import AIGeneration
 from app.core.db_class.rule import Rule
 from app.core.db_class.tag import BundleTagAssociation, Tag
 from app.features.rule.rule_portable import (rule_to_portable, normalize_rule_json, preview_rule,
-                                             create_rule_from_portable, find_existing_rule)
+                                             create_rule_from_portable, find_existing_rule,
+                                             rule_changes, update_rule_from_portable)
 
 FORMAT_NAME = "rulezet-bundle"
 FORMAT_VERSION = 1
@@ -163,20 +170,25 @@ def parse_bundle_json(raw) -> tuple[dict | None, str | None]:
 
 def _analyse_rules(data) -> list:
     """One entry per exported rule: ref, rule_dict, preview, action
-    (create | existing | invalid | trash)."""
+    (create | update | existing | invalid | trash)."""
     out = []
     for i, raw in enumerate(data.get("rules") or []):
         ref = str((raw or {}).get("uuid") or f"#{i}") if isinstance(raw, dict) else f"#{i}"
         rule_dict, error = normalize_rule_json(raw)
         if error:
-            out.append({"ref": ref, "rule_dict": None, "action": "invalid",
+            out.append({"ref": ref, "rule_dict": None, "action": "invalid", "changes": [],
                         "title": (raw or {}).get("title") if isinstance(raw, dict) else None, "error": error,
                         "bundle_description": None, "preview": None})
             continue
         preview = preview_rule(rule_dict)
         existing = preview["existing"]
+        changes = []
+        if existing and existing["kind"] == "uuid" and preview["valid"]:
+            changes = rule_changes(rule_dict, db.session.get(Rule, existing["id"]))
         if existing and existing["kind"] == "trash":
             action = "trash"
+        elif changes:
+            action = "update"
         elif existing:
             action = "existing"
         elif preview["valid"]:
@@ -184,7 +196,7 @@ def _analyse_rules(data) -> list:
         else:
             action = "invalid"
         out.append({"ref": ref, "rule_dict": rule_dict, "action": action, "title": rule_dict["title"],
-                    "error": preview["error"], "preview": preview,
+                    "error": preview["error"], "preview": preview, "changes": changes,
                     "bundle_description": raw.get("bundle_description")})
     return out
 
@@ -212,6 +224,17 @@ def _known_tag_names(names) -> dict:
     return {t.name: t for t in Tag.query.filter(Tag.name.in_(names)).all()}
 
 
+def find_existing_bundle(data: dict):
+    """The bundle this export was already imported as (remote_bundle_uuid),
+    or the exported bundle itself when it comes from this instance."""
+    from sqlalchemy import or_
+    src = str(data["bundle"].get("uuid") or "").strip()
+    if not src:
+        return None
+    return Bundle.query.filter(or_(Bundle.uuid == src, Bundle.remote_bundle_uuid == src)) \
+        .order_by(Bundle.id).first()
+
+
 def preview_bundle_import(data: dict, user) -> dict:
     from .bundle_core import bundle_name_taken
 
@@ -220,8 +243,23 @@ def preview_bundle_import(data: dict, user) -> dict:
     rules = _analyse_rules(data)
     tag_names = [t for t in (b.get("tags") or []) if isinstance(t, str)]
     known = _known_tag_names(tag_names)
-    counts = {a: sum(1 for r in rules if r["action"] == a) for a in ("create", "existing", "invalid", "trash")}
+    counts = {a: sum(1 for r in rules if r["action"] == a)
+              for a in ("create", "update", "existing", "invalid", "trash")}
+    existing = find_existing_bundle(data)
+    existing_json = None
+    if existing:
+        owner = existing.user
+        existing_json = {
+            "id": existing.id, "name": existing.name,
+            "owner": f"{owner.first_name} {owner.last_name}".strip() if owner else None,
+            "rules": existing.rules_assoc.count(),
+            "notes": existing.notes.count(),
+            "releases": [r.version for r in existing.releases],
+            "can_update": user.is_admin() or existing.user_id == user.id,
+            "name_taken": existing.name != name and bundle_name_taken(name, existing.user_id, exclude_id=existing.id),
+        }
     return {
+        "existing_bundle": existing_json,
         "bundle": {
             "name": name, "name_taken": bundle_name_taken(name, user.id),
             "description": b.get("description") or "", "access": bool(b.get("access", True)),
@@ -232,7 +270,7 @@ def preview_bundle_import(data: dict, user) -> dict:
         },
         "rules": [{
             "ref": r["ref"], "title": r["title"], "action": r["action"], "error": r["error"],
-            "preview": r["preview"],
+            "preview": r["preview"], "changes": r["changes"],
         } for r in rules],
         "counts": counts,
         "structure": _count_tree(data.get("structure")),
@@ -292,20 +330,8 @@ def _remap_release_snapshot(snap, rule_ids_by_ref):
     return {"bundle": snap.get("bundle") or {}, "rules": rules, "tree": remap(snap.get("tree"))}
 
 
-def import_bundle(data: dict, user, name: str | None = None) -> tuple[Bundle | None, dict]:
-    """Create the bundle (and its missing rules). Returns (bundle, report)."""
-    from .bundle_core import bundle_name_taken, create_bundle, validate_structure, save_workspace, \
-        place_rules_in_structure
-    from app.core.utils.activity_log import log_activity
-
-    b = data["bundle"]
-    name = (name or str(b.get("name"))).strip()[:255]
-    if not name:
-        return None, {"error": "The bundle needs a name."}
-    if bundle_name_taken(name, user.id):
-        return None, {"error": f'You already have a bundle called "{name}" — pick another name.'}
-
-    report = {"created": [], "reused": [], "skipped": []}
+def _import_rules(data, user, report):
+    """Create / update / reuse every exported rule → {ref: rule id}, {rule id: description}."""
     rule_ids_by_ref, descriptions = {}, {}
     for r in _analyse_rules(data):
         if r["action"] == "create":
@@ -321,29 +347,102 @@ def import_bundle(data: dict, user, name: str | None = None) -> tuple[Bundle | N
                     report["reused"].append({"id": existing.id, "title": existing.title})
                 else:
                     report["skipped"].append({"title": r["title"], "reason": str(message)})
-        elif r["action"] == "existing":
+        elif r["action"] in ("update", "existing"):
             rid = r["preview"]["existing"]["id"]
             rule_ids_by_ref[r["ref"]] = rid
-            report["reused"].append({"id": rid, "title": r["preview"]["existing"]["title"]})
+            if r["action"] == "update":
+                ok, why = update_rule_from_portable(r["rule_dict"], db.session.get(Rule, rid), user)
+                (report["updated"] if ok else report["skipped"]).append(
+                    {"id": rid, "title": r["title"], **({} if ok else {"reason": f"not updated: {why}"})})
+                if not ok:      # still part of the bundle, just not updated
+                    report["reused"].append({"id": rid, "title": r["title"]})
+            else:
+                report["reused"].append({"id": rid, "title": r["preview"]["existing"]["title"]})
         else:
             reason = "in the trash on this instance" if r["action"] == "trash" else (r["error"] or "invalid")
             report["skipped"].append({"title": r["title"], "reason": reason})
         if r["ref"] in rule_ids_by_ref:
             descriptions[rule_ids_by_ref[r["ref"]]] = r["bundle_description"]
+    return rule_ids_by_ref, descriptions
 
+
+def import_bundle(data: dict, user, name: str | None = None, mode: str = "create") -> tuple[Bundle | None, dict]:
+    """Create the bundle (mode "create") or update the one it was already
+    imported as (mode "update"), creating / updating its rules.
+    Returns (bundle, report)."""
+    from .bundle_core import bundle_name_taken, create_bundle
+    from .bundle_history_core import track_bundle_change
+    from app.core.utils.activity_log import log_activity
+
+    b = data["bundle"]
+    name = (name or str(b.get("name"))).strip()[:255]
+    if not name:
+        return None, {"error": "The bundle needs a name."}
+    report = {"created": [], "updated": [], "reused": [], "skipped": []}
     vulns = [v for v in (b.get("vulnerabilities") or []) if isinstance(v, str)]
-    bundle = create_bundle({
-        "name": name,
-        "description": b.get("description") if isinstance(b.get("description"), str) else "",
-        "public": bool(b.get("access", True)),
-        "vulnerability_identifiers": vulns,
-    }, user)
+    description = b.get("description") if isinstance(b.get("description"), str) else ""
 
+    if mode == "update":
+        bundle = find_existing_bundle(data)
+        if bundle is None:
+            return None, {"error": "No existing bundle to update — import it as a new bundle."}
+        if not (user.is_admin() or bundle.user_id == user.id):
+            return None, {"error": "You can't update this bundle."}
+        if name != bundle.name and bundle_name_taken(name, bundle.user_id, exclude_id=bundle.id):
+            return None, {"error": f'The owner already has a bundle called "{name}" — pick another name.'}
+        with track_bundle_change(bundle.id, "import", user=user):
+            rule_ids_by_ref, descriptions = _import_rules(data, user, report)
+            bundle.name, bundle.description = name, description
+            bundle.access = bool(b.get("access", True))
+            bundle.vulnerability_identifiers = json.dumps(vulns)
+            bundle.updated_at = _now()
+            BundleTagAssociation.query.filter_by(bundle_id=bundle.id).delete()
+            wanted = set(dict.fromkeys(rule_ids_by_ref.values()))
+            for a in BundleRuleAssociation.query.filter_by(bundle_id=bundle.id).all():
+                if a.rule_id not in wanted:
+                    db.session.delete(a)
+                else:
+                    wanted.discard(a.rule_id)
+                    if descriptions.get(a.rule_id):
+                        a.description = descriptions[a.rule_id]
+            db.session.flush()
+            _fill_bundle(bundle, data, user, rule_ids_by_ref, descriptions, report, new_rule_ids=wanted)
+        action = "updated"
+    else:
+        if bundle_name_taken(name, user.id):
+            return None, {"error": f'You already have a bundle called "{name}" — pick another name.'}
+        rule_ids_by_ref, descriptions = _import_rules(data, user, report)
+        bundle = create_bundle({"name": name, "description": description,
+                                "public": bool(b.get("access", True)),
+                                "vulnerability_identifiers": vulns}, user)
+        src = str(b.get("uuid") or "").strip()
+        if src and src != bundle.uuid:
+            bundle.remote_bundle_uuid = src[:36]
+        _fill_bundle(bundle, data, user, rule_ids_by_ref, descriptions, report,
+                     new_rule_ids=set(rule_ids_by_ref.values()))
+        action = "imported"
+
+    log_activity(f"bundle.import", f"{action.capitalize()} bundle '{bundle.name}' from JSON "
+                 f"({len(report['created'])} rule(s) created, {len(report['updated'])} updated, "
+                 f"{len(report['reused'])} reused, {len(report['skipped'])} skipped)",
+                 target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid,
+                 is_public=bool(bundle.access))
+    report["mode"] = mode
+    return bundle, report
+
+
+def _fill_bundle(bundle, data, user, rule_ids_by_ref, descriptions, report, new_rule_ids):
+    """Tags, rule links, tree, notes, AI analyses, releases — on a new bundle,
+    or on an existing one (its tags and stale rule links already removed;
+    notes / analyses / releases it already has are not duplicated)."""
+    from .bundle_core import validate_structure, save_workspace, place_rules_in_structure
+
+    b = data["bundle"]
     for tag in _known_tag_names(b.get("tags") or []).values():
         db.session.add(BundleTagAssociation(uuid=str(uuid_mod.uuid4()), bundle_id=bundle.id,
                                             tag_id=tag.id, user_id=user.id, added_at=_now()))
 
-    for rid in dict.fromkeys(rule_ids_by_ref.values()):
+    for rid in [r for r in dict.fromkeys(rule_ids_by_ref.values()) if r in new_rule_ids]:
         db.session.add(BundleRuleAssociation(
             bundle_id=bundle.id, rule_id=rid, added_at=_now(),
             description=descriptions.get(rid) or f"Imported from JSON on {_now():%Y-%m-%d}"))
@@ -353,7 +452,7 @@ def import_bundle(data: dict, user, name: str | None = None) -> tuple[Bundle | N
     error = validate_structure(structure)
     if error:
         report["structure_error"] = error
-    elif structure:
+    elif structure or BundleNode.query.filter_by(bundle_id=bundle.id).first():
         save_workspace(bundle.id, structure)
     placed = {n.rule_id for n in BundleNode.query.filter_by(bundle_id=bundle.id) if n.rule_id}
     missing = [rid for rid in dict.fromkeys(rule_ids_by_ref.values()) if rid not in placed]
@@ -361,8 +460,11 @@ def import_bundle(data: dict, user, name: str | None = None) -> tuple[Bundle | N
         place_rules_in_structure(bundle.id, missing)
         db.session.commit()
 
+    have_notes = {(n.title, n.content) for n in bundle.notes}
     for n in data.get("notes") or []:
         if not isinstance(n, dict) or not str(n.get("title") or "").strip() or not isinstance(n.get("content"), str):
+            continue
+        if (str(n["title"]).strip()[:200], n["content"]) in have_notes:
             continue
         note = BundleNote(
             uuid=str(uuid_mod.uuid4()), bundle_id=bundle.id, user_id=user.id,
@@ -376,8 +478,11 @@ def import_bundle(data: dict, user, name: str | None = None) -> tuple[Bundle | N
         for tag in _known_tag_names(n.get("tags") or []).values():
             db.session.add(BundleNoteTag(note_id=note.id, tag_id=tag.id))
 
+    have_ai = {(g.agent_key, g.content) for g in bundle.ai_generations}
     for g in data.get("ai_analyses") or []:
         if not isinstance(g, dict) or not isinstance(g.get("content"), str) or not g.get("agent_key"):
+            continue
+        if (str(g["agent_key"])[:50], g["content"]) in have_ai:
             continue
         db.session.add(AIGeneration(
             uuid=str(uuid_mod.uuid4()), agent_key=str(g["agent_key"])[:50], bundle_id=bundle.id,
@@ -386,7 +491,7 @@ def import_bundle(data: dict, user, name: str | None = None) -> tuple[Bundle | N
             created_at=_parse_dt(g.get("created_at")) or _now(),
         ))
 
-    seen_versions = set()
+    seen_versions = {r.version for r in bundle.releases}
     for r in data.get("releases") or []:
         if not isinstance(r, dict) or not r.get("version") or str(r["version"]) in seen_versions:
             continue
@@ -404,10 +509,3 @@ def import_bundle(data: dict, user, name: str | None = None) -> tuple[Bundle | N
             snapshot=snap, created_at=_parse_dt(r.get("created_at")) or _now(),
         ))
     db.session.commit()
-
-    log_activity("bundle.import", f"Imported bundle '{bundle.name}' from JSON "
-                 f"({len(report['created'])} rule(s) created, {len(report['reused'])} reused, "
-                 f"{len(report['skipped'])} skipped)",
-                 target_type="bundle", target_id=bundle.id, target_uuid=bundle.uuid,
-                 is_public=bool(bundle.access))
-    return bundle, report

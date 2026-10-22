@@ -2849,7 +2849,8 @@ def import_bundle_json():
         return jsonify({"success": False, "message": error}), 400
     name = body.get('name') if isinstance(body.get('name'), str) else None
     try:
-        bundle, report = import_bundle(data, current_user, name=name)
+        mode = 'update' if body.get('mode') == 'update' else 'create'
+        bundle, report = import_bundle(data, current_user, name=name, mode=mode)
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": internal_error(e)}), 500
