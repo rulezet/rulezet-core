@@ -5,6 +5,8 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-detail.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-create.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/rule-import-preview.css') }}">
 {% endblock %}
 {% block content %}
 <div class="container py-5">
@@ -31,6 +33,10 @@
             Once the bundle is created, you can populate it with rules and manage them easily.
         </p>
     </div>
+
+    {% if current_user.is_admin() %}
+    <div id="bundle-json-import"><bundle-json-import></bundle-json-import></div>
+    {% endif %}
 
     <form action="" method="post" id="form">
         {{ form.hidden_tag() }}
@@ -135,4 +141,10 @@
         },
     }).mount('#bundle-desc-editor')
 </script>
+{% if current_user.is_admin() %}
+<script type="module">
+    import BundleJsonImport from '/static/js/bundle/BundleJsonImport.js'
+    Vue.createApp({ components: { 'bundle-json-import': BundleJsonImport } }).mount('#bundle-json-import')
+</script>
+{% endif %}
 {% endblock %}

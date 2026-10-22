@@ -299,6 +299,7 @@ class Rule(db.Model):
             # --- relations ---
             "relations": {
                 "tags": tags,
+                "attacks": [a.technique_id for a in self.attack_assocs],
                 "bundles": bundles,
                 "similar_rules": similar_rules,
             },

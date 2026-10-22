@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/license-input.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ai-thinking-steps.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/rule-import-preview.css') }}">
 <style>
 .rf-label-hint {
     display: inline-flex;
@@ -705,7 +706,7 @@
             <i class="fas fa-code me-1" style="color:#0d6efd;"></i>Import from JSON
           </h6>
         </div>
-        <p class="text-muted mb-3" style="font-size:.83rem;margin-left:1.3rem;">Paste a rule's JSON export (from the rule detail page's Download menu) to recreate it here — only the rule's own fields are read, it's saved under your account.</p>
+        <p class="text-muted mb-3" style="font-size:.83rem;margin-left:1.3rem;">Paste a rule's JSON (the detail page's Download → JSON, or its "Json" tab) to recreate it here. A preview shows every field that will be imported before anything is saved — the rule is created under your account.</p>
         <hr style="border-color:var(--border-color);margin:0 0 1rem;">
 
         <form method="POST" action="{{ url_for('rule.import_rule_from_json') }}" class="d-flex flex-column" id="json-form" novalidate @submit="saveJsonDraft">
@@ -723,7 +724,7 @@
             <div class="d-flex align-items-center justify-content-between gap-1 mb-1">
               <div class="d-flex align-items-center gap-1">
                 <label class="form-label-styled mb-0" for="json-editor">Rule JSON<span class="req-badge">required</span></label>
-                <i class="rf-label-hint" data-tip="Only title, format, to_string, license, description, source, author, version, uuid and cve_id are read — everything else is ignored.">?</i>
+                <i class="rf-label-hint" data-tip="Read: title, format, to_string, license, description, source, author, version, uuid, cve_id, tags (by name) and attacks (technique ids) — everything else is ignored.">?</i>
               </div>
               <button type="button" class="rf-format-btn" @click="formatJsonContent">
                 <i class="fas fa-broom"></i>Format
@@ -746,8 +747,22 @@
             </smart-editor>
           </div>
 
+          <div v-if="jsonPreviewLoading" class="text-muted small mb-3"><i class="fas fa-spinner fa-spin me-1"></i>Building the preview…</div>
+          <div v-else-if="jsonPreviewError" class="alert alert-danger py-2 px-3 mb-3" style="font-size:.8rem;">
+            <i class="fas fa-circle-exclamation me-1"></i>[[ jsonPreviewError ]]
+          </div>
+          <div v-else-if="jsonPreview" class="mb-3">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <div class="h-card__accent"></div>
+              <h6 class="mb-0 fw-bold text-uppercase" style="font-size:.74rem;letter-spacing:.04em;color:var(--text-color);">
+                <i class="fas fa-eye me-1" style="color:#0d6efd;"></i>Preview — what will be imported
+              </h6>
+            </div>
+            <rule-import-preview :preview="jsonPreview"></rule-import-preview>
+          </div>
+
           <div class="d-flex justify-content-end">
-            <button type="submit" class="btn btn-primary px-4" style="border-radius:8px;">
+            <button type="submit" class="btn btn-primary px-4" style="border-radius:8px;" :disabled="!jsonCanImport">
               <i class="fas fa-file-import me-2"></i>Import Rule
             </button>
           </div>
@@ -891,6 +906,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
       import LicenseInput from '/static/js/components/LicenseInput.js';
       import AIThinkingSteps from '/static/js/components/ai-thinking-steps.js';
       import DeepValidateSuricata from '/static/js/rule/DeepValidateSuricata.js';
+      import RuleImportPreview from '/static/js/components/RuleImportPreview.js';
 
       const VALID_TABS = ['manual', 'parse', 'github', 'zip', 'json', 'ai_generate'];
 
@@ -906,6 +922,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                   'license-input': LicenseInput,
                   'ai-thinking-steps': AIThinkingSteps,
                   'deep-validate-suricata': DeepValidateSuricata,
+                  'rule-import-preview': RuleImportPreview,
             },
             setup() {
                   const pageParams   = new URLSearchParams(window.location.search);
@@ -1345,6 +1362,43 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                         } catch {}
                   }
 
+                  // ── JSON tab: server preview of every imported field, refreshed
+                  // (debounced) whenever the pasted JSON parses ──
+                  const jsonPreview = ref(null);
+                  const jsonPreviewError = ref('');
+                  const jsonPreviewLoading = ref(false);
+                  let jsonPreviewTimer = null;
+                  let jsonPreviewSeq = 0;
+                  async function fetchJsonPreview() {
+                        const seq = ++jsonPreviewSeq;
+                        jsonPreviewLoading.value = true;
+                        try {
+                              const res = await fetch('/rule/import_from_json/preview', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': $("#csrf_token").val() },
+                                    body: JSON.stringify({ rule_json: jsonContent.value }),
+                              });
+                              const data = await res.json().catch(() => ({}));
+                              if (seq !== jsonPreviewSeq) return;
+                              jsonPreview.value = data.success ? data.preview : null;
+                              jsonPreviewError.value = data.success ? '' : (data.message || 'Preview failed.');
+                        } catch {
+                              if (seq === jsonPreviewSeq) { jsonPreview.value = null; jsonPreviewError.value = 'Preview failed.'; }
+                        } finally {
+                              if (seq === jsonPreviewSeq) jsonPreviewLoading.value = false;
+                        }
+                  }
+                  watch(jsonContent, () => {
+                        clearTimeout(jsonPreviewTimer);
+                        jsonPreview.value = null;
+                        jsonPreviewError.value = '';
+                        jsonPreviewSeq++;
+                        jsonPreviewLoading.value = false;
+                        if (jsonValidity.value.valid) jsonPreviewTimer = setTimeout(fetchJsonPreview, 500);
+                  });
+                  const jsonCanImport = computed(() =>
+                        !!jsonPreview.value && jsonPreview.value.valid && !jsonPreview.value.existing);
+
                   // ── JSON tab: same safety net as Parse ──
                   const JSON_DRAFT_KEY = 'rz-json-draft';
                   function saveJsonDraft() {
@@ -1427,6 +1481,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                         jsonContent,
                         saveJsonDraft,
                         jsonValidity,
+                        jsonPreview, jsonPreviewError, jsonPreviewLoading, jsonCanImport,
                         formatJsonContent,
                         detectedVulnerabilities,
                         selectedTags,

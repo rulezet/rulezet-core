@@ -2802,3 +2802,58 @@ def bundle_ai_analysis_download(bundle_id, analysis_id, kind):
                  f"Downloaded AI analysis ({'Markdown' if kind == 'markdown' else 'PDF'}) for bundle '{bundle.name[:80]}'",
                  target_type='bundle', target_id=bundle.id, target_uuid=bundle.uuid, is_public=False)
     return resp
+
+
+#####################
+#   JSON export     #
+#####################
+
+@bundle_blueprint.route("/<int:bundle_id>/export_json", methods=['GET'])
+def export_bundle_json(bundle_id):
+    """The whole bundle as one JSON file (bundle_portable.py) — re-importable
+    on another instance from Create bundle → Import from JSON."""
+    from .bundle_portable import bundle_to_portable
+    bundle = BundleModel.get_bundle_by_id(bundle_id)
+    if not bundle or not _can_view_bundle(bundle):
+        return jsonify({"success": False, "message": "Bundle not found"}), 404
+    data = json.dumps(bundle_to_portable(bundle), indent=2)
+    safe = re.sub(r'[^A-Za-z0-9_.-]+', '_', bundle.name or 'bundle')[:80]
+    return send_file(io.BytesIO(data.encode('utf-8')), mimetype='application/json',
+                     as_attachment=True, download_name=f"{safe}.bundle.json")
+
+
+@bundle_blueprint.route("/import_json/preview", methods=['POST'])
+@login_required
+def import_bundle_json_preview():
+    """Everything a bundle JSON import would do — nothing written. Admin only."""
+    from .bundle_portable import parse_bundle_json, preview_bundle_import
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Admin only."}), 403
+    data, error = parse_bundle_json((json_object() or {}).get('bundle_json'))
+    if error:
+        return jsonify({"success": False, "message": error}), 400
+    return jsonify({"success": True, "preview": preview_bundle_import(data, current_user)})
+
+
+@bundle_blueprint.route("/import_json", methods=['POST'])
+@login_required
+def import_bundle_json():
+    """Create the bundle from its JSON export, creating the rules this
+    instance doesn't have yet (owned by the importing admin). Admin only."""
+    from .bundle_portable import parse_bundle_json, import_bundle
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Admin only."}), 403
+    body = json_object() or {}
+    data, error = parse_bundle_json(body.get('bundle_json'))
+    if error:
+        return jsonify({"success": False, "message": error}), 400
+    name = body.get('name') if isinstance(body.get('name'), str) else None
+    try:
+        bundle, report = import_bundle(data, current_user, name=name)
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": internal_error(e)}), 500
+    if not bundle:
+        return jsonify({"success": False, "message": report.get("error")}), 400
+    return jsonify({"success": True, "bundle_id": bundle.id, "report": report,
+                    "url": url_for("bundle.detail", bundle_id=bundle.id)})

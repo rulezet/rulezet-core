@@ -58,3 +58,42 @@
 }
 
 .bc-submit { width: 100%; justify-content: center; padding: 11px 16px; font-size: .9rem; }
+
+/* ── Admin "Import from JSON" (BundleJsonImport.js) ── */
+.bji-toggle {
+    width: 100%; display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 18px; border: 0; background: transparent; color: var(--text-color);
+    font-weight: 700; font-size: .85rem; text-transform: uppercase; letter-spacing: .05em;
+}
+.bji-file { cursor: pointer; }
+.bji-h {
+    font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--subtle-text-color); margin: 1rem 0 .5rem;
+}
+.bji-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: .5rem; }
+.bji-kpi {
+    border: 1px solid var(--border-color); border-radius: 10px; padding: .6rem .75rem;
+    display: flex; flex-direction: column; background: var(--light-bg-color);
+}
+.bji-kpi strong { font-size: 1.2rem; color: #0d6efd; }
+.bji-kpi span { font-size: .72rem; color: var(--subtle-text-color); }
+.bji-kpi--warn strong { color: #997404; }
+.bji-kpi--err strong { color: #dc3545; }
+.bji-meta { display: flex; flex-wrap: wrap; gap: .4rem 1rem; font-size: .8rem; color: var(--subtle-text-color); }
+.bji-meta i { margin-right: .3rem; }
+.bji-desc { white-space: pre-wrap; font-size: .8rem; max-height: 200px; overflow: auto; margin: .5rem 0 0; color: var(--text-color); }
+.bji-rules { border: 1px solid var(--border-color); border-radius: 10px; overflow: hidden; }
+.bji-rule + .bji-rule { border-top: 1px solid var(--border-color); }
+.bji-rule-head {
+    width: 100%; display: flex; align-items: center; gap: .6rem; text-align: left;
+    padding: .55rem .75rem; border: 0; background: var(--card-bg-color); color: var(--text-color); font-size: .84rem;
+}
+.bji-rule-title { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bji-rule-err { color: #dc3545; font-size: .75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bji-badge {
+    flex-shrink: 0; display: inline-flex; align-items: center; gap: .3rem;
+    padding: .1rem .5rem; border-radius: 999px; font-size: .7rem; font-weight: 600;
+}
+.bji-badge--create   { background: rgba(25, 135, 84, .12); color: #198754; }
+.bji-badge--existing { background: rgba(255, 193, 7, .18); color: #997404; }
+.bji-badge--invalid  { background: rgba(220, 53, 69, .12); color: #dc3545; }
