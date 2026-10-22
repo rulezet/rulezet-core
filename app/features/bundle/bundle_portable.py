@@ -366,10 +366,28 @@ def _import_rules(data, user, report):
     return rule_ids_by_ref, descriptions
 
 
-def import_bundle(data: dict, user, name: str | None = None, mode: str = "create") -> tuple[Bundle | None, dict]:
+def _release_before_update(bundle, user) -> str | None:
+    """Freeze the bundle as it is before an import updates it — a release
+    to go back to. None when there's nothing new since the last release
+    (or nothing at all); the version created otherwise."""
+    from .bundle_release_core import draft_release, create_release
+    draft = draft_release(bundle.id)
+    diff = draft["diff"]
+    if diff is not None and not diff["total"]:
+        return None
+    version = draft["suggested_version"]
+    if BundleRelease.query.filter_by(bundle_id=bundle.id, version=version).first():
+        version = f"{version}-pre-import"
+    release, error = create_release(bundle.id, user, version, "Before JSON import update",
+                                    draft["notes"] + "\n\nAutomatic release made just before a JSON import updated the bundle.")
+    return release.version if release else None
+
+
+def import_bundle(data: dict, user, name: str | None = None, mode: str = "create",
+                  release_before: bool = True) -> tuple[Bundle | None, dict]:
     """Create the bundle (mode "create") or update the one it was already
-    imported as (mode "update"), creating / updating its rules.
-    Returns (bundle, report)."""
+    imported as (mode "update"), creating / updating its rules — after a
+    release of its current state (release_before). Returns (bundle, report)."""
     from .bundle_core import bundle_name_taken, create_bundle
     from .bundle_history_core import track_bundle_change
     from app.core.utils.activity_log import log_activity
@@ -390,6 +408,8 @@ def import_bundle(data: dict, user, name: str | None = None, mode: str = "create
             return None, {"error": "You can't update this bundle."}
         if name != bundle.name and bundle_name_taken(name, bundle.user_id, exclude_id=bundle.id):
             return None, {"error": f'The owner already has a bundle called "{name}" — pick another name.'}
+        if release_before:
+            report["release_before"] = _release_before_update(bundle, user)
         with track_bundle_change(bundle.id, "import", user=user):
             rule_ids_by_ref, descriptions = _import_rules(data, user, report)
             bundle.name, bundle.description = name, description

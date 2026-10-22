@@ -26,7 +26,7 @@ export default {
     delimiters: ['[[', ']]'],
     data() {
         return { open: false, raw: '', loading: false, importing: false, error: '', preview: null,
-                 name: '', mode: 'create', expanded: null, ACTIONS };
+                 name: '', mode: 'create', releaseBefore: true, expanded: null, ACTIONS };
     },
     computed: {
         canImport() {
@@ -75,11 +75,12 @@ export default {
                 const res = await fetch('/bundle/import_json', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
-                    body: JSON.stringify({ bundle_json: this.raw, name: this.name.trim(), mode: this.mode }),
+                    body: JSON.stringify({ bundle_json: this.raw, name: this.name.trim(), mode: this.mode, release_before: this.releaseBefore }),
                 });
                 const data = await res.json().catch(() => ({}));
                 if (!data.success) { create_message(data.message || 'Import failed.', 'danger-subtle'); return; }
                 const r = data.report;
+                if (r.release_before) create_message(`Release ${r.release_before} saved the bundle as it was before the update.`, 'info-subtle');
                 create_message(`Bundle ${r.mode === 'update' ? 'updated' : 'imported'} — ${r.created.length} rule(s) created, ${r.updated.length} updated, ${r.reused.length} unchanged, ${r.skipped.length} skipped.`, 'success-subtle');
                 window.location.href = data.url;
             } catch {
@@ -141,7 +142,11 @@ export default {
                                 [[ preview.existing_bundle.notes ]] note(s)<template v-if="preview.existing_bundle.releases.length">, releases [[ preview.existing_bundle.releases.join(', ') ]]</template></span></div>
                             <label class="bji-mode" v-if="preview.existing_bundle.can_update">
                                 <input type="radio" value="update" v-model="mode">
-                                <div><strong>Update the existing bundle</strong><small>Name, description, visibility, tags, rules and tree replaced by the JSON's; changed rules updated (with history); notes, AI analyses and releases it doesn't have yet are added. Nothing else is deleted.</small></div>
+                                <div><strong>Update the existing bundle</strong><small>New rules are created and added; name, description, visibility, tags, rule list and tree replaced by the JSON's; changed rules updated (with history); notes, AI analyses and releases it doesn't have yet are added. Rules no longer in it are only unlinked.</small></div>
+                            </label>
+                            <label class="form-check ms-4 mt-2 mb-0" v-if="mode === 'update'">
+                                <input class="form-check-input" type="checkbox" v-model="releaseBefore">
+                                <span class="form-check-label"><strong>Release the bundle first</strong> — a release of its current state is published before the update, so it can be compared or downloaded as it was (skipped when nothing changed since the last release).</span>
                             </label>
                             <label class="bji-mode">
                                 <input type="radio" value="create" v-model="mode">
