@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/license-input.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ai-thinking-steps.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/editor/editor-ui.css') }}">
 <style>
 .rf-label-hint {
     display: inline-flex;
@@ -333,8 +334,7 @@
           <yara-editor-panel
             :active="activeTab === 'yara_editor'"
             csrf-token="{{ csrf_token() }}"
-            author="{{ current_user.get_username() }}"
-            parse-url="{{ url_for('rule.parse_rule') }}"></yara-editor-panel>
+            author="{{ current_user.get_username() }}"></yara-editor-panel>
         </div>
       </div>
     </div>

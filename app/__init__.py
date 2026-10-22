@@ -132,7 +132,7 @@ def create_app(start_worker=True):
     from app.features.vulnerability.vulnerability import vulnerability_blueprint
     from app.features.rule.rule_from_github.git_settings.git_settings_routes import git_settings_blueprint
     from app.features.alert.alert import alert_blueprint
-    from app.features.editor.editor import editor_blueprint
+    from app.features.editor.editor import editor_blueprint, editor_page_blueprint
 
     app.register_blueprint(home_blueprint, url_prefix="/")
     app.register_blueprint(account_blueprint, url_prefix="/account")
@@ -170,6 +170,7 @@ def create_app(start_worker=True):
     app.register_blueprint(git_settings_blueprint)
     app.register_blueprint(alert_blueprint, url_prefix='/alert')
     app.register_blueprint(editor_blueprint, url_prefix='/editor-api')
+    app.register_blueprint(editor_page_blueprint, url_prefix='/editor')
 
     from app.api.api import api_blueprint
 
@@ -222,6 +223,7 @@ def create_app(start_worker=True):
         return response
 
     from app.features.jobs import job_handlers  # noqa
+    from app.features.editor import editor_jobs  # noqa  (registers the editor's job)
     if start_worker:
         from app.features.jobs.job_worker import start_worker as _start_worker
         _start_worker(app)

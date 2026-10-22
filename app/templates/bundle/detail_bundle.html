@@ -235,6 +235,12 @@
                             </ul>
                         </div>
 
+{% if current_user.is_authenticated %}
+                        <a v-if="!(parseInt('{{ current_user.id }}') === bundle.user_id || is_admin)" :href="'/editor/?bundle=' + bundle_id"
+                           class="bd-btn bd-btn--icon" title="Open the bundle in the editor: you can save it as a new bundle of yours">
+                            <i class="fa-solid fa-laptop-code"></i><span>Open in editor</span>
+                        </a>
+{% endif %}
                         <template v-if="parseInt('{{ current_user.id }}') === bundle.user_id || is_admin">
                             <button type="button" class="bd-btn bd-btn--icon" :class="{ 'bd-btn--active': sharePanelOpen }"
                                     title="Private share link" @click="toggleSharePanel">
@@ -242,6 +248,9 @@
                             </button>
                             <a :href="'/bundle/edit/' + bundle_id" class="bd-btn bd-btn--icon" title="Edit this bundle">
                                 <i class="fa-solid fa-pen"></i><span>Edit</span>
+                            </a>
+                            <a :href="'/editor/?bundle=' + bundle_id" class="bd-btn bd-btn--icon" title="Open the bundle's rules in the editor (folders, files, edit and save)">
+                                <i class="fa-solid fa-laptop-code"></i><span>Open in editor</span>
                             </a>
                             <button type="button" class="bd-btn bd-btn--danger bd-btn--icon" title="Delete this bundle"
                                     data-bs-toggle="modal" :data-bs-target="'#delete_bundle_modal_'+bundle.id">

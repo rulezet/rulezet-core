@@ -52,3 +52,10 @@ def test_create_page_has_the_yara_editor_tab(clients):
     page = clients["user"].get("/rule/create_rule?tab=yara_editor")
     assert page.status_code == 200
     assert b"yara-editor-panel" in page.data
+
+
+def test_rule_lookup_says_who_may_edit(clients, users):
+    make_rule(users.owner, title="Editor_Owned_Rule", to_string=yara_rule("Editor_Owned_Rule"))
+    assert clients["owner"].get("/editor-api/rules/Editor_Owned_Rule?format=yara").json["can_edit"] is True
+    assert clients["admin"].get("/editor-api/rules/Editor_Owned_Rule?format=yara").json["can_edit"] is True
+    assert clients["user"].get("/editor-api/rules/Editor_Owned_Rule?format=yara").json["can_edit"] is False

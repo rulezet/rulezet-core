@@ -1559,3 +1559,4 @@ export default {
         }
     },
 }
+export { TreeItem }
