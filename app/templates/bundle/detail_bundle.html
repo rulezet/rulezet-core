@@ -227,6 +227,8 @@
                                     <i class="fa-solid fa-file-lines"></i><div><strong>Files &amp; documents</strong><small>[[ docFiles.length ]] non-rule files (ZIP)</small></div></button></li>
                                 <li><button type="button" class="dropdown-item" @click="DownloadMISP">
                                     <i class="fa-solid fa-diagram-project"></i><div><strong>MISP event</strong><small>JSON</small></div></button></li>
+                                <li><a class="dropdown-item" :href="'/bundle/' + bundle.id + '/export_json'">
+                                    <i class="fa-solid fa-file-export"></i><div><strong>Bundle JSON</strong><small>Everything, re-importable on another instance</small></div></a></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li class="bd-dl-warn">
                                     <i class="fa-solid fa-triangle-exclamation"></i>

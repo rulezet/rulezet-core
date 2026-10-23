@@ -39,6 +39,7 @@ from .rules_core import rule_generator_core as RuleGeneratorModel
 
 ################################################################################################### 
 
+from app.features.rule.rule_portable import rule_to_portable, normalize_rule_json, preview_rule, create_rule_from_portable
 from flask import Blueprint, Response, jsonify, redirect, request, render_template, flash, url_for, stream_with_context
 from flask_login import current_user, login_required
 
@@ -1682,7 +1683,7 @@ def download_rule_unified() -> Response:
             # Flat shape (to_json(), not to_json_detail()) so a downloaded
             # rule can be re-imported as-is via /rule/import_from_json —
             # matches the bulk zip exporter and the REST API's shape.
-            content = json.dumps(rule.to_json(), indent=2)
+            content = json.dumps(rule_to_portable(rule), indent=2)
             filename = f"{rule.title}.json"
 
         elif fmt == 'misp':
@@ -1737,7 +1738,7 @@ def download_rule_unified() -> Response:
                 try:
                     # Flat shape so this file can be re-imported via
                     # /rule/import_from_json — same reasoning as fmt == 'json' above.
-                    zip_file.writestr(f"{rule.title}.json", json.dumps(rule.to_json(), indent=2))
+                    zip_file.writestr(f"{rule.title}.json", json.dumps(rule_to_portable(rule), indent=2))
                 except Exception as e:
                     zip_file.writestr("errors.txt", f"JSON error: {str(e)}\n")
 
@@ -4139,10 +4140,11 @@ def parse_rule() -> dict:
 @rule_blueprint.route("/import_from_json", methods=['POST'])
 @login_required
 def import_rule_from_json():
-    """Import a single rule from its pasted JSON export.
+    """Import a single rule from its pasted JSON export (flat download or the
+    detail page's nested "Json" tab — see rule_portable.py).
 
-    Only a strict allowlist of identity fields is read out of the parsed
-    JSON — everything else (id, user_id, votes, status, ...) is ignored.
+    Only the rule's own fields, its tags (by name) and ATT&CK techniques are
+    read — everything else (id, user_id, votes, status, ...) is ignored.
     `user_id` is never taken from the pasted JSON: add_rule_core() always
     resolves it from the authenticated current_user for a live request,
     exactly like the Manual tab. Syntax validation and content-hash
@@ -4169,39 +4171,17 @@ def import_rule_from_json():
         flash('The pasted JSON must be a single rule object.', 'danger')
         return redirect(url_for('rule.rule', tab='json'))
 
-    def _clean_str(value):
-        return str(value).strip() if isinstance(value, (str, int, float)) else ''
-
-    rule_dict = {
-        'format':        _clean_str(parsed.get('format')),
-        'title':         _clean_str(parsed.get('title')),
-        'to_string':     str(parsed.get('to_string') or ''),
-        'license':       _clean_str(parsed.get('license')),
-        'description':   _clean_str(parsed.get('description')),
-        'source':        _clean_str(parsed.get('source')),
-        'author':        _clean_str(parsed.get('author')),
-        'version':       _clean_str(parsed.get('version')),
-        'original_uuid': _clean_str(parsed.get('uuid') or parsed.get('original_uuid')),
-        'cve_id':        parsed.get('cve_id') if isinstance(parsed.get('cve_id'), (str, list)) else None,
-    }
-
-    if not rule_dict['title'] or not rule_dict['format'] or not rule_dict['to_string']:
-        flash('The JSON must include at least "title", "format" and "to_string".', 'danger')
+    rule_dict, error = normalize_rule_json(parsed)
+    if error:
+        flash(error, 'danger')
         return redirect(url_for('rule.rule', tab='json'))
 
-    # Uuid-based duplicate detection now happens centrally inside
-    # add_rule_core() (checked before content), so every creation path
-    # (this route, the REST API, GitHub/connector import) is protected
-    # uniformly — see the UUID_DUPLICATE branch below.
-
-    valide, error = verify_syntax_rule_by_format(rule_dict)
+    valide, error = verify_syntax_rule_by_format(dict(rule_dict))
     if valide == False:
         flash(error, 'danger')
         return redirect(url_for('rule.rule', tab='json'))
 
-    rule_dict = fill_all_void_field(rule_dict)
-
-    new_rule, message = RuleModel.add_rule_core(rule_dict, current_user)
+    new_rule, message = create_rule_from_portable(rule_dict, current_user)
     if new_rule:
         profil_game_user = AccountModel.get_or_create_gamification_profile(current_user.id)
         if profil_game_user:
@@ -4232,6 +4212,25 @@ def import_rule_from_json():
     else:
         flash(message, 'danger')
         return redirect(url_for('rule.rule', tab='json'))
+
+
+@rule_blueprint.route("/import_from_json/preview", methods=['POST'])
+@login_required
+def preview_rule_from_json():
+    """What /import_from_json would create from this JSON — nothing written."""
+    raw = (json_object() or {}).get('rule_json', '')
+    if not isinstance(raw, str) or not raw.strip():
+        return jsonify({"success": False, "message": "Paste the rule JSON first."}), 400
+    if len(raw) > 300_000:
+        return jsonify({"success": False, "message": "That JSON is too large to import."}), 400
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return jsonify({"success": False, "message": f"Invalid JSON: {e.msg} (line {e.lineno}, column {e.colno})."}), 400
+    rule_dict, error = normalize_rule_json(parsed)
+    if error:
+        return jsonify({"success": False, "message": error}), 400
+    return jsonify({"success": True, "preview": preview_rule(rule_dict)})
 
 
 @rule_blueprint.route("/get_github_branches", methods=['GET'])
@@ -6045,7 +6044,7 @@ def download_rules_export():
             
             if filters["export_format"] == 'json_each':
                 path = f"rules_export/{rtype}/{safe_title}_{rule.id}.json"
-                zf.writestr(path, json.dumps(rule.to_json(), indent=4))
+                zf.writestr(path, json.dumps(rule_to_portable(rule), indent=4))
 
             elif filters["export_format"] == 'ext_each':
                 ext = rule.get_extension()
