@@ -4,7 +4,6 @@ from flask import Blueprint, jsonify, render_template, request
 from flask_login import current_user, login_required
 from rulezet_editor import create_blueprint
 
-from . import editor_bundle as EditorBundle
 from . import editor_core as EditorModel
 from . import editor_jobs as EditorJobs
 
@@ -47,18 +46,8 @@ def yara_job_start():
     if not rules:
         return jsonify({'error': 'No rule in the document.'}), 400
     imports = [str(m) for m in (payload.get('imports') or [])][:50]
-    bundle = payload.get('bundle') or None
-    if bundle:
-        bundle = {'mode': 'update' if bundle.get('mode') == 'update' else 'create',
-                  'bundle_id': int(bundle.get('bundle_id') or 0) or None,
-                  'name': str(bundle.get('name') or '')[:255], 'description': str(bundle.get('description') or '')[:5000],
-                  'public': bool(bundle.get('public', True))}
-        error = EditorBundle.check_bundle_request(bundle, current_user)
-        if error:
-            return jsonify({'error': error}), 400
-    label = f"YARA editor: {len(rules)} rule(s)" + (f" + bundle \"{bundle.get('name') or bundle.get('bundle_id')}\"" if bundle else '')
-    job = create_job(EditorJobs.JOB_TYPE, EditorJobs.new_payload(imports, rules, bundle, payload.get('tree') if bundle else None),
-                     label, current_user.id, total=len(rules))
+    job = create_job(EditorJobs.JOB_TYPE, EditorJobs.new_payload(imports, rules),
+                     f"YARA editor: {len(rules)} rule(s)", current_user.id, total=len(rules))
     if not job:
         return jsonify({'error': 'Could not start the job.'}), 500
     return jsonify(EditorJobs.public_state(job)), 202
@@ -74,39 +63,8 @@ def yara_job_state(job_uuid):
 
 
 
-@editor_blueprint.get('/bundles/<int:bundle_id>')
-def bundle_workspace(bundle_id):
-    """A bundle as an editor workspace (folders, rule files with their content)."""
-    from app.core.db_class.bundle import Bundle
-    from app.features.bundle.bundle_core import can_view_bundle
-    bundle = Bundle.query.get(bundle_id)
-    if not bundle or not can_view_bundle(bundle):
-        return jsonify({'error': 'Bundle not found.'}), 404
-    return jsonify(EditorBundle.workspace_from_bundle(bundle, current_user))
-
-
-
-@editor_blueprint.get('/yara/scenarios')
-def yara_scenarios():
-    """Test cases that fill the workspace (admins, or a development instance)."""
-    from flask import current_app
-    if not (current_user.is_admin() or current_app.debug):
-        return jsonify({'error': 'Not available.'}), 403
-    return jsonify({'scenarios': EditorModel.scenarios(current_user)})
-
-
 # Rulezet pages of the editor (the blueprint above is the editor's JSON API)
 editor_page_blueprint = Blueprint('editor', __name__)
-
-
-@editor_page_blueprint.get('/')
-@login_required
-def workspace():
-    """The editor as a full page: folders and files of YARA rules, create rules or a bundle.
-    ?bundle=<id> opens a bundle."""
-    from flask import current_app
-    return render_template('editor/workspace.html', bundle_id=request.args.get('bundle', type=int),
-                           show_scenarios=current_user.is_admin() or current_app.debug)
 
 
 @editor_page_blueprint.get('/import-result')

@@ -141,21 +141,3 @@ a.ed-dep:hover { border-color: #0d6efd; color: #0d6efd; }
 .ed-step--pending .ed-step__label, .ed-step--skipped .ed-step__label { color: var(--subtle-text-color); }
 .ed-step__detail { margin-left: auto; font-size: .75rem; color: var(--subtle-text-color); }
 
-/* ── bundle tree preview ── */
-.ed-tree { list-style: none; margin: 0; padding: .4rem 0; }
-.ed-tree__row { display: flex; align-items: center; gap: .55rem; padding: .3rem 1rem; font-size: .82rem; }
-.ed-tree__row:hover { background: var(--light-bg-color); }
-.ed-tree__icon { width: 1rem; text-align: center; }
-.ed-tree__icon--folder { color: #f0ad4e; }
-.ed-tree__icon--rule   { color: #0d6efd; }
-.ed-tree__icon--text   { color: var(--subtle-text-color); }
-.ed-tree__name { font-family: var(--bs-font-monospace, monospace); color: var(--text-color); }
-.ed-tree__row--empty .ed-tree__name { color: var(--subtle-text-color); text-decoration: line-through; }
-.ed-tree__note { font-size: .72rem; color: var(--subtle-text-color); }
-.ed-tree__note--split { color: #fd7e14; font-weight: 600; }
-
-/* ── form ── */
-.ed-field { margin-bottom: .75rem; }
-.ed-field label { display: block; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--subtle-text-color); margin-bottom: .3rem; }
-.ed-field .form-control { border-radius: 10px; }
-.ed-switch { display: flex; align-items: center; gap: .6rem; font-size: .84rem; }

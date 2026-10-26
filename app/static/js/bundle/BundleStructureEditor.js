@@ -1559,4 +1559,3 @@ export default {
         }
     },
 }
-export { TreeItem }

@@ -1,20 +1,15 @@
 /**
- * EditorImportModal.js — the one modal of the editor's "create" flows (create page tab and
- * /editor), styled like the detail pages (css/editor/editor-ui.css):
+ * EditorImportModal.js — the modal of the YARA editor's "Create" (create page tab), styled like the detail pages (css/editor/editor-ui.css):
  *
- *   preview    the bundle's folders and files, before creating it
  *   planning   quick check running
- *   confirm    what happens to each rule (new / in Rulezet / update / proposal), the bundle form
- *              and structure when making a bundle — the user confirms
+ *   confirm    what happens to each rule (new / in Rulezet / update / proposal) — the user confirms
  *   running    the background job's steps, live
- *   done       what was written (rules, bundle), with links
+ *   done       what was written, with links
  *   failed     nothing written: the rules to fix (the editor shows them on their lines)
  *
  * Props:
- *   state       { phase, kind: 'rules' | 'create-bundle' | 'save-bundle', rules, job, rows }
- *   bundleForm  { name, description, public } (create-bundle)
- *   bundleName  name of the bundle being saved (save-bundle)
- * Emits: close, confirm, fix, create-bundle (from the preview)
+ *   state       { phase, rules, job }
+ * Emits: close, confirm, fix
  */
 const { computed } = Vue
 
@@ -37,14 +32,11 @@ export default {
     name: 'EditorImportModal',
     delimiters: ['[[', ']]'],
     props: {
-        state:      { type: Object, required: true },
-        bundleForm: { type: Object, default: () => ({ name: '', description: '', public: true }) },
-        bundleName: { type: String, default: '' },
+        state: { type: Object, required: true },
     },
-    emits: ['close', 'confirm', 'fix', 'create-bundle'],
+    emits: ['close', 'confirm', 'fix'],
     setup(props, { emit }) {
         const phase = computed(() => props.state.phase)
-        const kind = computed(() => props.state.kind || 'rules')
         const job = computed(() => props.state.job || null)
         const rules = computed(() => {
             const fromJob = job.value && job.value.rules && job.value.rules.length ? job.value.rules : null
@@ -61,12 +53,8 @@ export default {
             const n = rules.value.length
             const plural = (k, word) => `${k} ${word}${k === 1 ? '' : 's'}`
             switch (phase.value) {
-                case 'preview': return { icon: 'fa-folder-tree', tone: '', title: 'Bundle preview', sub: 'What "Create bundle" makes from the explorer' }
                 case 'planning': return { icon: 'fa-spinner fa-spin', tone: '', title: 'Preparing', sub: 'Looking for these rules in Rulezet…' }
-                case 'confirm':
-                    if (kind.value === 'create-bundle') return { icon: 'fa-box-archive', tone: 'success', title: 'Create a bundle', sub: `${plural(n, 'rule')}, checked again before anything is written` }
-                    if (kind.value === 'save-bundle') return { icon: 'fa-floppy-disk', tone: 'warning', title: `Save "${props.bundleName}"`, sub: `${plural(n, 'rule')}, checked again before anything is written` }
-                    return { icon: 'fa-file-import', tone: '', title: `Create ${plural(n, 'rule')}`, sub: 'Every rule is checked again before anything is written' }
+                case 'confirm': return { icon: 'fa-file-import', tone: '', title: `Create ${plural(n, 'rule')}`, sub: 'Every rule is checked again before anything is written' }
                 case 'running': return { icon: 'fa-spinner fa-spin', tone: '', title: 'Checking and writing', sub: 'Runs in the background, the editor is read-only meanwhile' }
                 case 'done': return { icon: 'fa-check', tone: 'success', title: 'Done', sub: summary.value }
                 default: return { icon: 'fa-xmark', tone: 'danger', title: 'Nothing was written', sub: `${plural(toFix.value.length, 'rule')} to fix, shown in the editor on their lines` }
@@ -80,11 +68,10 @@ export default {
             if (counts.value.exists) parts.push(`${counts.value.exists} already in Rulezet`)
             return parts.join(' · ') || 'Nothing to write'
         })
-        const confirmClass = computed(() => counts.value.update ? 'ed-btn--warning' : kind.value === 'rules' ? 'ed-btn--primary' : 'ed-btn--success')
-        const confirmLabel = computed(() => kind.value === 'rules' ? 'Check and create' : kind.value === 'save-bundle' ? 'Check and save' : 'Check and create the bundle')
+        const confirmClass = computed(() => counts.value.update ? 'ed-btn--warning' : 'ed-btn--primary')
 
         const close = () => { if (!busy.value) emit('close') }
-        return { STATUS, STEP_ICON, phase, kind, job, rules, counts, toFix, written, busy, head, confirmClass, confirmLabel, close, emit }
+        return { STATUS, STEP_ICON, phase, job, rules, counts, toFix, written, busy, head, confirmClass, close, emit }
     },
     template: `
     <div class="ed-modal" @click.self="close">
@@ -99,50 +86,6 @@ export default {
             </div>
 
             <div class="ed-modal__body">
-                <!-- bundle form -->
-                <div v-if="phase === 'confirm' && kind === 'create-bundle'" class="ed-card">
-                    <div class="ed-card__header"><span class="ed-card__accent ed-card__accent--green"></span><span class="ed-card__title">Bundle</span></div>
-                    <div class="ed-card__body">
-                        <div class="ed-field">
-                            <label for="ed-bundle-name">Name</label>
-                            <input id="ed-bundle-name" v-model="bundleForm.name" class="form-control" maxlength="255" placeholder="My detection bundle">
-                        </div>
-                        <div class="ed-field">
-                            <label for="ed-bundle-desc">Description</label>
-                            <textarea id="ed-bundle-desc" v-model="bundleForm.description" class="form-control" rows="2" placeholder="What these rules detect"></textarea>
-                        </div>
-                        <div class="form-check form-switch ed-switch mb-0">
-                            <input id="ed-bundle-public" v-model="bundleForm.public" class="form-check-input" type="checkbox">
-                            <label for="ed-bundle-public" class="form-check-label">[[ bundleForm.public ? 'Public: everyone can see it' : 'Private: only you' ]]</label>
-                        </div>
-                    </div>
-                </div>
-
-                <div v-if="phase === 'confirm' && kind === 'save-bundle'" class="ed-note ed-note--warning">
-                    <i class="fas fa-box-archive"></i><span>The folders and files of <b>[[ bundleName ]]</b> will be replaced by the explorer's.</span>
-                </div>
-
-                <!-- structure -->
-                <div v-if="(phase === 'preview' || phase === 'confirm') && state.rows" class="ed-card">
-                    <div class="ed-card__header">
-                        <span class="ed-card__accent"></span><span class="ed-card__title">Structure</span>
-                        <span class="ed-card__count">a file with several rules becomes a folder</span>
-                    </div>
-                    <div class="ed-card__body ed-card__body--flush">
-                        <ul class="ed-tree">
-                            <li v-for="(row, i) in state.rows" :key="i" class="ed-tree__row" :class="{ 'ed-tree__row--empty': row.kind === 'empty' }"
-                                :style="{ paddingLeft: (1 + row.depth * 1.25) + 'rem' }">
-                                <i class="ed-tree__icon fas" :class="{
-                                    'fa-folder ed-tree__icon--folder': row.kind === 'folder',
-                                    'fa-shield-halved ed-tree__icon--rule': row.kind === 'rule',
-                                    'fa-file-lines ed-tree__icon--text': row.kind === 'text' || row.kind === 'empty' }"></i>
-                                <span class="ed-tree__name">[[ row.name ]][[ row.kind === 'folder' ? '/' : '' ]]</span>
-                                <span v-if="row.note" class="ed-tree__note" :class="{ 'ed-tree__note--split': row.split }">[[ row.note ]]</span>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-
                 <div v-if="phase === 'planning'" class="ed-note ed-note--info"><i class="fas fa-spinner fa-spin"></i><span>Checking each rule against Rulezet…</span></div>
 
                 <!-- confirm: what happens to each rule -->
@@ -208,10 +151,6 @@ export default {
 
                 <!-- done -->
                 <template v-if="phase === 'done'">
-                    <div v-if="job && job.bundle" class="ed-note ed-note--success">
-                        <i class="fas fa-box-archive"></i>
-                        <span>Bundle [[ job.bundle.mode === 'update' ? 'updated' : 'created' ]]: <a :href="job.bundle.url" class="fw-semibold">[[ job.bundle.name ]]</a></span>
-                    </div>
                     <div v-for="g in written" :key="g.status" class="ed-card">
                         <div class="ed-card__header">
                             <span class="ed-card__accent" :class="g.status === 'exists' ? '' : 'ed-card__accent--green'"></span>
@@ -261,22 +200,16 @@ export default {
             </div>
 
             <div class="ed-modal__foot">
-                <template v-if="phase === 'preview'">
-                    <button type="button" class="ed-btn ed-btn--ghost" @click="close">Close</button>
-                    <button type="button" class="ed-btn ed-btn--success" @click="emit('create-bundle')"><i class="fas fa-box-archive"></i>[[ bundleName ? 'Save the bundle' : 'Create the bundle' ]]</button>
-                </template>
-                <template v-else-if="phase === 'confirm'">
+                <template v-if="phase === 'confirm'">                <template v-else-if="phase === 'confirm'">
                     <button type="button" class="ed-btn ed-btn--ghost" @click="close">Cancel</button>
-                    <button type="button" class="ed-btn" :class="confirmClass"
-                            :disabled="kind === 'create-bundle' && !(bundleForm.name || '').trim()" @click="emit('confirm')">
-                        <i class="fas fa-check"></i>[[ confirmLabel ]]
+                    <button type="button" class="ed-btn" :class="confirmClass" @click="emit('confirm')">
+                        <i class="fas fa-check"></i>Check and create
                     </button>
                 </template>
                 <span v-else-if="busy" class="ed-modal__foot-note"><i class="fas fa-lock me-1"></i>The editor is read-only until the job ends.</span>
                 <template v-else-if="phase === 'done'">
                     <button type="button" class="ed-btn ed-btn--ghost" @click="close">Keep editing</button>
-                    <a v-if="job && job.bundle" :href="job.bundle.url" class="ed-btn ed-btn--success"><i class="fas fa-box-archive"></i>Open the bundle</a>
-                    <a v-else-if="job && job.result_url" :href="job.result_url" class="ed-btn ed-btn--primary"><i class="fas fa-list"></i>See the summary</a>
+                    <a v-if="job && job.result_url" :href="job.result_url" class="ed-btn ed-btn--primary"><i class="fas fa-list"></i>See the summary</a>
                 </template>
                 <template v-else>
                     <button type="button" class="ed-btn ed-btn--ghost" @click="close">Close</button>

@@ -8,7 +8,6 @@ from app import db
 from app.core.db_class.user import User
 from app.features.jobs.job_worker import register_handler
 
-from . import editor_bundle as EditorBundle
 from . import editor_core as EditorModel
 
 JOB_TYPE = 'editor_yara_import'
@@ -21,22 +20,11 @@ STEPS = [
 ]
 
 
-BUNDLE_STEP = ('bundle', 'Bundle: create it or update its files and folders')
-
-
-def _steps(bundle):
-    return STEPS + ([BUNDLE_STEP] if bundle else [])
-
-
-def new_payload(imports, rules, bundle=None, tree=None):
-    """bundle: {mode, bundle_id | name, description, public}; tree: the workspace (editor_bundle)."""
+def new_payload(imports, rules):
     return {
         'imports': imports,
         'rules': rules,
-        'bundle': bundle,
-        'tree': tree,
-        'bundle_result': None,
-        'steps': [{'id': key, 'label': label, 'status': 'pending', 'detail': ''} for key, label in _steps(bundle)],
+        'steps': [{'id': key, 'label': label, 'status': 'pending', 'detail': ''} for key, label in STEPS],
         'report': None,
         'ok': None,
         'result_url': None,
@@ -53,7 +41,6 @@ def public_state(job):
         'steps': payload.get('steps', []),
         'ok': payload.get('ok'),
         'result_url': payload.get('result_url'),
-        'bundle': payload.get('bundle_result'),
         'created': (payload.get('report') or {}).get('created'),
         'updated': (payload.get('report') or {}).get('updated'),
         'proposed': (payload.get('report') or {}).get('proposed'),
@@ -69,7 +56,7 @@ def handle_editor_yara_import(job, app):
     user = User.query.get(job.created_by)
 
     def save():
-        payload['steps'] = [steps[key] for key, _ in _steps(payload.get('bundle'))]
+        payload['steps'] = [steps[key] for key, _ in STEPS]
         job.payload = dict(payload)
         flag_modified(job, 'payload')
         db.session.commit()
@@ -96,8 +83,6 @@ def handle_editor_yara_import(job, app):
     if not plan['ok']:
         payload.update(report=plan, ok=False)
         step('create', 'skipped', 'nothing created: fix the errors first')
-        if payload.get('bundle'):
-            step('bundle', 'skipped', 'no bundle: fix the errors first')
         return
 
     step('create', 'running', f"{count('new', 'update', 'proposal')} rule(s)")
@@ -107,22 +92,3 @@ def handle_editor_yara_import(job, app):
                                                     (result.get('proposed'), 'proposed')) if n) or 'nothing to write'
     step('create', 'ok' if result['ok'] else 'error', done + ('' if result['ok'] else ' — some rules were refused'))
 
-    spec = payload.get('bundle')
-    if not spec or not result['ok']:
-        if spec:
-            step('bundle', 'skipped', 'no bundle: some rules were refused')
-        return
-    step('bundle', 'running', 'updating' if spec.get('mode') == 'update' else 'creating')
-    rule_ids = {}
-    for r in result['rules']:
-        target = r.get('created') or r.get('existing')
-        if target and target.get('id'):
-            rule_ids[r['name']] = target['id']
-    bundle, error = EditorBundle.write_bundle(spec, payload.get('tree') or [], rule_ids, user)
-    if error:
-        payload.update(ok=False)
-        step('bundle', 'error', error)
-        return
-    payload['bundle_result'] = {'id': bundle.id, 'name': bundle.name, 'url': f'/bundle/detail/{bundle.id}',
-                                'mode': spec.get('mode') or 'create'}
-    step('bundle', 'ok', ('updated: ' if spec.get('mode') == 'update' else 'created: ') + bundle.name)

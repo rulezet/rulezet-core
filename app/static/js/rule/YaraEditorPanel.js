@@ -166,7 +166,7 @@ export default {
             if (!canCreate.value) return
             const text = editor.getValue()
             const lines = Object.fromEntries(editor.getRules().map(r => [r.name, r.line]))
-            modal.value = { phase: 'planning', kind: 'rules', rules: [], job: null }
+            modal.value = { phase: 'planning', rules: [], job: null }
             try {
                 const plan = await post('plan')
                 if (plan.error) throw new Error(plan.error)
@@ -177,10 +177,10 @@ export default {
                     jobText = text
                     jobLines = lines
                     editor.setAnnotations(annotations(plan, lines))
-                    modal.value = { phase: 'failed', kind: 'rules', rules, job: { steps: [], rules: plan.rules } }
+                    modal.value = { phase: 'failed', rules, job: { steps: [], rules: plan.rules } }
                     return
                 }
-                modal.value = { phase: 'confirm', kind: 'rules', rules, job: null }
+                modal.value = { phase: 'confirm', rules, job: null }
             } catch (e) {
                 modal.value = null
                 editor.notify(`Rulezet: ${e.message || e}`)
@@ -310,7 +310,6 @@ export default {
                     already in Rulezet; nothing is written until every check passes. <kbd>Ctrl+Shift+R</kbd>: rule tools.
                 </div>
             </div>
-            <a href="/editor/" class="ed-btn ed-btn--ghost"><i class="fas fa-folder-tree"></i>Full editor · folders &amp; bundles</a>
         </div>
 
         <div v-if="loadError" class="ed-note ed-note--danger"><i class="fas fa-circle-exclamation"></i><span>[[ loadError ]]</span></div>
