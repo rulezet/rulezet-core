@@ -687,9 +687,71 @@ def _ensure_editor() -> None:
             run([PIP, "install", "-e", f"./app/modules/{folder}"])
 
 
+def _env_value(key: str, default: str = "") -> str:
+    """A setting from the environment, else from .env (the app reads it the same way)."""
+    if key in os.environ:
+        return os.environ[key]
+    env_file = ROOT / ".env"
+    if env_file.is_file():
+        for line in env_file.read_text().splitlines():
+            name, sep, value = line.strip().partition("=")
+            if sep and name.strip() == key and not line.strip().startswith("#"):
+                return value.strip().strip('"').strip("'")
+    return default
+
+
+_SANDBOX_PROBE = """
+import sys
+from rulezet_tester import FolderSampleStore, Sandbox, TestService
+from rulezet_tester.web import SAMPLES
+service = TestService(FolderSampleStore(SAMPLES), Sandbox(mode=sys.argv[1]), executor=lambda fn: fn())
+reason = service.unavailable()
+if reason:
+    print(reason); sys.exit(2)
+run = service.start('yara', 'rule probe { condition: filesize >= 0 }', ['synthetic-yara'])
+run = service.state(run['id'])
+if run['status'] != 'done':
+    print(run.get('error') or 'the test run failed'); sys.exit(1)
+"""
+
+
+def _ensure_sandbox() -> None:
+    """Tests on samples (YARA editor: Test button, "Test on samples" step of Create) run in a
+    bubblewrap sandbox. Run one tiny test through it; when bwrap is missing, offer to install it
+    (apt); when it is there but refused (e.g. user namespaces blocked by AppArmor), say how to fix.
+    Never blocks the start: without a sandbox the tests are simply switched off."""
+    import shutil as _shutil
+    mode = _env_value("RULE_TESTS_SANDBOX", "bwrap").strip().lower() or "bwrap"
+    if mode in ("off", "none", "false") or _env_value("RULE_TESTS_LAB"):
+        return                                   # switched off, or every run goes to the lab VM
+
+    def probe():
+        return subprocess.run([PYTHON, "-c", _SANDBOX_PROBE, mode], cwd=ROOT, env=_venv_env(),
+                              capture_output=True, text=True)
+
+    res = probe()
+    if res.returncode == 2 and mode == "bwrap" and not _shutil.which("bwrap") and _shutil.which("apt-get"):
+        if sys.stdin.isatty() and _confirm("Tests on samples need bubblewrap. Install it now (sudo apt-get install bubblewrap)?"):
+            subprocess.run(["sudo", "apt-get", "install", "-y", "bubblewrap"])
+            res = probe()
+    if res.returncode == 0:
+        ok(f"Sample tests ready (sandbox: {mode})")
+        return
+    reason = (res.stdout or res.stderr or "").strip().splitlines()[-1:] or ["unknown error"]
+    error(f"Sample tests switched off: {reason[0]}")
+    if mode == "bwrap" and _shutil.which("bwrap"):
+        info("bwrap is installed but cannot start: on Ubuntu 24.04+ unprivileged user namespaces are")
+        info("restricted by AppArmor — see app/modules/rulezet-tester/docs/design.md (sandbox).")
+        info("Development only: RULE_TESTS_SANDBOX=process in .env (no isolation).")
+    elif mode == "bwrap":
+        info("Install bubblewrap (apt install bubblewrap), or for development only set")
+        info("RULE_TESTS_SANDBOX=process in .env (no isolation).")
+
+
 def cmd_start_dev() -> None:
     _check_venv()
     _ensure_editor()
+    _ensure_sandbox()
     port = os.environ.get("FLASK_PORT", "7009")
     url = f"http://{os.environ.get('FLASK_URL', '127.0.0.1')}:{port}"
     header(f"Starting Rulezet v{app_version()} (development)")
@@ -702,6 +764,7 @@ def cmd_start_dev() -> None:
 def cmd_start_prod() -> None:
     _check_venv()
     _ensure_editor()
+    _ensure_sandbox()
 
     # 1. Backup
     cmd_backup()
@@ -795,6 +858,15 @@ def cmd_update() -> None:
     _check_venv()
     header("Updating Rulezet")
 
+    # update is also run on development checkouts: the hard reset below would silently drop
+    # uncommitted work (deploy keeps discarding it — production has none on purpose)
+    dirty = _git_out(["status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all"], ROOT)
+    if dirty:
+        error("Local changes not committed — update resets to origin and would delete them:")
+        print(dirty)
+        info("Commit or stash them first (or run 'git stash', update, then 'git stash pop').")
+        sys.exit(1)
+
     info("Syncing with origin…")
     _sync_with_origin()
     ok("Code updated")
@@ -818,6 +890,8 @@ def cmd_update() -> None:
     info("Seeding default data (formats, platform-tag configs)…")
     run([PYTHON, "app.py", "--seed-defaults"], extra_env={"FLASKENV": "development"})
     ok("Default data up to date")
+
+    _ensure_sandbox()
 
 
 def cmd_pivotick() -> None:

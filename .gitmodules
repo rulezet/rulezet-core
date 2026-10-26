@@ -31,6 +31,8 @@
 [submodule "app/modules/rulezet-editor"]
 	path = app/modules/rulezet-editor
 	url = https://github.com/rulezet/rulezet-editor.git
+	branch = main
 [submodule "app/modules/rulezet-tester"]
 	path = app/modules/rulezet-tester
 	url = https://github.com/rulezet/rulezet-tester.git
+	branch = main
