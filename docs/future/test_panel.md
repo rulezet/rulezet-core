@@ -242,10 +242,10 @@ First corpora, in this order (no risk first):
 |---|---|---|
 | 1 | Data model: `SampleSet`, `Sample` (metadata only), `LabRun`, `LabResult`; admin page for sets (no download) | Rulezet `features/lab/` |
 | 2 | Runner + sandbox + YARA `LabDriver`; protocol job → results; synthetic and benign sets | runner (in Rulezet repo first, own repo when it moves to its own machine) |
-| 3 | Generic Test panel + `pack.test` + host methods; YARA profile | rulezet-editor |
-| 4 | Wire into Rulezet: `/editor-api/test*`, the Create job step, "test on Create" setting | Rulezet `features/editor/` |
+| 3 | Generic Test panel + `pack.test` + host methods; YARA profile — **done** | rulezet-editor |
+| 4 | Wire into Rulezet: `/editor-api/test*`, the Create job step, "test on Create" setting — **done** (runs in the database, setting `editor.test_on_create`) | Rulezet `features/editor/` |
 | 5 | Relevance from tags / CVE / ATT&CK; malicious sets on the isolated machine | Lab |
-| 6 | Results per version, badge, Lab score, regressions ("v4 misses 3 samples v3 caught") | Lab |
+| 6 | Results per version, badge — **done** (Samples tab of the rule page); Lab score, regressions ("v4 misses 3 samples v3 caught") still to do | Lab |
 | 7 | Second format: Suricata (pcap) — only a driver, a pack profile and sets; no core change | all three |
 
 Step 7 is the test of this design: if Suricata needs a change outside its driver, its pack
@@ -256,8 +256,9 @@ profile and its sets, the contract (§4) is wrong and must be fixed then.
 - Runner: same server in a sandbox for the synthetic / benign phase, then a separate machine
   before any real malware? (recommended)
 - Who feeds the malicious sets: admins by hand, or an import from MalwareBazaar by tag / family?
-- On Create: false positives = warning only, or block above a threshold?
+- On Create: false positives = warning only, or block above a threshold? → warning by default,
+  blocking with `block_on_false_positives` (setting `editor.test_on_create`).
 - Results public on the rule page (hashes and counts only), or visible to the author and admins
-  first?
+  first? → public (Samples tab): hashes, labels, offsets and a few bytes per hit only.
 - The Rule Tester pages (one rule × one input) retire when the Lab ships (already planned in
   testing_lab.md); its drivers stay.
