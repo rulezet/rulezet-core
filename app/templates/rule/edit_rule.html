@@ -267,7 +267,8 @@
                                 {% if not restricted_edit %}
                                 <yara-edit-rule-panel v-if="isYara && yaraTabOpened" v-show="editorTab === 'yara'" ref="yaraPanel"
                                     :active="editorTab === 'yara'" :rule-id="ruleId" v-model="currentRule.to_string"
-                                    csrf-token="{{ csrf_token() }}" author="{{ current_user.get_username() }}">
+                                    @ready="pushFormToPanel" @fields="pullPanelToForm"
+                                    csrf-token="{{ csrf_token() }}" author="{{ ((current_user.first_name or '') ~ ' ' ~ (current_user.last_name or ''))|trim or current_user.get_username() }}">
                                 </yara-edit-rule-panel>
                                 {% endif %}
                                 {% if form.to_string.errors %}
@@ -343,7 +344,49 @@
             const editorTab = ref(new URLSearchParams(location.search).get('editor') === 'yara' ? 'yara' : 'classic');
             const yaraTabOpened = ref(editorTab.value === 'yara');
             const yaraPanel = ref(null);
-            watch(editorTab, (tab) => { if (tab === 'yara') yaraTabOpened.value = true; });
+            watch(editorTab, (tab) => { if (tab === 'yara') { yaraTabOpened.value = true; pushFormToPanel(); } });
+
+            // ── YARA tab: its Fields panel and this form stay in sync, both ways ──
+            const formInput = (id) => document.getElementById(id);
+            function readForm() {
+                return {
+                    title: formInput('title')?.value || '',
+                    description: formInput('description')?.value || '',
+                    source: formInput('source')?.value || '',
+                    original_uuid: formInput('original_uuid')?.value || '',
+                    license: manualLicense.value || '',
+                    version: formData.version || '',
+                    cve: (detectedVulnerabilities.value || []).map(v => ({ value: v, label: v })),
+                    tags: (selectedTags.value || []).map(t => ({ value: t.id, label: t.name, color: t.color || null })),
+                    attack: (selectedAttacks.value || []).map(a => ({ value: a.technique_id || a.id, label: a.technique_id || a.id, detail: a.name })),
+                    related: (selectedRelatedRules.value || []).map(r => ({ value: r.id, label: r.title, detail: r.format, kind: r.relation_type || 'references' })),
+                };
+            }
+            function pushFormToPanel() {
+                if (yaraPanel.value && yaraPanel.value.setFromForm) yaraPanel.value.setFromForm(readForm());
+            }
+            async function pullPanelToForm(v) {
+                const setInput = (id, value) => { const el = formInput(id); if (el && value !== undefined && el.value !== value) el.value = value; };
+                setInput('title', v.title); setInput('description', v.description);
+                setInput('source', v.source); setInput('original_uuid', v.original_uuid);
+                if (v.license !== undefined) manualLicense.value = v.license;
+                if (v.version) formData.version = v.version;
+                if (v.cve) detectedVulnerabilities.value = v.cve.map(i => String(i.value));
+                if (v.tags) selectedTags.value = v.tags.filter(t => /^\d+$/.test(String(t.value)))
+                    .map(t => ({ ...(selectedTags.value.find(x => x.id === Number(t.value)) || {}), id: Number(t.value), name: t.label, color: t.color }));
+                if (v.related) selectedRelatedRules.value = v.related.map(r => ({
+                    ...(selectedRelatedRules.value.find(x => x.id === Number(r.value)) || {}),
+                    id: Number(r.value), title: r.label, format: r.detail || '', relation_type: r.kind || 'references' }));
+                if (v.attack) {
+                    // ATT&CK is saved at once on this page (as the ATT&CK picker does)
+                    const before = new Set((selectedAttacks.value || []).map(a => a.technique_id || a.id));
+                    const after = new Set(v.attack.map(a => String(a.value)));
+                    const headers = { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' };
+                    for (const id of after) if (!before.has(id)) await fetch(`/attack/rule/${ruleId.value}/add`, { method: 'POST', headers, body: JSON.stringify({ technique_id: id }) });
+                    for (const id of before) if (!after.has(id)) await fetch(`/attack/rule/${ruleId.value}/remove/${id}`, { method: 'DELETE', headers });
+                    selectedAttacks.value = v.attack.map(a => ({ technique_id: String(a.value), name: a.detail || '', tactic_keys: [] }));
+                }
+            }
             let submitting = false;
 
             /** The YARA tab may need to save unlocked dependencies first (it asks). */
@@ -459,6 +502,8 @@
                 yaraTabOpened,
                 yaraPanel,
                 onSubmit,
+                pushFormToPanel,
+                pullPanelToForm,
             }
         },
     }).mount('#main-container');

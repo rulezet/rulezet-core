@@ -4,8 +4,11 @@
  * tools, several rules per document), backed by this Rulezet through /editor-api.
  *
  * Paste or write any number of YARA rules, then:
- *   Check   (editor toolbar, Ctrl+S) POST /editor-api/yara/plan — quick dry run, the result
- *           shows in the editor (badge and notes per rule in the rules panel, underlines).
+ *   Fields  (panel, open by default) the rule's Rulezet fields: title, CVE, ATT&CK, tags...; with
+ *           an empty document, filling them builds the rule.
+ *   Check   (Check & preview, editor toolbar, Ctrl+S) POST /editor-api/yara/plan — nothing written:
+ *           a modal lists every rule, what will happen to it, and every field Rulezet will store
+ *           for it (and where each value comes from); the result also shows in the editor.
  *   Create  (action bar) opens a modal listing the rules to import. Once confirmed, a
  *           background job (POST /editor-api/yara/jobs, polled) checks every rule — already in
  *           Rulezet?, syntax with its dependencies, samples (later) — and only when every check
@@ -98,7 +101,6 @@ export default {
         const loadError = ref('')
         const ruleCount = ref(0)
         const editorErrors = ref(0)
-        const checking = ref(false)
 
         // modal: null | { phase: 'confirm' | 'running' | 'done' | 'failed', rules, job }
         const modal = ref(null)
@@ -120,9 +122,11 @@ export default {
 
         function body() {
             const model = editor.getModel()
+            const fields = editor.getAllFieldValues ? editor.getAllFieldValues() : {}
             return JSON.stringify({
                 imports: (model.imports || []).map(i => i.name),
-                rules: editor.getRules().map(r => ({ name: r.name, text: r.text })),
+                // the Fields panel's values (title, CVE, tags, ATT&CK...) go with each rule
+                rules: editor.getRules().map(r => ({ name: r.name, text: r.text, fields: (fields[r.name] || {}).values || null })),
             })
         }
 
@@ -137,33 +141,10 @@ export default {
             return data
         }
 
-        /** quick dry run: the result goes into the editor */
-        async function check() {
-            if (!editor || checking.value) return
-            checking.value = true
-            refresh()
-            const text = editor.getValue()
-            try {
-                const lines = Object.fromEntries(editor.getRules().map(r => [r.name, r.line]))
-                const data = await post('plan')
-                if (data.error) { editor.notify(data.error); return }
-                if (editor.getValue() !== text) { editor.notify('The document changed during the check: check again'); return }
-                editor.setAnnotations(annotations(data, lines))
-                const count = (s) => data.rules.filter(r => r.status === s).length
-                editor.notify(data.ok
-                    ? `Ready: ${count('new')} new rule(s)${count('exists') ? `, ${count('exists')} already in Rulezet` : ''}`
-                    : `${count('error') + count('blocked')} rule(s) to fix`)
-            } catch (e) {
-                editor.notify(`Rulezet: ${e.message || e}`)
-            } finally {
-                checking.value = false
-                refresh()
-            }
-        }
-
         /** Create: first what will happen to each rule (quick check), then the user confirms */
-        async function openCreate() {
-            if (!canCreate.value) return
+        async function openCreate(force = false) {
+            if (modal.value || !editor || !ruleCount.value) return
+            if (!force && !canCreate.value) return
             const text = editor.getValue()
             const lines = Object.fromEntries(editor.getRules().map(r => [r.name, r.line]))
             modal.value = { phase: 'planning', rules: [], job: null }
@@ -180,6 +161,7 @@ export default {
                     modal.value = { phase: 'failed', rules, job: { steps: [], rules: plan.rules } }
                     return
                 }
+                editor.setAnnotations(annotations(plan, lines))
                 modal.value = { phase: 'confirm', rules, job: null }
             } catch (e) {
                 modal.value = null
@@ -269,15 +251,15 @@ export default {
                     buttons: [{
                         id: 'check', label: 'Check', icon: 'ok',
                         title: 'Check every rule with Rulezet, nothing is created (Ctrl+S)',
-                        disabled: (ed) => checking.value || !ed.getRules().length,
-                        run: () => check(),
+                        disabled: (ed) => !!modal.value || !ed.getRules().length,
+                        run: () => openCreate(true),
                     }],
                 })
-                editor.on('save', () => check())
+                editor.on('save', () => openCreate(true))
                 editor.on('change', refresh)
                 editor.on('diagnostics', refresh)
                 editor.on('annotationsCleared', refresh)
-                if (!editor.getValue().trim()) editor.newRule()
+                // an empty document: the Fields panel (open) builds the rule as the fields are filled
                 refresh()
             } catch (e) {
                 loadError.value = `The editor could not start: ${e.message || e}`
@@ -291,9 +273,9 @@ export default {
         onBeforeUnmount(() => { clearTimeout(pollTimer); if (editor) editor.destroy() })
 
         return {
-            host, loading, loadError, ruleCount, editorErrors, checking, canCreate,
+            host, loading, loadError, ruleCount, editorErrors, canCreate,
             modal, job, badRules,
-            check, openCreate, confirmCreate, fixErrors, closeModal,
+            openCreate, confirmCreate, fixErrors, closeModal,
         }
     },
     template: `
@@ -316,17 +298,19 @@ export default {
         <div v-if="loading" class="ed-note ed-note--info"><i class="fas fa-spinner fa-spin"></i><span>Loading the editor…</span></div>
         <div ref="host" style="min-height: 75vh;"></div>
 
-        <div class="ed-card mt-3 mb-0">
-            <div class="ed-card__body d-flex align-items-center gap-3 flex-wrap">
-                <div class="small">
-                    <span class="fw-semibold">[[ ruleCount ]] rule[[ ruleCount === 1 ? '' : 's' ]]</span>
-                    <span class="text-muted"> in the editor</span>
-                    <span v-if="editorErrors" class="ed-pill ed-pill--error ms-2">[[ editorErrors ]] error[[ editorErrors === 1 ? '' : 's' ]] to fix first</span>
-                </div>
-                <button type="button" class="ed-btn ed-btn--ghost ms-auto" :disabled="checking || !ruleCount" @click="check">
-                    <i class="fas" :class="checking ? 'fa-spinner fa-spin' : 'fa-list-check'"></i>Check
+        <div class="ed-actionbar">
+            <div class="ed-actionbar__stats">
+                <span class="ed-stat"><i class="fas fa-file-code"></i><b>[[ ruleCount ]]</b> rule[[ ruleCount === 1 ? '' : 's' ]]</span>
+                <span v-if="editorErrors" class="ed-stat ed-stat--error"><i class="fas fa-circle-xmark"></i><b>[[ editorErrors ]]</b> error[[ editorErrors === 1 ? '' : 's' ]] to fix</span>
+                <span v-else-if="ruleCount" class="ed-stat ed-stat--ok"><i class="fas fa-circle-check"></i>No error</span>
+                <span v-else class="ed-stat ed-stat--muted"><i class="fas fa-pen"></i>Fill the fields or write a rule</span>
+            </div>
+            <div class="ed-actionbar__buttons">
+                <button type="button" class="ed-btn ed-btn--ghost" :disabled="!ruleCount || !!modal" @click="openCreate(true)"
+                        title="See every rule and every field Rulezet will store, nothing is written (Ctrl+S)">
+                    <i class="fas fa-list-check"></i>Check &amp; preview
                 </button>
-                <button type="button" class="ed-btn ed-btn--success ed-btn--lg" :disabled="!canCreate" @click="openCreate"
+                <button type="button" class="ed-btn ed-btn--success ed-btn--lg" :disabled="!canCreate" @click="openCreate()"
                         :title="editorErrors ? 'Fix the errors in the editor first' : ''">
                     <i class="fas fa-floppy-disk"></i>Create [[ ruleCount ]] rule[[ ruleCount === 1 ? '' : 's' ]]
                 </button>

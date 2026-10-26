@@ -335,7 +335,7 @@
           <yara-editor-panel
             :active="activeTab === 'yara_editor'"
             csrf-token="{{ csrf_token() }}"
-            author="{{ current_user.get_username() }}"></yara-editor-panel>
+            author="{{ ((current_user.first_name or "") ~ " " ~ (current_user.last_name or ""))|trim or current_user.get_username() }}"></yara-editor-panel>
         </div>
       </div>
     </div>

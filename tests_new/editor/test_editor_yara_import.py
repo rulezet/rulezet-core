@@ -170,3 +170,114 @@ def test_changed_rule_of_someone_else_becomes_a_proposal(app, clients, users):
     assert "base_marker_v2" in proposal.proposed_content
     page = clients["user"].get(state["result_url"]).data.decode()
     assert "Edit proposals" in page
+
+
+# ── Fields panel (title, CVE, tags, ATT&CK...) ────────────────────────────────────────
+
+def test_fields_definitions_and_suggestions(clients, users):
+    from app import db
+    from app.core.db_class.attack import AttackTechnique
+    from tests_new.helpers.tags import make_tag
+    db.session.add(AttackTechnique(technique_id="T1059", name="Command and Scripting Interpreter"))
+    db.session.commit()
+    make_tag(users.user, name="fields:test-family")
+
+    defs = clients["user"].get("/editor-api/fields?format=yara").json["fields"]
+    by_id = {d["id"]: d for d in defs}
+    assert {"title", "description", "author", "license", "cve", "attack", "tags"} <= set(by_id)
+    assert by_id["license"]["options"] and isinstance(by_id["license"]["options"][0], dict)   # Rulezet's licences
+    assert by_id["cve"]["meta"]["key"] == "cve" and "title" not in [d.get("meta", {}).get("key") for d in defs]
+
+    attack = clients["user"].get("/editor-api/fields/suggest?format=yara&field=attack&q=T105").json["results"]
+    assert attack[0]["value"] == "T1059" and attack[0]["detail"] == "Command and Scripting Interpreter"
+    tags = clients["user"].get("/editor-api/fields/suggest?format=yara&field=tags&q=test-fam").json["results"]
+    assert tags and tags[0]["label"] == "fields:test-family"
+    assert clients["anonymous"].get("/editor-api/fields?format=yara").status_code == 401
+
+
+def test_created_rule_takes_the_fields(clients, users):
+    from app import db
+    from app.core.db_class.attack import AttackTechnique
+    from tests_new.helpers.tags import make_tag
+    db.session.add(AttackTechnique(technique_id="T1105", name="Ingress Tool Transfer"))
+    db.session.commit()
+    tag = make_tag(users.user, name="fields:created")
+    payload = body(BASE)
+    payload["rules"][0]["fields"] = {
+        "title": "Base rule from the editor", "description": "Typed in the Fields panel", "version": "2.1",
+        "cve": [{"value": "cve-2024-3094", "label": "CVE-2024-3094"}, {"value": "not-a-cve", "label": "x"}],
+        "attack": [{"value": "T1105", "label": "T1105"}],
+        "tags": [{"value": tag.id, "label": tag.name}],
+        "unknown_field": "ignored",
+    }
+    res = clients["user"].post("/editor-api/yara/import", json=payload)
+    assert res.json["ok"] is True
+    rule = Rule.query.filter_by(title="Base rule from the editor").one()
+    assert rule.description == "Typed in the Fields panel" and rule.version == "2.1"
+    assert "CVE-2024-3094" in (rule.cve_id or "") and "not-a-cve" not in (rule.cve_id or "")
+    from app.core.db_class.tag import RuleTagAssociation
+    assert RuleTagAssociation.query.filter_by(rule_id=rule.id, tag_id=tag.id).count() == 1
+    from app.features.attack.attack_core import get_techniques_for_rule
+    assert [t["technique_id"] for t in get_techniques_for_rule(rule.id)] == ["T1105"]
+
+
+def test_fields_browse_tags_and_tactics(clients, users):
+    from app import db
+    from app.core.db_class.attack import AttackTechnique
+    from tests_new.helpers.tags import make_tag
+    db.session.add(AttackTechnique(technique_id="T1027", name="Obfuscated Files or Information", tactic_keys=["defense-evasion"]))
+    db.session.commit()
+    tag = make_tag(users.user, name="browse-ns:value-a")
+    tag.namespace = "browse-ns"
+    db.session.commit()
+
+    tactics = clients["user"].get("/editor-api/fields/browse?format=yara&field=attack").json["folders"]
+    assert [f["id"] for f in tactics][:3] == ["reconnaissance", "resource-development", "initial-access"]
+    evasion = next(f for f in tactics if f["id"] == "defense-evasion")
+    assert evasion["count"] >= 1 and evasion["color"]
+    items = clients["user"].get("/editor-api/fields/browse?format=yara&field=attack&path=defense-evasion").json["items"]
+    assert any(i["value"] == "T1027" for i in items)
+
+    folders = clients["user"].get("/editor-api/fields/browse?format=yara&field=tags").json["folders"]
+    ns = next(f for f in folders if f["label"] == "browse-ns")
+    from urllib.parse import quote
+    page = clients["user"].get(f"/editor-api/fields/browse?format=yara&field=tags&path={quote(quote(ns['id'], safe=''), safe='')}").json
+    assert any(i["label"] == "browse-ns:value-a" for i in page["items"])
+
+
+def test_check_previews_every_field_of_a_new_rule(clients):
+    text = ('rule ed_preview : family_x\n{\n    meta:\n        author = "Alice"\n        description = "From the meta, see CVE-2021-44228"\n'
+            '        version = "1.3"\n    strings:\n        $a = "preview_marker"\n    condition:\n        $a\n}')
+    payload = body(text)
+    payload["rules"][0]["fields"] = {"title": "Preview title", "license": "MIT", "attack": [{"value": "T1059", "label": "T1059"}]}
+    res = clients["user"].post("/editor-api/yara/plan", json=payload).json
+    rows = {r["id"]: r for r in res["rules"][0]["preview"]}
+    assert rows["title"] == {"id": "title", "label": "Title", "value": "Preview title", "origin": "panel"}
+    assert rows["author"]["value"] == "Alice" and rows["author"]["origin"] == "rule"
+    assert rows["license"]["value"] == "MIT" and rows["license"]["origin"] == "panel"
+    assert rows["version"]["value"] == "1.3"
+    assert rows["cve"]["value"] == ["CVE-2021-44228"] and rows["cve"]["origin"] == "rule"
+    assert rows["attack"]["value"] == ["T1059"]
+    assert rows["rule_tags"]["value"] == ["family_x"]
+    assert rows["default_tags"]["value"]                     # tlp / pap from the setting
+    assert Rule.query.filter_by(title="Preview title").count() == 0     # a check writes nothing
+
+
+def test_fields_link_rules_and_take_tags_by_name(clients, users):
+    from app.core.db_class.rule_relation import RuleRelation
+    from app.core.db_class.tag import RuleTagAssociation
+    from tests_new.helpers.tags import make_tag
+    target = make_rule(users.owner, title="Link_Target", to_string=yara_rule("Link_Target"))
+    tag = make_tag(users.user, name="fields:by-name")
+    found = clients["user"].get("/editor-api/fields/suggest?format=yara&field=related&q=Link_Tar").json["results"]
+    assert found[0]["value"] == target.id and found[0]["label"] == "Link_Target"
+    payload = body(BASE)
+    payload["rules"][0]["fields"] = {"title": "Linked from the editor",
+                                     "related": [{"value": target.id, "label": "Link_Target", "kind": "variant_of"}, {"value": "x"}],
+                                     "tags": [{"value": "fields:by-name", "label": "fields:by-name"}]}
+    preview = {r["id"]: r for r in clients["user"].post("/editor-api/yara/plan", json=payload).json["rules"][0]["preview"]}
+    assert preview["related"]["value"] == ["Link_Target (variant of)"]
+    assert clients["user"].post("/editor-api/yara/import", json=payload).json["ok"] is True
+    rule = Rule.query.filter_by(title="Linked from the editor").one()
+    assert {(r.target_rule_id, r.relation_type) for r in RuleRelation.query.filter_by(source_rule_id=rule.id)} >= {(target.id, "variant_of")}
+    assert RuleTagAssociation.query.filter_by(rule_id=rule.id, tag_id=tag.id).count() == 1

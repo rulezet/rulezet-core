@@ -13,8 +13,12 @@
  * through the YARA editor's import (POST /editor-api/yara/import: owner/admin -> new version),
  * after a confirmation, when the form is submitted (beforeSubmit()).
  *
+ * Fields panel (open): the rule's Rulezet fields (title, CVE, tags, ATT&CK, linked rules...), read
+ * from the edit form (setFromForm) and sent back to it on every change (`fields` event); nothing is
+ * written into the rule text unless the user ticks it (editing the text stops GitHub updates).
+ *
  * Props:  active, ruleId, modelValue (the form's to_string), csrfToken, author
- * Emits:  update:modelValue
+ * Emits:  update:modelValue, fields (values of the edited rule's fields), ready
  */
 import { create_message } from '/static/js/toaster.js'
 
@@ -46,7 +50,7 @@ export default {
         csrfToken:  { type: String, default: '' },
         author:     { type: String, default: '' },
     },
-    emits: ['update:modelValue'],
+    emits: ['update:modelValue', 'fields', 'ready'],
     setup(props, { emit, expose }) {
         const host = ref(null)
         const loading = ref(false)
@@ -56,6 +60,25 @@ export default {
         const problem = ref('')              // why the edited rule cannot be read from the document
         let editor = null
         let lastEmitted = null
+        let applyingForm = false
+        let pendingForm = null
+
+        /** The edited rule's name in the document (the one that is not a dependency). */
+        function mainName() {
+            if (!editor) return null
+            const depNames = new Set(deps.value.map(d => d.name))
+            const mine = editor.getRules().filter(r => !depNames.has(r.name))
+            return mine.length === 1 ? mine[0].name : null
+        }
+
+        /** The edit form's values -> the Fields panel (on load, and when the classic tab changed them). */
+        function setFromForm(values) {
+            const name = mainName()
+            if (!editor || !name) { pendingForm = values; return }
+            editor.pickFieldsRule(name)          // the edited rule, not a dependency above it
+            applyingForm = true
+            try { editor.setFieldValues(name, values, { report: false }) } finally { applyingForm = false }
+        }
 
         /** The document: every import, the dependencies (compile order), then the edited rule. */
         function buildDocument(mainText, depTexts) {
@@ -130,6 +153,13 @@ export default {
                     author: props.author || null,
                     host: new lib.EditorServerHost({ baseUrl: '/editor-api', csrfToken: props.csrfToken, name: 'Rulezet' }),
                     value: buildDocument(props.modelValue, deps.value.map(d => d.content)),
+                    // an existing rule: fields are stored by Rulezet, the rule text is only touched on request
+                    fieldsReport: false,
+                })
+                editor.on('fields', (payload) => {
+                    const name = mainName()
+                    if (applyingForm || !payload || payload.rule !== name || !payload.values) return
+                    emit('fields', payload.values)
                 })
                 lockDeps()
                 editor.on('locks', (locks) => {
@@ -139,6 +169,8 @@ export default {
                 editor.on('change', sync)
                 editor.on('save', sync)
                 sync()
+                if (pendingForm) { const v = pendingForm; pendingForm = null; setFromForm(v) }
+                emit('ready')
             } catch (e) {
                 loadError.value = `The YARA editor could not start: ${e.message || e}`
             } finally {
@@ -192,7 +224,7 @@ export default {
             }
         }
 
-        expose({ beforeSubmit })
+        expose({ beforeSubmit, setFromForm })
         watch(() => props.active, (on) => { if (on) { load(); pullFromForm() } })
         watch(() => props.modelValue, () => { if (!props.active) return; pullFromForm() })
         onMounted(() => { if (props.active) load() })

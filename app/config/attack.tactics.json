@@ -1,0 +1,22 @@
+{
+  "label": "ATT&CK tactics",
+  "category": "ATT&CK",
+  "description": "The 14 enterprise tactics in matrix order, with the colours their chips use (text, background, border). Used by the rule editor's ATT&CK field (browse by tactic, chip colours).",
+  "public": true,
+  "value": [
+    {"key": "reconnaissance",       "label": "Reconnaissance",       "color": "#1d4ed8", "bg": "#e7f0ff", "border": "#bfdbfe"},
+    {"key": "resource-development", "label": "Resource Development", "color": "#6d28d9", "bg": "#ede9fe", "border": "#ddd6fe"},
+    {"key": "initial-access",       "label": "Initial Access",       "color": "#be185d", "bg": "#fce7f3", "border": "#fbcfe8"},
+    {"key": "execution",            "label": "Execution",            "color": "#92400e", "bg": "#fef3c7", "border": "#fde68a"},
+    {"key": "persistence",          "label": "Persistence",          "color": "#065f46", "bg": "#d1fae5", "border": "#a7f3d0"},
+    {"key": "privilege-escalation", "label": "Privilege Escalation", "color": "#9a3412", "bg": "#ffedd5", "border": "#fed7aa"},
+    {"key": "defense-evasion",      "label": "Defense Evasion",      "color": "#374151", "bg": "#f3f4f6", "border": "#d1d5db"},
+    {"key": "credential-access",    "label": "Credential Access",    "color": "#991b1b", "bg": "#fee2e2", "border": "#fecaca"},
+    {"key": "discovery",            "label": "Discovery",            "color": "#0c4a6e", "bg": "#e0f2fe", "border": "#bae6fd"},
+    {"key": "lateral-movement",     "label": "Lateral Movement",     "color": "#86198f", "bg": "#fdf4ff", "border": "#f0abfc"},
+    {"key": "collection",           "label": "Collection",           "color": "#064e3b", "bg": "#ecfdf5", "border": "#6ee7b7"},
+    {"key": "command-and-control",  "label": "Command and Control",  "color": "#881337", "bg": "#fff1f2", "border": "#fda4af"},
+    {"key": "exfiltration",         "label": "Exfiltration",         "color": "#7c2d12", "bg": "#fff7ed", "border": "#fdba74"},
+    {"key": "impact",               "label": "Impact",               "color": "#7f1d1d", "bg": "#fef2f2", "border": "#fca5a5"}
+  ]
+}

@@ -25,6 +25,8 @@ export const STATUS = {
     proposed: { label: 'Proposal sent', text: 'The owner reviews it' },
 }
 
+const ORIGIN = { panel: 'Fields panel', rule: 'From the rule', default: 'Default' }
+
 const STEP_ICON = { pending: 'fa-regular fa-circle', running: 'fa-solid fa-spinner fa-spin', ok: 'fa-solid fa-check',
                     error: 'fa-solid fa-xmark', skipped: 'fa-solid fa-minus' }
 
@@ -71,7 +73,19 @@ export default {
         const confirmClass = computed(() => counts.value.update ? 'ed-btn--warning' : 'ed-btn--primary')
 
         const close = () => { if (!busy.value) emit('close') }
-        return { STATUS, STEP_ICON, phase, job, rules, counts, toFix, written, busy, head, confirmClass, close, emit }
+
+        // preview tables: open by default for a few rules, on demand for many
+        const opened = Vue.reactive(new Set())
+        const closed = Vue.reactive(new Set())
+        const isOpen = (name) => opened.has(name) || (rules.value.length <= 3 && !closed.has(name))
+        const togglePreview = (name) => {
+            if (isOpen(name)) { opened.delete(name); closed.add(name) } else { closed.delete(name); opened.add(name) }
+        }
+        const empty = (v) => v === null || v === undefined || v === '' || v === 'Unknown' || (Array.isArray(v) && !v.length)
+        const filled = (rows) => rows.filter(r => !empty(r.value)).length
+        const values = (v) => empty(v) ? [] : (Array.isArray(v) ? v : [v])
+        return { STATUS, STEP_ICON, ORIGIN, phase, job, rules, counts, toFix, written, busy, head, confirmClass, close, emit,
+                 isOpen, togglePreview, empty, filled, values }
     },
     template: `
     <div class="ed-modal" @click.self="close">
@@ -124,6 +138,24 @@ export default {
                                             <a v-if="d.url" :href="d.url" target="_blank" class="ed-dep"><i class="fas fa-link"></i>[[ d.name ]] · Rulezet</a>
                                             <span v-else class="ed-dep"><i class="fas fa-link"></i>[[ d.name ]]</span>
                                         </template>
+                                    </div>
+                                    <!-- what Rulezet will store for this rule, field by field -->
+                                    <div v-if="r.preview" class="ed-preview">
+                                        <button type="button" class="ed-preview__toggle" @click="togglePreview(r.name)">
+                                            <i class="fas" :class="isOpen(r.name) ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
+                                            What Rulezet will store
+                                            <span class="ed-preview__count">[[ filled(r.preview) ]] fields</span>
+                                        </button>
+                                        <div v-show="isOpen(r.name)" class="ed-preview__table">
+                                            <div v-for="row in r.preview" :key="row.id" class="ed-preview__row" :class="{ 'ed-preview__row--empty': empty(row.value) }">
+                                                <div class="ed-preview__label">[[ row.label ]]</div>
+                                                <div class="ed-preview__cell">
+                                                    <span v-for="v in values(row.value)" :key="v" :class="Array.isArray(row.value) ? 'ed-preview__chip' : 'ed-preview__value'">[[ v ]]</span>
+                                                    <span v-show="empty(row.value)" class="ed-preview__none">none</span>
+                                                </div>
+                                                <div class="ed-preview__origin"><span class="ed-origin" :class="'ed-origin--' + row.origin">[[ ORIGIN[row.origin] ]]</span></div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </li>
                             </ul>
@@ -200,7 +232,7 @@ export default {
             </div>
 
             <div class="ed-modal__foot">
-                <template v-if="phase === 'confirm'">                <template v-else-if="phase === 'confirm'">
+                <template v-if="phase === 'confirm'">
                     <button type="button" class="ed-btn ed-btn--ghost" @click="close">Cancel</button>
                     <button type="button" class="ed-btn" :class="confirmClass" @click="emit('confirm')">
                         <i class="fas fa-check"></i>Check and create

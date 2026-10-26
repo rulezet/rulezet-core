@@ -1,6 +1,7 @@
 """Rule editor (app/modules/rulezet-editor) backed by this Rulezet: its validation and its
 rules, called as Python functions. Never an HTTP call to rulezet.org.
 See app/modules/rulezet-editor/docs/rulezet/ for what each editor feature uses here."""
+import json
 import re
 
 import yara
@@ -52,7 +53,88 @@ def get_rule(fmt, name):
     return _rule_item(rule) if rule else None
 
 
-backend = FunctionBackend(name='Rulezet', validate=validate, search_rules=search_rules, get_rule=get_rule)
+def fields(fmt):
+    """Fields panel: Rulezet's fields for a rule of this format (setting editor.rule_fields)."""
+    import copy
+    from app.core.utils.app_settings import get_setting
+    from app.features.rule.rule_format.utils_format.utils_import_update import get_licst_license
+    per_format = get_setting('editor.rule_fields') or {}
+    defs = copy.deepcopy(per_format.get((fmt or 'yara').lower()) or [])
+    for d in defs:
+        if d.get('options') == 'licenses':
+            d['options'] = [{'value': lic, 'label': lic} for lic in get_licst_license()]
+    return defs
+
+
+def _tactics():
+    from app.core.utils.app_settings import get_setting
+    return get_setting('attack.tactics') or []
+
+
+def _technique_item(t, tactics):
+    """A technique as the Fields panel shows it: coloured by its first tactic (as AttackInput)."""
+    first = next((x for x in tactics if x['key'] in (t.get('tactic_keys') or [])), None)
+    return {'value': t['technique_id'], 'label': t['technique_id'], 'detail': t['name'],
+            'color': first['color'] if first else None}
+
+
+def _tag_item(t):
+    """A tag as the tag picker shows it (its own colour)."""
+    return {'value': t['id'], 'label': t['name'], 'color': t.get('color') or None}
+
+
+def suggest(fmt, field, query, limit):
+    """Autocompletion of the Fields panel, from Rulezet's own data (same sources as the manual form)."""
+    if not query:
+        return []
+    if field == 'tags':
+        from werkzeug.datastructures import MultiDict
+        from app.features.tags import tags_core
+        tags = tags_core.get_all_tags(MultiDict({'search': query, 'limit': str(limit), 'lean': '1'}))
+        return [_tag_item(tags_core.picker_tag_json(t)) for t in tags[:limit]]
+    if field == 'attack':
+        from app.features.attack import attack_core
+        tactics = _tactics()
+        return [_technique_item(t, tactics) for t in attack_core.search_techniques(query, limit)]
+    if field == 'related':
+        rules = RuleModel._active().filter(Rule.title.ilike(f'%{query}%')).order_by(Rule.title).limit(limit)
+        return [{'value': r.id, 'label': r.title, 'detail': f'{r.format} · {r.author or "?"}'} for r in rules]
+    return []
+
+
+def browse(fmt, field, path, page):
+    """Folders of the Fields panel, one level at a time (same as the manual form's pickers):
+    tags: Public / Private namespaces, then one page of a namespace;
+    attack: the 14 tactics in matrix order, then the techniques of one tactic."""
+    from werkzeug.datastructures import MultiDict
+    if field == 'tags':
+        from app.features.tags import tags_core
+        if not path:
+            groups = tags_core.picker_namespaces(MultiDict())
+            return {'folders': [{'id': f'{group}\u001f{f["namespace"]}', 'label': f['namespace'] or '(no namespace)',
+                                 'count': f['count'], 'group': group}
+                                for group, folders in groups.items() for f in folders]}
+        group, _, namespace = path[0].partition('\u001f')
+        data = tags_core.picker_tags(MultiDict({'type': group, 'namespace': namespace, 'page': str(page), 'per_page': '50'}))
+        return {'items': [_tag_item(t) for t in data['tags']], 'has_more': data['has_more']}
+    if field == 'attack':
+        from app.features.attack import attack_core
+        tactics = _tactics()
+        if not path:
+            techniques = attack_core.get_all_techniques()
+            count = {x['key']: 0 for x in tactics}
+            for t in techniques:
+                for k in t.get('tactic_keys') or []:
+                    if k in count:
+                        count[k] += 1
+            return {'folders': [{'id': x['key'], 'label': x['label'], 'count': count[x['key']], 'color': x['color']}
+                                for x in tactics]}
+        return {'items': [_technique_item(t, tactics) for t in attack_core.get_all_techniques(path[0])]}
+    return None
+
+
+backend = FunctionBackend(name='Rulezet', validate=validate, search_rules=search_rules, get_rule=get_rule,
+                          fields=fields, suggest=suggest, browse=browse)
 
 
 def rule_dependencies(rule_id, user):
@@ -189,6 +271,157 @@ def _refusal(message):
     return message
 
 
+# ── Fields panel values (rulezet-editor) -> the rule Rulezet creates ───────────────
+
+_TEXT_FIELDS = ('title', 'description', 'author', 'license', 'version', 'source', 'original_uuid')
+_LIST_FIELDS = ('cve', 'attack', 'tags')
+_RELATION_KINDS = ('references', 'depends_on', 'related', 'variant_of', 'duplicate_of')
+
+
+def clean_fields(raw):
+    """The Fields panel's values for one rule, from the browser: known fields only, size-capped."""
+    if not isinstance(raw, dict):
+        return {}
+    values = raw.get('values') if isinstance(raw.get('values'), dict) else raw
+    out = {}
+    for key in _TEXT_FIELDS:
+        v = values.get(key)
+        if isinstance(v, (str, int, float)) and str(v).strip():
+            out[key] = str(v).strip()[:5000]
+    for key in _LIST_FIELDS:
+        items = values.get(key)
+        if not isinstance(items, list):
+            continue
+        clean = []
+        for item in items[:100]:
+            v = item.get('value') if isinstance(item, dict) else item
+            if isinstance(v, (str, int)) and str(v).strip():
+                clean.append(str(v).strip()[:200])
+        if clean:
+            out[key] = clean
+    related = values.get('related')
+    if isinstance(related, list):
+        links = []
+        for item in related[:20]:
+            if isinstance(item, dict) and str(item.get('value', '')).isdigit():
+                kind = item.get('kind') if item.get('kind') in _RELATION_KINDS else 'references'
+                links.append({'id': int(item['value']), 'kind': kind})
+        if links:
+            out['related'] = links
+    return out
+
+
+def apply_fields(rule_dict, fields):
+    """What the user typed in the Fields panel wins over what parse_metadata read from the rule
+    (the panel already shows the rule's own values when they exist)."""
+    if not fields:
+        return rule_dict
+    for key in _TEXT_FIELDS:
+        if fields.get(key):
+            rule_dict[key] = fields[key]
+    if fields.get('cve'):
+        rule_dict['vulnerabilities'] = json.dumps([c.upper() for c in fields['cve'] if re.fullmatch(r'(?i)CVE-\d{4}-\d{4,}', c)])
+    if fields.get('tags'):
+        rule_dict['tags'] = [{'id': t} for t in _tag_ids(fields['tags'])]
+    return rule_dict
+
+
+def _tag_ids(values):
+    """Tag ids from the panel: ids from the pickers, names when the tags were read from the rule."""
+    from app.core.db_class.tag import Tag
+    ids = [int(v) for v in values if str(v).isdigit()]
+    names = [v for v in values if not str(v).isdigit()]
+    if names:
+        ids += [t.id for t in Tag.query.filter(Tag.name.in_(names))]
+    return list(dict.fromkeys(ids))
+
+
+def attach_relations(rule, fields, user):
+    """Linked rules of the Fields panel, created once the rule exists (as the manual form does)."""
+    if not fields or not fields.get('related'):
+        return
+    from app.features.rule_relation.rule_relation_core import add_relation
+    for link in fields['related']:
+        if link['id'] != rule.id:
+            add_relation(rule.id, link['id'], link['kind'], user_id=user.id, source='manual')
+
+
+def attach_attack(rule, fields, user):
+    """ATT&CK techniques of the Fields panel, linked once the rule exists."""
+    if not fields or not fields.get('attack'):
+        return
+    from app.features.attack.attack_core import add_technique_to_rule
+    for tid in fields['attack']:
+        if re.fullmatch(r'(?i)T\d{4}(\.\d{3})?', tid):
+            try:
+                add_technique_to_rule(rule.id, tid.upper(), user.id, source='manual')
+            except Exception:
+                pass
+
+
+def _info(user):
+    """Defaults parse_metadata falls back on (the user's licence and name), as the import does."""
+    return {
+        'license': getattr(user, 'license', None) or 'Unknown',
+        'author': getattr(user, 'first_name', None) or 'Unknown',
+        'repo_url': None,
+    }
+
+
+def new_rule_dict(e, user):
+    """The rule dict Rulezet stores for this document rule: what the rule says (meta), with the
+    Fields panel's values on top. The preview and the creation both use it."""
+    return apply_fields(YaraRule().parse_metadata(e['content'], _info(user), _Validation(e['content'])), e.get('fields'))
+
+
+def import_preview(e, user):
+    """Every field Rulezet will store for a new rule, and where each value comes from:
+    'panel' (Fields panel), 'rule' (the rule's meta / header), 'default' (Rulezet's default)."""
+    from app.core.db_class.tag import Tag
+    from app.core.utils.app_settings import get_setting
+    fields = e.get('fields') or {}
+    meta_values = {}
+    for k, v in re.findall(r'^\s*(\w+)\s*=\s*"((?:[^"\\]|\\.)*)"', e['text'], re.M):
+        meta_values.setdefault(k.lower(), v)
+    meta = set(meta_values)
+    d = new_rule_dict(e, user)
+
+    def origin(field, *meta_keys):
+        # a panel value that is just the rule's own meta value comes from the rule
+        if field in fields and not any(str(fields[field]).strip() == meta_values.get(k, '').strip() for k in meta_keys):
+            return 'panel'
+        return 'rule' if any(k in meta for k in meta_keys) else 'default'
+
+    vulns = RuleModel._parse_vulnerabilities(d.get('vulnerabilities')) or RuleModel._parse_vulnerabilities(d.get('cve_id'))
+    tag_ids = [t['id'] for t in d.get('tags') or [] if isinstance(t, dict)]
+    related = fields.get('related') or []
+    related_titles = {r.id: r.title for r in RuleModel._active().filter(Rule.id.in_([x['id'] for x in related]))} if related else {}
+    tag_names = [t.name for t in Tag.query.filter(Tag.id.in_(tag_ids))] if tag_ids else []
+    defaults = list((get_setting('tags.defaults') or {}).get('auto_attach') or [])
+    # the tags Rulezet attaches as "Imported" on creation, with the same detection
+    from app.features.tags.imported_tags_core import extract_native_tags
+    rule_tags = extract_native_tags('yara', e['content'])
+    attack = [a.upper() for a in fields.get('attack') or [] if re.fullmatch(r'(?i)T\d{4}(\.\d{3})?', a)]
+    rows = [
+        {'id': 'title', 'label': 'Title', 'value': d.get('title'),
+         'origin': 'panel' if fields.get('title') and fields['title'] != e['name'] else 'rule'},
+        {'id': 'description', 'label': 'Description', 'value': d.get('description'), 'origin': origin('description', 'description', 'desc')},
+        {'id': 'author', 'label': 'Author', 'value': d.get('author'), 'origin': origin('author', 'author')},
+        {'id': 'license', 'label': 'License', 'value': d.get('license'), 'origin': origin('license', 'license')},
+        {'id': 'version', 'label': 'Version', 'value': d.get('version'), 'origin': origin('version', 'version')},
+        {'id': 'source', 'label': 'Source', 'value': d.get('source'), 'origin': origin('source', 'source')},
+        {'id': 'original_uuid', 'label': 'Original UUID', 'value': d.get('original_uuid'), 'origin': origin('original_uuid', 'id', 'uuid')},
+        {'id': 'cve', 'label': 'Vulnerabilities', 'value': vulns, 'origin': 'panel' if 'cve' in fields else ('rule' if vulns else 'default')},
+        {'id': 'attack', 'label': 'ATT&CK techniques', 'value': attack, 'origin': 'panel' if attack else 'default'},
+        {'id': 'tags', 'label': 'Tags', 'value': tag_names, 'origin': 'panel' if tag_names else 'default'},
+        {'id': 'related', 'label': 'Linked rules', 'origin': 'panel' if related else 'default',
+         'value': [f"{related_titles[x['id']]} ({x['kind'].replace('_', ' ')})" for x in related if x['id'] in related_titles]},
+        {'id': 'default_tags', 'label': 'Default tags', 'value': defaults, 'origin': 'default'},
+        {'id': 'rule_tags', 'label': 'Imported tags (from the rule)', 'value': rule_tags, 'origin': 'rule'},
+    ]
+    return rows
+
+
 def plan_yara(imports, rules, progress=None, user=None):
     """One entry per rule: status new | exists | update | proposal | error | blocked, with its
     dependencies. `user` decides between update and proposal for changed existing rules.
@@ -211,7 +444,8 @@ def plan_yara(imports, rules, progress=None, user=None):
         used = [mod for mod in own_imports if re.search(rf'\b{mod}\s*\.', text)]
         content = ''.join(f'import "{mod}"\n' for mod in used) + ('\n' if used else '') + text
         entry = {'name': name, 'text': text, 'content': content, 'status': 'new', 'errors': [],
-                 'depends_on': [], 'existing': None, 'path': r.get('path') or None}
+                 'depends_on': [], 'existing': None, 'path': r.get('path') or None,
+                 'fields': clean_fields(r.get('fields'))}
         if not m:
             entry.update(status='error', errors=[{'message': 'Not a YARA rule'}])
         elif name in names:
@@ -321,6 +555,12 @@ def plan_yara(imports, rules, progress=None, user=None):
     for e in entries:
         e.pop('_propagated', None)
 
+    for e in entries:
+        if e['status'] == 'new':          # what Rulezet will store, field by field (the Check shows it)
+            try:
+                e['preview'] = import_preview(e, user)
+            except Exception:
+                e['preview'] = None
     ok = all(e['status'] in PENDING + ('exists',) for e in entries)
     return {'ok': ok, 'rules': entries}
 
@@ -388,11 +628,6 @@ def create_from_plan(plan, user):
     from app.features.rule_relation.rule_relation_core import add_relation
 
     by_name = {e['name']: e for e in plan['rules']}
-    info = {
-        'license': getattr(user, 'license', None) or 'Unknown',
-        'author': getattr(user, 'first_name', None) or 'Unknown',
-        'repo_url': None,
-    }
     written = {}                     # name -> Rule (created or updated)
 
     def write(e, stack=()):
@@ -402,11 +637,13 @@ def create_from_plan(plan, user):
             if d['where'] == 'document':
                 write(by_name[d['name']], stack + (e['name'],))
         if e['status'] == 'new':
-            rule_dict = YaraRule().parse_metadata(e['content'], info, _Validation(e['content']))
+            rule_dict = new_rule_dict(e, user)
             rule, message = RuleModel.add_rule_core(rule_dict, user)
             if not rule:
                 e.update(status='error', errors=[{'message': _refusal(message)}])
                 return
+            attach_attack(rule, e.get('fields'), user)
+            attach_relations(rule, e.get('fields'), user)
             written[e['name']] = rule
             e.update(status='created', created=_rule_link(rule))
             return

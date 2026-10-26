@@ -141,3 +141,36 @@ a.ed-dep:hover { border-color: #0d6efd; color: #0d6efd; }
 .ed-step--pending .ed-step__label, .ed-step--skipped .ed-step__label { color: var(--subtle-text-color); }
 .ed-step__detail { margin-left: auto; font-size: .75rem; color: var(--subtle-text-color); }
 
+
+/* ── action bar under the editor (create page) ── */
+.ed-actionbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 12px; background: var(--card-bg-color); box-shadow: 0 1px 3px rgba(0, 0, 0, .05); }
+.ed-actionbar__stats { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ed-actionbar__buttons { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.ed-stat { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: .82rem; background: var(--light-bg-color); color: var(--text-color); }
+.ed-stat i { font-size: .8rem; color: var(--subtle-text-color); }
+.ed-stat b { font-weight: 700; }
+.ed-stat--error { background: rgba(220, 53, 69, .1); color: #dc3545; }
+.ed-stat--error i { color: #dc3545; }
+.ed-stat--ok { background: rgba(25, 135, 84, .1); color: #198754; }
+.ed-stat--ok i { color: #198754; }
+.ed-stat--muted { color: var(--subtle-text-color); }
+
+/* ── check / confirm: what Rulezet will store, per rule ── */
+.ed-preview { grid-column: 1 / -1; margin-top: 8px; border: 1px solid var(--border-color); border-radius: 10px; overflow: hidden; }
+.ed-preview__toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 12px; border: 0; background: var(--light-bg-color); color: var(--text-color); font-size: .82rem; font-weight: 600; text-align: left; }
+.ed-preview__toggle i { font-size: .7rem; color: var(--subtle-text-color); width: 10px; }
+.ed-preview__count { margin-left: auto; font-weight: 500; color: var(--subtle-text-color); }
+.ed-preview__table { font-size: .82rem; }
+.ed-preview__row { display: grid; grid-template-columns: 170px 1fr 120px; gap: 10px; padding: 6px 12px; align-items: start; }
+.ed-preview__row + .ed-preview__row { border-top: 1px solid var(--border-color); }
+.ed-preview__label { font-weight: 600; color: var(--subtle-text-color); }
+.ed-preview__cell { color: var(--text-color); word-break: break-word; min-width: 0; }
+.ed-preview__row--empty .ed-preview__label, .ed-preview__row--empty .ed-preview__cell { opacity: .55; }
+@media (max-width: 640px) { .ed-preview__row { grid-template-columns: 1fr; gap: 2px; } .ed-preview__origin { text-align: left; } }
+.ed-preview__chip { display: inline-block; margin: 0 4px 3px 0; padding: 1px 8px; border-radius: 999px; background: var(--light-bg-color); border: 1px solid var(--border-color); font-family: var(--bs-font-monospace, monospace); font-size: .76rem; }
+.ed-preview__none { color: var(--subtle-text-color); font-style: italic; }
+.ed-preview__origin { text-align: right; }
+.ed-origin { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .7rem; font-weight: 600; white-space: nowrap; }
+.ed-origin--panel { background: rgba(13, 110, 253, .12); color: #0d6efd; }
+.ed-origin--rule { background: rgba(25, 135, 84, .12); color: #198754; }
+.ed-origin--default { background: var(--light-bg-color); color: var(--subtle-text-color); }
