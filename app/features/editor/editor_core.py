@@ -55,6 +55,34 @@ def get_rule(fmt, name):
 backend = FunctionBackend(name='Rulezet', validate=validate, search_rules=search_rules, get_rule=get_rule)
 
 
+def _test_service():
+    """Tests on samples (app/modules/rulezet-tester). Two modes:
+      - lab VM (RULE_TESTS_LAB=rzlab@host): every run goes over SSH to the isolated lab, the only
+        place real malware may live (see rulezet-tester docs/lab.md); nothing runs here;
+      - local: the safe sets shipped with rulezet-tester plus RULE_TESTS_SAMPLES folders, isolated
+        by RULE_TESTS_SANDBOX (bwrap by default: without bubblewrap the Test button does not show).
+    None when switched off."""
+    import os
+    mode = os.environ.get('RULE_TESTS_SANDBOX', 'bwrap').strip().lower()
+    if mode in ('', 'off', 'none', 'false'):
+        return None
+    try:
+        from rulezet_tester import FolderSampleStore, RemoteLab, Sandbox, TestService
+        from rulezet_tester.web import SAMPLES
+    except ImportError:
+        return None
+    lab = os.environ.get('RULE_TESTS_LAB', '').strip()
+    if lab:
+        remote = RemoteLab(lab, key=os.environ.get('RULE_TESTS_LAB_KEY') or None,
+                           known_hosts=os.environ.get('RULE_TESTS_LAB_KNOWN_HOSTS') or None)
+        return TestService(remote, remote)
+    extra = [d for d in os.environ.get('RULE_TESTS_SAMPLES', '').split(os.pathsep) if d.strip()]
+    return TestService(FolderSampleStore(SAMPLES, *extra), Sandbox(mode=mode))
+
+
+tests = _test_service()
+
+
 # ── Several YARA rules at once: check each one, then create them ────────────────
 #
 # The editor sends the rules it parsed ({name, text}) and the document's imports. Nothing is

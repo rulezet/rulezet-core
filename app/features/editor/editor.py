@@ -7,7 +7,14 @@ from rulezet_editor import create_blueprint
 from . import editor_core as EditorModel
 from . import editor_jobs as EditorJobs
 
-editor_blueprint = create_blueprint(EditorModel.backend, name='editor_api')
+def _test_owner():
+    return current_user.id if current_user.is_authenticated else None
+
+
+# /editor-api/test/*: runs are private to the user who started them (the before_request below
+# already refuses anonymous users)
+editor_blueprint = create_blueprint(EditorModel.backend, name='editor_api',
+                                    tests=EditorModel.tests, test_owner=_test_owner)
 
 
 @editor_blueprint.before_request
