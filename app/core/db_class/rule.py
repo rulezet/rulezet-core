@@ -328,6 +328,14 @@ class Rule(db.Model):
                 "cve_ids": self.cve_id if self.cve_id is not None else [],
             },
 
+            # --- references and other metadata (read from the text / added by hand) ---
+            "references": {
+                "all": self.all_references,
+                "from_rule": self.rule_references or [],
+                "manual": self.manual_references or [],
+            },
+            "extra_metadata": self.extra_metadata or {},
+
             # --- history ---
             "history": {
                 "edit_proposals": {

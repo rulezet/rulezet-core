@@ -119,6 +119,27 @@
       "disable_correlation": true,
       "misp-attribute": "counter",
       "ui-priority": 0
+    },
+    "reference": {
+      "description": "Reference of the rule (report, advisory, blog\u2026): the ones written in the rule and the ones added on Rulezet.",
+      "disable_correlation": true,
+      "misp-attribute": "link",
+      "multiple": true,
+      "ui-priority": 0
+    },
+    "reference-text": {
+      "description": "Reference of the rule that is not a URL (report name, CVE written as a reference\u2026).",
+      "disable_correlation": true,
+      "misp-attribute": "text",
+      "multiple": true,
+      "ui-priority": 0
+    },
+    "extra-metadata": {
+      "description": "Other metadata written in the rule (dates, hashes, status, level\u2026), one \"key: value\" per attribute.",
+      "disable_correlation": true,
+      "misp-attribute": "text",
+      "multiple": true,
+      "ui-priority": 0
     }
   },
   "description": "Rule set metadata object meant to be linked to rule content objects such as YARA, NSE, Sigma or similar templates.",
@@ -129,5 +150,5 @@
     "uuid"
   ],
   "uuid": "5f4a076e-5e48-4534-b84d-f161de838851",
-  "version": 1
+  "version": 2
 }

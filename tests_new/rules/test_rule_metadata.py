@@ -186,3 +186,38 @@ def test_references_by_hand_survive_a_change_of_the_text(app, users):
     assert rule.all_references == ["https://changed.example", "https://by-hand.example/3"]
     page_refs = rule.to_json(is_favorited=False)
     assert page_refs["references_manual"] == ["https://by-hand.example/3"]
+
+
+# ── Exports: MISP, portable JSON (download / bundle), connectors ─────────────
+
+def test_misp_object_carries_references_and_metadata(app, users):
+    from app.features.misp.rule.misp_object import create_rulezet_metadata_misp_object
+    from app.features.rule.rule_metadata_core import set_manual_references
+    rule = make_rule(users.user, to_string=YARA)
+    set_manual_references(rule, ["Internal report 42"])
+    db.session.commit()
+    attrs = [(a.object_relation, a.value) for a in create_rulezet_metadata_misp_object(rule.id).attributes]
+    assert ("reference", "https://example.org/report-1") in attrs
+    assert ("reference-text", "Internal report 42") in attrs
+    assert ("extra-metadata", "date: 2024-05-02") in attrs
+
+
+def test_portable_json_round_trip_keeps_references_added_by_hand(app, users):
+    from app.features.rule.rule_metadata_core import set_manual_references
+    from app.features.rule.rule_portable import normalize_rule_json, rule_to_portable
+    rule = make_rule(users.user, to_string=YARA)
+    set_manual_references(rule, ["https://by-hand.example/9"])
+    db.session.commit()
+    with app.test_request_context():                 # to_json() reads the current user
+        exported = rule_to_portable(rule)
+    assert exported["references_manual"] == ["https://by-hand.example/9"] and exported["extra_metadata"]["date"]
+    rule_dict, error = normalize_rule_json(exported)
+    assert error is None and rule_dict["references"] == ["https://by-hand.example/9"]
+
+
+def test_connector_sync_keeps_references_added_by_hand(app, users):
+    from app.features.connector.connector_core import clean_remote_rule
+    clean = clean_remote_rule({"uuid": "6b3c5e2a-1f2d-4a9b-8c7d-0e1f2a3b4c5d", "to_string": YARA,
+                               "references_manual": ["https://by-hand.example/7", 5]})
+    assert clean["references_manual"] == ["https://by-hand.example/7"]
+    assert "references_manual" not in clean_remote_rule({"uuid": "6b3c5e2a-1f2d-4a9b-8c7d-0e1f2a3b4c5e", "to_string": YARA})

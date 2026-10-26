@@ -22,6 +22,7 @@ from app import db
 from app.core.db_class.activity_log import ActivityLog
 from app.core.db_class.bundle import Bundle, BundleRuleAssociation
 from app.core.db_class.connector import Connector
+from app.features.rule.rule_metadata_core import set_manual_references
 from app.core.db_class.rule import Rule, RuleUpdateHistory
 from app.core.db_class.tag import BundleTagAssociation, RuleTagAssociation, Tag
 from app.core.db_class.user import OFFICIAL_LOGO_AVATAR_SENTINEL, User
@@ -467,6 +468,8 @@ def clean_remote_rule(item) -> dict | None:
     clean['tags']           = _remote_text_list(item.get('tags'))
     clean['cve_ids']        = _remote_text_list(item.get('cve_ids'))
     clean['attack_ids']     = _remote_text_list(item.get('attack_ids'))
+    if 'references_manual' in item:          # older instances don't send it: keep ours then
+        clean['references_manual'] = _remote_text_list(item.get('references_manual'))
     clean['update_history'] = _remote_history(item.get('update_history'))
     return clean
 
@@ -577,6 +580,8 @@ def _upsert_rule(connector: Connector, shadow_user_id: int, remote: dict,
         if missing_tags is not None:
             missing_tags.update(missed)
         _sync_cve_ids(local_match, remote.get('cve_ids', []))
+        if 'references_manual' in remote:
+            set_manual_references(local_match, remote['references_manual'])
 
         new_snapshot     = rule_metadata_snapshot(local_match)
         metadata_changed = new_snapshot != old_snapshot
@@ -641,6 +646,8 @@ def _upsert_rule(connector: Connector, shadow_user_id: int, remote: dict,
     if missing_tags is not None:
         missing_tags.update(missed)
     _sync_cve_ids(rule, remote.get('cve_ids', []))
+    if remote.get('references_manual'):
+        set_manual_references(rule, remote['references_manual'])
     _import_rule_history(rule, remote.get('update_history', []), owner_id)
     try:
         from app.features.rule.github_repo_core import apply_delta
@@ -686,6 +693,8 @@ def _prepare_new_rule(connector: Connector, owner_id: int, remote: dict) -> Rule
         last_modif=now,
         is_deleted=False,
     )
+    if remote.get('references_manual'):
+        set_manual_references(rule, remote['references_manual'])
     db.session.add(rule)
     return rule
 
