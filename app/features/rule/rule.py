@@ -694,6 +694,12 @@ def edit_rule(rule_id) -> render_template:
                     "change_type": "metadata",
                 })
 
+            # tested with the editor's Test button right before saving: that result is this version's
+            try:
+                SampleTests.record_saved_rule(current_rule, current_user)
+            except Exception:
+                db.session.rollback()
+
             flash("Rule modified with success!", "success")
 
             return redirect(url_for('rule.detail_rule', rule_id=current_rule.id))
@@ -1210,7 +1216,7 @@ def detail_rule_samples(rule_id):
     if rule.is_deleted:
         return render_template("rule/rule_in_trash.html", rule=rule)
     return render_template("rule/detail_rule/detail_rule_samples.html", rule=rule,
-                           samples=SampleTests.rule_sample_details(rule),
+                           samples=SampleTests.rule_sample_details(rule, request.args.get('result', type=int)),
                            **_nav_counts(rule.id))
 
 

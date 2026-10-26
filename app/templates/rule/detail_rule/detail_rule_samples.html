@@ -67,7 +67,21 @@
     </div>
     {% else %}
 
-    <!-- ── Verdict of the current version ── -->
+    {% if not samples.is_current %}
+    <span id="rs-report-old"></span>
+    <!-- viewing the report of an older version (?result=) -->
+    <div class="rs-old-banner mb-3">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <div class="flex-grow-1">
+            <b>Report of an older version of the rule</b>, tested {{ latest.created_at[:16]|replace('T', ' ') }} UTC.
+            {% if samples.text_missing %}Its text is no longer known: the rule shown is the current one.{% else %}The rule shown below is that version.{% endif %}
+        </div>
+        <a href="/rule/detail_rule/{{ rule.id }}/samples" class="btn btn-sm btn-outline-primary rounded-pill px-3">Current version</a>
+    </div>
+    {% endif %}
+
+    <span id="rs-report"></span>
+    <!-- ── Verdict of the report shown ── -->
     <div class="rs-verdict {{ 'rs-verdict--warn' if latest.false_positives else 'rs-verdict--ok' }} mb-3">
         <div class="rs-verdict__icon">
             <i class="fa-solid {{ 'fa-triangle-exclamation' if latest.false_positives else 'fa-circle-check' }}"></i>
@@ -81,7 +95,7 @@
                 {% endif %}
             </div>
             <div class="rs-verdict__sub">
-                This version · tested {{ latest.created_at[:16]|replace('T', ' ') }} UTC
+                {{ 'This version' if samples.is_current else 'An older version' }} · tested {{ latest.created_at[:16]|replace('T', ' ') }} UTC
                 · {{ 'when it was created in the YARA editor' if latest.origin == 'create' else 'from the YARA editor' }}
             </div>
         </div>
@@ -294,6 +308,7 @@
         <div class="h-card__header">
             <div class="h-card__accent h-card__accent--green"></div>
             <span class="h-card__title"><i class="fa-solid fa-clock-rotate-left me-1"></i>Test history</span>
+            <span class="rs-muted ms-auto">Click a test to open its report, with the rule as it was then</span>
         </div>
         <div class="h-card__body p-0">
             <div class="table-responsive">
@@ -304,8 +319,10 @@
                     </thead>
                     <tbody>
                         {% for h in samples.history %}
-                        <tr class="{{ '' if h.current else 'rs-old' }}">
-                            <td>{{ h.created_at[:16]|replace('T', ' ') }}</td>
+                        <tr class="rs-history-row {{ '' if h.current else 'rs-old' }} {{ 'is-selected' if h.id == samples.selected_id }}"
+                            @click="openReport({{ h.id }})">
+                            <td><a href="/rule/detail_rule/{{ rule.id }}/samples?result={{ h.id }}#rs-report" class="rs-history-link">{{ h.created_at[:16]|replace('T', ' ') }}</a>
+                                {% if h.id == samples.selected_id %}<span class="rs-kind rs-kind--shown">shown</span>{% endif %}</td>
                             <td>
                                 {% if h.current %}<span class="rs-kind rs-kind--current">this version</span>
                                 {% else %}<span class="rs-kind">older version</span>{% endif %}
@@ -335,7 +352,7 @@
     const SAMPLES = {{ samples.samples | tojson }};
     const STRINGS = {{ samples.strings | tojson }};
     // the rule, one entry per line; a rule written on one line is spread out (sections, strings)
-    const RULE_TEXT = {{ (rule.to_string or '') | tojson }};
+    const RULE_TEXT = {{ (samples.rule_text or rule.to_string or '') | tojson }};    // the version of the report shown
     const spread = t => t.includes('\n') ? t : t
         .replace(/\s*(\b(?:meta|strings|condition)\s*:)/g, '\n    $1')
         .replace(/\s+(\$\w*\s*=)/g, '\n        $1')
@@ -443,7 +460,8 @@
             const ascii = h => bytes(h).map(b => { const c = parseInt(b, 16); return c >= 32 && c < 127 ? String.fromCharCode(c) : '·'; }).join('');
             const spaced = h => bytes(h).join(' ');
             const size = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
-            return { CODE, current, ruleOpen, toggleRule, focusString, reveal, openAndReveal, hitsOf, stringSamples, STRINGS, stringFilter, barWidth, pickString, PER_PAGE, page, totalPages, pageItems, OUTCOMES, EXPECTED, filters, filter, search, open, count, visible, key, toggle, hex, size, groups, ascii, spaced };
+            const openReport = id => { window.location.href = `/rule/detail_rule/{{ rule.id }}/samples?result=${id}#rs-report`; };
+            return { openReport, CODE, current, ruleOpen, toggleRule, focusString, reveal, openAndReveal, hitsOf, stringSamples, STRINGS, stringFilter, barWidth, pickString, PER_PAGE, page, totalPages, pageItems, OUTCOMES, EXPECTED, filters, filter, search, open, count, visible, key, toggle, hex, size, groups, ascii, spaced };
         },
     }).mount('#main-container');
 </script>

@@ -3,6 +3,7 @@ database, the YARA editor's Create job testing the document (setting editor.test
 the result kept per rule version and shown on the rule page."""
 import pytest
 
+from app import db
 from app.core.db_class.rule import Rule
 from app.core.db_class.rule_tester import RuleSampleResult, SampleTestRun
 from app.features.editor import editor_core as EditorModel
@@ -118,3 +119,47 @@ def test_samples_page(app, clients, tester, monkeypatch):
 
 def rule_page_latest(rule):
     return SampleTests.rule_sample_details(rule)["latest"]
+
+
+def test_test_button_keeps_the_result_of_saved_rules(app, clients, users, tester):
+    from tests_new.helpers.rules import make_rule
+    mine = make_rule(users.user, title="ed_quiet", to_string=QUIET)
+    theirs = make_rule(users.owner, title="ed_gnu", to_string=GNU)
+    document = QUIET + "\n\n" + GNU
+    res = clients["user"].post("/editor-api/test/", json={"format": "yara", "text": document, "sets": ["benign-text"]})
+    assert res.status_code == 202
+    assert SampleTests.latest_result(mine)["false_positives"] == 0          # tested unchanged: kept
+    assert SampleTests.latest_result(theirs) is None                        # not the user's rule
+    # changed in the editor and not saved: not this version, nothing kept
+    changed = QUIET.replace("zz_never", "yy_never")
+    clients["user"].post("/editor-api/test/", json={"format": "yara", "text": changed, "sets": ["benign-text"]})
+    assert RuleSampleResult.query.filter_by(rule_id=mine.id).count() == 1
+
+
+def test_test_then_save_keeps_the_result_for_the_new_version(app, clients, users, tester):
+    from tests_new.helpers.rules import edit_form, make_rule
+    rule = make_rule(users.owner, title="ed_quiet", to_string=QUIET)
+    new_text = QUIET.replace("zz_never", "yy_never")
+    clients["owner"].post("/editor-api/test/", json={"format": "yara", "text": new_text, "sets": ["benign-text"]})
+    assert SampleTests.latest_result(rule) is None                          # not saved yet
+    clients["owner"].post(f"/rule/edit_rule/{rule.id}", data=edit_form(rule, to_string=new_text))
+    rule = db.session.get(Rule, rule.id)
+    assert "yy_never" in rule.to_string
+    assert SampleTests.latest_result(rule)["total"] > 0                     # the test right before the save
+
+
+def test_every_report_opens_with_its_version_of_the_rule(app, clients, users, tester, monkeypatch):
+    settings(monkeypatch)
+    _run_job(app, clients["user"], body(GNU))
+    rule = Rule.query.filter_by(title="ed_gnu").one()
+    first = SampleTests.latest_result(rule)["id"]
+    rule.to_string = GNU.replace('"GNU"', '"GNU_v2"')                   # a new version, tested again
+    db.session.commit()
+    clients["user"].post("/editor-api/test/", json={"format": "yara", "text": rule.to_string, "sets": ["benign-text"]})
+    now = SampleTests.rule_sample_details(rule)
+    assert now["is_current"] and "GNU_v2" in now["rule_text"]
+    old = SampleTests.rule_sample_details(rule, first)
+    assert old["selected_id"] == first and not old["is_current"]
+    assert '"GNU"' in old["rule_text"] and old["latest"]["false_positives"] >= 1
+    page = clients["anonymous"].get(f"/rule/detail_rule/{rule.id}/samples?result={first}").get_data(as_text=True)
+    assert "Report of an older version" in page

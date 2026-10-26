@@ -164,6 +164,9 @@ class SampleTestRun(db.Model):
     origin      = db.Column(db.String(16), nullable=False, default='editor')
     status      = db.Column(db.String(16), nullable=False, default='queued', index=True)
     state       = db.Column(db.JSON, nullable=False)
+    # the tested document (Test button runs only): a rule saved right after its test gets the result
+    # (sample_test_core.record_saved_rule). Never sent to the browser.
+    document    = db.Column(db.Text, nullable=True)
     created_at  = db.Column(db.DateTime, nullable=False,
                             default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
     finished_at = db.Column(db.DateTime, nullable=True)
@@ -184,6 +187,7 @@ class RuleSampleResult(db.Model):
     false_positives = db.Column(db.Integer, nullable=False, default=0)
     errors          = db.Column(db.Integer, nullable=False, default=0)
     sets            = db.Column(db.JSON, nullable=True)       # [{id, name, kind}]
+    rule_text       = db.Column(db.Text, nullable=True)       # the rule as it was tested (its version)
     created_at      = db.Column(db.DateTime, nullable=False,
                                 default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
@@ -192,7 +196,7 @@ class RuleSampleResult(db.Model):
     def to_json(self):
         return {
             'total': self.total, 'detected': self.detected, 'missed': self.missed,
-            'false_positives': self.false_positives, 'errors': self.errors, 'sets': self.sets or [],
+            'id': self.id, 'false_positives': self.false_positives, 'errors': self.errors, 'sets': self.sets or [],
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 

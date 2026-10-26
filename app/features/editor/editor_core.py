@@ -155,6 +155,26 @@ def rule_dependencies(rule_id, user):
     return {'rule': item(rule), 'dependencies': [item(found[i]) for i in order], 'truncated': graph['truncated']}
 
 
+def _rulezet_test_service(*args, **kwargs):
+    """rulezet-tester's TestService, plus: a finished run from the Test button is kept with the
+    Rulezet rules it tested unchanged (sample_test_core.record_editor_run)."""
+    from rulezet_tester import TestService
+
+    class RulezetTestService(TestService):
+        def _execute(self, run_id, fmt, text, paths):
+            super()._execute(run_id, fmt, text, paths)
+            registry = self.registry
+            try:
+                with registry.app.app_context():
+                    from app.features.rule_tester.sample_test_core import keep_document, record_editor_run
+                    keep_document(run_id, text)
+                    record_editor_run(registry.get(run_id), text)
+            except Exception:                    # never let the bookkeeping break a test run
+                pass
+
+    return RulezetTestService(*args, **kwargs)
+
+
 def _test_service():
     """Tests on samples (app/modules/rulezet-tester). Two modes:
       - lab VM (RULE_TESTS_LAB=rzlab@host): every run goes over SSH to the isolated lab, the only
@@ -175,9 +195,14 @@ def _test_service():
     if lab:
         remote = RemoteLab(lab, key=os.environ.get('RULE_TESTS_LAB_KEY') or None,
                            known_hosts=os.environ.get('RULE_TESTS_LAB_KNOWN_HOSTS') or None)
-        return TestService(remote, remote, registry=DbRunRegistry('editor'))
+        return _rulezet_test_service(remote, remote, registry=DbRunRegistry('editor'))
     extra = [d for d in os.environ.get('RULE_TESTS_SAMPLES', '').split(os.pathsep) if d.strip()]
-    return TestService(FolderSampleStore(SAMPLES, *extra), Sandbox(mode=mode), registry=DbRunRegistry('editor'))
+    # sets read from this server's own folders (/usr/bin, documents, PE) show what is installed on it:
+    # off in production (the samples there are the ones provided in RULE_TESTS_SAMPLES / the lab VM)
+    default = 'off' if os.environ.get('FLASKENV', 'development') == 'production' else 'on'
+    system_sets = os.environ.get('RULE_TESTS_SYSTEM_SETS', default).strip().lower() in ('1', 'on', 'true', 'yes')
+    return _rulezet_test_service(FolderSampleStore(SAMPLES, *extra, system_sets=system_sets), Sandbox(mode=mode),
+                                 registry=DbRunRegistry('editor'))
 
 
 tests = _test_service()

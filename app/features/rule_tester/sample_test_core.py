@@ -82,7 +82,7 @@ def record_rule_results(run, rules):
     sets = [{'id': s['id'], 'name': s['name'], 'kind': s['kind']} for s in run.get('sets') or []]
     for name, rule in rules:
         db.session.add(RuleSampleResult(rule_id=rule.id, run_id=row.id, content_hash=content_hash(rule.to_string),
-                                        sets=sets, **rule_counts(run, name)))
+                                        rule_text=rule.to_string, sets=sets, **rule_counts(run, name)))
     db.session.commit()
     return len(rules)
 
@@ -139,21 +139,40 @@ def rule_strings(text, samples):
     return found
 
 
-def rule_sample_details(rule):
+def _tested_text(rule, result):
+    """The rule's text as it was when `result` was produced: kept on the result; for older results,
+    found in the rule's history by its hash; the current text when it is that version."""
+    if result.rule_text:
+        return result.rule_text
+    if content_hash(rule.to_string) == result.content_hash:
+        return rule.to_string
+    from app.core.db_class.rule import RuleUpdateHistory
+    for h in RuleUpdateHistory.query.filter_by(rule_id=rule.id).order_by(RuleUpdateHistory.id.desc()).limit(200):
+        for text in (h.new_content, h.old_content):
+            if text and content_hash(text) == result.content_hash:
+                return text
+    return None
+
+
+def rule_sample_details(rule, result_id=None):
     """Everything the rule's "Samples" page shows: every result kept for the rule (newest first,
-    each saying whether it is about the current text), and for the newest one of the current
-    version its sets and samples seen through this rule."""
+    each saying whether it is about the current text), and one report in full — the one asked for
+    (?result=), else the newest of the current version: its sets, its samples seen through this
+    rule, and the rule as it was tested (its strings, its code)."""
     current = content_hash(rule.to_string)
     rows = (RuleSampleResult.query.filter_by(rule_id=rule.id)
             .order_by(RuleSampleResult.created_at.desc(), RuleSampleResult.id.desc()).limit(50).all())
-    history = [{**r.to_json(), 'id': r.id, 'current': r.content_hash == current,
+    history = [{**r.to_json(), 'current': r.content_hash == current,
                 'origin': r.run.origin if r.run else None} for r in rows]
-    latest = next((r for r in rows if r.content_hash == current), None)
-    details = {'history': history, 'latest': None, 'sets': [], 'samples': [], 'strings': []}
-    if not latest or not latest.run:
+    chosen = next((r for r in rows if r.id == result_id), None) if result_id else None
+    shown = chosen or next((r for r in rows if r.content_hash == current), None)
+    details = {'history': history, 'latest': None, 'sets': [], 'samples': [], 'strings': [],
+               'rule_text': rule.to_string, 'selected_id': None, 'is_current': True}
+    if not shown or not shown.run:
         return details
-    state = latest.run.state or {}
-    found = _RULE_NAME.search(rule.to_string or '')
+    text = _tested_text(rule, shown)
+    state = shown.run.state or {}
+    found = _RULE_NAME.search(text or rule.to_string or '')
     name = found.group(1) if found else rule.title
     samples = [_sample_view(s, name) for s in state.get('samples') or []]
     sets = []
@@ -162,13 +181,76 @@ def rule_sample_details(rule):
         sets.append({'id': st['id'], 'name': st['name'], 'kind': st['kind'], 'total': len(mine),
                      **{k: sum(1 for s in mine if s['outcome'] == k)
                         for k in ('detected', 'missed', 'false_positive', 'clean', 'matched', 'error', 'timeout')}})
-    details['strings'] = rule_strings(rule.to_string, samples)
+    details['strings'] = rule_strings(text or '', samples)
     set_names = {s['id']: s['name'] for s in sets}
     for s in samples:
         s['set_name'] = set_names.get(s['set'], s['set'])
-    details.update(latest={**latest.to_json(), 'origin': latest.run.origin}, sets=sets, samples=samples)
+    details.update(latest={**shown.to_json(), 'origin': shown.run.origin}, sets=sets, samples=samples,
+                   rule_text=text or '', selected_id=shown.id, is_current=shown.content_hash == current,
+                   text_missing=text is None)
     return details
 
 
 def rule_sample_count(rule_id):
     return RuleSampleResult.query.filter_by(rule_id=rule_id).count()
+
+
+def _squash(text):
+    """Text without any whitespace, lower case: a rule is found in a document whatever its layout."""
+    return re.sub(r'\s+', '', text or '').lower()
+
+
+def record_editor_run(run, text):
+    """A run started from the editor's Test button: every YARA rule of Rulezet whose saved text is
+    in the tested document unchanged — the rule of the edit page and the rules it needs — keeps
+    the result for that version, when the user who ran it may edit the rule (owner or admin).
+    A rule changed in the editor and not saved yet is not this version: nothing is recorded."""
+    from sqlalchemy import func
+    from app.core.db_class.rule import Rule
+    from app.core.db_class.user import User
+    from app.features.rule.rule_core import _active
+    if not run or run.get('status') != 'done' or (run.get('format') or '').lower() != 'yara':
+        return 0
+    user = db.session.get(User, run.get('owner')) if run.get('owner') else None
+    names = set(_RULE_NAME.findall(text or '')) | set(re.findall(r'\brule\s+([A-Za-z_]\w*)', text or ''))
+    if not user or not names:
+        return 0
+    document = _squash(text)
+    found = []
+    for rule in _active().filter(Rule.corpus_identifier.in_(names), func.lower(Rule.format) == 'yara'):
+        if (rule.user_id == user.id or user.is_admin()) and rule.to_string and _squash(rule.to_string) in document:
+            found.append((rule.corpus_identifier, rule))
+    return record_rule_results(run, found) if found else 0
+
+
+def keep_document(run_id, text):
+    """The text a Test-button run tested, kept on its row (never in the state sent to the browser)."""
+    row = SampleTestRun.query.filter_by(run_id=str(run_id)[:32]).first()
+    if row:
+        row.document = text
+        db.session.commit()
+
+
+SAVED_AFTER_TEST_HOURS = 24
+
+
+def record_saved_rule(rule, user):
+    """A rule just saved (edit page): when the user tested exactly this text with the Test button
+    in the last hours, that run's result is kept for this new version."""
+    import datetime
+    if not rule or not user or (rule.format or '').lower() != 'yara':
+        return 0
+    if rule.user_id != user.id and not user.is_admin():
+        return 0
+    since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=SAVED_AFTER_TEST_HOURS)
+    wanted = _squash(rule.to_string)
+    runs = (SampleTestRun.query.filter(SampleTestRun.user_id == user.id, SampleTestRun.origin == 'editor',
+                                       SampleTestRun.status == 'done', SampleTestRun.document.isnot(None),
+                                       SampleTestRun.created_at >= since)
+            .order_by(SampleTestRun.created_at.desc()).limit(20).all())
+    for row in runs:
+        if wanted and wanted in _squash(row.document):
+            if RuleSampleResult.query.filter_by(rule_id=rule.id, run_id=row.id).first():
+                return 0
+            return record_rule_results(row.state, [(rule.corpus_identifier or rule.title, rule)])
+    return 0
