@@ -41,7 +41,7 @@ what value it adds. Nothing here is built yet unless its status says so.
 Before a rule reaches a real tool, prove what it does: for each format, a
 controlled environment (pcap replay, malware and clean-file corpora, attack
 logs) runs every rule, measures detection, false positives and cost, and
-turns it into a **Lab score**. See [testing_lab.md](testing_lab.md).
+turns it into a **Lab score**. See [testing_lab.md](testing_lab.md); the editor's Test button and the shared design for every format: [test_panel.md](test_panel.md).
 The Lab supersedes the current Rule Tester, which will be deprecated.
 
 ## Principles

@@ -19,6 +19,9 @@ step before: **prove what a rule does** in a controlled environment — replay
 traffic, scan known malware and known-clean files, run attack logs — and turn
 the results into a score everyone can read.
 
+> How the editor's Test button, the Lab and the per-format drivers fit together (one system for
+> every format): [test_panel.md](./test_panel.md).
+
 ## The idea
 
 For each format, an environment that reproduces where the rule would run, and

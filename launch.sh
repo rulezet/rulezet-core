@@ -1,12 +1,14 @@
 #!/bin/bash
 
-# The rule editor is a submodule installed editable (requirements.txt): fetch / install it
-# when this checkout predates it.
+# The rule editor and the rule tester are submodules installed editable (requirements.txt):
+# fetch / install them when this checkout predates them.
 function ensure_editor {
-    if [ ! -f app/modules/rulezet-editor/pyproject.toml ]; then
-        git submodule update --init --recursive app/modules/rulezet-editor
-    fi
-    python3 -c "import rulezet_editor" 2>/dev/null || pip install -e ./app/modules/rulezet-editor
+    for mod in rulezet-editor rulezet-tester; do
+        if [ ! -f app/modules/$mod/pyproject.toml ]; then
+            git submodule update --init --recursive app/modules/$mod
+        fi
+        python3 -c "import ${mod//-/_}" 2>/dev/null || pip install -e ./app/modules/$mod
+    done
 }
 
 function launch {

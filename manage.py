@@ -112,7 +112,7 @@ def _sync_submodules() -> None:
     """Bring tracked-branch submodules up to their remote tip.
 
     Mirrors update.sh's submodule step: rulezet-cast, misp-taxonomies,
-    misp-galaxy, rulezet-validation and rulezet-editor float to their remote branch on every
+    misp-galaxy, rulezet-validation, rulezet-editor and rulezet-tester float to their remote branch on every
     update (--remote) since we want their latest content automatically —
     rulezet-validation in particular used to require a separate manual pull
     on prod; pivotick stays pinned to the committed submodule ref (its dist
@@ -121,11 +121,11 @@ def _sync_submodules() -> None:
     --remote; refreshed via the admin UI instead).
     """
     run(["git", "submodule", "update", "--init", "--recursive",
-         "app/modules/rulezet-validation", "app/modules/rulezet-editor"])
+         "app/modules/rulezet-validation", "app/modules/rulezet-editor", "app/modules/rulezet-tester"])
     result = subprocess.run(
         ["git", "submodule", "update", "--remote", "app/modules/rulezet-cast",
          "app/modules/misp-taxonomies", "app/modules/misp-galaxy",
-         "app/modules/rulezet-validation", "app/modules/rulezet-editor"],
+         "app/modules/rulezet-validation", "app/modules/rulezet-editor", "app/modules/rulezet-tester"],
         cwd=ROOT,
     )
     if result.returncode != 0:
@@ -549,6 +549,7 @@ def cmd_init() -> None:
     run(["git", "submodule", "update", "--init", "--recursive", "--depth", "1",
          "app/modules/rulezet-validation"])
     run(["git", "submodule", "update", "--init", "--recursive", "app/modules/rulezet-editor"])
+    run(["git", "submodule", "update", "--init", "--recursive", "app/modules/rulezet-tester"])
     ok("Submodules initialised")
 
     info("Installing Python dependencies…")
@@ -670,18 +671,20 @@ def _run_gunicorn_with_worker(flaskenv: str, port: str, reload: bool = False) ->
 
 
 def _ensure_editor() -> None:
-    """The rule editor (app/modules/rulezet-editor) is a submodule installed editable by
-    requirements.txt. A checkout made before it existed has neither: fetch and install it
-    here so start-dev / start-prod never boot without it."""
-    editor = os.path.join(ROOT, "app", "modules", "rulezet-editor")
-    if not os.path.isfile(os.path.join(editor, "pyproject.toml")):
-        info("Fetching the rule editor submodule (app/modules/rulezet-editor)…")
-        run(["git", "submodule", "update", "--init", "--recursive", "app/modules/rulezet-editor"])
-    probe = subprocess.run([PYTHON, "-c", "import rulezet_editor"], cwd=ROOT, env=_venv_env(),
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if probe.returncode != 0:
-        info("Installing the rule editor (pip install -e app/modules/rulezet-editor)…")
-        run([PIP, "install", "-e", "./app/modules/rulezet-editor"])
+    """The rule editor (app/modules/rulezet-editor) and the rule tester (app/modules/rulezet-tester)
+    are submodules installed editable by requirements.txt. A checkout made before they existed has
+    neither: fetch and install them here so start-dev / start-prod never boot without them."""
+    for folder, module, label in (("rulezet-editor", "rulezet_editor", "rule editor"),
+                                  ("rulezet-tester", "rulezet_tester", "rule tester")):
+        path = os.path.join(ROOT, "app", "modules", folder)
+        if not os.path.isfile(os.path.join(path, "pyproject.toml")):
+            info(f"Fetching the {label} submodule (app/modules/{folder})…")
+            run(["git", "submodule", "update", "--init", "--recursive", f"app/modules/{folder}"])
+        probe = subprocess.run([PYTHON, "-c", f"import {module}"], cwd=ROOT, env=_venv_env(),
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if probe.returncode != 0:
+            info(f"Installing the {label} (pip install -e app/modules/{folder})…")
+            run([PIP, "install", "-e", f"./app/modules/{folder}"])
 
 
 def cmd_start_dev() -> None:

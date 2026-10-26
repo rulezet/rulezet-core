@@ -23,6 +23,7 @@ git submodule update --init --recursive --depth 1 app/modules/pivotick
 git submodule update --init --depth 1 app/modules/pivotick-converters
 git submodule update --init --recursive --depth 1 app/modules/rulezet-validation
 git submodule update --init --recursive app/modules/rulezet-editor
+git submodule update --init --recursive app/modules/rulezet-tester
 
 echo -e "${CYAN}📦 Install the Python dependencies...${RESET}"
 pip install -r requirements.txt

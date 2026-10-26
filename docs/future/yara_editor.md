@@ -108,6 +108,8 @@ Priority: **P0** = first usable version, **P1** = next, **P2** = later / nice to
 
 ### 3.5 Test as you write
 
+> Design: [test_panel.md](./test_panel.md) — same system for every format, YARA first.
+
 | Feature | Priority | Notes |
 |---|---|---|
 | Test panel: paste text, hex, or upload a file; run the page's rules against it | P0 | yara_driver, sandboxed, size / time limits |
