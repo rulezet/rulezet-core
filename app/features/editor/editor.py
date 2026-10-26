@@ -60,6 +60,13 @@ def yara_job_start():
     return jsonify(EditorJobs.public_state(job)), 202
 
 
+@editor_blueprint.get('/yara/rules/<int:rule_id>/dependencies')
+def yara_rule_dependencies(rule_id):
+    """The rule and the rules it needs (edit page, YARA editor tab)."""
+    data = EditorModel.rule_dependencies(rule_id, current_user)
+    return jsonify(data) if data else (jsonify({'error': 'Rule not found.'}), 404)
+
+
 @editor_blueprint.get('/yara/jobs/<string:job_uuid>')
 def yara_job_state(job_uuid):
     from app.core.db_class.job import BackgroundJob

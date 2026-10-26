@@ -1,0 +1,6 @@
+/* Edit page: "Classic editor" / "YARA editor" tabs above the rule content (YARA rules only). */
+.yara-edit-tabs { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--light-bg-color); }
+.yara-edit-tab { border: 0; background: none; padding: .35rem .9rem; border-radius: 8px; font-size: .85rem; font-weight: 600; color: var(--subtle-text-color); }
+.yara-edit-tab:hover { color: var(--text-color); }
+.yara-edit-tab.active { background: var(--card-bg-color); color: #0d6efd; box-shadow: 0 1px 3px rgba(0, 0, 0, .08); }
+.yara-edit-beta { font-size: .65rem; text-transform: uppercase; letter-spacing: .04em; padding: 1px 5px; border-radius: 4px; background: rgba(13, 110, 253, .12); color: #0d6efd; margin-left: 4px; }

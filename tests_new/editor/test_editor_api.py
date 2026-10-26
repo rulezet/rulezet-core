@@ -59,3 +59,22 @@ def test_rule_lookup_says_who_may_edit(clients, users):
     assert clients["owner"].get("/editor-api/rules/Editor_Owned_Rule?format=yara").json["can_edit"] is True
     assert clients["admin"].get("/editor-api/rules/Editor_Owned_Rule?format=yara").json["can_edit"] is True
     assert clients["user"].get("/editor-api/rules/Editor_Owned_Rule?format=yara").json["can_edit"] is False
+
+
+def test_rule_dependencies_for_the_edit_page(clients, users):
+    from app.features.rule_relation.rule_relation_core import add_relation
+    base = make_rule(users.user, title="Dep_Base", to_string=yara_rule("Dep_Base"))
+    mid = make_rule(users.owner, title="Dep_Mid",
+                    to_string='rule Dep_Mid { strings: $a = "m" condition: $a and Dep_Base }')
+    top = make_rule(users.owner, title="Dep_Top",
+                    to_string='rule Dep_Top { strings: $a = "t" condition: $a and Dep_Mid }')
+    add_relation(mid.id, base.id, 'yara_condition_ref', source='auto')
+    add_relation(top.id, mid.id, 'yara_condition_ref', source='auto')
+
+    data = clients["owner"].get(f"/editor-api/yara/rules/{top.id}/dependencies").json
+    assert data["rule"]["name"] == "Dep_Top" and data["rule"]["can_edit"] is True
+    # needed ones first, in compile order; each says whether this user may edit it
+    assert [(d["name"], d["can_edit"]) for d in data["dependencies"]] == [("Dep_Base", False), ("Dep_Mid", True)]
+    assert clients["admin"].get(f"/editor-api/yara/rules/{top.id}/dependencies").json["dependencies"][0]["can_edit"] is True
+    assert clients["anonymous"].get(f"/editor-api/yara/rules/{top.id}/dependencies").status_code == 401
+    assert clients["owner"].get("/editor-api/yara/rules/999999/dependencies").status_code == 404

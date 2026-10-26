@@ -5,6 +5,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/license-input.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/yara_edit_panel.css') }}">
 <style>
 .rf-label-hint {
     display: inline-flex; align-items: center; justify-content: center;
@@ -99,7 +100,7 @@
         <div class="col-lg-12">
             <div class="card border-0 shadow-sm rounded-4">
                 <div class="card-body p-4">
-                    <form action="" method="post" id="form">
+                    <form action="" method="post" id="form" @submit="onSubmit">
                         {{ form.hidden_tag() }}
 
                         <fieldset {% if restricted_edit %}disabled{% endif %} class="border-0 p-0 m-0" :class="{ 'rf-restricted': restrictedEdit }">
@@ -237,6 +238,22 @@
                                     </label>
                                     <i class="rf-label-hint" data-tip="Full rule content. Syntax is validated against&#10;the selected format before saving.">?</i>
                                 </div>
+                                {# YARA rules: a second tab with the full rule editor (dependencies, locks,
+                                   tests). The classic editor stays the default and keeps posting to_string;
+                                   the YARA tab only writes into the same value. #}
+                                {% if not restricted_edit %}
+                                <div v-if="isYara" class="yara-edit-tabs mb-2" role="tablist">
+                                    <button type="button" role="tab" class="yara-edit-tab" :class="{ active: editorTab === 'classic' }"
+                                            :aria-selected="editorTab === 'classic'" @click="editorTab = 'classic'">
+                                        <i class="fas fa-pen me-1"></i>Classic editor
+                                    </button>
+                                    <button type="button" role="tab" class="yara-edit-tab" :class="{ active: editorTab === 'yara' }"
+                                            :aria-selected="editorTab === 'yara'" @click="editorTab = 'yara'">
+                                        <i class="fas fa-code me-1"></i>YARA editor <span class="yara-edit-beta">beta</span>
+                                    </button>
+                                </div>
+                                {% endif %}
+                                <div v-show="!isYara || editorTab === 'classic'">
                                 <smart-editor
                                     v-model="currentRule.to_string"
                                     mode="code"
@@ -246,6 +263,13 @@
                                     min-height="500px"
                                     max-height="80vh">
                                 </smart-editor>
+                                </div>
+                                {% if not restricted_edit %}
+                                <yara-edit-rule-panel v-if="isYara && yaraTabOpened" v-show="editorTab === 'yara'" ref="yaraPanel"
+                                    :active="editorTab === 'yara'" :rule-id="ruleId" v-model="currentRule.to_string"
+                                    csrf-token="{{ csrf_token() }}" author="{{ current_user.get_username() }}">
+                                </yara-edit-rule-panel>
+                                {% endif %}
                                 {% if form.to_string.errors %}
                                 <div class="invalid-feedback d-block fw-bold mt-2">{{ form.to_string.errors[0] }}</div>
                                 {% endif %}
@@ -279,7 +303,7 @@
 {% endblock %}
 {% block script %}
 <script type="module">
-    const { createApp, ref, reactive, onMounted, watch } = Vue
+    const { createApp, ref, reactive, computed, onMounted, watch } = Vue
     import { message_list, create_message } from '/static/js/toaster.js'
     import VulnerabilityInput from '/static/js/vulnerability/vulnerabilityInput.js';
     import SmartEditor from '/static/js/components/smart-editor.js';
@@ -289,6 +313,7 @@
     import RelatedRuleInput from '/static/js/rule_relation/relatedRuleInput.js';
     import LicenseInput from '/static/js/components/LicenseInput.js';
     import DeepValidateSuricata from '/static/js/rule/DeepValidateSuricata.js';
+    import YaraEditRulePanel from '/static/js/rule/YaraEditRulePanel.js';
 
     window.__deep_validation_available = {{ deep_validation_available | default(false) | tojson }};
 
@@ -303,6 +328,7 @@
             'related-rule-input': RelatedRuleInput,
             'license-input': LicenseInput,
             'deep-validate-suricata': DeepValidateSuricata,
+            'yara-edit-rule-panel': YaraEditRulePanel,
         },
         setup() {
 
@@ -311,6 +337,34 @@
             const editFormat   = ref('{{ rule.format | e }}');
             const rules_formats = ref([]);
             const restrictedEdit = ref({{ 'true' if restricted_edit else 'false' }});
+
+            // YARA editor tab (YARA rules only; the classic editor stays the default)
+            const isYara = computed(() => (editFormat.value || '').toLowerCase() === 'yara' && !restrictedEdit.value);
+            const editorTab = ref(new URLSearchParams(location.search).get('editor') === 'yara' ? 'yara' : 'classic');
+            const yaraTabOpened = ref(editorTab.value === 'yara');
+            const yaraPanel = ref(null);
+            watch(editorTab, (tab) => { if (tab === 'yara') yaraTabOpened.value = true; });
+            let submitting = false;
+
+            /** The YARA tab may need to save unlocked dependencies first (it asks). */
+            async function onSubmit(event) {
+                if (submitting || !isYara.value || !yaraPanel.value) return;
+                event.preventDefault();
+                const form = event.target;
+                if (await yaraPanel.value.beforeSubmit()) {
+                    submitting = true;
+                    // the native submit skips this handler; keep the clicked button's name/value
+                    if (event.submitter && event.submitter.name) {
+                        const field = document.createElement('input');
+                        field.type = 'hidden';
+                        field.name = event.submitter.name;
+                        field.value = event.submitter.value;
+                        form.appendChild(field);
+                    }
+                    // not form.submit(): WTForms' Save button is named "submit" and shadows the method
+                    HTMLFormElement.prototype.submit.call(form);
+                }
+            }
 
 
             const detectedVulnerabilities = ref([]);
@@ -400,6 +454,11 @@
                 selectedRelatedRules,
                 formData,
                 restrictedEdit,
+                isYara,
+                editorTab,
+                yaraTabOpened,
+                yaraPanel,
+                onSubmit,
             }
         },
     }).mount('#main-container');

@@ -55,6 +55,23 @@ def get_rule(fmt, name):
 backend = FunctionBackend(name='Rulezet', validate=validate, search_rules=search_rules, get_rule=get_rule)
 
 
+def rule_dependencies(rule_id, user):
+    """A YARA rule and every YARA rule it needs (transitively), the needed ones first, in the
+    order they compile — what the edit page's YARA editor loads around the rule. Each one says
+    whether `user` may edit it (owner or admin): only then can it be unlocked in the editor.
+    None when the rule is missing, deleted or not YARA."""
+    from app.features.rule_relation.rule_relation_core import dependency_install_order, get_dependency_graph
+    rule = RuleModel.get_rule(rule_id)
+    if not rule or (rule.format or '').lower() != 'yara':
+        return None
+    graph = get_dependency_graph(rule.id)
+    wanted = [n['id'] for n in graph['nodes'] if n['role'] == 'requires' and (n['format'] or '').lower() == 'yara']
+    found = {r.id: r for r in RuleModel._active().filter(Rule.id.in_(wanted))} if wanted else {}
+    order = dependency_install_order([i for i in wanted if i in found], graph['edges'])
+    item = lambda r: {**_rule_item(r), 'id': r.id, 'can_edit': _can_edit(user, r)}   # noqa: E731
+    return {'rule': item(rule), 'dependencies': [item(found[i]) for i in order], 'truncated': graph['truncated']}
+
+
 def _test_service():
     """Tests on samples (app/modules/rulezet-tester). Two modes:
       - lab VM (RULE_TESTS_LAB=rzlab@host): every run goes over SSH to the isolated lab, the only
