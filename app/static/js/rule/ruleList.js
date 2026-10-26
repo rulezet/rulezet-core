@@ -740,7 +740,7 @@ export default {
                     <span v-if="isOwner(rule)" class="badge bg-success shadow-sm pt-1" title="You own this rule">
                         <i class="fa-solid fa-crown me-1"></i>OWNER
                     </span>
-                    <span v-if="currentUserIsAdmin" class="badge bg-warning shadow-sm pt-1">
+                    <span v-if="currentUserIsAdmin" class="badge bg-warning shadow-sm pt-1 rl-badge-admin">
                         <i class="fa-solid fa-crown me-1"></i>ADMIN
                     </span>
                     <span v-if="rule.is_code_format" class="badge bg-danger shadow-sm pt-1"
@@ -873,7 +873,7 @@ export default {
                             <i class="fas fa-code-branch"></i>
                             <span>v{{ rule.version && rule.version !== 'Unknown' ? rule.version : '1.0' }}</span>
                         </span>
-                        <span v-if="rule.author && rule.author !== 'Unknown'" class="rl-meta-item">
+                        <span v-if="rule.author && rule.author !== 'Unknown'" class="rl-meta-item rl-meta-item--author">
                             <i class="fas fa-user"></i>
                             <span>{{ rule.author }}</span>
                         </span>
@@ -1790,10 +1790,13 @@ export default {
         const cardSort = ref('newest')
 
         // ── UI state ──────────────────────────────────────────────────────
-        const _defaultView = props.defaultView !== 'card'
+        // On a phone the table is unreadable: cards, whatever was chosen on a wider screen
+        const _isPhone = window.matchMedia && window.matchMedia('(max-width: 640px)').matches
+        const _defaultView = _isPhone ? 'card'
+            : props.defaultView !== 'card'
             ? props.defaultView
             : (localStorage.getItem('rz-list-view') || 'card')
-        const viewMode    = ref(_p('view', _defaultView))
+        const viewMode    = ref(_isPhone ? 'card' : _p('view', _defaultView))
         const _hasUrlFilters = ['tags','sources','branches','licenses','vulnerabilities','attacks','authors','editors',
                                 'rule_type','search_field','exact_match','person_mode','scope']
                                .some(k => _url.has(k))
