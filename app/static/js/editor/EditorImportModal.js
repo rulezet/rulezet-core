@@ -28,7 +28,7 @@ export const STATUS = {
 const ORIGIN = { panel: 'Fields panel', rule: 'From the rule', default: 'Default' }
 
 const STEP_ICON = { pending: 'fa-regular fa-circle', running: 'fa-solid fa-spinner fa-spin', ok: 'fa-solid fa-check',
-                    error: 'fa-solid fa-xmark', skipped: 'fa-solid fa-minus' }
+                    error: 'fa-solid fa-xmark', skipped: 'fa-solid fa-minus', warning: 'fa-solid fa-triangle-exclamation' }
 
 export default {
     name: 'EditorImportModal',

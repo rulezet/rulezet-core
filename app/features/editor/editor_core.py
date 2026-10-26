@@ -10,6 +10,7 @@ from rulezet_editor import FunctionBackend
 from app import db
 from app.core.db_class.rule import Rule
 from app.features.rule import rule_core as RuleModel
+from app.features.rule_tester.sample_test_core import DbRunRegistry
 from app.features.rule.rule_format.available_format.yara_format import (
     YaraRule, _condition_references, extract_undefined_identifier,
 )
@@ -174,12 +175,50 @@ def _test_service():
     if lab:
         remote = RemoteLab(lab, key=os.environ.get('RULE_TESTS_LAB_KEY') or None,
                            known_hosts=os.environ.get('RULE_TESTS_LAB_KNOWN_HOSTS') or None)
-        return TestService(remote, remote)
+        return TestService(remote, remote, registry=DbRunRegistry('editor'))
     extra = [d for d in os.environ.get('RULE_TESTS_SAMPLES', '').split(os.pathsep) if d.strip()]
-    return TestService(FolderSampleStore(SAMPLES, *extra), Sandbox(mode=mode))
+    return TestService(FolderSampleStore(SAMPLES, *extra), Sandbox(mode=mode), registry=DbRunRegistry('editor'))
 
 
 tests = _test_service()
+
+
+def create_test_service():
+    """Same samples and sandbox as the Test button, but the run executes right away in the
+    calling thread (the Create job waits for it) and is recorded as origin 'create'."""
+    if not tests:
+        return None
+    from rulezet_tester import TestService
+    return TestService(tests.store, tests.sandbox, registry=DbRunRegistry('create'), executor=lambda fn: fn())
+
+
+def test_document(plan, imports):
+    """One YARA source with every rule of the plan, each after the rules it needs (rules taken
+    from Rulezet first), the imports gathered at the top: what the Create job tests."""
+    by_name = {e['name']: e for e in plan['rules']}
+    modules = {m for m in imports or [] if re.fullmatch(r'\w+', str(m))}
+    parts, done, rulezet_ids = [], set(), []
+
+    def strip(text):
+        modules.update(re.findall(r'^\s*import\s+"(\w+)"\s*$', text or '', flags=re.M))
+        return re.sub(r'^\s*import\s+"[^"]+"\s*$', '', text or '', flags=re.M).strip()
+
+    def add(e, stack=()):
+        if e['name'] in done or e['name'] in stack:
+            return
+        for d in e.get('depends_on') or []:
+            if d['where'] == 'document' and d['name'] in by_name:
+                add(by_name[d['name']], stack + (e['name'],))
+            elif d['where'] == 'rulezet' and d.get('id') not in rulezet_ids:
+                rulezet_ids.append(d.get('id'))
+        done.add(e['name'])
+        parts.append(strip(e['text']))
+
+    for e in plan['rules']:
+        add(e)
+    needed = {r.id: r for r in RuleModel._active().filter(Rule.id.in_([i for i in rulezet_ids if i]))} if rulezet_ids else {}
+    head = [strip(needed[i].to_string) for i in rulezet_ids if i in needed]
+    return ''.join(f'import "{m}"\n' for m in sorted(modules)) + '\n\n'.join(head + parts) + '\n'
 
 
 # ── Several YARA rules at once: check each one, then create them ────────────────

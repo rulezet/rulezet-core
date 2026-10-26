@@ -1,0 +1,11 @@
+{
+  "label": "Test on samples when creating",
+  "category": "Editor",
+  "description": "The YARA editor's Create job runs the document on sample sets before writing the rules. kinds = which sets (benign, synthetic, malicious): benign sets catch false positives. block_on_false_positives = refuse to create when a rule fires on a benign sample (otherwise only a warning). The result is kept per rule version and shown on the rule page.",
+  "public": false,
+  "value": {
+    "enabled": true,
+    "kinds": ["benign"],
+    "block_on_false_positives": false
+  }
+}

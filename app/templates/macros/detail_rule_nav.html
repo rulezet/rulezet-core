@@ -64,6 +64,17 @@
         {% endif %}
     </a>
     {% endif %}
+    {# tests on sample sets (YARA editor) — sample_tests_count comes from the page context (_nav_counts) #}
+    {% if (sample_tests_count|default(0)) > 0 or active == 'samples' or (rule.format or '')|lower == 'yara' %}
+    <a href="/rule/detail_rule/{{ rule.id }}/samples"
+       class="dr-nav__item {% if active == 'samples' %}active{% endif %}">
+        <i class="fa-solid fa-vial-circle-check"></i>
+        <span>Samples</span>
+        {% if (sample_tests_count|default(0)) > 0 %}
+        <span class="dr-nav__badge">{{ sample_tests_count }}</span>
+        {% endif %}
+    </a>
+    {% endif %}
     <a href="/rule/detail_rule/{{ rule.id }}/ai_analysis"
        class="dr-nav__item {% if active == 'ai_analysis' %}active{% endif %}">
         <i class="fa-solid fa-robot"></i>

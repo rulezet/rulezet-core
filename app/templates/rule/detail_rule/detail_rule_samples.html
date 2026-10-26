@@ -1,0 +1,450 @@
+{% extends "base.html" %}
+{% block title %}{{ rule.title }} — Samples — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_section_card.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_samples.css') }}">
+{% endblock %}
+{% import 'macros/detail_rule_nav.html' as nav with context %}
+
+{% set can_edit = current_user.is_authenticated and (current_user.id == rule.user_id or current_user.is_admin()) %}
+{% set is_yara = (rule.format or '')|lower == 'yara' %}
+{% set latest = samples.latest %}
+
+{% block content %}
+<div class="container mt-4" id="main-container" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-vial-circle-check banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item">
+                    <a href="/rule/detail_rule/{{ rule.id }}" class="text-decoration-none text-muted">
+                        {% if rule.title|length > 40 %}{{ rule.title[:40] }}…{% else %}{{ rule.title }}{% endif %}
+                    </a>
+                </li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Samples</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-vial-circle-check"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Tests on samples</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width: 640px; font-size: 0.95rem;">
+            The rule run on sample sets in an isolated sandbox: what it detects, what it misses, and
+            where it fires on clean files. A result belongs to one version of the rule.
+        </p>
+    </div>
+
+    {{ nav.detail_rule_nav(rule, 'samples', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count, test_count=test_count, ai_analysis_count=ai_analysis_count, linked_rules_count=linked_rules_count) }}
+
+    {% if not latest %}
+    <!-- ── Not tested (this version) ── -->
+    <div class="h-card mb-4">
+        <div class="h-card__body">
+            <div class="rs-empty">
+                <i class="fa-solid fa-flask"></i>
+                <h6 class="fw-bold mb-1">
+                    {% if samples.history %}This version of the rule has not been tested yet{% else %}Not tested on samples yet{% endif %}
+                </h6>
+                <p class="mb-3">
+                    Rules created with the YARA editor are tested on clean sample sets before they are saved.
+                    {% if samples.history %}The rule changed since its last test: older results are listed below.{% endif %}
+                </p>
+                {% if can_edit and is_yara %}
+                <a href="/rule/edit_rule/{{ rule.id }}?editor=yara" class="btn btn-sm btn-primary rounded-pill px-3">
+                    <i class="fa-solid fa-vial me-1"></i>Test it in the YARA editor
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% else %}
+
+    <!-- ── Verdict of the current version ── -->
+    <div class="rs-verdict {{ 'rs-verdict--warn' if latest.false_positives else 'rs-verdict--ok' }} mb-3">
+        <div class="rs-verdict__icon">
+            <i class="fa-solid {{ 'fa-triangle-exclamation' if latest.false_positives else 'fa-circle-check' }}"></i>
+        </div>
+        <div class="flex-grow-1">
+            <div class="rs-verdict__title">
+                {% if latest.false_positives %}
+                Fires on {{ latest.false_positives }} clean sample{{ 's' if latest.false_positives != 1 }}
+                {% else %}
+                No false positive on {{ latest.total }} sample{{ 's' if latest.total != 1 }}
+                {% endif %}
+            </div>
+            <div class="rs-verdict__sub">
+                This version · tested {{ latest.created_at[:16]|replace('T', ' ') }} UTC
+                · {{ 'when it was created in the YARA editor' if latest.origin == 'create' else 'from the YARA editor' }}
+            </div>
+        </div>
+        {% if can_edit and is_yara %}
+        <a href="/rule/edit_rule/{{ rule.id }}?editor=yara" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+            <i class="fa-solid fa-vial me-1"></i>Test again
+        </a>
+        {% endif %}
+    </div>
+
+    <div class="rs-stats mb-4">
+        <div class="rs-stat">
+            <div class="rs-stat__icon"><i class="fa-solid fa-flask"></i></div>
+            <div><div class="rs-stat__value">{{ latest.total }}</div><div class="rs-stat__label">Samples</div></div>
+        </div>
+        <div class="rs-stat">
+            <div class="rs-stat__icon rs-stat__icon--green"><i class="fa-solid fa-bullseye"></i></div>
+            <div><div class="rs-stat__value">{{ latest.detected }}</div><div class="rs-stat__label">Detected</div></div>
+        </div>
+        <div class="rs-stat">
+            <div class="rs-stat__icon rs-stat__icon--grey"><i class="fa-solid fa-circle-minus"></i></div>
+            <div><div class="rs-stat__value">{{ latest.missed }}</div><div class="rs-stat__label">Missed</div></div>
+        </div>
+        <div class="rs-stat">
+            <div class="rs-stat__icon {{ 'rs-stat__icon--orange' if latest.false_positives else 'rs-stat__icon--green' }}"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div><div class="rs-stat__value">{{ latest.false_positives }}</div><div class="rs-stat__label">False positives</div></div>
+        </div>
+        <div class="rs-stat">
+            <div class="rs-stat__icon rs-stat__icon--teal"><i class="fa-solid fa-layer-group"></i></div>
+            <div><div class="rs-stat__value">{{ samples.sets|length }}</div><div class="rs-stat__label">Sample sets</div></div>
+        </div>
+    </div>
+
+    <!-- ── Per set ── -->
+    <div class="h-card mb-4">
+        <div class="h-card__header">
+            <div class="h-card__accent"></div>
+            <span class="h-card__title"><i class="fa-solid fa-layer-group me-1"></i>Sample sets</span>
+        </div>
+        <div class="h-card__body p-0">
+            <div class="table-responsive">
+                <table class="rs-table">
+                    <thead>
+                        <tr><th>Set</th><th>Kind</th><th class="text-end">Samples</th><th class="text-end">Detected</th>
+                            <th class="text-end">Missed</th><th class="text-end">False positives</th><th class="text-end">Clean</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for s in samples.sets %}
+                        <tr>
+                            <td class="fw-semibold">{{ s.name }}</td>
+                            <td><span class="rs-kind rs-kind--{{ s.kind }}">{{ s.kind }}</span></td>
+                            <td class="text-end">{{ s.total }}</td>
+                            <td class="text-end">{{ s.detected or '—' }}</td>
+                            <td class="text-end">{{ s.missed or '—' }}</td>
+                            <td class="text-end {{ 'rs-fp' if s.false_positive }}">{{ s.false_positive or '—' }}</td>
+                            <td class="text-end">{{ s.clean or '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── The rule and its strings: stays at the top while the samples scroll ── -->
+    <div class="h-card mb-4 rs-sticky" :class="{ 'is-collapsed': !ruleOpen }">
+        <div class="h-card__header rs-collapse-head" role="button" tabindex="0" :aria-expanded="ruleOpen"
+             @click="toggleRule" @keydown.enter="toggleRule">
+            <div class="h-card__accent"></div>
+            <span class="h-card__title"><i class="fa-solid fa-quote-right me-1"></i>Strings of the rule</span>
+            <span class="rs-muted ms-auto" v-if="current">matches of <b>[[ current.label ]]</b></span>
+            <span class="rs-muted ms-auto" v-else>open a sample to see what each string matched</span>
+            <i class="fa-solid rs-collapse-icon" :class="ruleOpen ? 'fa-chevron-up' : 'fa-chevron-down'"
+               :title="ruleOpen ? 'Collapse (stays at the top, closed)' : 'Expand'"></i>
+        </div>
+        <div class="h-card__body p-0" v-show="ruleOpen">
+            <div class="rs-code" :class="{ 'has-focus': focusString }" @click.self="focusString = null">
+                <div class="rs-code__body">
+                    <div v-for="(line, i) in CODE" :key="i" class="rs-line" :data-string="line.id || null"
+                         :class="{ 'is-string': line.id, 'is-hit': line.id && hitsOf(line.id).length, 'is-active': line.id && stringFilter === line.id, 'is-focus': line.id && focusString === line.id }"
+                         @click="line.id ? (reveal(line.id), pickString({ id: line.id, samples: 1 })) : (focusString = null)">
+                        <span class="rs-line__no">[[ i + 1 ]]</span>
+                        <span class="rs-line__text">[[ line.text ]]</span>
+                        <span v-if="line.id" class="rs-line__match">
+                            <template v-if="hitsOf(line.id).length">
+                                <span class="rs-line__count">×[[ hitsOf(line.id).length ]]</span>
+                                <mark class="rs-mono">[[ ascii(hitsOf(line.id)[0].data) ]]</mark>
+                            </template>
+                            <span v-else-if="current" class="rs-muted">no match</span>
+                            <span v-else class="rs-muted">[[ stringSamples(line.id) ]] sample[[ stringSamples(line.id) === 1 ? '' : 's' ]]</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            {% if samples.strings %}
+            <div class="table-responsive">
+                <table class="rs-table rs-strings">
+                    <thead>
+                        <tr><th>String</th><th>Definition</th><th class="text-end">Matched samples</th>
+                            <th class="text-end">Detected</th><th class="text-end">False positives</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="st in STRINGS" :key="st.id" :class="{ 'is-active': stringFilter === st.id, 'rs-old': !st.samples }"
+                            @click="pickString(st)" :title="st.samples ? 'Show the samples matched by ' + st.id : 'Never matched'">
+                            <td><span class="rs-chip">[[ st.id ]]</span></td>
+                            <td class="rs-mono rs-def">[[ st.definition ]]</td>
+                            <td class="text-end">
+                                <span class="rs-bar"><span :style="{ width: barWidth(st) }"></span></span>
+                                [[ st.samples || 'never' ]]
+                            </td>
+                            <td class="text-end">[[ st.detected || '—' ]]</td>
+                            <td class="text-end" :class="{ 'rs-fp': st.false_positives }">[[ st.false_positives || '—' ]]</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ── Samples ── -->
+    <div class="h-card mb-4" id="rs-samples">
+        <div class="h-card__header">
+            <div class="h-card__accent"></div>
+            <span class="h-card__title"><i class="fa-solid fa-file-shield me-1"></i>Samples</span>
+            <div class="d-flex flex-wrap align-items-center gap-2 ms-auto">
+                <span v-for="f in filters" :key="f.key" v-show="f.key === 'all' || count(f.key)"
+                      class="h-filter-chip" :class="{ active: filter === f.key }" @click="filter = f.key">
+                    [[ f.label ]] <span class="opacity-75">[[ count(f.key) ]]</span>
+                </span>
+            </div>
+        </div>
+        <div class="h-card__body">
+            <div v-if="stringFilter" class="rs-note mb-2">
+                <i class="fa-solid fa-filter"></i>Samples matched by <span class="rs-chip">[[ stringFilter ]]</span>
+                <button type="button" class="btn btn-link btn-sm p-0 ms-auto" @click="stringFilter = null">Show all</button>
+            </div>
+            <div class="rs-search mb-3">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="search" v-model="search" placeholder="Search a sample, a set, a SHA-256…">
+            </div>
+            <div v-if="!visible.length" class="rs-empty rs-empty--small">
+                <i class="fa-solid fa-filter-circle-xmark"></i>
+                <p class="mb-0">No sample matches.</p>
+            </div>
+            <div class="rs-list">
+                <div v-for="s in pageItems" :key="key(s)" class="rs-item">
+                    <div class="rs-row" :class="['rs-row--' + s.outcome, { 'is-clickable': true, 'is-open': open[key(s)] }]"
+                         @click="toggle(s)" tabindex="0" @keydown.enter="toggle(s)">
+                        <span class="rs-outcome" :class="'rs-outcome--' + s.outcome"><i :class="OUTCOMES[s.outcome].icon"></i>[[ OUTCOMES[s.outcome].label ]]</span>
+                        <span class="rs-row__label" :title="s.label">[[ s.label ]]</span>
+                        <span class="rs-row__chips">
+                            <span v-for="g in groups(s).slice(0, 4)" :key="g.item" class="rs-chip" title="Show it in the rule"
+                                  @click.stop="openAndReveal(s, g.item)">[[ g.item ]] <b>×[[ g.hits.length ]]</b></span>
+                            <span v-if="groups(s).length > 4" class="rs-more">+[[ groups(s).length - 4 ]]</span>
+                        </span>
+                        <span class="rs-row__meta">[[ s.set_name ]]<template v-if="s.time_ms != null"> · [[ s.time_ms ]] ms</template></span>
+                        <i class="fa-solid rs-row__chevron" :class="open[key(s)] ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                    </div>
+                    <div v-if="open[key(s)]" class="rs-detail">
+                        <div class="rs-facts">
+                            <div class="rs-fact"><span>Set</span><b>[[ s.set_name ]]</b></div>
+                            <div class="rs-fact"><span>Expected</span><b>[[ EXPECTED[s.expected] || s.expected ]]</b></div>
+                            <div class="rs-fact" v-if="s.size != null"><span>Size</span><b>[[ size(s.size) ]]</b></div>
+                            <div class="rs-fact" v-if="s.time_ms != null"><span>Scan time</span><b>[[ s.time_ms ]] ms</b></div>
+                            <div class="rs-fact rs-fact--wide" v-if="s.sha256"><span>SHA-256</span><b class="rs-mono">[[ s.sha256 ]]</b></div>
+                        </div>
+                        <div v-if="!s.hits.length" class="rs-note">
+                            <i class="fa-solid fa-circle-info"></i>
+                            [[ s.outcome === 'missed' ? 'The rule did not fire on this sample: none of its strings matched, or the condition was not met.' : 'The rule did not fire on this sample.' ]]
+                        </div>
+                        <div v-for="g in groups(s)" :key="g.item" class="rs-hitgroup">
+                            <div class="rs-hitgroup__head">
+                                <span class="rs-chip" title="Show it in the rule" @click="reveal(g.item)">[[ g.item ]] <i class="fa-solid fa-arrow-up-right-from-square"></i></span>
+                                <span class="rs-muted">[[ g.hits.length ]] match[[ g.hits.length === 1 ? '' : 'es' ]]</span>
+                            </div>
+                            <div class="rs-hits-wrap">
+                                <table class="rs-hits">
+                                    <thead><tr><th>Offset</th><th>Length</th><th>Where it matched (bytes around it dimmed)</th></tr></thead>
+                                    <tbody>
+                                        <tr v-for="(h, i) in g.hits" :key="i">
+                                            <td class="rs-mono">[[ h.where && h.where.offset != null ? hex(h.where.offset) : '—' ]]</td>
+                                            <td class="rs-mono">[[ h.where && h.where.length != null ? h.where.length : '—' ]]</td>
+                                            <td>
+                                                <div class="rs-ctx">
+                                                    <div class="rs-ctx__ascii rs-mono"><span class="rs-dim">[[ ascii(h.before) ]]</span><mark>[[ ascii(h.data) ]]</mark><span class="rs-dim">[[ ascii(h.after) ]]</span></div>
+                                                    <div class="rs-ctx__hex rs-mono"><span class="rs-dim">[[ spaced(h.before) ]] </span><mark>[[ spaced(h.data) ]]</mark><span class="rs-dim"> [[ spaced(h.after) ]]</span></div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div v-if="s.hit_count > s.hits.length" class="rs-more">+ [[ s.hit_count - s.hits.length ]] more matches not kept</div>
+                    </div>
+                </div>
+            </div>
+            <div v-if="totalPages > 1" class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
+                <span class="rs-muted">[[ (page - 1) * PER_PAGE + 1 ]]–[[ Math.min(page * PER_PAGE, visible.length) ]] of [[ visible.length ]] samples</span>
+                <pagination-component :current-page="page" :total-pages="totalPages" @change-page="p => page = p"></pagination-component>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if samples.history %}
+    <!-- ── Every test of the rule ── -->
+    <div class="h-card mb-4">
+        <div class="h-card__header">
+            <div class="h-card__accent h-card__accent--green"></div>
+            <span class="h-card__title"><i class="fa-solid fa-clock-rotate-left me-1"></i>Test history</span>
+        </div>
+        <div class="h-card__body p-0">
+            <div class="table-responsive">
+                <table class="rs-table">
+                    <thead>
+                        <tr><th>Date (UTC)</th><th>Version</th><th>Sets</th><th class="text-end">Samples</th>
+                            <th class="text-end">Detected</th><th class="text-end">Missed</th><th class="text-end">False positives</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for h in samples.history %}
+                        <tr class="{{ '' if h.current else 'rs-old' }}">
+                            <td>{{ h.created_at[:16]|replace('T', ' ') }}</td>
+                            <td>
+                                {% if h.current %}<span class="rs-kind rs-kind--current">this version</span>
+                                {% else %}<span class="rs-kind">older version</span>{% endif %}
+                            </td>
+                            <td class="rs-sets">{{ h.sets | map(attribute='name') | join(', ') }}</td>
+                            <td class="text-end">{{ h.total }}</td>
+                            <td class="text-end">{{ h.detected or '—' }}</td>
+                            <td class="text-end">{{ h.missed or '—' }}</td>
+                            <td class="text-end {{ 'rs-fp' if h.false_positives }}">{{ h.false_positives or '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    const { createApp, ref, reactive, computed, watch, onMounted, nextTick } = Vue;
+    import PaginationComponent from '/static/js/rule/paginationComponent.js';
+
+    const SAMPLES = {{ samples.samples | tojson }};
+    const STRINGS = {{ samples.strings | tojson }};
+    // the rule, one entry per line; a rule written on one line is spread out (sections, strings)
+    const RULE_TEXT = {{ (rule.to_string or '') | tojson }};
+    const spread = t => t.includes('\n') ? t : t
+        .replace(/\s*(\b(?:meta|strings|condition)\s*:)/g, '\n    $1')
+        .replace(/\s+(\$\w*\s*=)/g, '\n        $1')
+        .replace(/\{\s*\n/, '{\n').replace(/\s*\}\s*$/, '\n}');
+    const CODE = spread(RULE_TEXT).split('\n').map(text => {
+        const m = text.match(/^\s*(\$\w*)\s*=/);
+        return { text, id: m ? m[1] : null };
+    });
+    const OUTCOMES = {
+        detected:       { label: 'Detected',       icon: 'fa-solid fa-bullseye' },
+        missed:         { label: 'Missed',         icon: 'fa-solid fa-circle-minus' },
+        false_positive: { label: 'False positive', icon: 'fa-solid fa-triangle-exclamation' },
+        clean:          { label: 'Clean',          icon: 'fa-solid fa-circle-check' },
+        matched:        { label: 'Matched',        icon: 'fa-solid fa-crosshairs' },
+        not_matched:    { label: 'No match',       icon: 'fa-regular fa-circle' },
+        timeout:        { label: 'Timeout',        icon: 'fa-solid fa-hourglass-end' },
+        error:          { label: 'Error',          icon: 'fa-solid fa-bug' },
+        pending:        { label: 'Not run',        icon: 'fa-regular fa-clock' },
+    };
+    const PER_PAGE = 25;
+    const EXPECTED = { match: 'Should match', no_match: 'Should not match (clean file)', unknown: 'Not labelled' };
+    // false positives first: that is what a reader comes for
+    const ORDER = ['false_positive', 'detected', 'missed', 'matched', 'error', 'timeout', 'clean', 'not_matched', 'pending'];
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: { 'pagination-component': PaginationComponent },
+        setup() {
+            const filter = ref(SAMPLES.some(s => s.outcome === 'false_positive') ? 'false_positive' : 'all');
+            const search = ref('');
+            const stringFilter = ref(null);
+            const maxStringSamples = Math.max(1, ...STRINGS.map(s => s.samples));
+            const barWidth = st => Math.round(100 * st.samples / maxStringSamples) + '%';
+            const pickString = st => {
+                if (!st.samples) return;
+                stringFilter.value = stringFilter.value === st.id ? null : st.id;
+                filter.value = 'all';
+                document.getElementById('rs-samples')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            };
+            const open = reactive({});
+            const filters = [
+                { key: 'all', label: 'All' }, { key: 'false_positive', label: 'False positives' },
+                { key: 'detected', label: 'Detected' }, { key: 'missed', label: 'Missed' },
+                { key: 'clean', label: 'Clean' }, { key: 'error', label: 'Errors' },
+            ];
+            const count = k => k === 'all' ? SAMPLES.length : SAMPLES.filter(s => s.outcome === k || (k === 'error' && s.outcome === 'timeout')).length;
+            const visible = computed(() => {
+                const q = search.value.trim().toLowerCase();
+                return SAMPLES
+                    .filter(s => filter.value === 'all' || s.outcome === filter.value || (filter.value === 'error' && s.outcome === 'timeout'))
+                    .filter(s => !stringFilter.value || s.hits.some(h => h.item === stringFilter.value))
+                    .filter(s => !q || [s.label, s.set_name, s.sha256].some(v => (v || '').toLowerCase().includes(q)))
+                    .sort((a, b) => ORDER.indexOf(a.outcome) - ORDER.indexOf(b.outcome));
+            });
+            const page = ref(1);
+            const totalPages = computed(() => Math.max(1, Math.ceil(visible.value.length / PER_PAGE)));
+            const pageItems = computed(() => visible.value.slice((page.value - 1) * PER_PAGE, page.value * PER_PAGE));
+            watch([filter, search, stringFilter], () => { page.value = 1; });
+            const key = s => s.set + ':' + s.sha256 + ':' + s.label;
+            const current = ref(null);            // the sample whose matches the rule panel shows
+            const focusString = ref(null);
+            // scroll the rule panel (not the page) to a string's line and light it up
+            // collapsed by the reader: stays collapsed (a click on a match never reopens it), remembered
+            let saved = null;
+            try { saved = localStorage.getItem('rz-samples-rule-open'); } catch (e) { /* storage off */ }
+            const ruleOpen = ref(saved !== '0');
+            const toggleRule = () => {
+                ruleOpen.value = !ruleOpen.value;
+                try { localStorage.setItem('rz-samples-rule-open', ruleOpen.value ? '1' : '0'); } catch (e) { /* storage off */ }
+            };
+            const reveal = id => {
+                focusString.value = id;
+                if (!ruleOpen.value) return;
+                nextTick(() => {
+                    const box = document.querySelector('.rs-sticky .h-card__body');
+                    const line = box && box.querySelector(`.rs-line[data-string="${CSS.escape(id)}"]`);
+                    if (line) box.scrollTo({ top: Math.max(0, line.offsetTop - box.clientHeight / 3), behavior: 'smooth' });
+                });
+            };
+            // one sample open at a time: opening one closes the others
+            const toggle = s => {
+                const opening = !open[key(s)];
+                for (const k of Object.keys(open)) open[k] = false;
+                open[key(s)] = opening;
+                current.value = open[key(s)] ? s : (current.value === s ? null : current.value);
+                if (open[key(s)] && s.hits.length) reveal(s.hits[0].item || 'condition');
+            };
+            const openAndReveal = (s, id) => {
+                if (!open[key(s)]) toggle(s);
+                reveal(id);
+            };
+            const hitsOf = id => current.value ? current.value.hits.filter(h => h.item === id) : [];
+            // the first sample (a false positive when there is one) opens right away: the rule panel
+            // then shows at once what matched
+            onMounted(() => { const first = pageItems.value.find(s => s.hits.length); if (first) { toggle(first); focusString.value = null; } });
+            const stringSamples = id => (STRINGS.find(st => st.id === id) || {}).samples || 0;
+            const hex = n => '0x' + Number(n).toString(16).padStart(4, '0');
+            // a sample's hits grouped by the string that matched ($a, $b… or the condition)
+            const groups = s => {
+                const by = {};
+                for (const h of s.hits) (by[h.item || 'condition'] ||= { item: h.item || 'condition', hits: [] }).hits.push(h);
+                return Object.values(by);
+            };
+            const bytes = h => (h || '').match(/../g) || [];
+            const ascii = h => bytes(h).map(b => { const c = parseInt(b, 16); return c >= 32 && c < 127 ? String.fromCharCode(c) : '·'; }).join('');
+            const spaced = h => bytes(h).join(' ');
+            const size = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+            return { CODE, current, ruleOpen, toggleRule, focusString, reveal, openAndReveal, hitsOf, stringSamples, STRINGS, stringFilter, barWidth, pickString, PER_PAGE, page, totalPages, pageItems, OUTCOMES, EXPECTED, filters, filter, search, open, count, visible, key, toggle, hex, size, groups, ascii, spaced };
+        },
+    }).mount('#main-container');
+</script>
+{% endblock %}

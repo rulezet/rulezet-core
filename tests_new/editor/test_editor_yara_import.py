@@ -125,7 +125,8 @@ def _run_job(app, client, payload):
 def test_job_checks_then_creates(app, clients):
     state = _run_job(app, clients["user"], body(BASE, USES_BASE))
     assert state["status"] == "done" and state["ok"] is True
-    assert [s["status"] for s in state["steps"]] == ["ok", "ok", "skipped", "ok"]
+    assert [s["status"] for s in state["steps"][:2] + state["steps"][3:]] == ["ok", "ok", "ok"]
+    assert state["steps"][2]["status"] in ("skipped", "ok", "warning")    # samples: depends on the server
     assert {r["name"] for r in state["rules"] if r["status"] == "created"} == {"ed_base", "ed_uses_base"}
     assert state["result_url"].startswith("/editor/import-result?")
     assert "text" not in state["rules"][0]

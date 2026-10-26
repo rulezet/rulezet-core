@@ -132,6 +132,14 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                               title="Perfect quality score (100/100) — this rule is extremely well documented, traceable and valid.">
                             <i class="fa-solid fa-medal me-1"></i> 100
                         </span>
+                        {% if sample_result %}
+                        {# last test on sample sets for this exact version of the rule (YARA editor's Create) #}
+                        {% set _sr = sample_result %}
+                        <span class="badge rounded-pill shadow-sm pt-1 rule-sample-badge {{ 'rule-sample-badge--fp' if _sr.false_positives else 'rule-sample-badge--ok' }}"
+                              title="Tested on {{ _sr.total }} samples ({{ _sr.sets | map(attribute='name') | join(', ') }}){% if _sr.detected or _sr.missed %}: {{ _sr.detected }} detected, {{ _sr.missed }} missed{% endif %}, {{ _sr.false_positives }} false positive(s){% if _sr.errors %}, {{ _sr.errors }} error(s){% endif %}. This version of the rule.">
+                            <i class="fa-solid fa-vial-circle-check me-1"></i>{{ _sr.total }} samples · {{ _sr.false_positives }} FP
+                        </span>
+                        {% endif %}
                         <format-chip :format="currentRule.format"></format-chip>
                     </div>
 

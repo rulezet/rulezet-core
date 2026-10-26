@@ -16,6 +16,7 @@ from app.core.utils.utils import  DB_ID_MAX, as_db_id, bump_version, form_to_dic
 
 from app.features.account.account_core import add_favorite, remove_favorite, is_rule_favorited_by_user
 from app.features.misp.misp_core import  convert_misp_to_stix
+from app.features.rule_tester import sample_test_core as SampleTests
 from app.features.rule.rule_format.main_format import  parse_rule_by_format, process_and_import_fixed_rule, verify_syntax_rule_by_format, import_bad_rule_with_dependency
 from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, generic_repo_metadata, get_github_branches, get_github_host, get_github_rate_limit_status, get_github_repo_live_info, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
 
@@ -970,6 +971,7 @@ def detail_rule_by_uuid(rule_uuid):
                                rule_to_json=rule_to_json, active_tab=active_tab,
                                current_user_vote=current_user_vote, rule_risk=rule_risk,
                                mirror_github_urls=get_mirror_github_urls(rule),
+                               sample_result=SampleTests.latest_result(rule),
                                **_nav_counts(rule.id))
     return render_template("404.html")
 
@@ -1048,6 +1050,7 @@ def _nav_counts(rule_id):
         'test_count':          _rule_test_count(rule_id),
         'ai_analysis_count':   _rule_ai_analysis_count(rule_id),
         'linked_rules_count':  _rule_linked_rules_count(rule_id),
+        'sample_tests_count':  SampleTests.rule_sample_count(rule_id),
     }
 
 
@@ -1099,6 +1102,7 @@ def detail_rule(rule_id)-> render_template:
                                rule_to_json=rule_to_json, active_tab=active_tab,
                                current_user_vote=current_user_vote, rule_risk=rule_risk,
                                mirror_github_urls=get_mirror_github_urls(rule),
+                               sample_result=SampleTests.latest_result(rule),
                                **_nav_counts(rule.id))
     return render_template("404.html")
 
@@ -1188,6 +1192,20 @@ def detail_rule_linked_rules(rule_id):
     if rule.is_deleted:
         return render_template("rule/rule_in_trash.html", rule=rule)
     return render_template("rule/detail_rule/detail_rule_linked_rules.html", rule=rule,
+                           **_nav_counts(rule.id))
+
+
+@rule_blueprint.route("/detail_rule/<int:rule_id>/samples", methods=['GET'])
+def detail_rule_samples(rule_id):
+    """Samples sub-page: the rule's tests on sample sets (YARA editor), per version — what was
+    detected, missed, the false positives, and where each string hit."""
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return render_template("404.html")
+    if rule.is_deleted:
+        return render_template("rule/rule_in_trash.html", rule=rule)
+    return render_template("rule/detail_rule/detail_rule_samples.html", rule=rule,
+                           samples=SampleTests.rule_sample_details(rule),
                            **_nav_counts(rule.id))
 
 
