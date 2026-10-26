@@ -17,6 +17,7 @@ from app.core.utils.utils import  DB_ID_MAX, as_db_id, bump_version, form_to_dic
 from app.features.account.account_core import add_favorite, remove_favorite, is_rule_favorited_by_user
 from app.features.misp.misp_core import  convert_misp_to_stix
 from app.features.rule_tester import sample_test_core as SampleTests
+from app.features.rule.rule_metadata_core import display_metadata
 from app.features.rule.rule_format.main_format import  parse_rule_by_format, process_and_import_fixed_rule, verify_syntax_rule_by_format, import_bad_rule_with_dependency
 from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, generic_repo_metadata, get_github_branches, get_github_host, get_github_rate_limit_status, get_github_repo_live_info, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
 
@@ -586,6 +587,7 @@ def edit_rule(rule_id) -> render_template:
         form.version.data = rule.version
         form.to_string.data = rule.to_string
         form.original_uuid.data = rule.original_uuid
+        form.references.data = "\n".join(rule.manual_references or [])
         from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
         return render_template("rule/edit_rule.html", form=form, rule=rule, restricted_edit=True,
                                deep_validation_available=is_deep_validation_configured())
@@ -721,6 +723,7 @@ def edit_rule(rule_id) -> render_template:
             form.version.data = rule.version
             form.to_string.data = rule.to_string
             form.original_uuid.data = rule.original_uuid
+            form.references.data = "\n".join(rule.manual_references or [])
 
         from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
         return render_template("rule/edit_rule.html", form=form, rule=rule,
@@ -972,6 +975,7 @@ def detail_rule_by_uuid(rule_uuid):
                                current_user_vote=current_user_vote, rule_risk=rule_risk,
                                mirror_github_urls=get_mirror_github_urls(rule),
                                sample_result=SampleTests.latest_result(rule),
+                               rule_metadata=display_metadata(rule.extra_metadata),
                                **_nav_counts(rule.id))
     return render_template("404.html")
 
@@ -1103,6 +1107,7 @@ def detail_rule(rule_id)-> render_template:
                                current_user_vote=current_user_vote, rule_risk=rule_risk,
                                mirror_github_urls=get_mirror_github_urls(rule),
                                sample_result=SampleTests.latest_result(rule),
+                               rule_metadata=display_metadata(rule.extra_metadata),
                                **_nav_counts(rule.id))
     return render_template("404.html")
 

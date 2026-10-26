@@ -31,6 +31,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
 <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_bundles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/rule_metadata.css') }}">
 {% endblock %}
 {% import 'macros/form_macros.html' as f %}
 {% import 'macros/detail_rule_nav.html' as nav with context %}
@@ -260,6 +261,48 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                             </div>
                         </div>
 
+                        {% if rule.all_references or rule_metadata %}
+                        <!-- References and other metadata, read from the rule's own text (rule_metadata_core.py) -->
+                        <div class="rule-meta mb-4">
+                            {% if rule.all_references %}
+                            <div class="rule-meta-block">
+                                <div class="rule-meta-head"><i class="fa-solid fa-book-bookmark"></i>References <span>{{ rule.all_references | length }}</span></div>
+                                {# v-pre: the values come from the rule's text, Vue must never read them as a template #}
+                                <ul class="rule-refs" v-pre>
+                                    {% for ref in rule.all_references %}
+                                    {% set is_url = ref.lower().startswith('http://') or ref.lower().startswith('https://') %}
+                                    <li>
+                                        <i class="fa-solid {{ 'fa-arrow-up-right-from-square' if is_url else 'fa-quote-left' }}"></i>
+                                        {% if is_url %}<a href="{{ ref }}" target="_blank" rel="noopener noreferrer">{{ ref }}</a>
+                                        {% else %}<span>{{ ref }}</span>{% endif %}
+                                        {% if ref in (rule.manual_references or []) and ref not in (rule.rule_references or []) %}<em class="rule-ref-manual">added by hand</em>{% endif %}
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+                            {% if rule_metadata %}
+                            <div class="rule-meta-block">
+                                <div class="rule-meta-head"><i class="fa-solid fa-circle-info"></i>Other metadata <span>{{ rule_metadata | length }}</span></div>
+                                <div class="rule-meta-grid">
+                                    {% for field in rule_metadata %}
+                                    <div class="rule-meta-cell {{ 'rule-meta-cell--wide' if field.is_hash or (field['values'] | join(' ') | length) > 90 }}">
+                                        <div class="rule-meta-cell__label" v-pre><i class="fa-solid {{ field.icon }}"></i>{{ field.label }}</div>
+                                        {% for value in field['values'] %}
+                                        <div class="rule-meta-cell__value {{ 'is-hash' if field.is_hash }}">
+                                            <span v-pre>{{ value }}</span>
+                                            {% if field.is_hash %}
+                                            <button type="button" class="rule-meta-copy" title="Copy" data-value="{{ value }}" @click="copyMetaValue"><i class="fa-regular fa-copy"></i></button>
+                                            {% endif %}
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
 
                         <!-- Taxonomies-->
                         <div class="mt-2">
@@ -1980,7 +2023,14 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                 });
             }
 
+            function copyMetaValue(event) {
+                navigator.clipboard.writeText(event.currentTarget.dataset.value || '').then(
+                    () => create_message('Copied.', 'success-subtle'),
+                    () => create_message('Could not copy.', 'danger-subtle'));
+            }
+
             return {
+                copyMetaValue,
                 getRandomColor,
                 bundleListRule, bundleListLoaded,
                 relatedMatchField,

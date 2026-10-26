@@ -1,0 +1,42 @@
+{
+  "label": "Rule metadata display",
+  "category": "Rules",
+  "description": "How the Other metadata of a rule page shows known keys: label and Font Awesome icon per key (keys not listed get their own name and a generic icon). Keys starting with one of hash_prefixes are shown as hashes (monospace, copy button).",
+  "public": false,
+  "value": {
+    "fields": {
+      "date":            {"label": "Date",             "icon": "fa-calendar"},
+      "modified":        {"label": "Modified",         "icon": "fa-calendar-check"},
+      "last_modified":   {"label": "Modified",         "icon": "fa-calendar-check"},
+      "creation_date":   {"label": "Created",          "icon": "fa-calendar"},
+      "updated_date":    {"label": "Updated",          "icon": "fa-calendar-check"},
+      "status":          {"label": "Status",           "icon": "fa-signal"},
+      "level":           {"label": "Level",            "icon": "fa-gauge-high"},
+      "severity":        {"label": "Severity",         "icon": "fa-gauge-high"},
+      "risk_score":      {"label": "Risk score",       "icon": "fa-gauge-high"},
+      "score":           {"label": "Score",            "icon": "fa-star-half-stroke"},
+      "tlp":             {"label": "TLP",              "icon": "fa-traffic-light"},
+      "falsepositives":  {"label": "False positives",  "icon": "fa-circle-exclamation"},
+      "logsource":       {"label": "Log source",       "icon": "fa-database"},
+      "classtype":       {"label": "Class type",       "icon": "fa-layer-group"},
+      "sid":             {"label": "SID",              "icon": "fa-hashtag"},
+      "rev":             {"label": "Revision",         "icon": "fa-code-branch"},
+      "gid":             {"label": "GID",              "icon": "fa-hashtag"},
+      "priority":        {"label": "Priority",         "icon": "fa-arrow-up-wide-short"},
+      "maturity":        {"label": "Maturity",         "icon": "fa-seedling"},
+      "type":            {"label": "Type",             "icon": "fa-shapes"},
+      "malware":         {"label": "Malware",          "icon": "fa-virus"},
+      "malware_family":  {"label": "Malware family",   "icon": "fa-virus"},
+      "family":          {"label": "Family",           "icon": "fa-virus"},
+      "actor":           {"label": "Actor",            "icon": "fa-user-secret"},
+      "threat_actor":    {"label": "Threat actor",     "icon": "fa-user-secret"},
+      "category":        {"label": "Category",         "icon": "fa-folder"},
+      "platform":        {"label": "Platform",         "icon": "fa-desktop"},
+      "os":              {"label": "OS",               "icon": "fa-desktop"},
+      "filetype":        {"label": "File type",        "icon": "fa-file"},
+      "related":         {"label": "Related",          "icon": "fa-diagram-project"},
+      "source":          {"label": "Source",           "icon": "fa-link"}
+    },
+    "hash_prefixes": ["hash", "md5", "sha1", "sha256", "sha512", "imphash", "ssdeep", "tlsh", "sample"]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "label": "Rule metadata extraction",
+  "category": "Rules",
+  "description": "What is read from a rule's own text into its References and Other metadata (kept in sync on every change of the rule; existing rules: Admin → Bulk parse fields → References & metadata). reference_keys = keys whose values are references (YARA meta, Sigma / YAML keys, Elastic, KQL header comments…). skip_keys = keys never shown as other metadata: Rulezet already has them as fields, or they are the rule's logic. Limits keep one rule's JSON small.",
+  "public": false,
+  "value": {
+    "reference_keys": ["reference", "references", "ref", "refs", "url", "urls", "link", "links", "report", "reports", "blog", "source_url", "more_info", "see_also"],
+    "skip_keys": ["title", "name", "description", "desc", "summary", "author", "authors", "license", "licence", "version", "id", "uuid", "tags", "tag",
+                  "detection", "condition", "search", "query", "rule", "strings", "logic", "how_to_implement", "known_false_positives_query",
+                  "msg", "content", "pcre", "flow", "rule_id"],
+    "max_references": 50,
+    "max_fields": 40,
+    "max_values_per_field": 20,
+    "max_value_length": 300
+  }
+}

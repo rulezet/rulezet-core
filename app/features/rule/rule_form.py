@@ -25,6 +25,7 @@ class AddNewRuleForm(FlaskForm):
     version = StringField('Version')
     to_string = TextAreaField('Content rule', validators=[InputRequired()])
     cve_id = StringField('Vulnerability id (comma, space, or newline separated)')
+    references = TextAreaField('References')
     submit = SubmitField('Create rule')
 
     def __init__(self, *args, **kwargs):
@@ -106,6 +107,7 @@ class EditRuleForm(FlaskForm):
     version = StringField('Version', validators=[InputRequired()])
     to_string = TextAreaField('Content rule', validators=[InputRequired()])
     cve_id = StringField('Vulnerability id')
+    references = TextAreaField('References')
     submit = SubmitField('Save')
 
     def __init__(self, *args, rule_id=None, **kwargs):

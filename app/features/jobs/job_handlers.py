@@ -5627,3 +5627,81 @@ def handle_recompute_gamification(job, app):
                 level='info', event='progress')
 
     log_job(job, f"Gamification recompute complete — {recomputed} user(s) processed.", level='success', event='done')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# reparse_rule_metadata — fill / refresh rule_references and extra_metadata of
+# existing rules from their text (new and edited rules get theirs from Rule's
+# `set` events). Launched from Admin → Bulk parse fields → References & metadata.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@register_handler('reparse_rule_metadata')
+def handle_reparse_rule_metadata(job, app):
+    """Re-read references and other metadata from each rule's text
+    (rule_metadata_core.extract_rule_metadata). Only these two columns are written —
+    never the text, last_modif or any other field — so it is safe to re-run, and
+    re-running repairs rules parsed by an older version of the extractor.
+
+    Payload:
+        formats  : 'ALL' | list[str] — rule formats to scan
+        rule_ids : 'ALL' | list[int] — optional restriction to some rules
+    """
+    from sqlalchemy import func
+    from app.features.rule.rule_metadata_core import extract_rule_metadata
+
+    payload  = job.payload or {}
+    formats  = payload.get('formats', 'ALL')
+    rule_ids = payload.get('rule_ids', 'ALL')
+    offset   = payload.get('_resume_offset', 0)
+
+    # deleted rules too: a rule restored from the trash must not come back without them
+    q = Rule.query.order_by(Rule.id.asc())
+    if formats != 'ALL':
+        q = q.filter(func.lower(Rule.format).in_([str(f).lower() for f in formats or []] or ['']))
+    if rule_ids != 'ALL':
+        q = q.filter(Rule.id.in_(rule_ids or [-1]))
+
+    if job.total == 0:
+        job.total = q.count()
+        db.session.commit()
+        scope = 'all formats' if formats == 'ALL' else ', '.join(formats)
+        log_job(job, f'Starting — reading references and metadata of {job.total} rule(s) ({scope}).',
+                level='info', event='start')
+    else:
+        log_job(job, f'Resuming from offset {offset}.', level='info', event='resume')
+
+    changed = with_refs = with_extra = 0
+    batch_num = 0
+    while True:
+        if _is_cancelled(job):
+            log_job(job, 'Cancelled.', level='warning', event='cancelled')
+            return
+        while _should_pause(job):
+            import time; time.sleep(2)
+
+        rows = (q.with_entities(Rule.id, Rule.format, Rule.to_string, Rule.rule_references, Rule.extra_metadata)
+                .offset(offset).limit(FIELD_PARSE_BATCH).all())
+        if not rows:
+            break
+        for rule_id, fmt, content, old_refs, old_extra in rows:
+            found = extract_rule_metadata(fmt, content)
+            refs, extra = found['references'] or None, found['extra'] or None
+            with_refs += bool(refs)
+            with_extra += bool(extra)
+            if refs != old_refs or extra != old_extra:
+                # a plain UPDATE of these two columns: no ORM events, last_modif untouched
+                Rule.query.filter(Rule.id == rule_id).update(
+                    {'rule_references': refs, 'extra_metadata': extra}, synchronize_session=False)
+                changed += 1
+        db.session.commit()
+        offset += len(rows)
+        job.done = offset
+        _save_offset(job, offset)
+        db.session.commit()
+
+        batch_num += 1
+        if batch_num % FIELD_PARSE_LOG_EVERY == 0:
+            log_job(job, f'{offset}/{job.total} rules read, {changed} updated.', level='info', event='progress')
+
+    log_job(job, f'Done — {offset} rules read, {changed} updated; {with_refs} with references, '
+                 f'{with_extra} with other metadata.', level='success', event='done')

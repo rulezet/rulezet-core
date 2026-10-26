@@ -286,6 +286,13 @@
               </div>
               {{ form.original_uuid(class_="form-control", placeholder="e.g. 550e8400-e29b-41d4-a716-446655440000") }}
             </div>
+            <div class="col-md-12">
+              <div class="d-flex align-items-center gap-1 mb-1">
+                <label class="form-label-styled mb-0" for="references">{{ form.references.label.text }}<span class="opt-badge">optional</span></label>
+                <i class="rf-label-hint" data-tip="One per line (URL, report, CVE…). References written in the rule itself (YARA meta reference, Sigma references…) are added automatically.">?</i>
+              </div>
+              {{ form.references(class_="form-control", rows=3, placeholder="https://example.org/report") }}
+            </div>
           </div>
 
           <!-- Rule Content -->

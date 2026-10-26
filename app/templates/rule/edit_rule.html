@@ -6,6 +6,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/license-input.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/yara_edit_panel.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/rule_metadata.css') }}">
 <style>
 .rf-label-hint {
     display: inline-flex; align-items: center; justify-content: center;
@@ -226,6 +227,34 @@
                                         }}</label>
                                     {{ form.original_uuid(class_="form-control rounded-3", placeholder="Optional:
                                     Existing UUID if any...") }}
+                                </div>
+                            </div>
+                            <div class="col-md-12 text-start">
+                                <div class="form-group">
+                                    <div class="d-flex align-items-center gap-1 mb-1">
+                                        <label class="form-label fw-bold text-dark mb-0" for="references">{{ form.references.label.text }}</label>
+                                        <span class="opt-badge">optional</span>
+                                        <i class="rf-label-hint" data-tip="References added by hand, one per line (URL, report, CVE…).&#10;The ones written in the rule itself are read from its text.">?</i>
+                                    </div>
+                                    {{ form.references(class_="form-control rounded-3 rf-references", rows=3, placeholder="One per line, e.g. https://example.org/report") }}
+                                    {% if rule.rule_references or rule.extra_metadata %}
+                                    {# read from the rule's text: changed by editing the rule itself, not here #}
+                                    <div class="rf-from-rule mt-2" v-pre>
+                                        <div class="rf-from-rule__head"><i class="fa-solid fa-lock"></i>Read from the rule's text — edit the rule to change them</div>
+                                        {% if rule.rule_references %}
+                                        <ul class="rule-refs">
+                                            {% for ref in rule.rule_references %}<li><i class="fa-solid fa-book-bookmark"></i><span>{{ ref }}</span></li>{% endfor %}
+                                        </ul>
+                                        {% endif %}
+                                        {% if rule.extra_metadata %}
+                                        <div class="rf-from-rule__extra">
+                                            {% for key, value in rule.extra_metadata.items() %}
+                                            <span class="rf-from-rule__chip"><b>{{ key }}</b> {{ value if value is string else value | join(', ') }}</span>
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>

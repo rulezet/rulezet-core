@@ -1,0 +1,55 @@
+/* References and other metadata read from a rule's text (rule_metadata_core.py):
+   rule page (Overview) and the admin preview (Bulk parse fields → References & metadata). */
+
+.rule-meta-block + .rule-meta-block { margin-top: 1rem; }
+.rule-meta-head {
+    display: flex; align-items: center; gap: .45rem; margin-bottom: .55rem;
+    font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--subtle-text-color);
+}
+.rule-meta-head::before { content: ''; width: 3px; height: 14px; border-radius: 2px; background: #0d6efd; }
+.rule-meta-head span {
+    padding: 0 .45rem; border-radius: 999px; font-size: .68rem; letter-spacing: 0;
+    background: var(--light-bg-color); border: 1px solid var(--border-color);
+}
+
+/* references: one per line, links open in a new tab */
+.rule-refs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+.rule-refs li {
+    display: flex; align-items: baseline; gap: .55rem; min-width: 0;
+    padding: .4rem .7rem; border-radius: 10px; font-size: .84rem;
+    background: var(--light-bg-color); border: 1px solid var(--border-color);
+}
+.rule-refs li i { flex-shrink: 0; font-size: .7rem; color: var(--subtle-text-color); }
+.rule-refs a, .rule-refs span { min-width: 0; overflow-wrap: anywhere; }
+.rule-refs a { color: #0d6efd; text-decoration: none; }
+.rule-refs a:hover { text-decoration: underline; }
+
+/* other metadata: a cell per key, as many values as it has */
+.rule-meta-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: .6rem; }
+.rule-meta-cell {
+    min-width: 0; padding: .6rem .8rem; border-radius: 12px;
+    background: var(--light-bg-color); border: 1px solid var(--border-color);
+}
+.rule-meta-cell--wide { grid-column: 1 / -1; }
+.rule-meta-cell__label {
+    display: flex; align-items: center; gap: .4rem; margin-bottom: .2rem;
+    font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--subtle-text-color);
+}
+.rule-meta-cell__label i { color: #0d6efd; font-size: .72rem; }
+.rule-meta-cell__value { display: flex; align-items: center; gap: .4rem; font-size: .85rem; color: var(--text-color); overflow-wrap: anywhere; }
+.rule-meta-cell__value + .rule-meta-cell__value { margin-top: .2rem; }
+.rule-meta-cell__value.is-hash { font-family: var(--bs-font-monospace); font-size: .76rem; }
+.rule-meta-copy {
+    flex-shrink: 0; border: 0; background: none; padding: 0 .2rem;
+    color: var(--subtle-text-color); font-size: .72rem; cursor: pointer;
+}
+.rule-meta-copy:hover { color: #0d6efd; }
+
+/* Edit rule form: what the rule's text gives (read-only) under the References field */
+.rf-from-rule { padding: .6rem .75rem; border-radius: 12px; border: 1px dashed var(--border-color); background: var(--light-bg-color); }
+.rf-from-rule__head { display: flex; align-items: center; gap: .4rem; margin-bottom: .45rem; font-size: .72rem; color: var(--subtle-text-color); }
+.rf-from-rule .rule-refs li { background: var(--card-bg-color); font-size: .8rem; padding: .3rem .6rem; }
+.rf-from-rule__extra { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .45rem; }
+.rf-from-rule__chip { padding: .15rem .55rem; border-radius: 999px; font-size: .74rem; background: var(--card-bg-color); border: 1px solid var(--border-color); color: var(--text-color); overflow-wrap: anywhere; }
+.rf-from-rule__chip b { font-weight: 600; color: var(--subtle-text-color); margin-right: .2rem; }
+.rule-ref-manual { margin-left: auto; flex-shrink: 0; font-size: .7rem; font-style: normal; color: var(--subtle-text-color); }

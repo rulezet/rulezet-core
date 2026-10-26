@@ -800,6 +800,9 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
             github_path=form_dict.get("github_path") or None,
             branch=form_dict.get("branch") or None
         )
+        if form_dict.get("references"):
+            from app.features.rule.rule_metadata_core import set_manual_references
+            set_manual_references(new_rule, form_dict.get("references"))
 
         db.session.add(new_rule)
         db.session.flush()
@@ -977,6 +980,9 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
     vuln_edit = [v for v in vuln_edit if isinstance(v, str) and v.strip()]
     rule.cve_id = json.dumps(vuln_edit)
     rule.last_modif = datetime.datetime.now(tz=datetime.timezone.utc)
+    if "references" in form_dict:
+        from app.features.rule.rule_metadata_core import set_manual_references
+        set_manual_references(rule, form_dict.get("references"))
 
 
     if "tags" in form_dict:

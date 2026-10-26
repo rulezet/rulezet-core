@@ -179,6 +179,20 @@ def get_setting(key):
     return _as_python(current_json_value(key), definition['python_type'])
 
 
+def cached_setting(key):
+    """Same as get_setting, but never queries the database: the admin's value as last loaded
+    (any get_setting refreshes it), else the file's. For code running inside SQLAlchemy events
+    (attribute set, flush), where a query would flush a half-built object."""
+    definition = _default(key)
+    stored = _db_cache['values']
+    if key not in stored:
+        value = definition['value']
+    else:
+        base = _db_cache.get('bases', {}).get(key)
+        value = stored[key] if base is None else merge_values(base, stored[key], definition['value'])
+    return _as_python(value, definition['python_type'])
+
+
 def _as_python(value, python_type):
     if python_type == 'tuple':
         return tuple(value)
