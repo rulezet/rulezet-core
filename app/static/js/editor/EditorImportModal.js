@@ -84,8 +84,19 @@ export default {
         const empty = (v) => v === null || v === undefined || v === '' || v === 'Unknown' || (Array.isArray(v) && !v.length)
         const filled = (rows) => rows.filter(r => !empty(r.value)).length
         const values = (v) => empty(v) ? [] : (Array.isArray(v) ? v : [v])
+        const ungrouped = (rows) => rows.filter(r => !r.group)
+        const groups = (rows) => {
+            const out = []
+            for (const r of rows.filter(x => x.group)) {
+                let g = out.find(x => x.name === r.group)
+                if (!g) out.push(g = { name: r.group, rows: [], total: 0 })
+                g.rows.push(r)
+                g.total += values(r.value).length
+            }
+            return out
+        }
         return { STATUS, STEP_ICON, ORIGIN, phase, job, rules, counts, toFix, written, busy, head, confirmClass, close, emit,
-                 isOpen, togglePreview, empty, filled, values }
+                 isOpen, togglePreview, empty, filled, values, ungrouped, groups }
     },
     template: `
     <div class="ed-modal" @click.self="close">
@@ -147,13 +158,28 @@ export default {
                                             <span class="ed-preview__count">[[ filled(r.preview) ]] fields</span>
                                         </button>
                                         <div v-show="isOpen(r.name)" class="ed-preview__table">
-                                            <div v-for="row in r.preview" :key="row.id" class="ed-preview__row" :class="{ 'ed-preview__row--empty': empty(row.value) }">
+                                            <div v-for="row in ungrouped(r.preview)" :key="row.id" class="ed-preview__row" :class="{ 'ed-preview__row--empty': empty(row.value) }">
                                                 <div class="ed-preview__label">[[ row.label ]]</div>
                                                 <div class="ed-preview__cell">
                                                     <span v-for="v in values(row.value)" :key="v" :class="Array.isArray(row.value) ? 'ed-preview__chip' : 'ed-preview__value'">[[ v ]]</span>
                                                     <span v-show="empty(row.value)" class="ed-preview__none">none</span>
                                                 </div>
                                                 <div class="ed-preview__origin"><span class="ed-origin" :class="'ed-origin--' + row.origin">[[ ORIGIN[row.origin] ]]</span></div>
+                                            </div>
+                                            <!-- grouped rows (Tags: chosen / by default / imported from the rule) -->
+                                            <div v-for="g in groups(r.preview)" :key="g.name" class="ed-preview__group">
+                                                <div class="ed-preview__group-head">
+                                                    <span>[[ g.name ]]</span>
+                                                    <span class="ed-preview__count">[[ g.total ]] in all</span>
+                                                </div>
+                                                <div v-for="row in g.rows" :key="row.id" class="ed-preview__row ed-preview__row--sub" :class="{ 'ed-preview__row--empty': empty(row.value) }">
+                                                    <div class="ed-preview__label">[[ row.label ]]</div>
+                                                    <div class="ed-preview__cell">
+                                                        <span v-for="v in values(row.value)" :key="v" class="ed-preview__chip">[[ v ]]</span>
+                                                        <span v-show="empty(row.value)" class="ed-preview__none">none</span>
+                                                    </div>
+                                                    <div class="ed-preview__origin"><span class="ed-origin" :class="'ed-origin--' + row.origin">[[ ORIGIN[row.origin] ]]</span></div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>

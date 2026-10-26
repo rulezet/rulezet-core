@@ -174,3 +174,7 @@ a.ed-dep:hover { border-color: #0d6efd; color: #0d6efd; }
 .ed-origin--panel { background: rgba(13, 110, 253, .12); color: #0d6efd; }
 .ed-origin--rule { background: rgba(25, 135, 84, .12); color: #198754; }
 .ed-origin--default { background: var(--light-bg-color); color: var(--subtle-text-color); }
+.ed-preview__group { border-top: 1px solid var(--border-color); }
+.ed-preview__group-head { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-weight: 700; font-size: .82rem; background: var(--light-bg-color); }
+.ed-preview__row--sub .ed-preview__label { padding-left: 14px; font-weight: 500; }
+.ed-preview__row--sub .ed-preview__label::before { content: '└ '; color: var(--border-color); }

@@ -22,10 +22,12 @@
  *   author     String — offered by the "Set author" rule tool
  */
 import EditorImportModal from '/static/js/editor/EditorImportModal.js'
+import { create_message } from '/static/js/toaster.js'
 
 const { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } = Vue
 
 const EDITOR_JS = '/editor-api/assets/rulezet-editor.js'
+const TOAST_CLASS = { info: 'info', success: 'success', warning: 'warning', error: 'danger' }
 const EDITOR_CSS = '/editor-api/assets/rulezet-editor.css'
 const POLL_MS = 700
 
@@ -151,7 +153,7 @@ export default {
             try {
                 const plan = await post('plan')
                 if (plan.error) throw new Error(plan.error)
-                if (editor.getValue() !== text) { modal.value = null; editor.notify('The document changed: try again'); return }
+                if (editor.getValue() !== text) { modal.value = null; editor.notify('The document changed: try again', 'warning'); return }
                 const rules = plan.rules.map(r => ({ ...r, line: lines[r.name] }))
                 if (!plan.ok) {
                     // nothing can be written: straight to the errors
@@ -165,7 +167,7 @@ export default {
                 modal.value = { phase: 'confirm', rules, job: null }
             } catch (e) {
                 modal.value = null
-                editor.notify(`Rulezet: ${e.message || e}`)
+                editor.notify(`Rulezet: ${e.message || e}`, 'error')
             }
         }
 
@@ -248,6 +250,8 @@ export default {
                     author: props.author || null,
                     host: new lib.EditorServerHost({ baseUrl: '/editor-api', csrfToken: props.csrfToken, name: 'Rulezet' }),
                     draftKey: 'rulezet-create-yara',
+                    lockPasted: true,          // a pasted rule keeps its text; unlock it to edit
+                    toast: (message, tone) => create_message(message, TOAST_CLASS[tone] || 'info'),   // Rulezet's own toasts
                     buttons: [{
                         id: 'check', label: 'Check', icon: 'ok',
                         title: 'Check every rule with Rulezet, nothing is created (Ctrl+S)',

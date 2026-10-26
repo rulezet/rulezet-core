@@ -44,10 +44,17 @@
         "type": "select",
         "options": "licenses",
         "meta": {
-          "key": "license"
+          "key": "license",
+          "aliases": [
+            "licence",
+            "licensing",
+            "spdx"
+          ]
         },
         "searchable": true,
-        "placeholder": "Search a license (e.g. MIT, GPL-3.0)…"
+        "placeholder": "Search a license (e.g. MIT, GPL-3.0)…",
+        "free": true,
+        "help": "Pick a license from Rulezet's list or type your own. Read from the rule's license / licence key."
       },
       {
         "id": "version",

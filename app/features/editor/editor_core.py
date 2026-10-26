@@ -413,11 +413,11 @@ def import_preview(e, user):
         {'id': 'original_uuid', 'label': 'Original UUID', 'value': d.get('original_uuid'), 'origin': origin('original_uuid', 'id', 'uuid')},
         {'id': 'cve', 'label': 'Vulnerabilities', 'value': vulns, 'origin': 'panel' if 'cve' in fields else ('rule' if vulns else 'default')},
         {'id': 'attack', 'label': 'ATT&CK techniques', 'value': attack, 'origin': 'panel' if attack else 'default'},
-        {'id': 'tags', 'label': 'Tags', 'value': tag_names, 'origin': 'panel' if tag_names else 'default'},
+        {'id': 'tags', 'label': 'Chosen', 'group': 'Tags', 'value': tag_names, 'origin': 'panel' if tag_names else 'default'},
         {'id': 'related', 'label': 'Linked rules', 'origin': 'panel' if related else 'default',
          'value': [f"{related_titles[x['id']]} ({x['kind'].replace('_', ' ')})" for x in related if x['id'] in related_titles]},
-        {'id': 'default_tags', 'label': 'Default tags', 'value': defaults, 'origin': 'default'},
-        {'id': 'rule_tags', 'label': 'Imported tags (from the rule)', 'value': rule_tags, 'origin': 'rule'},
+        {'id': 'default_tags', 'label': 'Added by default', 'group': 'Tags', 'value': defaults, 'origin': 'default'},
+        {'id': 'rule_tags', 'label': 'Imported from the rule', 'group': 'Tags', 'value': rule_tags, 'origin': 'rule'},
     ]
     return rows
 

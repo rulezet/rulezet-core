@@ -155,6 +155,7 @@ export default {
                     value: buildDocument(props.modelValue, deps.value.map(d => d.content)),
                     // an existing rule: fields are stored by Rulezet, the rule text is only touched on request
                     fieldsReport: false,
+                    toast: (message, tone) => create_message(message, { success: 'success', warning: 'warning', error: 'danger' }[tone] || 'info'),
                 })
                 editor.on('fields', (payload) => {
                     const name = mainName()
