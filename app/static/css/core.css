@@ -278,7 +278,11 @@ label,
 @media (max-width: 700px) {
   .admin-mega-menu {
     width: 92vw;
+    max-height: 75vh;
+    overflow-y: auto;
   }
+  /* the three columns stack: full width, every label readable */
+  .admin-mega-menu .row > .col-4 { flex: 0 0 100%; max-width: 100%; }
 }
 
 .avatar-circle {
@@ -3176,6 +3180,15 @@ button.dr-nav__item {
     .dr-nav__item span { display: none; }
     .dr-nav__item { padding: 9px 13px; }
     .dr-nav__sep { display: none; }
+}
+/* Admin navigation (navbar mega-menu + the inline panel): on a phone the labels stay,
+   the links wrap / stack instead — icons alone are unreadable there. */
+@media (max-width: 600px) {
+    .admin-mega-menu .dr-nav__item span,
+    #adminNavPanel .dr-nav__item span { display: inline; }
+    #adminNavPanel .dr-nav { flex-wrap: wrap; overflow: visible; }
+    #adminNavPanel .dr-nav__label { width: 100%; }
+    #adminNavPanel .dr-nav__item { padding: 7px 11px; font-size: .8rem; }
 }
 
 /* ── Admin nav toggle (collapsed by default, see macros/admin_nav.html) ────
