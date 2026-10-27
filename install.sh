@@ -7,16 +7,24 @@ RESET="\033[0m"
 
 echo -e "${CYAN}🚀 Starting the installation process...${RESET}"
 
-sudo apt install -y python3.12-venv
 # System libraries WeasyPrint needs for the PDF exports (blog posts, AI
-# analyses) — pip installs the Python package fine without them, and the
+# analyses) — uv installs the Python package fine without them, and the
 # failure only shows up as an "Internal error" on the first PDF download.
 sudo apt install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0
-python3 -m venv env
-. env/bin/activate
+# uv manages the virtualenv and the dependencies (pyproject.toml + uv.lock).
+# Install it for the current user if it isn't on the PATH yet.
+if ! command -v uv >/dev/null 2>&1; then
+    echo -e "${CYAN}📥 Installing uv...${RESET}"
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.local/bin:$PATH"
+fi
 
-# Init required git submodules (before pip install: requirements.txt installs
-# rulezet-validation editable from its submodule checkout)
+# uv creates its default project environment in .venv/ — make sure nothing
+# in the caller's shell redirects it (manage.py and the docs expect .venv/).
+unset UV_PROJECT_ENVIRONMENT
+
+# Init required git submodules (manage.py / update.sh keep them in sync;
+# rulezet-validation itself is installed by uv from its git source)
 echo -e "${CYAN}📂 Initialising git submodules...${RESET}"
 git submodule update --init --recursive --depth 1 app/modules/rulezet-cast
 git submodule update --init --recursive --depth 1 app/modules/pivotick
@@ -24,7 +32,10 @@ git submodule update --init --depth 1 app/modules/pivotick-converters
 git submodule update --init --recursive --depth 1 app/modules/rulezet-validation
 
 echo -e "${CYAN}📦 Install the Python dependencies...${RESET}"
-pip install -r requirements.txt
+# --locked: install exactly what uv.lock pins (fails if it's out of date with
+# pyproject.toml). uv also downloads a Python >= 3.12 if the system has none.
+uv sync --locked
+. .venv/bin/activate
 
 echo -e "${CYAN}🐘 Install PostgreSQL ...${RESET}"
 ./install_postgresql.sh
@@ -68,7 +79,7 @@ else
     echo -e "${GREEN}✔ MITRE CTI submodule already present.${RESET}"
 fi
 
-. env/bin/activate
+. .venv/bin/activate
 
 echo -e "${GREEN}🎮 Launch the application...${RESET}"
 ./launch.sh -i

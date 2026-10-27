@@ -22,19 +22,45 @@ Commands:
 
 import json
 import os
+import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-VENV = ROOT / "env"
+# uv's default project environment (pyproject.toml + uv.lock → .venv/)
+VENV = ROOT / ".venv"
+# pip-era virtualenv — moved aside once by _migrate_legacy_venv()
+LEGACY_VENV = ROOT / "env"
 VENV_BIN = VENV / "bin"
 
 PYTHON   = str(VENV_BIN / "python3")
 FLASK    = str(VENV_BIN / "flask")
 GUNICORN = str(VENV_BIN / "gunicorn")
 PYTEST   = str(VENV_BIN / "pytest")
-PIP      = str(VENV_BIN / "pip")
+UV       = shutil.which("uv") or str(Path.home() / ".local" / "bin" / "uv")
+
+# `uv sync` flags: --locked installs exactly what uv.lock pins (fails if the
+# lock is out of date with pyproject.toml instead of silently re-resolving);
+# --inexact keeps packages that aren't in the lock (e.g. AI provider SDKs the
+# app installs at runtime) instead of uninstalling them.
+UV_SYNC = [UV, "sync", "--locked", "--inexact"]
+
+
+def _uv_sync_cmd() -> list[str]:
+    """UV_SYNC, plus the optional `redis` extra when .env switches the cache
+    to Redis (deploy/setup_redis.sh) — so a fresh .venv/ (e.g. the one-time
+    move from env/) doesn't silently fall back to the file cache."""
+    cmd = list(UV_SYNC)
+    env_file = ROOT / ".env"
+    if env_file.is_file():
+        for line in env_file.read_text().splitlines():
+            key, _, value = line.strip().partition("=")
+            if key.strip() == "CACHE_TYPE" and value.strip().strip('"').strip("'") == "RedisCache":
+                cmd += ["--extra", "redis"]
+                break
+    return cmd
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -70,6 +96,8 @@ def _venv_env() -> dict:
     env["VIRTUAL_ENV"] = str(VENV)
     env["PATH"] = str(VENV_BIN) + os.pathsep + env.get("PATH", "")
     env.pop("PYTHONHOME", None)
+    # uv must sync into .venv/, not wherever an outer shell points it
+    env.pop("UV_PROJECT_ENVIRONMENT", None)
     return env
 
 
@@ -91,6 +119,35 @@ def run(cmd: list[str], cwd: Path = ROOT, check: bool = True, extra_env: dict | 
 def _current_branch() -> str:
     result = subprocess.run(["git", "branch", "--show-current"], cwd=ROOT, capture_output=True, text=True)
     return result.stdout.strip() or "main"
+
+
+# Set on the manage.py process re-executed by _sync_and_reexec(), so it skips
+# the steps the first process already did (backup, git sync).
+_SYNCED_FLAG = "RULEZET_MANAGE_SYNCED"
+
+
+def _already_synced() -> bool:
+    return os.environ.get(_SYNCED_FLAG) == "1"
+
+
+def _sync_and_reexec() -> None:
+    """Sync with origin, then restart this command on the updated manage.py.
+
+    Without the re-exec the rest of an update (deps, migrations, launch)
+    would still run the manage.py loaded before the sync — a change to
+    manage.py itself would only apply on the next deploy.
+    """
+    if _already_synced():
+        ok("Code updated (manage.py restarted on the new code)")
+        return
+    info("Syncing with origin…")
+    _sync_with_origin()
+    ok("Code updated")
+    info("Restarting manage.py on the updated code…")
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os.execve(sys.executable, [sys.executable, str(ROOT / "manage.py"), *sys.argv[1:]],
+              {**os.environ, _SYNCED_FLAG: "1"})
 
 
 def _sync_with_origin() -> None:
@@ -297,7 +354,6 @@ PIVOGRAPH_KEEP   = ("index.html", "favicon.svg", "assets", "icons", "fonts", "lo
 
 
 def _build_pivograph_assets() -> None:
-    import shutil
     commit = _git_out(["rev-parse", "HEAD"], PIVOGRAPH_DIR)
     if not commit:
         raise RuntimeError("app/modules/pivograph is missing — run `git submodule update --init app/modules/pivograph`")
@@ -341,10 +397,41 @@ def _confirm(prompt: str) -> bool:
         return False
 
 
+def _check_uv() -> None:
+    if not Path(UV).exists():
+        error("uv not found")
+        print("\n  Install it first:\n    curl -LsSf https://astral.sh/uv/install.sh | sh\n")
+        sys.exit(1)
+
+
+def _migrate_legacy_venv() -> None:
+    """One-time move from the pip-era env/ virtualenv to uv's .venv/.
+
+    Existing servers were installed with `python3 -m venv env`. The first
+    manage.py run after the switch to uv builds .venv/ with `uv sync` (env/
+    stays untouched until that succeeds), moves env/ aside to env.old-<date>/
+    and leaves an `env` → `.venv` symlink, so anything outside the repo that
+    still says env/bin/… (service units, cron jobs, `source env/bin/activate`)
+    keeps working. Later runs see the symlink and do nothing.
+    """
+    if VENV_BIN.exists() or LEGACY_VENV.is_symlink() or not LEGACY_VENV.is_dir():
+        return
+    header("Moving the virtualenv from env/ to .venv/ (one-time, uv)")
+    info("Building .venv/ with uv — env/ is left as is until this succeeds…")
+    run(_uv_sync_cmd())
+    backup = ROOT / f"env.old-{datetime.now():%Y%m%d-%H%M%S}"
+    LEGACY_VENV.rename(backup)
+    LEGACY_VENV.symlink_to(VENV.name, target_is_directory=True)
+    ok(f"Virtualenv now in .venv/ — env is a symlink to it, the old one is in {backup.name}/")
+    info(f"Delete {backup.name}/ once the app runs fine from .venv/")
+
+
 def _check_venv() -> None:
+    _check_uv()
+    _migrate_legacy_venv()
     if not VENV_BIN.exists():
         error(f"Virtualenv not found at {VENV}")
-        print(f"\n  Create it first:\n    python3 -m venv {VENV}\n    python3 manage.py init\n")
+        print("\n  Create it first:\n    python3 manage.py init\n")
         sys.exit(1)
 
 
@@ -464,7 +551,7 @@ def cmd_help() -> None:
 {W}Commands:{R}
 
   {G}init{R}          {D}First-time setup:{R}
-                  {D}  install deps from requirements.txt → init DB{R}
+                  {D}  uv sync (creates env/) → init DB{R}
                   {D}→ Run once after cloning the repo{R}
 
   {G}start-dev{R}     {D}Start locally (FLASKENV=development): worker.py + gunicorn wsgi:app{R}
@@ -473,7 +560,7 @@ def cmd_help() -> None:
                   {D}→ Use this for local development{R}
 
   {G}start-prod{R}    {D}Full production launch:{R}
-                  {D}  backup → sync with origin → pip install → ensure ollama → db upgrade{R}
+                  {D}  backup → sync with origin → uv sync → ensure ollama → db upgrade{R}
                   {D}  → worker.py (background jobs, its own process) + gunicorn wsgi:app --bind 0.0.0.0:80{R}
                   {D}→ Use this on the production server (needs root for port 80){R}
                   {D}→ "Sync with origin" hard-resets to origin/<branch> — any local{R}
@@ -486,7 +573,7 @@ def cmd_help() -> None:
 
   {G}test{R}          {D}Run the full test suite (FLASKENV=testing){R}
 
-  {G}update{R}        {D}sync with origin + pip install + ensure ollama + flask db upgrade{R}
+  {G}update{R}        {D}sync with origin + uv sync + ensure ollama + flask db upgrade{R}
                   {D}→ Use this after pulling new code — see start-prod's note on sync{R}
 
   {G}pivotick{R}      {D}Rebuild the graph assets from app/modules/pivotick (release build){R}
@@ -520,7 +607,6 @@ def cmd_help() -> None:
 {W}Examples:{R}
 
   {D}# Fresh install{R}
-  {G}python3 -m venv env{R}
   {G}python3 manage.py init{R}
   {G}python3 manage.py start-dev{R}
 
@@ -542,7 +628,8 @@ def cmd_help() -> None:
 
 
 def cmd_init() -> None:
-    _check_venv()
+    _check_uv()
+    _migrate_legacy_venv()
     header("Initialising Rulezet (first-time setup)")
 
     info("Initialising Git submodules…")
@@ -550,8 +637,8 @@ def cmd_init() -> None:
          "app/modules/rulezet-validation"])
     ok("Submodules initialised")
 
-    info("Installing Python dependencies…")
-    run([PIP, "install", "-r", "requirements.txt"])
+    info("Installing Python dependencies (uv sync → env/)…")
+    run(_uv_sync_cmd())
     ok("Dependencies installed")
 
     info("Initialising database (tables + admin user)…")
@@ -682,14 +769,13 @@ def cmd_start_dev() -> None:
 def cmd_start_prod() -> None:
     _check_venv()
 
-    # 1. Backup
-    cmd_backup()
+    # 1. Backup (done by the first process, before the re-exec)
+    if not _already_synced():
+        cmd_backup()
 
     # 2. Pull + deps + migrations
     header("Updating Rulezet")
-    info("Syncing with origin…")
-    _sync_with_origin()
-    ok("Code updated")
+    _sync_and_reexec()
 
     info("Syncing Git submodules…")
     _sync_submodules()
@@ -697,7 +783,7 @@ def cmd_start_prod() -> None:
     _ensure_pivotick_assets()
 
     info("Syncing Python dependencies…")
-    run([PIP, "install", "-r", "requirements.txt"])
+    run(_uv_sync_cmd())
     ok("Dependencies up to date")
 
     _ensure_ollama()
@@ -774,9 +860,7 @@ def cmd_update() -> None:
     _check_venv()
     header("Updating Rulezet")
 
-    info("Syncing with origin…")
-    _sync_with_origin()
-    ok("Code updated")
+    _sync_and_reexec()
 
     info("Syncing Git submodules…")
     _sync_submodules()
@@ -785,7 +869,7 @@ def cmd_update() -> None:
     _check_pivograph_assets()
 
     info("Syncing Python dependencies…")
-    run([PIP, "install", "-r", "requirements.txt"])
+    run(_uv_sync_cmd())
     ok("Dependencies up to date")
 
     _ensure_ollama()
