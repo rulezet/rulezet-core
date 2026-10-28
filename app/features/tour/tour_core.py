@@ -50,16 +50,20 @@ def user_roles(user=None) -> set:
         roles.add('admin')
     else:
         roles.add('member')
-    for key in _permission_keys():
-        if user.has_permission(key):
-            roles.add(f'perm:{key}')
+        roles.update(f'perm:{key}' for key in _granted_permissions(user.id))   # one query, every page
     return roles
 
 
-def _permission_keys():
+def _granted_permissions(user_id) -> list:
+    """Permission keys granted to this user through their roles (admins have them all anyway)."""
     try:
-        from app.features.roles.roles_core import DEFAULT_PERMISSIONS
-        return [p['key'] for p in DEFAULT_PERMISSIONS]
+        from app import db
+        from app.core.db_class.role import Permission, RolePermission, UserRole
+        rows = (db.session.query(Permission.key)
+                .join(RolePermission, RolePermission.permission_id == Permission.id)
+                .join(UserRole, UserRole.role_id == RolePermission.role_id)
+                .filter(UserRole.user_id == user_id).distinct().all())
+        return [r[0] for r in rows]
     except Exception:
         return []
 

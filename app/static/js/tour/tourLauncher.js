@@ -37,8 +37,8 @@ function demoHtml(kind, demo) {
         <div class="rz-tour-example__chips mt-1">${chips}</div></div>`
 }
 function withDemo(steps, demo) {
-    return steps.map(s => s.demo && typeof s.demo === 'string' && !s.demo.startsWith('<')
-        ? { ...s, demo: demoHtml(s.demo, demo) } : s)
+    // only the two known examples: a step's text comes from a setting, never raw HTML
+    return steps.map(s => s.demo ? { ...s, demo: demoHtml(s.demo === 'bundle' ? 'bundle' : 'rule', demo) } : s)
 }
 
 // ── generic tour: read from the page itself ──
