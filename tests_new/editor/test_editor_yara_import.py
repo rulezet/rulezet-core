@@ -146,12 +146,17 @@ def test_job_state_is_private(app, clients):
     assert clients["owner"].get(f"/editor-api/yara/jobs/{start.json['uuid']}").status_code == 404
 
 
+def with_id(payload, rule_id):
+    payload["rules"][0]["id"] = rule_id
+    return payload
+
+
 def test_changed_rule_of_mine_is_updated(app, clients, users):
     mine = make_rule(users.user, title="ed_base", to_string=BASE, version="1.0")
     changed = BASE.replace("base_marker", "base_marker_v2")
-    plan = clients["user"].post("/editor-api/yara/plan", json=body(changed)).json
+    plan = clients["user"].post("/editor-api/yara/plan", json=with_id(body(changed), mine.id)).json
     assert plan["rules"][0]["status"] == "update"
-    state = _run_job(app, clients["user"], body(changed))
+    state = _run_job(app, clients["user"], with_id(body(changed), mine.id))
     assert state["ok"] is True and state["rules"][0]["status"] == "updated"
     db_rule = Rule.query.get(mine.id)
     assert "base_marker_v2" in db_rule.to_string and db_rule.version != "1.0"
@@ -162,15 +167,33 @@ def test_changed_rule_of_someone_else_becomes_a_proposal(app, clients, users):
     from app.core.db_class.rule_proposal import RuleEditProposal
     other = make_rule(users.owner, title="ed_base", to_string=BASE)
     changed = BASE.replace("base_marker", "base_marker_v2")
-    plan = clients["user"].post("/editor-api/yara/plan", json=body(changed)).json
+    plan = clients["user"].post("/editor-api/yara/plan", json=with_id(body(changed), other.id)).json
     assert plan["rules"][0]["status"] == "proposal"
-    state = _run_job(app, clients["user"], body(changed))
+    state = _run_job(app, clients["user"], with_id(body(changed), other.id))
     assert state["ok"] is True and state["rules"][0]["status"] == "proposed"
     assert "base_marker_v2" not in Rule.query.get(other.id).to_string
     proposal = RuleEditProposal.query.filter_by(rule_id=other.id).one()
     assert "base_marker_v2" in proposal.proposed_content
     page = clients["user"].get(state["result_url"]).data.decode()
     assert "Edit proposals" in page
+
+
+def test_new_rule_with_a_name_already_in_rulezet_is_blocked(clients, users):
+    make_rule(users.user, title="ed_base", to_string=BASE)
+    changed = BASE.replace("base_marker", "base_marker_v2")
+    res = clients["user"].post("/editor-api/yara/import", json=body(changed))
+    entry = res.json["rules"][0]
+    assert entry["status"] == "error" and "already exists" in entry["errors"][0]["message"]
+    assert Rule.query.filter_by(title="ed_base").count() == 1
+    assert "base_marker_v2" not in Rule.query.filter_by(title="ed_base").one().to_string
+
+
+def test_title_already_used_is_blocked(clients, users):
+    make_rule(users.owner, title="ed taken title", to_string=BASE)
+    payload = body(USES_BASE.replace("ed_base and ", ""))
+    payload["rules"][0]["fields"] = {"title": "ed taken title"}
+    entry = clients["user"].post("/editor-api/yara/plan", json=payload).json["rules"][0]
+    assert entry["status"] == "error" and "already used" in entry["errors"][0]["message"]
 
 
 # ── Fields panel (title, CVE, tags, ATT&CK...) ────────────────────────────────────────
