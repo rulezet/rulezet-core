@@ -60,3 +60,19 @@
     color: var(--subtle-text-color);
 }
 .ghst-text { color: var(--text-color); }
+
+/* CIRCL badge of a git repository (Git Sources list) */
+.ghst-circl-badge {
+    display: inline-flex; align-items: center;
+    padding: 2px 8px; border-radius: 999px;
+    font-size: .65rem; font-weight: 700; letter-spacing: .03em;
+    gap: 4px;
+    color: #000; background: #fff; border: 1px solid #000;
+    vertical-align: middle;
+}
+.dt-action-btn.ghst-circl-on { color: #0d6efd; }
+
+/* CIRCL shortcut at the end of the host bar */
+.ghf-hosts__sep { width: 1px; align-self: stretch; background: var(--border-color); margin: 0 .25rem; }
+.ghf-host__logo { width: 18px; height: 18px; object-fit: contain; border-radius: 4px; }
+.ghst-circl-logo { width: 14px; height: 14px; object-fit: contain; }

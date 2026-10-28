@@ -593,6 +593,9 @@ class GithubRepo(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.datetime.now(tz=datetime.timezone.utc),
                            onupdate=datetime.datetime.now(tz=datetime.timezone.utc))
     last_synced_at = db.Column(db.DateTime, nullable=True)  # set by a full rebuild, not by incremental deltas
+    # CIRCL badge set by an admin: True = always, False = never, None = automatic
+    # (the url or author contains a word of the setting git.circl_badge_keywords).
+    circl_badge = db.Column(db.Boolean, nullable=True, default=None)
 
     def to_json(self):
         return {

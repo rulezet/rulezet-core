@@ -5077,6 +5077,7 @@ def get_url_github():
     license_filter = request.args.get("license", default=None, type=str)
     conflicts_only = request.args.get("conflicts_only", default='false', type=str) == 'true'
     provider_filter = request.args.get("provider", default=None, type=str) or None
+    circl_only = request.args.get("circl_only", default='false', type=str) == 'true'
     page = request.args.get("page", default=1, type=int)
     sort = request.args.get("sort", default=None, type=str)
     sort_dir = request.args.get("dir", default='asc', type=str)
@@ -5097,6 +5098,7 @@ def get_url_github():
         license_filter=license_filter,
         conflicts_only=conflicts_only,
         provider_filter=provider_filter,
+        circl_only=circl_only,
         sort=sort,
         sort_dir=sort_dir
     )
@@ -5107,6 +5109,26 @@ def get_url_github():
         "total_url": total_url,
         "total_pages": total_pages
     }), 200
+
+
+@rule_blueprint.route("/github_repo/circl_badge", methods=['POST'])
+@login_required
+def set_github_repo_circl_badge():
+    """Admin: add / remove the CIRCL badge of a git repository, or give it back to the automatic rule."""
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Admins only"}), 403
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or "").strip()
+    value = data.get("value")
+    if not url or value not in (True, False, None):
+        return jsonify({"success": False, "message": "url and value (true, false or null) required"}), 400
+    repo = RuleModel.set_circl_badge(url, value)
+    if not repo:
+        return jsonify({"success": False, "message": "Repository not found"}), 404
+    state = {True: 'added', False: 'removed', None: 'set back to automatic'}[value]
+    log_activity('git.circl_badge', f"CIRCL badge {state} on {url}",
+                 target_type='github_repo', target_id=repo.id, extra={'url': url, 'value': value})
+    return jsonify({"success": True, "circl": RuleModel.has_circl_badge(repo), "circl_badge": repo.circl_badge}), 200
 
 
 @rule_blueprint.route("/get_github_authors_usage", methods=['GET'])

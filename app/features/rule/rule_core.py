@@ -3531,7 +3531,38 @@ def get_all_github_urls_matching(search: str = None, search_field: str = 'url', 
 # a repo's rules are whatever matches this against Rule.source.
 
 
-def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, author_names: list = None, editor_names: list = None, license_filter: str = None, conflicts_only: bool = False, sort: str = None, sort_dir: str = 'asc', provider_filter: str = None):
+def _circl_keywords():
+    from app.core.utils.app_settings import get_setting
+    return [k.strip().lower() for k in (get_setting('git.circl_badge_keywords') or []) if k and k.strip()]
+
+
+def has_circl_badge(repo):
+    """CIRCL badge of a git repository: the admin's choice, else its url or author holds a keyword."""
+    if repo.circl_badge is not None:
+        return repo.circl_badge
+    text = f"{repo.url or ''} {repo.author or ''}".lower()
+    return any(k in text for k in _circl_keywords())
+
+
+def circl_badge_expr():
+    """SQL version of has_circl_badge(), for the CIRCL filter."""
+    from sqlalchemy import false
+    auto = or_(*[or_(GithubRepo.url.ilike(f"%{k}%"), GithubRepo.author.ilike(f"%{k}%")) for k in _circl_keywords()]) \
+        if _circl_keywords() else false()
+    return or_(GithubRepo.circl_badge == True, and_(GithubRepo.circl_badge.is_(None), auto))
+
+
+def set_circl_badge(url, value):
+    """Admin: force the badge on (True) / off (False), or back to automatic (None)."""
+    repo = GithubRepo.query.filter_by(url=url).first()
+    if not repo:
+        return None
+    repo.circl_badge = value
+    db.session.commit()
+    return repo
+
+
+def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, author_names: list = None, editor_names: list = None, license_filter: str = None, conflicts_only: bool = False, sort: str = None, sort_dir: str = 'asc', provider_filter: str = None, circl_only: bool = False):
     """Paginates AND filters/sorts entirely off GithubRepo (a small,
     incrementally-synced table — see github_repo_core.py) instead of
     running a live GROUP BY / per-rule scan over the whole Rule table.
@@ -3601,6 +3632,9 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
     if conflicts_only:
         query = query.filter(GithubRepo.conflict_count > 0)
 
+    if circl_only:
+        query = query.filter(circl_badge_expr())
+
     if sort in ('url', 'author', 'rule_count', 'cve_count'):
         sort_column = getattr(GithubRepo, sort)
     else:
@@ -3664,6 +3698,8 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
             "branches": branch_names,
             "cve_count": repo.cve_count,
             "has_conflicts": repo.conflict_count > 0,
+            "circl": has_circl_badge(repo),
+            "circl_badge": repo.circl_badge,
             "last_import": {
                 "date": last_import.query_date.strftime('%Y-%m-%d %H:%M') if last_import else None,
                 "url_imported": "/rule/import_loading/"+ last_import.uuid if last_import else None,
