@@ -413,17 +413,23 @@ def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False, is_sso=
     user.last_name  = form_dict["last_name"]
     pending_email = None
 
+    # First login of a new instance (the route checked both are given): the email is applied at once
+    # — mail is often not set up yet, a confirmation link could never arrive — and the setup ends.
+    first_setup = user.must_change_password and not is_sso and bool(form_dict.get("password"))
+
     # SSO accounts have their identity managed externally; disallow email changes.
     if not is_sso:
         # Detect email change but don't apply it yet
         new_email = form_dict["email"]
-        if new_email != user.email:
+        if new_email != user.email and not first_setup:
             pending_email = new_email
         else:
             user.email = new_email
 
     if form_dict.get("password") and not is_sso:
         user.password = form_dict["password"]
+        if first_setup:
+            user.must_change_password = False
 
     # Profile fields: only those sent are changed (the API edit sends none).
     for field in ("username", "bio", "location", "website_url", "github_url", "twitter_url"):

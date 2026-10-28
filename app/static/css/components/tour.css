@@ -1,0 +1,68 @@
+/* Tour (js/components/tour/Tour.js) + the Tutorial icon of the top bar (js/tour/tourLauncher.js) */
+.rz-tour { position: fixed; inset: 0; z-index: 20000; pointer-events: none; animation: rz-tour-fade .6s ease; }
+.rz-tour-card { animation: rz-tour-rise .55s cubic-bezier(.22, 1, .36, 1); }
+@keyframes rz-tour-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rz-tour-rise { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+.rz-tour-blocker { position: fixed; inset: 0; pointer-events: auto; background: transparent; }
+.rz-tour--centred .rz-tour-blocker { background: rgba(15, 23, 42, .55); }
+.rz-tour-spot { position: fixed; border-radius: 10px; pointer-events: none;
+    box-shadow: 0 0 0 4px rgba(13, 110, 253, .55), 0 0 0 9999px rgba(15, 23, 42, .55);
+    transition: left .25s ease, top .25s ease, width .25s ease, height .25s ease, opacity .2s; }
+
+.rz-tour-card { position: fixed; width: min(380px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto;
+    pointer-events: auto; padding: 1.15rem 1.25rem 1rem; border-radius: 14px; outline: none;
+    background: var(--card-bg-color, #fff); color: var(--text-color, #212529);
+    border: 1px solid var(--border-color, #dee2e6); border-top: 3px solid #0d6efd;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .3); transition: left .25s ease, top .25s ease, opacity .15s; }
+.rz-tour-card--busy { opacity: .6; }
+.rz-tour-card--nudge { animation: rz-tour-nudge .35s; }
+@keyframes rz-tour-nudge { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+
+.rz-tour-x { position: absolute; top: .55rem; right: .6rem; border: 0; background: none; width: 30px; height: 30px; border-radius: 8px;
+    color: var(--subtle-text-color, #6c757d); }
+.rz-tour-x:hover { background: var(--light-bg-color, #f1f3f5); color: var(--text-color, #212529); }
+.rz-tour-badge { display: inline-block; margin-bottom: .45rem; padding: .15rem .6rem; border-radius: 999px; font-size: .68rem; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; color: #0d6efd; background: rgba(13, 110, 253, .1); }
+.rz-tour-title { margin: 0 1.8rem .5rem 0; font-size: 1.05rem; font-weight: 700; }
+.rz-tour-text { font-size: .9rem; line-height: 1.55; color: var(--text-color, #212529); }
+.rz-tour-text p { margin: 0 0 .55rem; }
+.rz-tour-text code { font-size: .82em; }
+.rz-tour-demo { margin: .35rem 0 .6rem; }
+.rz-tour-foot { display: flex; align-items: center; gap: .5rem; margin-top: .75rem; flex-wrap: wrap; }
+.rz-tour-progress { flex: 1 0 100%; height: 4px; border-radius: 4px; background: var(--light-bg-color, #e9ecef); overflow: hidden; margin-bottom: .35rem; }
+.rz-tour-bar { height: 100%; background: linear-gradient(90deg, #0d6efd, #0a58ca); transition: width .25s; }
+.rz-tour-count { margin-right: auto; font-size: .78rem; color: var(--subtle-text-color, #6c757d); font-variant-numeric: tabular-nums; }
+.rz-tour-btn { border: 1px solid #0d6efd; background: #0d6efd; color: #fff; border-radius: 999px; padding: .38rem 1rem; font-size: .85rem; font-weight: 600; }
+.rz-tour-btn:hover { background: #0a58ca; border-color: #0a58ca; }
+.rz-tour-btn--ghost { background: transparent; color: var(--text-color, #212529); border-color: var(--border-color, #dee2e6); }
+.rz-tour-btn--ghost:hover { background: var(--light-bg-color, #f1f3f5); color: var(--text-color, #212529); border-color: var(--border-color, #dee2e6); }
+.rz-tour-btn:focus-visible, .rz-tour-x:focus-visible { outline: 2px solid #0d6efd; outline-offset: 2px; }
+
+/* example shown in the card (empty instance) */
+.rz-tour-example { position: relative; padding: .7rem .8rem; border-radius: 10px; border: 1px dashed rgba(13, 110, 253, .45);
+    background: var(--light-bg-color, #f8f9fa); font-size: .82rem; }
+.rz-tour-example__tag { position: absolute; top: -.55rem; right: .6rem; padding: 0 .45rem; border-radius: 999px; font-size: .62rem; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; background: #0d6efd; color: #fff; }
+.rz-tour-example__title { font-weight: 700; margin-bottom: .15rem; }
+.rz-tour-example__meta { color: var(--subtle-text-color, #6c757d); font-size: .75rem; margin-bottom: .35rem; }
+.rz-tour-example__chips span { display: inline-block; margin: 0 .25rem .25rem 0; padding: .05rem .45rem; border-radius: 999px; font-size: .7rem;
+    background: rgba(13, 110, 253, .1); color: #0d6efd; }
+
+/* ── Tutorial icon of the top bar (sidebar.html, next to the settings gear) ── */
+.rz-tour-launch { position: relative; display: inline-flex; }
+.rz-tour-launch__btn { border: 0; background: none; padding: 0; cursor: pointer; }
+.rz-tour-launch__menu { position: absolute; right: 0; top: calc(100% + 10px); z-index: 1060; min-width: 260px; padding: .35rem; border-radius: 12px;
+    background: var(--card-bg-color, #fff); border: 1px solid var(--border-color, #dee2e6); box-shadow: 0 12px 32px rgba(0, 0, 0, .2); }
+.rz-tour-launch__menu[hidden] { display: none; }
+.rz-tour-launch__item { display: flex; gap: .65rem; align-items: flex-start; width: 100%; padding: .55rem .65rem; border: 0; border-radius: 8px;
+    background: none; text-align: left; color: var(--text-color, #212529); }
+.rz-tour-launch__item:hover, .rz-tour-launch__item:focus-visible { background: var(--light-bg-color, #f1f3f5); outline: none; }
+.rz-tour-launch__item i { margin-top: .2rem; color: #0d6efd; width: 1rem; text-align: center; }
+.rz-tour-launch__item strong { display: block; font-size: .86rem; }
+.rz-tour-launch__item small { display: block; font-size: .74rem; color: var(--subtle-text-color, #6c757d); }
+.rz-tour-launch__role { padding: .35rem .65rem .5rem; font-size: .72rem; color: var(--subtle-text-color, #6c757d); border-bottom: 1px solid var(--border-color, #dee2e6); margin-bottom: .25rem; }
+@media (max-width: 991px) { .rz-tour-launch__menu { right: auto; left: 0; } }
+@media (prefers-reduced-motion: reduce) {
+    .rz-tour-spot, .rz-tour-card, .rz-tour-bar { transition: none; }
+    .rz-tour-card--nudge, .rz-tour, .rz-tour-card { animation: none; }
+}

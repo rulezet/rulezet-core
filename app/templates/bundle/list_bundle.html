@@ -36,7 +36,7 @@
 
     {% if current_user.is_authenticated %}
     <!-- Tabs -->
-    <nav class="dr-nav mb-4">
+    <nav data-tour="bundles-tabs" class="dr-nav mb-4">
         <a href="#" class="dr-nav__item" :class="{ active: activeTab === 'all' }" @click.prevent="activeTab = 'all'">
             <i class="fa-solid fa-boxes-stacked"></i><span>All bundles</span>
         </a>
@@ -48,7 +48,7 @@
     {% endif %}
 
     <!-- BundleList component -->
-    <bundle-list
+    <bundle-list data-tour="bundles-list"
         v-show="activeTab === 'all'"
         ref="bundleListRef"
         mode="read"

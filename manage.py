@@ -1013,6 +1013,16 @@ def _prepare_dev() -> None:
         warn("Start continues; first install? run: python3 manage.py db-init")
 
 
+def _first_login(flaskenv: str) -> None:
+    """The first admin has not chosen a password yet: print a fresh one, here in the launch terminal
+    (app.py --first-admin-password; nothing is printed once the admin has changed it)."""
+    res = subprocess.run([PYTHON, "app.py", "--first-admin-password"], cwd=ROOT, capture_output=True, text=True,
+                         env={**_venv_env(), "FLASKENV": flaskenv})
+    box = "\n".join(l for l in res.stdout.splitlines() if "DEBUG MODE" not in l and "TESTING MODE" not in l).strip()
+    if box:
+        _say("\n" + box)
+
+
 def cmd_start_dev() -> None:
     banner("development")
     with step(1, 4, "Environment, dependencies & database"):
@@ -1024,6 +1034,7 @@ def cmd_start_dev() -> None:
         _ensure_sandbox()
     port = os.environ.get("FLASK_PORT", "7009")
     url = f"http://{os.environ.get('FLASK_URL', '127.0.0.1')}:{port}"
+    _first_login("development")
     _say(f"\n\033[1;34m  [4/4]\033[0m \033[1mStarting the server\033[0m \033[0;90m(gunicorn: web · worker.py: jobs)\033[0m")
     _announce_when_up(url, port, "development")
     _run_gunicorn_with_worker("development", port, reload=True)
@@ -1064,6 +1075,7 @@ def cmd_start_prod() -> None:
     # after the code and the dependencies are up to date: checks the rulezet-tester just installed
     _ensure_editor()
     _ensure_sandbox()
+    _first_login("production")
 
     # 3. Start — same gunicorn+worker.py launch as `start-dev`, see
     # _run_gunicorn_with_worker's docstring for why this isn't `flask run`

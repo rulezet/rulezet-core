@@ -39,7 +39,7 @@
         </button>
     </nav>
 
-    <div class="fmt-search mb-4" id="fmt-search-wrap">
+    <div data-tour="formats-search" class="fmt-search mb-4" id="fmt-search-wrap">
         <i class="fa-solid fa-magnifying-glass"></i>
         <input type="search" id="fmt-search-input" class="form-control" placeholder="Search a format, a category, a maintainer…" autocomplete="off">
     </div>
@@ -64,7 +64,7 @@
         {% endif %}
     </div>
 
-    <div class="row g-4" id="fmt-grid">
+    <div data-tour="formats-grid" class="row g-4" id="fmt-grid">
         {% for f in formats %}
         <div class="col-12 col-md-6 col-xl-4 fmt-col" style="--i: {{ loop.index0 }};"
              data-search="{{ (f.key ~ ' ' ~ f.title ~ ' ' ~ f.category ~ ' ' ~ (f.maintainer or '') ~ ' ' ~ f.extensions|join(' '))|lower }}">

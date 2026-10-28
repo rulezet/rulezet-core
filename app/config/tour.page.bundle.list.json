@@ -1,0 +1,27 @@
+{
+  "label": "Tutorial: Bundles",
+  "category": "Tutorial",
+  "description": "Steps of the Tutorial button on the Bundles page (endpoint bundle.list). A step: target (CSS selector, empty = centred card), title, text (blank line = new paragraph, **bold**, `code`), roles (optional: anonymous, user, member, admin, perm:<key>), demo (rule / bundle: example shown when the target is missing, e.g. an empty list).",
+  "public": false,
+  "value": {
+    "title": "Bundles",
+    "steps": [
+      {
+        "target": ".explorer-banner",
+        "title": "Bundles",
+        "text": "A bundle groups rules of any format around one subject: a threat actor, a CVE, a malware family, a customer, a training. Download it in one zip, follow its releases, push it to MISP."
+      },
+      {
+        "target": "[data-tour=\"bundles-tabs\"]",
+        "title": "Every bundle, or yours",
+        "text": "**All bundles**: the public ones. **Mine**: the bundles you own, public or private. **Favorites**: the ones you starred (loaded the first time you open the tab)."
+      },
+      {
+        "target": "[data-tour=\"bundles-list\"]",
+        "title": "The list",
+        "demo": "bundle",
+        "text": "Search and filter the bundles. Each card shows the number of rules, the formats inside, tags, votes and author — open one to see its rules, structure and history."
+      }
+    ]
+  }
+}

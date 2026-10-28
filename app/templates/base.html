@@ -43,6 +43,7 @@
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/base/sidebar.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/components/global-search.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/base/toaster.css') }}">
+    {% if tour_ctx %}<link rel="stylesheet" href="{{ url_for('static', filename='css/components/tour.css') }}">{% endif %}
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/jobWidget.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/chatbot/chatbot.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/account/verify_email.css') }}">
@@ -68,7 +69,8 @@
     <script src="{{ url_for('static',filename='js/blur.js')}}"></script>
 </head>
 
-<body>
+{# first login of a new instance: only the profile page until the password and email are set #}
+<body{% if current_user.is_authenticated and current_user.must_change_password %} class="rz-first-setup"{% endif %}>
     <!-- Apply nav style, code font, app font, and json theme before first paint to avoid flash -->
     <script>
     (function(){
@@ -255,6 +257,11 @@
     </script>
     {% endblock %}
 
+    {% if tour_ctx %}
+    {# Tutorial button: this page's tour and the full tour (app/features/tour/) #}
+    <script type="application/json" id="rz-tour-data">{{ tour_ctx | tojson }}</script>
+    <script type="module" src="{{ url_for('static', filename='js/tour/tourLauncher.js') }}"></script>
+    {% endif %}
     <script src="{{ url_for('static', filename='js/themes/christmas.js') }}" defer></script>
     {% block script %}
     {% endblock %}
@@ -340,7 +347,7 @@
     <div id="job-widget"></div>
     <script type="module" src="{{ url_for('static', filename='js/jobs/jobWidget.js') }}"></script>
     <script type="module" src="{{ url_for('static', filename='js/notification/notificationBell.js') }}"></script>
-    {% if chatbot_enabled and (current_user.is_admin() or current_user.has_permission('ai.use')) %}
+    {% if chatbot_enabled and (current_user.is_admin() or current_user.has_permission('ai.use')) and not current_user.must_change_password %}
     <div id="chatbot-widget"></div>
     <script type="module" src="{{ url_for('static', filename='js/chatbot/chatbot.js') }}"></script>
     {% endif %}

@@ -1,0 +1,51 @@
+{
+  "label": "Tutorial: Add rules",
+  "category": "Tutorial",
+  "description": "Steps of the Tutorial button on the Add rules page (endpoint rule.rule). A step: target (CSS selector, empty = centred card), title, text (blank line = new paragraph, **bold**, `code`), roles (optional: anonymous, user, member, admin, perm:<key>), demo (rule / bundle: example shown when the target is missing, e.g. an empty list).",
+  "public": false,
+  "value": {
+    "title": "Add rules",
+    "steps": [
+      {
+        "target": "[data-tour=\"create-tabs\"]",
+        "title": "Seven ways to add rules",
+        "text": "Each tab is a way in. Whatever you choose, every rule is checked with its format's own validator before it is saved, and gets the default tags `tlp:clear` and `pap:clear`."
+      },
+      {
+        "target": "[data-tour=\"create-identity\"]",
+        "title": "By hand — 1. Identity",
+        "text": "The **title** (unique on Rulezet) and the **format**. The format decides how the content is checked."
+      },
+      {
+        "target": "[data-tour=\"create-classification\"]",
+        "title": "By hand — 2. Classification",
+        "text": "**Licence** (can others reuse it?), **CVEs** it detects, **ATT&CK techniques** and **tags**. They make the rule findable in the filters and on the CVE and ATT&CK pages."
+      },
+      {
+        "target": "[data-tour=\"create-content\"]",
+        "title": "By hand — 3. Content",
+        "text": "Paste the rule. A rule that does not compile is refused, with the error and the line shown."
+      },
+      {
+        "target": "[data-tour=\"create-tab-parse\"]",
+        "title": "Paste a whole file",
+        "text": "Paste many rules at once: Rulezet splits them, reads their metadata (author, references, description) and shows each one before creating them. Rules in error are listed, the others are created."
+      },
+      {
+        "target": "[data-tour=\"create-tab-git\"]",
+        "title": "From a Git repository",
+        "text": "The URL of a GitHub, GitLab, Gitea… repository and a branch: every rule found is imported, with a link back to its file. The repository is remembered, so its rules can be **updated** later in one sync."
+      },
+      {
+        "target": "[data-tour=\"create-tab-zip\"]",
+        "title": "From a zip file",
+        "text": "Upload an archive of rule files: same checks as above, one rule per file (or per rule in a file)."
+      },
+      {
+        "target": "[data-tour=\"create-tab-editor\"]",
+        "title": "YARA editor",
+        "text": "A full YARA editor: live syntax checks, autocompletion, rules that use other rules, templates, a Try panel on a sample, and tests on sample sets before saving."
+      }
+    ]
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "label": "Tutorial: My account",
+  "category": "Tutorial",
+  "description": "Steps of the Tutorial button on the My account page (endpoint account.index). A step: target (CSS selector, empty = centred card), title, text (blank line = new paragraph, **bold**, `code`), roles (optional: anonymous, user, member, admin, perm:<key>), demo (rule / bundle: example shown when the target is missing, e.g. an empty list).",
+  "public": false,
+  "value": {
+    "title": "My account",
+    "steps": [
+      {
+        "target": "[data-tour=\"account-hero\"]",
+        "title": "Your profile",
+        "text": "What others see on your public page: avatar, name, links, points and badges. **Edit Profile** changes them."
+      },
+      {
+        "target": "[data-tour=\"account-tabs\"]",
+        "title": "Your account, in three tabs",
+        "text": "Profile, Community and Comments."
+      },
+      {
+        "target": "[data-tour=\"atab-info\"]",
+        "title": "Profile",
+        "text": "Your details, your API key and your settings.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"atab-follow\"]",
+        "title": "Community",
+        "text": "People you follow and who follow you. Following someone notifies you of their new rules and bundles.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"atab-comments\"]",
+        "title": "Comments",
+        "text": "Every comment you wrote, with a link to its rule or bundle.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"account-api\"]",
+        "title": "API key",
+        "text": "Your key for the REST API (header `X-API-KEY`): scripts can search, add and download rules as you. Keep it secret; regenerate it if it leaks."
+      }
+    ]
+  }
+}

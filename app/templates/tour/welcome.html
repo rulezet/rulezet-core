@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}Welcome — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tour/demo.css') }}">
+{% endblock %}
+{% block content %}
+{# First page of the full tour on an empty Rulezet (tour.full, "when": "empty"): what Rulezet is and
+   the three ways to fill it — connectors first, the fastest way to get rules. #}
+<div class="container mt-4 mb-5">
+    <div class="explorer-banner mb-4" data-tour="welcome-intro">
+        <i class="fa-solid fa-hand-sparkles banner-watermark"></i>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-hand-sparkles"></i></div>
+            <div><h2 class="fw-bold mb-1">Welcome to Rulezet</h2><div class="banner-accent"></div></div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:640px;font-size:.95rem;">
+            A library of detection rules — YARA, Sigma, Suricata, Zeek and more — to share, review, test and
+            deploy, alone or as a community.
+            {% if empty %}This instance has no rule yet: here is how to fill it.{% endif %}
+        </p>
+    </div>
+
+    <div class="row g-4 mb-4" data-tour="welcome-fill">
+        <div class="col-md-4">
+            <div class="welcome-way h-100" data-tour="welcome-connectors">
+                <div class="welcome-way__icon"><i class="fa-solid fa-network-wired"></i></div>
+                <h5 class="fw-bold">1. Connect to another Rulezet</h5>
+                <p>The fastest way: a <strong>connector</strong> pulls the rules and bundles of another Rulezet instance —
+                    rulezet.org for instance — with their tags, CVEs and ATT&amp;CK techniques, and keeps them in sync.</p>
+                {% if is_admin %}
+                <a href="{{ url_for('connector.connector_list') }}" class="btn btn-primary btn-sm rounded-pill"><i class="fa-solid fa-plug me-1"></i>Set up a connector</a>
+                {% else %}
+                <p class="small text-muted mb-0"><i class="fa-solid fa-user-shield me-1"></i>Connectors are set up by an administrator.</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="welcome-way h-100" data-tour="welcome-git">
+                <div class="welcome-way__icon"><i class="fa-brands fa-git-alt"></i></div>
+                <h5 class="fw-bold">2. Import a Git repository</h5>
+                <p>Give the URL of a repository of rules (GitHub, GitLab, Gitea…): every rule is checked, imported with a
+                    link back to its file, and can be updated later in one sync.</p>
+                {% if current_user.is_authenticated %}
+                <a href="{{ url_for('rule.rule') }}" class="btn btn-outline-primary btn-sm rounded-pill"><i class="fa-solid fa-download me-1"></i>Import rules</a>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="welcome-way h-100" data-tour="welcome-own">
+                <div class="welcome-way__icon"><i class="fa-solid fa-pen-to-square"></i></div>
+                <h5 class="fw-bold">3. Add your own rules</h5>
+                <p>Write a rule, paste a whole file, upload a zip or use the YARA editor. Then group rules into
+                    <strong>bundles</strong> to share them as one.</p>
+                {% if current_user.is_authenticated %}
+                <a href="{{ url_for('rule.rule') }}" class="btn btn-outline-primary btn-sm rounded-pill"><i class="fa-solid fa-plus me-1"></i>Add a rule</a>
+                {% else %}
+                <a href="{{ url_for('account.login') }}" class="btn btn-outline-primary btn-sm rounded-pill"><i class="fa-solid fa-right-to-bracket me-1"></i>Log in to add rules</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if starter %}
+    <div class="tour-demo-note mb-3" data-tour="welcome-starter" role="note">
+        <i class="fa-solid fa-seedling"></i>
+        <span>Your <strong>first rule</strong> and <strong>first bundle</strong> were created for the tour:
+            <a href="{{ starter.rule }}">open the rule</a> · <a href="{{ starter.bundle }}">open the bundle</a>.</span>
+    </div>
+    {% endif %}
+    <div class="tour-demo-note" data-tour="welcome-tour" role="note">
+        <i class="fa-solid fa-graduation-cap"></i>
+        <span>The <strong>Tutorial</strong> icon in the top bar, next to the settings gear, explains every page.
+            Until rules arrive, the tour shows an example rule and bundle.</span>
+    </div>
+</div>
+{% endblock %}

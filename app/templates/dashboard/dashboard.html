@@ -12,7 +12,7 @@
 <div class="container mt-4" id="dashboard-app" v-cloak>
 
     <!-- Always-visible control bar — stays even when the banner below is hidden -->
-    <div class="d-flex justify-content-end gap-2 mb-2">
+    <div data-tour="dash-controls" class="d-flex justify-content-end gap-2 mb-2">
         <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="toggleBanner">
             <i :class="bannerCollapsed ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-up'" class="me-1"></i>
             [[ bannerCollapsed ? 'Show header' : 'Hide header' ]]
@@ -54,7 +54,7 @@
     </div>
 
     <!-- Grid -->
-    <div class="grid-stack" ref="gridEl">
+    <div data-tour="dash-grid" class="grid-stack" ref="gridEl">
         <div v-for="w in widgets" :key="w.id"
              class="grid-stack-item"
              :gs-id="w.id" :gs-x="w.x" :gs-y="w.y" :gs-w="w.w" :gs-h="w.h">

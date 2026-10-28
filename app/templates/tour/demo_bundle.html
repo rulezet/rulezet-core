@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}Example bundle — Tutorial — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tour/demo.css') }}">
+{% endblock %}
+{% block content %}
+{# The full tour's "A bundle" page on an instance with no bundle yet: an example (setting tour.demo),
+   never saved. Same data-tour anchors as bundle/detail_bundle.html, so the same steps work. #}
+<div class="container mt-4 mb-5">
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-box banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/bundle/list" class="text-decoration-none text-muted">Bundles</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Example</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-box"></i></div>
+            <div><h2 class="fw-bold mb-1" style="word-break:break-word;">{{ demo.title[:60] }}</h2><div class="banner-accent"></div></div>
+        </div>
+    </div>
+
+    <div class="tour-demo-note mb-4" role="note">
+        <i class="fa-solid fa-graduation-cap"></i>
+        <span><strong>Example for the tutorial</strong> — this instance has no bundle yet, so the tour shows this one.
+            It is not saved anywhere and its buttons do nothing.</span>
+    </div>
+
+    <div class="card h-100 border-0 card_detail border-top shadow-lg position-relative mb-4" style="border-radius:12px;">
+        <div class="card-watermark-detail"><i class="fa-solid fa-box"></i></div>
+        <div class="card-body p-4 p-md-5">
+            <div data-tour="bundle-description" class="mb-3">
+                <div class="text-muted small mb-1"><i class="fa-solid fa-user me-1"></i>{{ demo.author }}</div>
+                <p class="mb-0">{{ demo.description }}</p>
+            </div>
+            <div data-tour="bundle-kpis" class="row g-3 my-4">
+                <div class="col-6 col-md-3"><div class="tour-demo-kpi"><strong>{{ demo.rules | length }}</strong><span>rules</span></div></div>
+                <div class="col-6 col-md-3"><div class="tour-demo-kpi"><strong>{{ demo.rules | map(attribute='format') | unique | list | length }}</strong><span>formats</span></div></div>
+                <div class="col-6 col-md-3"><div class="tour-demo-kpi"><strong>8</strong><span>votes</span></div></div>
+                <div class="col-6 col-md-3"><div class="tour-demo-kpi"><strong>21</strong><span>downloads</span></div></div>
+            </div>
+            <div data-tour="bundle-actions" class="rounded-3 border p-3 d-flex flex-wrap gap-2" style="background:var(--light-bg-color);">
+                <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" disabled><i class="fa-solid fa-download me-1"></i>Download all</button>
+                <button type="button" class="btn btn-sm btn-outline-warning rounded-pill" disabled><i class="fa-regular fa-star me-1"></i>Favorite</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" disabled><i class="fa-solid fa-share-nodes me-1"></i>Share</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" disabled><i class="fa-solid fa-diagram-project me-1"></i>MISP event</button>
+            </div>
+            <div data-tour="bundle-tags" class="mt-4 tour-demo-chips">
+                {% for t in demo.tags %}<span class="tour-demo-chip">{{ t }}</span>{% endfor %}
+            </div>
+            <div data-tour="bundle-tabs" class="mt-4">
+                <h6 class="fw-bold mb-2"><i class="fa-solid fa-list me-2"></i>Rules</h6>
+                <ul class="list-group">
+                    {% for r in demo.rules %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {{ r.title }}<span class="badge rounded-pill bg-primary">{{ r.format | upper }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div data-tour="bundle-comments" class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-4">
+            <h5 class="fw-bold mb-3"><i class="fa-regular fa-comments me-2"></i>Comments</h5>
+            <p class="text-muted mb-0">Comments and known issues of the bundle.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

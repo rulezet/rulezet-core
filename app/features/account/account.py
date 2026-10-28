@@ -473,6 +473,40 @@ def _update_last_seen():
         AccountModel.update_last_seen(current_user.id)
 
 
+def _first_login_pending() -> bool:
+    """A new instance whose first admin has not logged in and changed the generated password yet."""
+    from app.core.db_class.user import User
+    return User.query.filter_by(admin=True, must_change_password=True).first() is not None
+
+
+# Pages still reachable while the password must be changed (first admin of a new instance)
+_PASSWORD_CHANGE_ALLOWED = {'account.edit_user', 'account.logout', 'static'}
+
+
+@account_blueprint.before_app_request
+def _force_password_change():
+    """The first admin (app.py -i) has a generated password: nothing else until it is changed.
+    Page loads are sent back to the profile page; other requests (data the page fetches, forms
+    elsewhere) are refused; images, styles and scripts load as usual."""
+    if not current_user.is_authenticated or not getattr(current_user, 'must_change_password', False):
+        return None
+    endpoint = request.endpoint or ''
+    if (endpoint in _PASSWORD_CHANGE_ALLOWED or endpoint.endswith('static')
+            or request.path.startswith(('/static/', '/media/', '/api/', '/editor-api/assets/'))):
+        return None
+    # what the profile page itself loads: avatar previews, images, styles, fonts, scripts
+    if request.method == 'GET' and (endpoint == 'account.avatar_preview'
+                                    or request.headers.get('Sec-Fetch-Dest') in ('image', 'style', 'font', 'script')):
+        return None
+    navigating = request.method == 'GET' and (request.headers.get('Sec-Fetch-Mode') == 'navigate'
+                                               or request.accept_mimetypes.best == 'text/html')
+    if not navigating:
+        return jsonify({'error': 'Change your password first.'}), 403
+    flash('Welcome! Choose your own password before anything else: the one created at install time '
+          'must be replaced.', 'warning')
+    return redirect(url_for('account.edit_user', change_password=1))
+
+
 
 @account_blueprint.route("/edit", methods=['GET', 'POST'])
 @login_required
@@ -481,7 +515,21 @@ def edit_user():
     form = EditUserForm()
     is_sso = current_user.auth_provider != 'local'
 
-    if form.validate_on_submit():
+    first_setup_errors = []
+    if form.is_submitted() and current_user.must_change_password and not is_sso:
+        from app.core.utils.init_db import DEFAULT_ADMIN_EMAIL
+        if not form.change_password.data or not form.password.data:
+            first_setup_errors.append('Choose your own password.')
+        if (form.email.data or '').strip().lower() in ('', DEFAULT_ADMIN_EMAIL):
+            first_setup_errors.append('Replace admin@admin.admin with your own email address.')
+        elif (form.email.data or '').strip().lower() != current_user.email.lower() and \
+                User.query.filter(db.func.lower(User.email) == form.email.data.strip().lower()).first():
+            first_setup_errors.append('This email address is already used by another account.')
+        for message in first_setup_errors:
+            flash(message, 'danger')
+
+    was_first_setup = current_user.must_change_password
+    if not first_setup_errors and form.validate_on_submit():
         form_dict     = form_to_dict(form)
         avatar_file   = form.profile_picture.data
         remove_avatar = request.form.get("remove_avatar") == "1"
@@ -519,10 +567,16 @@ def edit_user():
                         f'Profile updated, but the email address {pending_email} is already in use by another account.',
                         'warning'
                     )
-            else:
+            elif not was_first_setup:
                 flash('Profile updated successfully!', 'success')
+            if was_first_setup:                 # account set up: on to the home page, where the tour starts
+                session['rz_just_setup'] = True          # confetti + the tour at once (tour_core.context)
+                return redirect(url_for('home.home'))
             return redirect("/account")
     else:
+        # first admin of a new instance, or a link asking for it: the password part opened
+        if current_user.must_change_password or request.args.get('change_password'):
+            form.change_password.data = True
         form.first_name.data  = current_user.first_name
         form.last_name.data   = current_user.last_name
         form.email.data       = current_user.email
@@ -598,7 +652,7 @@ def login() -> redirect:
         if remaining_time:
             current_app.logger.warning(f"Login rate limit hit, IP={get_client_ip()}")
             flash(f"Too many failed login attempts. Please try again in {remaining_time} seconds.", "warning")
-            return render_template("account/login.html", form=form, show_reset_link=False)
+            return render_template("account/login.html", form=form, show_reset_link=False, first_login=_first_login_pending())
 
         user = User.query.filter_by(email=form.email.data).first()
 
@@ -620,7 +674,7 @@ def login() -> redirect:
             # someone's password typed into the email field, or enumeration.
             current_app.logger.warning(f"Failed login attempt, IP={get_client_ip()}")
 
-    return render_template('account/login.html', form=form)
+    return render_template('account/login.html', form=form, first_login=_first_login_pending())
 
 @account_blueprint.route('/logout')
 @login_required

@@ -3361,3 +3361,20 @@ button.dr-nav__item {
     background: var(--light-bg-color);
     border: 1px solid var(--border-color);
 }
+
+/* First login of a new instance (base.html body.rz-first-setup): the profile page only — the menus,
+   search, bell, settings, chatbot and footer stay visible but cannot be clicked until the password and
+   email are set (the server sends any other page back here anyway); the profile menu keeps Logout */
+body.rz-first-setup .main-navbar .navbar-nav,
+body.rz-first-setup .main-navbar .navbar-brand,
+body.rz-first-setup .main-navbar global-search,
+body.rz-first-setup .main-navbar .nav-icon-btn,
+body.rz-first-setup #notif-bell-app,
+body.rz-first-setup #chatbot-widget,
+body.rz-first-setup footer,
+body.rz-first-setup main nav[aria-label="breadcrumb"] { pointer-events: none !important; opacity: .45; filter: grayscale(.4); user-select: none; }
+body.rz-first-setup .main-navbar .dropdown-menu a:not([href*="logout"]) { pointer-events: none; opacity: .45; }
+/* the two fields to change first */
+body.rz-first-setup .rz-setup-field { position: relative; border-radius: 12px; padding: .75rem; margin: 0 0 .75rem;
+    background: rgba(255, 193, 7, .12); box-shadow: 0 0 0 2px rgba(255, 193, 7, .75); }
+body.rz-first-setup .rz-setup-field input { border-color: #f0ad00; }

@@ -47,6 +47,8 @@ class User(UserMixin, db.Model):
     auth_data = db.Column(db.String(128), unique=True, index=True)
 
     is_verified = db.Column(db.Boolean, default=False)
+    # the first admin of a new instance (app.py -i) gets a generated password: changed before anything else
+    must_change_password = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
     verification_code = db.Column(db.String(6), nullable=True)
     verification_expiration = db.Column(db.DateTime, nullable=True)
     password_reset_token = db.Column(db.String(64), nullable=True, index=True)

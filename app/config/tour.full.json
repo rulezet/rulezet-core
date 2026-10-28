@@ -1,0 +1,171 @@
+{
+  "label": "Tutorial: full tour",
+  "category": "Tutorial",
+  "description": "The pages of the full tour, in order. A page: page (endpoint; its own tour gives the section steps, button-level ones left out) or sample (rule / bundle: a real public one, else the demo page) or url, title, overview (first step: the whole page), roles, when (empty: only on an instance with no rule), sections (false: not the page's own steps), steps (extra steps).",
+  "public": false,
+  "value": [
+    {
+      "page": "tour.welcome",
+      "url": "/tour/welcome",
+      "title": "Welcome",
+      "when": "empty",
+      "overview": "Rulezet is a library of detection rules — YARA, Sigma, Suricata, Zeek and more — to share, review, test and deploy. This instance has no rule yet: this page shows how to fill it.",
+      "steps": [
+        {
+          "target": "[data-tour=\"welcome-connectors\"]",
+          "title": "Get rules in minutes: connectors",
+          "text": "A **connector** links this instance to another Rulezet (rulezet.org for instance) and pulls its rules and bundles, with their tags, CVEs and ATT&CK techniques. **Soft** pull adds what is missing; **hard** pull also updates what you already have. Rules are matched by their UUID, so pulling again never creates duplicates."
+        },
+        {
+          "target": "[data-tour=\"welcome-git\"]",
+          "title": "Or import Git repositories",
+          "text": "Any public repository of rules — SigmaHQ, Yara-Rules, Emerging Threats… — can be imported and kept up to date."
+        },
+        {
+          "target": "[data-tour=\"welcome-own\"]",
+          "title": "Or write your own",
+          "text": "By hand, pasted, zipped or with the YARA editor."
+        },
+        {
+          "target": "[data-tour=\"welcome-starter\"]",
+          "title": "Your first rule and bundle",
+          "roles": [
+            "user"
+          ],
+          "text": "So that this tour has something to show, Rulezet created a **first rule** and a **bundle** holding it, owned by you. Keep them, edit them or delete them whenever you want."
+        },
+        {
+          "target": "[data-tour=\"nav-profile\"]",
+          "title": "Log in to start",
+          "roles": [
+            "anonymous"
+          ],
+          "href": "/account/login",
+          "nextLabel": "Log in →",
+          "text": "Everything starts with an account: log in (the first administrator received a generated password at install time — you will be asked to change it). The tour starts again once you are in."
+        }
+      ]
+    },
+    {
+      "page": "connector.connector_list",
+      "title": "Connectors",
+      "when": "empty",
+      "roles": [
+        "admin"
+      ],
+      "overview": "Administrators link this instance to other Rulezet instances here — the quickest way to get rules."
+    },
+    {
+      "page": "home.home",
+      "title": "Home",
+      "overview": "The home page: search, the formats, what this instance holds and the latest activity."
+    },
+    {
+      "page": "rule.rules_list",
+      "title": "Rules",
+      "overview": "Every rule of the instance, with a search, a filter box and one card per rule."
+    },
+    {
+      "page": "rule.detail_rule",
+      "sample": "rule",
+      "title": "A rule",
+      "overview": "One rule and everything about it: its content, classification, actions, quality and discussion."
+    },
+    {
+      "page": "rule.rule",
+      "title": "Add rules",
+      "roles": [
+        "user"
+      ],
+      "overview": "Every way to bring rules in: by hand, pasted, from Git, a zip, JSON or the YARA editor."
+    },
+    {
+      "page": "bundle.list",
+      "title": "Bundles",
+      "overview": "Bundles group rules of any format around one subject: a threat, a CVE, a project."
+    },
+    {
+      "page": "bundle.detail",
+      "sample": "bundle",
+      "title": "A bundle",
+      "overview": "One bundle: what it is for, its actions, and tabs for its rules, structure, coverage and history."
+    },
+    {
+      "page": "bundle.create",
+      "title": "Create a bundle",
+      "roles": [
+        "user"
+      ],
+      "overview": "Start a bundle: a name, a description and who can see it — rules are added right after."
+    },
+    {
+      "page": "vulnerability.index",
+      "title": "CVE kits",
+      "overview": "One page per vulnerability, gathering every rule that detects it."
+    },
+    {
+      "page": "attack_blueprint.heatmap",
+      "title": "ATT&CK",
+      "overview": "MITRE ATT&CK, coloured by how many rules detect each technique."
+    },
+    {
+      "page": "rule.rule_formats",
+      "title": "Formats",
+      "overview": "Every rule format Rulezet understands, and what each one is for."
+    },
+    {
+      "page": "dashboard.dashboard",
+      "title": "Dashboard",
+      "roles": [
+        "user"
+      ],
+      "overview": "Your own page of widgets: charts, lists and counters you choose and arrange."
+    },
+    {
+      "page": "notification.page_notifications",
+      "title": "Notifications",
+      "roles": [
+        "user"
+      ],
+      "overview": "Everything that happened around you: comments, votes, proposals, alerts, finished jobs."
+    },
+    {
+      "page": "account.index",
+      "title": "Your account",
+      "roles": [
+        "user"
+      ],
+      "overview": "Your profile, the people you follow, your comments and your API key."
+    },
+    {
+      "page": "home.admin_settings",
+      "title": "Administration",
+      "roles": [
+        "admin"
+      ],
+      "overview": "Instance settings. The Admin menu above leads to every administration page.",
+      "steps": [
+        {
+          "target": "[data-tour=\"nav-admin\"]",
+          "title": "The Admin menu",
+          "text": "Users and roles, configuration, imports and Git sources, background jobs, connectors, logs and moderation — only administrators see it."
+        },
+        {
+          "title": "Reword this tutorial",
+          "text": "Every text of this tutorial is a setting: **Admin → Configuration**, category **Tutorial**."
+        }
+      ]
+    },
+    {
+      "url": "/",
+      "title": "The end",
+      "sections": false,
+      "steps": [
+        {
+          "title": "You have seen the essentials",
+          "text": "On every page, the **Tutorial** icon (graduation cap, next to the settings gear) explains what is there, button by button.\n\nHappy hunting!"
+        }
+      ]
+    }
+  ]
+}

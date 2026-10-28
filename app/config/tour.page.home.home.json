@@ -1,0 +1,67 @@
+{
+  "label": "Tutorial: Home",
+  "category": "Tutorial",
+  "description": "Steps of the Tutorial button on the Home page (endpoint home.home). A step: target (CSS selector, empty = centred card), title, text (blank line = new paragraph, **bold**, `code`), roles (optional: anonymous, user, member, admin, perm:<key>), demo (rule / bundle: example shown when the target is missing, e.g. an empty list).",
+  "public": false,
+  "value": {
+    "title": "Home",
+    "steps": [
+      {
+        "target": ".hv2-eyebrow",
+        "title": "Version and release notes",
+        "text": "The version this instance runs. Click it to read what changed in the latest release."
+      },
+      {
+        "target": ".hv2-search",
+        "title": "Search everything",
+        "text": "Type a rule name, a CVE (CVE-2024-3400), an ATT&CK technique (T1059), a malware family or any word: Rulezet searches titles, descriptions and the rules' content, in every format. The examples typing themselves in the box show what you can try."
+      },
+      {
+        "target": ".hv2-quick",
+        "title": "Browse by format",
+        "text": "Each chip opens the rules of one format — YARA for files, Sigma for logs, Suricata and Zeek for network traffic, CRS for web servers, and more."
+      },
+      {
+        "target": ".hv2-cta",
+        "title": "Add a rule or build a bundle",
+        "roles": [
+          "user"
+        ],
+        "text": "**Add a rule**: share a detection rule (by hand, from Git, a zip, JSON or the YARA editor).\n\n**Create a bundle**: group rules of any format around one subject.\n\n**Why Rulezet?** explains the project."
+      },
+      {
+        "target": ".hv2-cta",
+        "title": "Join to contribute",
+        "roles": [
+          "anonymous"
+        ],
+        "text": "Browsing and downloading are open to everyone. To add rules, vote, comment or build bundles, create a free account."
+      },
+      {
+        "target": ".hv2-stats",
+        "title": "Rulezet in numbers",
+        "text": "Detection rules, bundles, ATT&CK techniques covered and CVEs covered on this instance. Each figure is a link: rules → the Rules Explorer, bundles → the bundle list, ATT&CK → the heatmap, CVEs → the response kits."
+      },
+      {
+        "target": ".hv2-steps",
+        "title": "How it works",
+        "text": "The three steps of Rulezet: **find** a rule, **check** it (quality score, votes, tests, discussion), then **use** it (download, bundle, deploy)."
+      },
+      {
+        "target": ".hv2-live-row",
+        "title": "Live activity",
+        "text": "What is happening right now: the latest rules added and updated, as they arrive."
+      },
+      {
+        "target": ".hv2-insights",
+        "title": "Insights",
+        "text": "Charts of the instance: rules per format, most active sources, new rules over time. Pick a chart on the left; it loads when you open it."
+      },
+      {
+        "target": ".hv2-posts",
+        "title": "From the blog",
+        "text": "The latest posts: releases, CVE write-ups and articles. The full list is in Community → Blog."
+      }
+    ]
+  }
+}

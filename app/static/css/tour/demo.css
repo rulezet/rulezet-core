@@ -1,0 +1,19 @@
+/* Tutorial demo pages (templates/tour/demo_*.html): an example rule / bundle, never saved */
+.tour-demo-note { display: flex; gap: .75rem; align-items: center; padding: .8rem 1rem; border-radius: 12px; font-size: .9rem;
+    border: 1px dashed rgba(13, 110, 253, .5); background: rgba(13, 110, 253, .06); color: var(--text-color); }
+.tour-demo-note i { color: #0d6efd; font-size: 1.2rem; }
+.tour-demo-meta { display: flex; gap: 1.25rem; flex-wrap: wrap; font-size: .85rem; color: var(--subtle-text-color); }
+.tour-demo-chips { display: flex; gap: .35rem; flex-wrap: wrap; }
+.tour-demo-chip { padding: .15rem .6rem; border-radius: 999px; font-size: .75rem; font-weight: 600;
+    background: rgba(13, 110, 253, .1); color: #0d6efd; }
+.tour-demo-chip--attack { background: rgba(253, 126, 20, .12); color: #c2570c; }
+.tour-demo-kpi { padding: .8rem 1rem; border-radius: 12px; border: 1px solid var(--border-color); background: var(--card-bg-color); text-align: center; }
+.tour-demo-kpi strong { display: block; font-size: 1.4rem; }
+.tour-demo-kpi span { font-size: .78rem; color: var(--subtle-text-color); }
+
+/* Welcome page (templates/tour/welcome.html) */
+.welcome-way { padding: 1.4rem; border-radius: 14px; background: var(--card-bg-color); border: 1px solid var(--border-color);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .05); }
+.welcome-way p { font-size: .9rem; color: var(--text-color); }
+.welcome-way__icon { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; margin-bottom: .8rem;
+    font-size: 1.3rem; color: #fff; background: linear-gradient(135deg, #0d6efd, #0a58ca); }

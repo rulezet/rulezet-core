@@ -1,0 +1,157 @@
+{
+  "label": "Tutorial: Rule",
+  "category": "Tutorial",
+  "description": "Steps of the Tutorial button on the Rule page (endpoint rule.detail_rule). A step: target (CSS selector, empty = centred card), title, text (blank line = new paragraph, **bold**, `code`), roles (optional: anonymous, user, member, admin, perm:<key>), demo (rule / bundle: example shown when the target is missing, e.g. an empty list).",
+  "public": false,
+  "value": {
+    "title": "Rule",
+    "steps": [
+      {
+        "target": ".explorer-banner",
+        "title": "One rule, everything about it",
+        "text": "Its content, where it comes from, what it detects, what the community thinks of it — and the tabs below for its history, bundles, similar rules and tests."
+      },
+      {
+        "target": "[data-tour=\"rule-nav\"]",
+        "title": "The rule's pages",
+        "text": "Each tab is a page about this rule; the steps below go through them."
+      },
+      {
+        "target": "[data-tour=\"rnav-propose\"]",
+        "title": "Suggest an edit",
+        "roles": [
+          "user"
+        ],
+        "text": "Not your rule? Propose a change: its owner reviews it and accepts it or not.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rnav-proposals\"]",
+        "title": "Proposals",
+        "text": "Edit proposals sent for this rule, open or closed.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rnav-history\"]",
+        "title": "History",
+        "text": "Every version of the rule, with the differences between them.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rnav-similarity\"]",
+        "title": "Similarity",
+        "text": "Rules whose content is close to this one — duplicates or variants.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rnav-bundles\"]",
+        "title": "Bundles",
+        "text": "The bundles that contain this rule.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rnav-linked\"]",
+        "title": "Linked rules",
+        "text": "Rules this one needs (dependencies) or is related to.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rnav-samples\"]",
+        "title": "Samples",
+        "text": "Results of the rule on sample sets: detections, misses, false positives.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rnav-ai\"]",
+        "title": "AI analysis",
+        "text": "Rulezy's review of the rule: what it detects, weaknesses, suggestions.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rule-metadata\"]",
+        "title": "What the rule says about itself",
+        "text": "References, author and dates read from the rule's own text."
+      },
+      {
+        "target": "[data-tour=\"rule-tags\"]",
+        "title": "Tags",
+        "text": "TLP / PAP sharing levels, malware families, platforms… Click one to see every rule with it."
+      },
+      {
+        "target": "[data-tour=\"rule-attack\"]",
+        "title": "ATT&CK techniques",
+        "text": "The MITRE ATT&CK techniques this rule detects. Each opens its page with every rule for it."
+      },
+      {
+        "target": "[data-tour=\"rule-content\"]",
+        "title": "The rule",
+        "text": "The rule itself, highlighted, ready to copy."
+      },
+      {
+        "target": "[data-tour=\"rule-json-tab\"]",
+        "title": "Other views",
+        "text": "The rule as JSON (all its fields), or as a MISP object when a MISP instance is connected.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rule-actions\"]",
+        "title": "Actions",
+        "text": "Everything you can do with this rule, in one bar."
+      },
+      {
+        "target": "[data-tour=\"rule-vote\"]",
+        "title": "Vote and favorite",
+        "text": "Votes tell others whether the rule works. Logged-in users can vote and keep the rule in their favorites.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rule-download\"]",
+        "title": "Download",
+        "text": "The rule as a file, as JSON, or with the rules it depends on.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rule-git-source\"]",
+        "title": "Source",
+        "text": "Open the rule in the Git repository it comes from.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rule-report\"]",
+        "title": "Report",
+        "text": "Something wrong (stolen, broken, dangerous)? Tell the administrators.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rule-contributors\"]",
+        "title": "Contributors",
+        "text": "Everyone who wrote or improved this rule."
+      },
+      {
+        "target": "[data-tour=\"rule-bundles\"]",
+        "title": "In bundles",
+        "text": "Bundles that already use this rule."
+      },
+      {
+        "target": "[data-tour=\"rule-related\"]",
+        "title": "Related rules",
+        "text": "Other rules from the same source or author."
+      },
+      {
+        "target": "[data-tour=\"rule-visualization\"]",
+        "title": "Visualization",
+        "text": "A graph of the rule and what it is linked to."
+      },
+      {
+        "target": "[data-tour=\"rule-quality\"]",
+        "title": "Quality score",
+        "text": "A score from the rule's syntax, metadata, references and the community's votes. The (?) explains how it is computed."
+      },
+      {
+        "target": "[data-tour=\"rule-comments\"]",
+        "title": "Discussion",
+        "text": "Ask a question, report a false positive or thank the author. Logged-in users can comment and react."
+      }
+    ]
+  }
+}

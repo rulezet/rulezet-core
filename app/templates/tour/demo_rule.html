@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% block title %}Example rule — Tutorial — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tour/demo.css') }}">
+{% endblock %}
+{% block content %}
+{# The full tour's "A rule" page on an instance with no rule yet: an example (setting tour.demo),
+   never saved. Same data-tour anchors as rule/detail_rule/detail_rule.html, so the same steps work. #}
+<div class="container mt-4 mb-5" id="demo-app" v-cloak>
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-shield-halved banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Example</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-shield-halved"></i></div>
+            <div><h2 class="fw-bold mb-1" style="word-break:break-word;">{{ demo.title[:60] }}</h2><div class="banner-accent"></div></div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">{{ demo.description }}</p>
+    </div>
+
+    <div class="tour-demo-note mb-4" role="note">
+        <i class="fa-solid fa-graduation-cap"></i>
+        <span><strong>Example for the tutorial</strong> — this instance has no rule yet, so the tour shows this one.
+            It is not saved anywhere and its buttons do nothing.</span>
+    </div>
+
+    <div class="card h-100 border-0 card_detail border-top shadow-lg position-relative mb-4" style="border-radius:12px;">
+        <div class="card-watermark-detail"><i class="fa-solid fa-shield-halved"></i></div>
+        <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2" style="z-index:2;">
+            <span class="badge rounded-pill bg-primary">{{ demo.format | upper }}</span>
+            <span class="badge rounded-pill bg-secondary">v{{ demo.version }}</span>
+        </div>
+        <div class="card-body p-4 p-md-5">
+            <div data-tour="rule-metadata" class="rule-meta mb-4 tour-demo-meta">
+                <span><i class="fa-solid fa-user me-1"></i>{{ demo.author }}</span>
+                <span><i class="fa-solid fa-scale-balanced me-1"></i>MIT</span>
+            </div>
+            <div data-tour="rule-tags" class="mt-2 tour-demo-chips">
+                {% for t in demo.tags %}<span class="tour-demo-chip">{{ t }}</span>{% endfor %}
+            </div>
+            <div data-tour="rule-attack" class="mt-2 mb-4 tour-demo-chips">
+                {% for t in demo.techniques %}<span class="tour-demo-chip tour-demo-chip--attack">{{ t }}</span>{% endfor %}
+            </div>
+            <div data-tour="rule-content" class="mb-4">
+                <code-viewer :code="code" language="{{ demo.format }}" max-height="420px"></code-viewer>
+            </div>
+            <div data-tour="rule-actions" class="mt-4 mb-3 rounded-3 border p-3 d-flex flex-wrap gap-2 align-items-center" style="background:var(--light-bg-color);">
+                <div data-tour="rule-vote" class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-success rounded-pill" disabled><i class="fa-solid fa-thumbs-up me-1"></i>{{ demo.votes_up }}</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger rounded-pill" disabled><i class="fa-solid fa-thumbs-down me-1"></i>{{ demo.votes_down }}</button>
+                    <button type="button" class="btn btn-sm btn-outline-warning rounded-pill" disabled><i class="fa-regular fa-star me-1"></i>Favorite</button>
+                </div>
+                <button type="button" data-tour="rule-download" class="btn btn-sm btn-outline-primary rounded-pill" disabled><i class="fa-solid fa-download me-1"></i>Download</button>
+                <button type="button" data-tour="rule-report" class="btn btn-sm btn-outline-secondary rounded-pill ms-auto" disabled><i class="fa-solid fa-flag me-1"></i>Report</button>
+            </div>
+        </div>
+    </div>
+
+    <div data-tour="rule-comments" class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-4">
+            <h5 class="fw-bold mb-3"><i class="fa-regular fa-comments me-2"></i>Comments</h5>
+            <p class="text-muted mb-0">Questions, false positives and thanks go here, below every rule.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block script %}
+<script type="module">
+    import CodeViewer from '/static/js/components/code-viewer.js'
+    const { createApp } = Vue
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: { 'code-viewer': CodeViewer },
+        setup() { return { code: {{ demo.content | tojson }} } },
+    }).mount('#demo-app')
+</script>
+{% endblock %}

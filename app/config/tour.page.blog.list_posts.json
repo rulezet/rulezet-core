@@ -1,0 +1,21 @@
+{
+  "label": "Tutorial: Blog",
+  "category": "Tutorial",
+  "description": "Steps of the Tutorial button on the Blog page (endpoint blog.list_posts). A step: target (CSS selector, empty = centred card), title, text (blank line = new paragraph, **bold**, `code`), roles (optional: anonymous, user, member, admin, perm:<key>), demo (rule / bundle: example shown when the target is missing, e.g. an empty list).",
+  "public": false,
+  "value": {
+    "title": "Blog",
+    "steps": [
+      {
+        "target": ".explorer-banner",
+        "title": "News from Rulezet",
+        "text": "Releases, CVE write-ups and articles from the team."
+      },
+      {
+        "target": "[data-tour=\"blog-filters\"]",
+        "title": "Search the posts",
+        "text": "By text or by tag."
+      }
+    ]
+  }
+}

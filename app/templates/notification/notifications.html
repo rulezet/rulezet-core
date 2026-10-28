@@ -230,7 +230,7 @@ mark.notif-search-hit {
     <div v-if="mainTab === 'notifs'">
 
         <!-- Toolbar row -->
-        <div class="d-flex flex-wrap align-items-start gap-3 mb-3">
+        <div data-tour="notif-toolbar" class="d-flex flex-wrap align-items-start gap-3 mb-3">
 
             <!-- Search -->
             <div class="notif-search-wrap">
@@ -244,7 +244,7 @@ mark.notif-search-hit {
             </div>
 
             <!-- Type filter dropdown -->
-            <div class="notif-type-wrap" v-click-outside="closeDropdown">
+            <div data-tour="notif-types" class="notif-type-wrap" v-click-outside="closeDropdown">
                 <div :class="['notif-type-trigger', dropdownOpen ? 'open' : '']"
                      @click="dropdownOpen = !dropdownOpen">
                     <i class="fa-solid fa-filter" style="font-size:.78rem;color:#0d6efd;"></i>
