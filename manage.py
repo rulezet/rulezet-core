@@ -186,24 +186,64 @@ def _announce_when_up(url: str, port: str, mode: str) -> None:
     threading.Thread(target=wait, daemon=True).start()
 
 
-_LOG_NOISE = ("Starting gunicorn", "Listening at:", "Using worker:", "Booting worker with pid",
+_LOG_NOISE = ("Starting gunicorn", "Listening at:", "Using worker:",
               "THIS APP IS IN DEBUG MODE", "Handling signal:", "Shutting down: Master",
-              "Worker exiting (pid", "Control socket")
+              "Worker exiting (pid", "Control socket", "Autorestarting worker after current request")
+_STOPPING = threading.Event()          # CTRL+C: children ending is expected, not an incident
+
+
+def _event(color: str, icon: str, tag: str, text: str) -> None:
+    """A lifecycle line (start, restart, job done…): icon + bold text, stands out from plain logs."""
+    _say(f"\033[0;90m  {tag} │\033[0m \033[1;{color}m{icon} {text}\033[0m")
 
 
 def _relay(proc, tag: str) -> None:
     """Prints a child's output, tidied: gunicorn's boot chatter hidden, request lines coloured by
-    status, errors in red, the job worker's lines tagged so both streams stay readable."""
+    status, errors in red, the job worker's lines tagged so both streams stay readable.
+    Lifecycle gets its own look: worker (re)started, web worker recycled, each job's start / end."""
     import re
     access_re = re.compile(r'"(\w+) (\S+) [^"]*" (\d{3}) \S+ ([\d.]+)s')
+    job_start = re.compile(r"\[worker:(\w+)\] Starting job (\S+) type=(\S+)")
+    job_end = re.compile(r"\[worker:(\w+)\] Job (\S+) finished with status=(\w+)")
+    job_fail = re.compile(r"\[worker:(\w+)\] Job (\S+) failed: (.*)")
+    job_types = {}                      # uuid → type, to name the job again when it ends
+    booted = False
     for line in proc.stdout:
         line = line.rstrip("\n")
         if not line.strip() or any(n in line for n in _LOG_NOISE):
             continue
         if "Worker reloading:" in line:
-            _say(f"\033[1;33m  ↻ reloading — {line.split('Worker reloading:', 1)[1].strip()}\033[0m")
+            _event("33", "↻", tag, f"reloading — {line.split('Worker reloading:', 1)[1].strip()} changed")
             continue
-        clean = re.sub(r"^\[[^\]]+\] \[\d+\] |^\[worker[-\w]*\] ", "", line)   # drop "[date] [pid] " / "[worker] "
+        if "Booting worker with pid" in line:          # gunicorn web worker: first boot, then recycles
+            if booted:
+                _event("36", "↻", tag, f"web worker restarted (pid {line.rsplit(':', 1)[1].strip()})")
+            booted = True
+            continue
+        if "[worker-process] Background worker running" in line:
+            _event("36", "▶", tag, "job worker running (job queue, telemetry, update-checker)")
+            continue
+        if "[worker-process] Stopped." in line or ("[worker] " in line and "worker started." in line):
+            continue                                    # summed up by the line above / the exit line
+        m = job_start.search(line)
+        if m:
+            job_types[m.group(2)] = m.group(3)
+            _event("34", "▶", tag, f"{m.group(3)} \033[0;90m{m.group(2)[:8]} · {m.group(1)} lane")
+            continue
+        m = job_end.search(line)
+        if m:
+            kind, status = job_types.pop(m.group(2), "job"), m.group(3)
+            color, icon = {"done": ("32", "✓"), "failed": ("31", "✗")}.get(status, ("33", "!"))
+            _event(color, icon, tag, f"{kind} {status} \033[0;90m{m.group(2)[:8]}")
+            continue
+        m = job_fail.search(line)
+        if m:
+            _event("31", "✗", tag, f"{job_types.pop(m.group(2), 'job')} failed: {m.group(3)}")
+            continue
+        if "Recovered" in line and "interrupted job" in line:
+            _event("33", "↻", tag, re.sub(r"^\[[^\]]+\] ", "", line))
+            continue
+        clean = re.sub(r"^\[[^\]]+\] \[\d+\] |^\[worker[-:\w]*\] ", "", line)   # drop "[date] [pid] " / "[worker] "
         if "[ERROR]" in line or "[CRITICAL]" in line or "Traceback" in line or "Error" in clean[:40]:
             _say(f"\033[1;31m  {tag} │ {clean}\033[0m")
         elif line.startswith("[site]") or line.startswith("[api]"):
@@ -219,6 +259,11 @@ def _relay(proc, tag: str) -> None:
                  f" \033[0;90m{secs * 1000:.0f} ms\033[0m")
         else:
             _say(f"\033[0;90m  {tag} │\033[0m {clean}")
+    code = proc.wait()
+    if _STOPPING.is_set() or code == 0:
+        _event("90", "■", tag, "stopped")
+    else:
+        _event("31", "✗", tag, f"process ended unexpectedly (exit code {code})")
 
 
 def _spawn(cmd: list, flaskenv: str, pretty: bool, tag: str):
@@ -837,6 +882,7 @@ def _run_gunicorn_with_worker(flaskenv: str, port: str, reload: bool = False) ->
         else:
             run(_gunicorn_cmd(f"{host}:{port}", threads, "site", reload), extra_env={"FLASKENV": flaskenv})
     except KeyboardInterrupt:
+        _STOPPING.set()
         _SPIN.stop()
         _say("\n\033[0;37m  · Server stopped.\033[0m")
     finally:
