@@ -52,7 +52,8 @@
 
                 <form class="hv2-search" action="/rule/rules_list" method="get" role="search">
                     <i class="fa-solid fa-magnifying-glass hv2-search__icon"></i>
-                    <input type="search" name="search" class="hv2-search__input" placeholder="Search a rule, a CVE, a technique, a malware family…" aria-label="Search rules" autocomplete="off">
+                    <input type="search" name="search" class="hv2-search__input" placeholder="Search a rule, a CVE, a technique, a malware family…" aria-label="Search rules" autocomplete="off"
+                           data-typing='["CVE-2024-3400", "Cobalt Strike beacon", "T1059.001 PowerShell", "Emotet", "log4j JNDI lookup", "ransomware note", "Mimikatz", "suspicious scheduled task"]'>
                     <button type="submit" class="hv2-btn hv2-btn--primary">Search<i class="fa-solid fa-arrow-right hv2-btn__arrow"></i></button>
                 </form>
                 {% if rule_formats %}

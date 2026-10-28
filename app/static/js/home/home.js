@@ -4,6 +4,8 @@
  *                          children one after the other)
  *   [data-count]           the key figures count up when they appear
  *   [data-rulezy]          Rulezy floats, changes pose and says something new every few seconds
+ *   [data-typing]          the search box types example searches in its placeholder, a caret
+ *                          blinking after them; stops for good as soon as the visitor focuses it
  *                          (click: next tip); stops while the tab is hidden
  * The page is rendered by Vue after load, so elements are picked up as they appear.
  * prefers-reduced-motion: no motion at all, everything is shown as is.
@@ -94,8 +96,39 @@
         setTimeout(() => { el.classList.add('is-awake'); type(poses[0].text); schedule(); }, reduce ? 0 : 1800);
     }
 
+    // ── Search box: example searches typed in the placeholder ─────────────────
+    function typing(input) {
+        let phrases = [];
+        try { phrases = JSON.parse(input.getAttribute('data-typing')) || []; } catch { phrases = []; }
+        if (!phrases.length || reduce) return;
+        const original = input.placeholder;
+        let phrase = 0, chars = 0, deleting = false, caret = true, timer = null, blink = null, stopped = false;
+        const show = () => { input.placeholder = 'Search ' + phrases[phrase].slice(0, chars) + (caret ? '|' : ''); };
+        function step() {
+            if (stopped) return;
+            const text = phrases[phrase];
+            if (!deleting && chars < text.length) { chars += 1; show(); timer = setTimeout(step, 55 + Math.random() * 70); return; }
+            if (!deleting) { deleting = true; timer = setTimeout(step, 1800); return; }          // read it
+            if (chars > 0) { chars -= 1; show(); timer = setTimeout(step, 28); return; }
+            deleting = false;
+            phrase = (phrase + 1) % phrases.length;
+            timer = setTimeout(step, 450);
+        }
+        blink = setInterval(() => { caret = !caret; if (!stopped) show(); }, 530);
+        function stop() {
+            stopped = true;
+            clearTimeout(timer);
+            clearInterval(blink);
+            input.placeholder = original;
+        }
+        input.addEventListener('focus', stop, { once: true });
+        input.addEventListener('input', stop, { once: true });
+        setTimeout(step, 1200);                                    // after the hero has risen in
+    }
+
     function start() {
         watch();
+        document.querySelectorAll('input[data-typing]').forEach(typing);
         // the hero figures are on screen from the start: count once the strip has risen in
         setTimeout(() => document.querySelectorAll('.hv2-stats [data-count]').forEach(countUp), reduce ? 0 : 900);
         new MutationObserver(watch).observe(document.body, { childList: true, subtree: true });
