@@ -707,6 +707,9 @@ export default {
             }
         }
 
+        // a parent filter changes the URL (e.g. ?status=draft): reload from the first page
+        watch(() => props.fetchUrl, () => { page.value = 1; fetchData() })
+
         onMounted(() => {
             fetchData()
             document.addEventListener('click', handleOutsideClick)

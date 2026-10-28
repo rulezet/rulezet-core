@@ -95,7 +95,7 @@
                 <template #toolbar-start>
                     <select class="form-select form-select-sm border-0 rounded-pill px-3"
                             style="background:var(--light-bg-color);color:var(--text-color);width:auto;"
-                            v-model="filterStatus" @change="dataTableRef?.fetchData()">
+                            v-model="filterStatus">
                         <option value="">All posts</option>
                         <option value="public">Public only</option>
                         <option value="private">Private only</option>
