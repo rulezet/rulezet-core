@@ -75,7 +75,8 @@ def api_mark_read(notif_id):
 @notification_blueprint.post('/read_all')
 @login_required
 def api_mark_all_read():
-    ok = mark_all_read(current_user.id)
+    jobs_only = request.args.get('jobs', 'false').lower() == 'true'
+    ok = mark_all_read(current_user.id, jobs_only=jobs_only)
     return jsonify({'ok': ok})
 
 
