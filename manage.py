@@ -764,7 +764,6 @@ def cmd_start_dev() -> None:
 def cmd_start_prod() -> None:
     _check_venv()
     _ensure_editor()
-    _ensure_sandbox()
 
     # 1. Backup
     cmd_backup()
@@ -793,6 +792,10 @@ def cmd_start_prod() -> None:
     info("Seeding default data (formats, platform-tag configs, AI agent configs)…")
     run([PYTHON, "app.py", "--seed-defaults"], extra_env={"FLASKENV": "production"})
     ok("Default data up to date")
+
+    # after the code and the dependencies are up to date: checks the rulezet-tester just installed
+    _ensure_editor()
+    _ensure_sandbox()
 
     # 3. Start — same gunicorn+worker.py launch as `start-dev`, see
     # _run_gunicorn_with_worker's docstring for why this isn't `flask run`
