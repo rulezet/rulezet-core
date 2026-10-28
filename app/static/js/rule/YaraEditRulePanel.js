@@ -21,6 +21,7 @@
  * Emits:  update:modelValue, fields (values of the edited rule's fields), ready
  */
 import { linkedRulesPicker } from '/static/js/rule_relation/rulePicker.js'
+import { RULEZET_EDITOR_CREDITS } from '/static/js/editor/editorCredits.js'
 import { create_message } from '/static/js/toaster.js'
 
 const { ref, watch, onMounted, onBeforeUnmount, nextTick } = Vue
@@ -157,6 +158,7 @@ export default {
                     value: buildDocument(props.modelValue, deps.value.map(d => d.content)),
                     // an existing rule: fields are stored by Rulezet, the rule text is only touched on request
                     fieldsReport: false,
+                    credits: RULEZET_EDITOR_CREDITS,   // Rulezet's section of the Credits & licences page
                     pickValues: linkedRulesPicker(props.csrfToken, [Number(props.ruleId)]),   // "Linked rules" → Browse: Rulezet's rule list in a modal
                     tests: props.tests ? 'auto' : false,      // tests on samples: Rulezet setting editor.test_access
                     toast: (message, tone) => create_message(message, { success: 'success', warning: 'warning', error: 'danger' }[tone] || 'info'),
