@@ -56,7 +56,8 @@ def yara_job_start():
     rules = [{'name': str(r.get('name') or ''), 'text': str(r.get('text') or ''),
               'path': str(r.get('path') or '') or None,
               'imports': [str(m) for m in (r.get('imports') or [])][:50] if r.get('imports') is not None else None,
-              'fields': EditorModel.clean_fields(r.get('fields'))}
+              'fields': EditorModel.clean_fields(r.get('fields')),
+              'id': r.get('id') if isinstance(r.get('id'), int) else None}
              for r in (payload.get('rules') or [])][:EditorModel.MAX_RULES]
     if not rules:
         return jsonify({'error': 'No rule in the document.'}), 400

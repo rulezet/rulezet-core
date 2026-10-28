@@ -214,7 +214,7 @@ export default {
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': props.csrfToken },
                     body: JSON.stringify({
                         imports: (editor.getModel().imports || []).map(i => i.name),
-                        rules: changed.map(c => ({ name: c.dep.name, text: c.text })),
+                        rules: changed.map(c => ({ id: c.dep.id, name: c.dep.name, text: c.text })),
                     }),
                 })
                 const data = await res.json().catch(() => ({}))

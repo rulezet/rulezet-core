@@ -530,6 +530,9 @@ def plan_yara(imports, rules, progress=None, user=None):
         entry = {'name': name, 'text': text, 'content': content, 'status': 'new', 'errors': [],
                  'depends_on': [], 'existing': None, 'path': r.get('path') or None,
                  'fields': clean_fields(r.get('fields'))}
+        # the edit page names the Rulezet rule it saves (a dependency): updated by id, not by name
+        rid = r.get('id')
+        entry['rule_id'] = rid if isinstance(rid, int) and not isinstance(rid, bool) and rid > 0 else None
         if not m:
             entry.update(status='error', errors=[{'message': 'Not a YARA rule'}])
         elif name in names:
@@ -540,7 +543,18 @@ def plan_yara(imports, rules, progress=None, user=None):
     for i, e in enumerate(entries):
         if e['status'] == 'new':
             rule, reason = _existing(e['name'], e['content'], _meta_id(e['text']))
-            if rule:
+            if e.get('rule_id'):
+                own = RuleModel._active().filter(Rule.id == e['rule_id'], Rule.format.ilike('yara')).first()
+                if own:
+                    rule, reason = own, 'same id'
+            if rule and reason == 'same rule name' and not (_same_content(rule.to_string, e['content'])
+                                                             or _same_content(rule.to_string, e['text'])):
+                # same name, other content, no shared id: a new rule must get its own name
+                e['existing'] = {**_rule_link(rule), 'reason': reason, 'owner_id': rule.user_id}
+                e.update(status='error', errors=[{'message': f'A rule named "{e["name"]}" already exists in Rulezet: '
+                                                             f'give this one another name (or set its meta id to the existing rule\'s uuid to update it)'}])
+                rule = None
+            elif rule:
                 e['existing'] = {**_rule_link(rule), 'reason': reason, 'owner_id': rule.user_id}
                 if reason == 'same content' or _same_content(rule.to_string, e['content']) or _same_content(rule.to_string, e['text']):
                     e['status'] = 'exists'
@@ -551,6 +565,12 @@ def plan_yara(imports, rules, progress=None, user=None):
                     e['status'] = 'proposal'
                     if open_proposal:
                         e['open_proposal'] = {'id': open_proposal.id, 'url': f'/rule/proposal_content_discuss?id={open_proposal.id}'}
+        title = (e['fields'] or {}).get('title')
+        if e['status'] == 'new' and title and title != e['name']:
+            taken = RuleModel._active().filter(Rule.title == title).first()
+            if taken:
+                e.update(status='error', errors=[{'message': f'The title "{title}" is already used by another rule in Rulezet: choose another one'}])
+                e['existing'] = {**_rule_link(taken), 'reason': 'same title', 'owner_id': taken.user_id}
         tick('existing', i + 1, len(entries))
 
     def deps_of(e):
