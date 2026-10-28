@@ -37,7 +37,7 @@
         </div>
         <div class="hv2-wrap hv2-hero__grid">
             <div class="hv2-hero__copy">
-                <a href="https://github.com/rulezet/rulezet-core/releases" target="_blank" rel="noopener" class="hv2-eyebrow">
+                <a href="{{ release_url }}" class="hv2-eyebrow"{% if release_url.startswith('http') %} target="_blank" rel="noopener"{% endif %}>
                     <span class="hv2-eyebrow__dot"></span>Open source<span class="hv2-eyebrow__sep"></span>v{{ app_version }}
                     <i class="fa-solid fa-arrow-right"></i>
                 </a>
@@ -67,15 +67,8 @@
 
                 <div class="hv2-cta">
                     <a href="/rule/create_rule" class="hv2-btn hv2-btn--primary hv2-btn--lg"><i class="fa-solid fa-plus"></i>Add a rule</a>
-                    <a href="/why_choose_rulezet" class="hv2-btn hv2-btn--ghost hv2-btn--lg"><i class="fa-solid fa-circle-question"></i>Why Rulezet?</a>
-                    {% if current_user.is_authenticated %}
-                    {# Seasonal (end of year): switches to the Christmas theme and back — js/themes/holidayToggle.js #}
-                    {% set _holiday_on = user_config and (user_config.theme or '').startswith('christmas') %}
-                    <button type="button" class="holiday-toggle" id="holidayToggle"
-                            title="A seasonal theme for the end of the year — click again to go back to yours">
-                        <i class="fa-solid fa-tree"></i><span data-holiday-label>{{ 'Back to your theme' if _holiday_on else 'Holiday theme' }}</span><span class="holiday-toggle__new">New</span>
-                    </button>
-                    {% endif %}
+                    <a href="/bundle/create" class="hv2-btn hv2-btn--bundle hv2-btn--lg"><i class="fa-solid fa-box"></i>Create a bundle</a>
+                    <a href="/why_choose_rulezet" class="hv2-cta__why">Why Rulezet?<i class="fa-solid fa-arrow-right"></i></a>
                 </div>
             </div>
 
@@ -92,21 +85,21 @@
         <!-- key figures, one strip -->
         <div class="hv2-wrap">
             <div class="hv2-stats">
-                <a href="/rule/rules_list" class="hv2-stat hero-kpi-big" data-kpi-href="/rule/rules_list" data-kpi-type="rules" data-kpi-color="#0d6efd" style="--c:#0d6efd">
+                <a href="/rule/rules_list" class="hv2-stat" style="--c:#0d6efd">
                     <span class="hv2-stat__icon"><i class="fa-solid fa-shield-halved"></i></span>
                     <span><span class="hv2-stat__num" data-count="{{ total_rules }}">{{ "{:,}".format(total_rules) }}</span><span class="hv2-stat__lbl">detection rules</span></span>
                 </a>
-                <a href="/bundle/list" class="hv2-stat hero-kpi-big" data-kpi-href="/bundle/list" data-kpi-type="bundles" data-kpi-color="#198754" style="--c:#198754">
+                <a href="/bundle/list" class="hv2-stat" style="--c:#198754">
                     <span class="hv2-stat__icon"><i class="fa-solid fa-box"></i></span>
                     <span><span class="hv2-stat__num" data-count="{{ total_bundles }}">{{ "{:,}".format(total_bundles) }}</span><span class="hv2-stat__lbl">rule bundles</span></span>
                 </a>
-                <a href="/attack/heatmap" class="hv2-stat hero-kpi-big" data-kpi-href="/attack/heatmap" data-kpi-type="attacks" data-kpi-color="#fd7e14" style="--c:#fd7e14">
+                <a href="/attack/heatmap" class="hv2-stat" style="--c:#fd7e14">
                     <span class="hv2-stat__icon"><i class="fa-solid fa-crosshairs"></i></span>
                     <span><span class="hv2-stat__num" data-count="{{ total_attacks }}">{{ "{:,}".format(total_attacks) }}</span><span class="hv2-stat__lbl">ATT&amp;CK techniques covered</span></span>
                 </a>
-                <a href="/rule/formats" class="hv2-stat" style="--c:#0891b2">
-                    <span class="hv2-stat__icon"><i class="fa-solid fa-layer-group"></i></span>
-                    <span><span class="hv2-stat__num" data-count="{{ rule_formats | length }}">{{ rule_formats | length }}</span><span class="hv2-stat__lbl">rule formats</span></span>
+                <a href="/vulnerability/" class="hv2-stat" style="--c:#dc3545">
+                    <span class="hv2-stat__icon"><i class="fa-solid fa-bug"></i></span>
+                    <span><span class="hv2-stat__num" data-count="{{ total_cves }}">{{ "{:,}".format(total_cves) }}</span><span class="hv2-stat__lbl">CVEs covered</span></span>
                 </a>
             </div>
         </div>
@@ -345,7 +338,6 @@
 {% endblock %}
 
 {% block script %}
-<script src="{{ url_for('static', filename='js/themes/holidayToggle.js') }}"></script>
 <script type="module">
     const { createApp, ref, onMounted } = Vue
     import { message_list } from '/static/js/toaster.js'
@@ -476,6 +468,5 @@
         },
     }).mount('#main-container')
 </script>
-<script src="{{ url_for('static', filename='js/home/kpiTransition.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/home/home.js') }}" defer></script>
 {% endblock %}

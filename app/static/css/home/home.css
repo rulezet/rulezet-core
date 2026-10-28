@@ -94,12 +94,21 @@ body:has(.hv2) { overflow-x: hidden; }
 .hv2-search__input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font-size: 1rem; color: var(--text-color); padding: .6rem 0; }
 .hv2-search__input::placeholder { color: var(--subtle-text-color); opacity: .8; }
 .hv2-search .hv2-btn { padding: .75rem 1.3rem; border-radius: 13px; }
-.hv2-quick { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin: 1rem 0 2.25rem; }
+/* one line, running under the logo on wide screens (above it: z-index); scrolls sideways on phones */
+.hv2-quick { position: relative; z-index: 2; display: flex; flex-wrap: nowrap; align-items: center; gap: .45rem; margin: 1rem 0 2.25rem; width: max-content; }
+.hv2-quick > * { flex: none; white-space: nowrap; }
 .hv2-quick__lbl { font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--subtle-text-color); margin-right: .25rem; }
 .hv2-chip { padding: .28rem .75rem; border-radius: 999px; font-size: .8rem; font-weight: 600; color: var(--text-color); text-decoration: none;
     background: var(--card-bg-color); border: 1px solid var(--border-color); transition: color .2s, border-color .2s, transform .2s; }
 .hv2-chip:hover { color: var(--hv2-blue); border-color: rgba(13, 110, 253, .45); transform: translateY(-2px); }
 .hv2-cta { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.hv2-btn--bundle { color: #198754; background: var(--card-bg-color); border-color: rgba(25, 135, 84, .45); }
+.hv2-btn--bundle:hover { color: #fff; background: #198754; border-color: #198754; }
+.hv2-cta__why { display: inline-flex; align-items: center; gap: .4rem; margin-left: .35rem; font-weight: 600; font-size: .92rem;
+    color: var(--subtle-text-color); text-decoration: none; }
+.hv2-cta__why i { font-size: .75rem; transition: transform .2s; }
+.hv2-cta__why:hover { color: var(--hv2-blue); }
+.hv2-cta__why:hover i { transform: translateX(3px); }
 
 /* stage: the logo builds once, on a soft glow */
 .hv2-stage { position: relative; aspect-ratio: 1; width: 100%; max-width: 560px; justify-self: center; display: grid; place-items: center; }
@@ -305,6 +314,7 @@ body.dark-mode .hv2-post:hover { box-shadow: 0 18px 40px rgba(0, 0, 0, .35); }
 @media (max-width: 991px) {
     .hv2-hero__grid, .hv2-live-row { grid-template-columns: 1fr; }
     .hv2-stage { max-width: 380px; order: -1; }
+    .hv2-quick { width: auto; max-width: 100%; overflow-x: auto; scrollbar-width: none; padding-bottom: .2rem; }
     .hv2-steps { grid-template-columns: 1fr; }
     .hv2-posts { grid-template-columns: 1fr; }
 }

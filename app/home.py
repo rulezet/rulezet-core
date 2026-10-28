@@ -105,7 +105,7 @@ def home() -> render_template:
     # and the CSRF token below are per-user/per-session and must never be
     # served from a shared cache.
     try:
-        platform_stats = cache.get('home_platform_stats')
+        platform_stats = cache.get('home_platform_stats_v2')
     except Exception:            # cache backend down (e.g. Redis restarting)
         platform_stats = None
     if platform_stats is None:
@@ -114,17 +114,27 @@ def home() -> render_template:
             'total_bundles': Bundle.query.count(),
             'total_attacks': AttackTechnique.query.count(),
             'rule_formats':  RuleModel.get_all_rule_format(),
+            'total_cves':    sum(1 for v in RuleModel.get_rules_vulnerabilities_usage()
+                                 if str(v.get('name', '')).upper().startswith('CVE-')),
         }
         try:
-            cache.set('home_platform_stats', platform_stats, timeout=60 * 60 * 6)
+            cache.set('home_platform_stats_v2', platform_stats, timeout=60 * 60 * 6)
         except Exception:
             pass
     total_rules   = platform_stats['total_rules']
     total_bundles = platform_stats['total_bundles']
     total_attacks = platform_stats['total_attacks']
     rule_formats  = platform_stats['rule_formats']
+    total_cves    = platform_stats['total_cves']
 
     from app.features.blog import blog_core as BlogModel
+    from app.core.db_class.blog import BlogPost
+    # "Open source · vX" badge: the blog post of the latest release (posts made from a GitHub
+    # release are titled "Rulezet v…"), else the GitHub releases page
+    release_post = (BlogPost.query.filter(BlogPost.is_public.is_(True), BlogPost.is_draft.is_(False),
+                                          BlogPost.title.ilike('Rulezet v%'))
+                    .order_by(BlogPost.published_at.desc()).first())
+    release_url = f"/blog/post/{release_post.uuid}" if release_post else "https://github.com/rulezet/rulezet-core/releases"
     latest_posts = BlogModel.get_posts_paginated(page=1, per_page=2, is_admin=False)
     latest_blog_posts = [p.to_json() for p in latest_posts.items]
 
@@ -134,6 +144,8 @@ def home() -> render_template:
         total_bundles=total_bundles,
         total_attacks=total_attacks,
         rule_formats=rule_formats,
+        total_cves=total_cves,
+        release_url=release_url,
         latest_blog_posts=latest_blog_posts,
     )
 

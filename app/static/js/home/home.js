@@ -136,3 +136,23 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
     else start();
 })();
+
+// ── hero logo: replay the build animation on every visit ───────────────────────
+// A browser keeps the decoded animated WebP of a page it already showed, so a plain reload
+// shows the last frame. A fresh blob: URL (bytes still from the HTTP cache) starts it over.
+(function () {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    function replay(img) {
+        const src = img.currentSrc || img.src;
+        if (!/\.webp(\?|$)/.test(src) || img.dataset.replayed) return;
+        img.dataset.replayed = '1';
+        fetch(src).then(r => r.ok ? r.blob() : null).then(blob => {
+            if (blob) img.src = URL.createObjectURL(blob);
+        }).catch(() => {});
+    }
+    const find = () => document.querySelector('.hv2-stage__logo img');
+    const img = find();
+    if (img) return replay(img);
+    const mo = new MutationObserver(() => { const el = find(); if (el) { mo.disconnect(); replay(el); } });
+    mo.observe(document.documentElement, { childList: true, subtree: true });
+})();
