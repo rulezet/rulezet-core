@@ -567,6 +567,16 @@ def _ensure_local_repo(config: RuleMirrorConfig) -> Repo:
     return repo
 
 
+def _unpushed_commits(repo: Repo, branch: str) -> int:
+    """Local commits not on origin/<branch> yet (0 when unknown: empty repo, no remote branch)."""
+    try:
+        if not repo.head.is_valid() or f'origin/{branch}' not in [str(r) for r in repo.remotes.origin.refs]:
+            return 0
+        return int(repo.git.rev_list('--count', f'origin/{branch}..HEAD') or 0)
+    except Exception:
+        return 0
+
+
 def _set_authenticated_remote(repo: Repo, config: RuleMirrorConfig):
     """Writes the token straight into .git/config (a Python file write via
     GitPython's config writer, NOT a `git remote set-url` subprocess call)
@@ -795,6 +805,12 @@ def _sync_one_config(config: RuleMirrorConfig, job=None, log_fn=None) -> dict:
         raise RuntimeError(f"'{config.name}' is enabled but missing a repo URL or token.")
     if not config.is_verified:
         raise RuntimeError(f"'{config.name}' hasn't passed a connection test yet — click 'Test connection' first.")
+    # The token can expire or be revoked long after the connection test: check it before writing
+    # (possibly hundreds of) local commits that the final push would then refuse.
+    can_push, push_message, _ = git_provider.check_push_access(config.repo_url, config.github_token)
+    if not can_push:
+        raise RuntimeError(f"'{config.name}': {push_message} Nothing was written; the sync resumes "
+                           f"from the same point once the token is fixed.")
 
     local_dir = _local_repo_dir(config)
     is_first_sync = config.last_synced_at is None
@@ -812,7 +828,11 @@ def _sync_one_config(config: RuleMirrorConfig, job=None, log_fn=None) -> dict:
 
     from app.features.rule.rule_core import _active
 
-    commits_since_push = 0
+    # commits a previous run made but could not push (token refused, network down...): pushed
+    # with this run's commits instead of staying stranded in the local mirror
+    commits_since_push = _unpushed_commits(repo, config.branch)
+    if commits_since_push:
+        _log('info', f"{commits_since_push} commit(s) from a previous run were never pushed — pushing them with this run.")
     written = 0
     deleted = 0
 
@@ -848,6 +868,12 @@ def _sync_one_config(config: RuleMirrorConfig, job=None, log_fn=None) -> dict:
         _set_authenticated_remote(repo, config)
         try:
             repo.git.push('origin', config.branch)
+        except GitCommandError as e:
+            if 'Authentication failed' in str(e) or 'Invalid username or token' in str(e):
+                raise RuntimeError(f"'{config.name}': the git host refused the token (invalid, expired or "
+                                   f"revoked) — update it in Manage Git → Git tokens & hosts, then run again. "
+                                   f"Local commits are kept and pushed by the next run.") from None
+            raise
         finally:
             _clear_authenticated_remote(repo, config)
         commits_since_push = 0
