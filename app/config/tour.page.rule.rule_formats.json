@@ -1,0 +1,21 @@
+{
+  "label": "Tutorial: Rule formats",
+  "category": "Tutorial",
+  "description": "Steps of the Tutorial button on the Rule formats page (endpoint rule.rule_formats). A step: target (CSS selector, empty = centred card), title, text (blank line = new paragraph, **bold**, `code`), roles (optional: anonymous, user, member, admin, perm:<key>), demo (rule / bundle: example shown when the target is missing, e.g. an empty list).",
+  "public": false,
+  "value": {
+    "title": "Rule formats",
+    "steps": [
+      {
+        "target": "[data-tour=\"formats-search\"]",
+        "title": "Every supported format",
+        "text": "YARA, Sigma, Suricata, Zeek, CRS, Wazuh, NOVA and more: search one to see what it detects."
+      },
+      {
+        "target": "[data-tour=\"formats-grid\"]",
+        "title": "A card per format",
+        "text": "How many rules, the validator used, and the formats each one can be exported to."
+      }
+    ]
+  }
+}

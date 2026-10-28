@@ -176,6 +176,8 @@ def _rule_to_sync_json(rule: Rule,
         'tags':           tags,
         'cve_ids':        cve_ids,
         'attack_ids':     attack_ids,
+        # references added by hand (the rule's own are read again from to_string on the other side)
+        'references_manual': rule.manual_references or [],
         'last_modif':     rule.last_modif.isoformat() if rule.last_modif else None,
         'created_at':     rule.creation_date.isoformat() if rule.creation_date else None,
         'update_history': history,

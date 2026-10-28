@@ -78,6 +78,21 @@ class Rule(db.Model):
     quality_score_breakdown   = db.Column(db.JSON, nullable=True)
     quality_score_computed_at = db.Column(db.DateTime, nullable=True)
 
+    # Read from the rule's own text (app/features/rule/rule_metadata_core.py), kept in sync by the
+    # `set` events below: references (list of strings) and every other metadata key the rule
+    # carries that Rulezet has no field for (dates, hashes, status, level…: {key: value | [values]}).
+    # NULL when the text has none. Never edited by hand: change the rule's text instead.
+    rule_references = db.Column(db.JSON, nullable=True)
+    extra_metadata  = db.Column(db.JSON, nullable=True)
+    # References added by hand (create / edit form), on top of the ones in the text — never
+    # overwritten by the events below. all_references = both, the rule's own first.
+    manual_references = db.Column(db.JSON, nullable=True)
+
+    @property
+    def all_references(self):
+        refs = list(self.rule_references or [])
+        return refs + [r for r in (self.manual_references or []) if r not in refs]
+
     #edit
     def get_rule_user_first_name_by_id(self):
         user = User.query.get(self.user_id)  
@@ -137,6 +152,10 @@ class Rule(db.Model):
             "quality_score": self.quality_score,
             "quality_score_breakdown": self.quality_score_breakdown,
             "quality_score_computed_at": self.quality_score_computed_at.strftime('%Y-%m-%d %H:%M') if self.quality_score_computed_at else None,
+            "references": self.all_references,
+            "references_from_rule": self.rule_references or [],
+            "references_manual": self.manual_references or [],
+            "extra_metadata": self.extra_metadata or {},
         }
 
     def get_extension(self):
@@ -309,6 +328,14 @@ class Rule(db.Model):
                 "cve_ids": self.cve_id if self.cve_id is not None else [],
             },
 
+            # --- references and other metadata (read from the text / added by hand) ---
+            "references": {
+                "all": self.all_references,
+                "from_rule": self.rule_references or [],
+                "manual": self.manual_references or [],
+            },
+            "extra_metadata": self.extra_metadata or {},
+
             # --- history ---
             "history": {
                 "edit_proposals": {
@@ -337,10 +364,19 @@ def compute_rule_corpus_identifier(rule_format, content):
     return _extract_corpus_identifier(rule_format, content)
 
 
+def compute_rule_metadata(rule_format, content):
+    """(references, extra_metadata) read from the rule's text — None for each when empty, so a
+    rule with nothing keeps NULL columns. Lazy import, same reason as above."""
+    from app.features.rule.rule_metadata_core import extract_rule_metadata
+    found = extract_rule_metadata(rule_format, content)
+    return found['references'] or None, found['extra'] or None
+
+
 @event.listens_for(Rule.to_string, 'set')
 def _rule_to_string_set(target, value, oldvalue, initiator):
     target.content_hash = compute_rule_content_hash(value)
     target.corpus_identifier = compute_rule_corpus_identifier(target.format, value)
+    target.rule_references, target.extra_metadata = compute_rule_metadata(target.format, value)
 
 
 @event.listens_for(Rule.format, 'set')
@@ -349,6 +385,7 @@ def _rule_format_set(target, value, oldvalue, initiator):
     # format (add_rule_core sets format first today, but nothing enforces that).
     if target.to_string:
         target.corpus_identifier = compute_rule_corpus_identifier(value, target.to_string)
+        target.rule_references, target.extra_metadata = compute_rule_metadata(value, target.to_string)
 
 
 class FormatRule(db.Model):

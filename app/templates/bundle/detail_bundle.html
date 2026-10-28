@@ -147,7 +147,7 @@
                 </div>
 
                 <!-- Description (markdown, collapsed when long) -->
-                <div v-if="viewRelease ? releaseData.bundle.description : bundle.description" class="bd-desc" :class="{ 'bd-desc--collapsed': descOverflows && !showFullDesc }">
+                <div data-tour="bundle-description" v-if="viewRelease ? releaseData.bundle.description : bundle.description" class="bd-desc" :class="{ 'bd-desc--collapsed': descOverflows && !showFullDesc }">
                     <div class="bd-desc-tools">
                         <button type="button" class="bd-desc-tool" @click="copyDescription" title="Copy description (Markdown)">
                             <i class="fa-regular fa-copy"></i>
@@ -175,7 +175,7 @@
                 </div>
 
                 <!-- KPIs -->
-                <div class="row g-3 my-4">
+                <div data-tour="bundle-kpis" class="row g-3 my-4">
                     <div class="col-6 col-lg-3" v-for="stat in stats" :key="stat.label">
                         <div class="bd-kpi" :class="'bd-kpi--' + stat.tone">
                             <div class="bd-kpi-icon"><i :class="stat.icon"></i></div>
@@ -189,8 +189,8 @@
                 </div>
 
                 <!-- Action bar -->
-                <div class="bd-actionbar">
-                    <div class="vote-pill">
+                <div data-tour="bundle-actions" class="bd-actionbar">
+                    <div class="vote-pill" data-tour="bundle-vote">
                         <voter-popover :fetch-url="'/bundle/voters?bundleId=' + bundle.id + '&voteType=up'" label="Liked by">
                             <button type="button" @click="vote('up', bundle.id); animateClick($event)"
                                 class="vote-pill__btn btn-animate" :class="{ 'vote-pill__btn--up': bundleUserVote === 'up' }" title="Vote up">
@@ -211,7 +211,7 @@
                     </div>
 
                     <div class="bd-actions">
-                        <div class="dropdown">
+                        <div class="dropdown" data-tour="bundle-download">
                             <button type="button" class="bd-btn bd-btn--primary" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i class="fa-solid fa-download"></i><span>Download</span><i class="fa-solid fa-chevron-down bd-caret"></i>
                             </button>
@@ -227,8 +227,6 @@
                                     <i class="fa-solid fa-file-lines"></i><div><strong>Files &amp; documents</strong><small>[[ docFiles.length ]] non-rule files (ZIP)</small></div></button></li>
                                 <li><button type="button" class="dropdown-item" @click="DownloadMISP">
                                     <i class="fa-solid fa-diagram-project"></i><div><strong>MISP event</strong><small>JSON</small></div></button></li>
-                                <li><a class="dropdown-item" :href="'/bundle/' + bundle.id + '/export_json'">
-                                    <i class="fa-solid fa-file-export"></i><div><strong>Bundle JSON</strong><small>Everything, re-importable on another instance</small></div></a></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li class="bd-dl-warn">
                                     <i class="fa-solid fa-triangle-exclamation"></i>
@@ -240,9 +238,9 @@
                         <template v-if="parseInt('{{ current_user.id }}') === bundle.user_id || is_admin">
                             <button type="button" class="bd-btn bd-btn--icon" :class="{ 'bd-btn--active': sharePanelOpen }"
                                     title="Private share link" @click="toggleSharePanel">
-                                <i class="fa-solid fa-link"></i><span>Share</span>
+                                <i data-tour="bundle-share" class="fa-solid fa-link"></i><span>Share</span>
                             </button>
-                            <a :href="'/bundle/edit/' + bundle_id" class="bd-btn bd-btn--icon" title="Edit this bundle">
+                            <a data-tour="bundle-edit" :href="'/bundle/edit/' + bundle_id" class="bd-btn bd-btn--icon" title="Edit this bundle">
                                 <i class="fa-solid fa-pen"></i><span>Edit</span>
                             </a>
                             <button type="button" class="bd-btn bd-btn--danger bd-btn--icon" title="Delete this bundle"
@@ -260,7 +258,7 @@
                                 <template #trigger="{ open }">
                                     <button type="button" @click="open" class="bd-btn bd-btn--ghost bd-btn--icon"
                                         title="Report an issue with this bundle">
-                                        <i class="fa-solid fa-flag"></i><span>Report</span>
+                                        <i data-tour="bundle-report" class="fa-solid fa-flag"></i><span>Report</span>
                                     </button>
                                 </template>
                             </report-modal>
@@ -347,7 +345,7 @@
 
                 <!-- Tags-->
                 <template v-if="!viewRelease">
-                <div class="mt-4">
+                <div data-tour="bundle-tags" class="mt-4">
                     <!-- Tags Component -->
                     <tag-display :tags="displayTags" :loading="loadingDisplayTags" section-title="Workspace Tags"
                         css-path="{{ url_for('static', filename='/css/tag/tags.css') }}">
@@ -380,7 +378,7 @@
                     </div>
                 </div>
                 <!-- ── Bundle content tabs ─────────────────────── -->
-                <div class="bd-zone">
+                <div data-tour="bundle-tabs" class="bd-zone">
                     <div class="bd-zone-label">
                         <div class="bd-zone-bar"></div>
                         <span><i class="fa-solid fa-layer-group me-1"></i>Bundle Content
@@ -415,7 +413,7 @@
                     </div>
                     <nav class="dr-nav bd-nav" role="tablist">
                         <button v-for="t in contentTabs" :key="t.key" type="button" role="tab"
-                                class="dr-nav__item" :class="{ active: activeTab === t.key }"
+                                class="dr-nav__item" :data-tour="'btab-' + t.key" :class="{ active: activeTab === t.key }"
                                 :aria-selected="activeTab === t.key" @click="setTab(t.key)">
                             <i :class="t.icon"></i>
                             <span>[[ t.label ]]</span>
@@ -820,7 +818,7 @@
 
         </div>
         <!-- Comment section -->
-        <div class="mt-5">
+        <div data-tour="bundle-comments" class="mt-5">
             <h4 class="fw-bold mb-4 border-start border-primary border-4 ps-3">Community Discussion</h4>
             <comment-thread
                 object-type="bundle"

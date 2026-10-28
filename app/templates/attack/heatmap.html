@@ -28,7 +28,7 @@
                 </div>
             </div>
             <!-- View switcher -->
-            <div v-if="!loading" class="d-flex gap-1 p-1 rounded-3" style="background:var(--light-bg-color);">
+            <div data-tour="attack-views" v-if="!loading" class="d-flex gap-1 p-1 rounded-3" style="background:var(--light-bg-color);">
                 <button @click="viewMode = 'matrix'"
                         :style="viewMode === 'matrix' ? 'background:rgba(13,110,253,.1);color:#0d6efd;' : 'background:transparent;color:var(--subtle-text-color);'"
                         style="font-size:.78rem;font-weight:600;padding:.32rem .75rem;border-radius:7px;border:none;cursor:pointer;transition:background .13s,color .13s;">
@@ -53,7 +53,7 @@
     </div>
 
     <!-- Search bar -->
-    <div v-if="!loading" class="mb-4">
+    <div data-tour="attack-search" v-if="!loading" class="mb-4">
         <div class="input-group" style="max-width:420px;">
             <span class="input-group-text bg-transparent border-end-0">
                 <i class="fa-solid fa-magnifying-glass" style="color:var(--subtle-text-color);font-size:.85rem;"></i>
@@ -75,7 +75,7 @@
     </div>
 
     <!-- Matrix view -->
-    <div v-else-if="viewMode === 'matrix'" class="card border-0 shadow-sm rounded-4">
+    <div data-tour="attack-matrix" v-else-if="viewMode === 'matrix'" class="card border-0 shadow-sm rounded-4">
         <div class="card-body p-4">
             <attack-matrix :coverage="coverage" :loading="false" :navigate-on-click="true" :technique-pages="true" :search="searchQuery"></attack-matrix>
         </div>

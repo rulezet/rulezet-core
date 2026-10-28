@@ -1,8 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Security Intelligence Repository — Rulezet{% endblock %}
-{% import 'macros/form_macros.html' as f %}
+
 {% block head %}
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" as="script" crossorigin="anonymous">
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" async></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/chart-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/rulesCarousel.css') }}">
@@ -12,658 +11,340 @@
 {% if latest_blog_posts %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/blog/blog.css') }}">
 {% endif %}
-<style>
-/* ── Hero ── */
-.home-hero {
-    background: var(--card-bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: 22px;
-    padding: 3.75rem 3rem;
-    position: relative;
-    overflow: hidden;
-}
-.home-hero::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0; height: 3px;
-    background: linear-gradient(90deg, transparent 0%, #0d6efd 25%, #60a5fa 75%, transparent 100%);
-}
-/* Ambient glow orbs */
-.hero-orb {
-    position: absolute; border-radius: 50%;
-    pointer-events: none; filter: blur(70px);
-}
-.hero-orb-1 {
-    width: 420px; height: 420px;
-    background: radial-gradient(circle, rgba(13,110,253,.13), transparent 65%);
-    top: -160px; left: -130px;
-}
-.hero-orb-2 {
-    width: 320px; height: 320px;
-    background: radial-gradient(circle, rgba(96,165,250,.1), transparent 65%);
-    bottom: -100px; right: 8%;
-}
-/* Dark mode: swap the orbs' flat glow for a soft conic-gradient spiral —
-   same size/position/heavy blur, just a bit more sense of relief. Kept
-   subtle: low opacity, no rotation/animation. */
-body.dark-mode .hero-orb-1 {
-    background: conic-gradient(from 45deg, transparent 0deg, rgba(96,165,250,.16) 100deg, transparent 200deg, rgba(13,110,253,.12) 300deg, transparent 360deg);
-}
-body.dark-mode .hero-orb-2 {
-    background: conic-gradient(from 210deg, transparent 0deg, rgba(96,165,250,.12) 120deg, transparent 240deg, rgba(13,110,253,.09) 320deg, transparent 360deg);
-}
-/* Dot-grid texture */
-.hero-grid {
-    position: absolute; inset: 0; pointer-events: none;
-    background-image: radial-gradient(circle, rgba(13,110,253,.055) 1px, transparent 1px);
-    background-size: 28px 28px;
-}
-/* Brand badge */
-.hero-brand-badge {
-    display: inline-flex; align-items: center; gap: .45rem;
-    font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-    color: #0d6efd;
-    background: rgba(13,110,253,.08);
-    border: 1px solid rgba(13,110,253,.22);
-    border-radius: 50px; padding: .3rem .9rem;
-    text-decoration: none;
-    transition: background .15s, border-color .15s;
-}
-.hero-brand-badge:hover {
-    color: #0d6efd;
-    background: rgba(13,110,253,.14);
-    border-color: rgba(13,110,253,.35);
-}
-/* Big headline */
-.hero-big-title {
-    font-size: clamp(1.9rem, 4vw, 2.75rem);
-    font-weight: 900; line-height: 1.08;
-    color: var(--text-color); letter-spacing: -.025em;
-}
-.hero-title-gradient {
-    background: linear-gradient(135deg, #0d6efd 0%, #60a5fa 100%);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-.home-hero-sub { font-size: .93rem; color: var(--subtle-text-color); line-height: 1.7; }
-/* KPI big cards */
-.hero-kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; }
-.hero-kpi-big {
-    background: var(--light-bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: 14px; padding: 1.25rem .9rem;
-    text-align: center; position: relative; overflow: hidden;
-    transition: transform .18s cubic-bezier(.22,1,.36,1), box-shadow .18s;
-    cursor: pointer;
-    user-select: none;
-}
-.hero-kpi-big:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 10px 28px rgba(0,0,0,.1); }
-.hero-kpi-big:active { transform: scale(.97); }
-.hkb-top { position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 14px 14px 0 0; }
-.hkb-num { font-size: 2rem; font-weight: 900; line-height: 1; margin-bottom: .25rem; transition: transform .18s; }
-.hero-kpi-big:hover .hkb-num { transform: scale(1.06); }
-.hkb-icon { font-size: 1rem; margin-bottom: .3rem; opacity: .75; transition: opacity .18s, transform .18s; }
-.hero-kpi-big:hover .hkb-icon { opacity: 1; transform: scale(1.15); }
-.hkb-lbl { font-size: .62rem; text-transform: uppercase; letter-spacing: .07em; color: var(--subtle-text-color); font-weight: 600; }
-
-/* Format pills */
-.hero-formats { display: flex; flex-wrap: wrap; gap: .4rem; }
-.hero-fmt-pill {
-    font-size: .6rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
-    padding: .22rem .6rem; border-radius: 4px;
-    background: rgba(13,110,253,.06); color: #0d6efd;
-    border: 1px solid rgba(13,110,253,.16);
-    font-family: 'Space Mono', monospace; text-decoration: none;
-    transition: background .13s;
-}
-.hero-fmt-pill:hover { background: rgba(13,110,253,.12); }
-
-/* ── CTA buttons ── */
-.btn-home-primary {
-    background: linear-gradient(135deg,#0d6efd,#0a58ca);
-    color: #fff !important; border: none;
-    padding: .5rem 1.25rem; border-radius: 50px;
-    font-size: .83rem; font-weight: 600;
-    text-decoration: none;
-    display: inline-flex; align-items: center; gap: .4rem;
-    box-shadow: 0 4px 12px rgba(13,110,253,.28);
-    transition: opacity .14s, box-shadow .14s, transform .14s;
-}
-.btn-home-primary:hover { opacity: .88; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(13,110,253,.36); }
-.btn-home-outline {
-    background: transparent; color: #0d6efd !important;
-    border: 1px solid rgba(13,110,253,.32);
-    padding: .5rem 1.25rem; border-radius: 50px;
-    font-size: .83rem; font-weight: 600; text-decoration: none;
-    display: inline-flex; align-items: center; gap: .4rem;
-    transition: background .14s, border-color .14s;
-}
-.btn-home-outline:hover { background: rgba(13,110,253,.07); border-color: #0d6efd; }
-
-/* ── Action cards ── */
-.home-action-card {
-    display: flex; align-items: center; gap: .8rem;
-    padding: .9rem 1rem;
-    background: var(--card-bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: 13px; text-decoration: none;
-    height: 100%;
-    transition: border-color .16s, transform .16s, box-shadow .16s;
-}
-.home-action-card:hover {
-    border-color: rgba(13,110,253,.3);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(0,0,0,.07);
-}
-.action-icon { width: 40px; height: 40px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: .9rem; flex-shrink: 0; }
-.action-title { font-size: .85rem; font-weight: 700; color: var(--text-color); margin-bottom: 1px; }
-.action-sub { font-size: .72rem; color: var(--subtle-text-color); line-height: 1.4; }
-.action-arrow { margin-left: auto; font-size: .7rem; opacity: .3; flex-shrink: 0; transition: opacity .13s, transform .13s; }
-.home-action-card:hover .action-arrow { opacity: .65; transform: translateX(3px); }
-
-/* ── Stats card ── */
-.home-stats-card {
-    background: var(--card-bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: 14px; overflow: hidden;
-    height: 100%;
-}
-.home-stats-header {
-    padding: .8rem 1.1rem .4rem;
-    border-bottom: 1px solid var(--border-color);
-    display: flex; align-items: center; gap: .5rem;
-}
-.home-stats-tab {
-    font-size: .78rem; font-weight: 600;
-    padding: .32rem .75rem; border-radius: 7px;
-    cursor: pointer; border: none; background: transparent;
-    color: var(--subtle-text-color);
-    transition: background .13s, color .13s;
-}
-.home-stats-tab.active {
-    background: rgba(13,110,253,.1); color: #0d6efd;
-}
-.home-stats-tab:hover:not(.active) { background: var(--light-bg-color); color: var(--text-color); }
-
-/* ── Activity feed ── */
-.home-feed-card {
-    background: var(--card-bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: 14px; overflow: hidden;
-    display: flex; flex-direction: column;
-    height: 100%;
-}
-.home-feed-header {
-    padding: .8rem 1.1rem .55rem;
-    border-bottom: 1px solid var(--border-color);
-    display: flex; align-items: center; justify-content: space-between;
-    flex-shrink: 0;
-}
-.home-feed-title { font-size: .85rem; font-weight: 700; color: var(--text-color); display: flex; align-items: center; gap: .45rem; }
-.feed-live-dot { width: 7px; height: 7px; border-radius: 50%; background: #198754; flex-shrink: 0; animation: pulse-dot 2s ease infinite; }
-@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
-.home-feed-scroll { flex: 1; overflow-y: auto; padding: .4rem .5rem; scrollbar-width: thin; scrollbar-color: rgba(0,0,0,.1) transparent; }
-.home-feed-scroll::-webkit-scrollbar { width: 3px; }
-.home-feed-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,.1); border-radius: 3px; }
-.feed-row {
-    display: flex; align-items: flex-start; gap: .55rem;
-    padding: .45rem .5rem; border-radius: 8px;
-    cursor: pointer; transition: background .11s;
-}
-.feed-row:hover { background: rgba(13,110,253,.06); }
-.feed-row.no-link { cursor: default; }
-.feed-row.no-link:hover { background: transparent; }
-.feed-bubble { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .68rem; flex-shrink: 0; margin-top: 1px; }
-.feed-action { font-size: .73rem; color: var(--subtle-text-color); }
-.feed-desc { font-size: .7rem; color: var(--subtle-text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.feed-time { font-size: .64rem; color: var(--subtle-text-color); opacity: .65; margin-top: 1px; }
-.feed-uname { font-weight: 600; color: #0d6efd; text-decoration: none; font-size: .73rem; }
-.feed-uname:hover { text-decoration: underline; }
-
-/* ── Section header ── */
-.home-sh {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: .9rem;
-}
-.home-sh-title { font-size: 1rem; font-weight: 700; color: var(--text-color); display: flex; align-items: center; gap: .5rem; }
-.home-sh-dot { width: 7px; height: 7px; border-radius: 50%; background: #0d6efd; flex-shrink: 0; }
-.home-sh-sub { font-size: .76rem; color: var(--subtle-text-color); }
-.home-divider { border: none; border-top: 1px solid var(--border-color); margin: 2rem 0; }
-
-/* ── From the blog ── */
-.home-blog-card {
-    display: flex; gap: 1.1rem;
-    width: 100%;
-    background: var(--card-bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
-    padding: 1.1rem;
-    text-decoration: none;
-    transition: border-color .16s, transform .16s, box-shadow .16s;
-}
-.home-blog-card:hover {
-    border-color: rgba(13,110,253,.3);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(0,0,0,.07);
-}
-.home-blog-cover {
-    width: 140px; height: 120px; flex-shrink: 0;
-    border-radius: 11px; object-fit: cover;
-}
-.home-blog-cover-placeholder {
-    width: 140px; height: 120px; flex-shrink: 0;
-    border-radius: 11px;
-    background: linear-gradient(135deg, #0d6efd18 0%, #0a58ca10 100%);
-    display: flex; align-items: center; justify-content: center;
-}
-.home-blog-title {
-    font-size: .98rem; font-weight: 700; color: var(--text-color); line-height: 1.3; margin-bottom: .4rem;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.home-blog-excerpt {
-    font-size: .82rem; color: var(--subtle-text-color); line-height: 1.5;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-    margin-bottom: .6rem;
-}
-.home-blog-meta { font-size: .74rem; color: var(--subtle-text-color); display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; }
-.home-blog-read-more { font-weight: 600; color: #0d6efd; }
-.home-blog-card:hover .home-blog-read-more { text-decoration: underline; }
-@media (max-width: 576px) {
-    .home-blog-card { flex-direction: column; }
-    .home-blog-cover, .home-blog-cover-placeholder { width: 100%; }
-}
-
-/* ── See more ── */
-.btn-see-more {
-    background: transparent; color: #0d6efd !important;
-    border: 1px solid rgba(13,110,253,.28); font-size: .83rem;
-    transition: background .13s, border-color .13s, box-shadow .13s;
-}
-.btn-see-more:hover { background: rgba(13,110,253,.06); border-color: #0d6efd; box-shadow: 0 0 0 3px rgba(13,110,253,.09); }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/home/home.css') }}">
 {% endblock %}
 
 {% block content %}
-<div class="container py-4" id="main-container">
+<div class="hv2" id="main-container">
 
     {% if show_import_hint %}
-    <div class="alert alert-dismissible d-flex align-items-center gap-3 rounded-3 mb-4"
-         role="alert"
-         style="background:rgba(13,110,253,.07);border:1px solid rgba(13,110,253,.2);border-left:3px solid #0d6efd;">
-        <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
-             style="width:38px;height:38px;background:rgba(13,110,253,.12);">
-            <i class="fa-solid fa-circle-arrow-down text-primary"></i>
+    <div class="hv2-wrap">
+        <div class="hv2-hint" role="alert">
+            <span class="hv2-hint__icon"><i class="fa-solid fa-circle-arrow-down"></i></span>
+            <div class="flex-grow-1">
+                <strong>Your instance has no rules yet.</strong>
+                <span>Pull from <b>Rulezet Official</b> to populate it with the full community rule set.</span>
+            </div>
+            <a href="/connector/list" class="hv2-btn hv2-btn--primary hv2-btn--sm"><i class="fa-solid fa-plug"></i>Go to Connectors</a>
         </div>
-        <div class="flex-grow-1">
-            <div class="fw-bold mb-1" style="font-size:.88rem;">Your instance has no rules yet.</div>
-            <div class="text-muted" style="font-size:.8rem;">Pull from <strong>Rulezet Official</strong> to instantly populate your instance with the full community rule set.</div>
-        </div>
-        <a href="/connector/list" class="btn-home-primary flex-shrink-0" style="font-size:.78rem;padding:.4rem .9rem;">
-            <i class="fa-solid fa-plug"></i>Go to Connectors
-        </a>
-        <button type="button" class="btn-close ms-1" data-bs-dismiss="alert"></button>
     </div>
     {% endif %}
 
-    <template v-if="is_loading">
+    <!-- ══ HERO: search first, the animated logo beside it ══ -->
+    <section class="hv2-hero">
+        <div class="hv2-hero__bg" aria-hidden="true">
+            <span class="hv2-orb hv2-orb--a"></span><span class="hv2-orb hv2-orb--b"></span><span class="hv2-grid"></span>
+        </div>
+        <div class="hv2-wrap hv2-hero__grid">
+            <div class="hv2-hero__copy">
+                <a href="{{ release_url }}" class="hv2-eyebrow"{% if release_url.startswith('http') %} target="_blank" rel="noopener"{% endif %}>
+                    <span class="hv2-eyebrow__dot"></span>Open source<span class="hv2-eyebrow__sep"></span>v{{ app_version }}
+                    <i class="fa-solid fa-arrow-right"></i>
+                </a>
+                <h1 class="hv2-title">
+                    Detection rules,<br>
+                    <span class="hv2-title__accent">shared by defenders.</span>
+                </h1>
+                <p class="hv2-lead">
+                    The open source security intelligence repository: explore, share and manage
+                    detection rules across every major format.
+                </p>
 
-        <!-- ══ HERO ══════════════════════════════════════════════════════════ -->
-        <div class="home-hero mb-4">
-            <div class="hero-orb hero-orb-1"></div>
-            <div class="hero-orb hero-orb-2"></div>
-            <div class="hero-grid"></div>
+                <form class="hv2-search" action="/rule/rules_list" method="get" role="search">
+                    <i class="fa-solid fa-magnifying-glass hv2-search__icon"></i>
+                    <input type="search" name="search" class="hv2-search__input" placeholder="Search a rule, a CVE, a technique, a malware family…" aria-label="Search rules" autocomplete="off"
+                           data-typing='["CVE-2024-3400", "Cobalt Strike beacon", "T1059.001 PowerShell", "Emotet", "log4j JNDI lookup", "ransomware note", "Mimikatz", "suspicious scheduled task"]'>
+                    <button type="submit" class="hv2-btn hv2-btn--primary">Search<i class="fa-solid fa-arrow-right hv2-btn__arrow"></i></button>
+                </form>
+                {% if rule_formats %}
+                <div class="hv2-quick">
+                    <span class="hv2-quick__lbl">Browse</span>
+                    {% for fmt in rule_formats %}
+                    <a href="/rule/rules_list?rule_type={{ fmt.name | urlencode }}" class="hv2-chip">{{ fmt.name }}</a>
+                    {% endfor %}
+                </div>
+                {% endif %}
 
-            <div class="row g-5 align-items-center" style="position:relative;z-index:1;">
+                <div class="hv2-cta">
+                    <a href="/rule/create_rule" class="hv2-btn hv2-btn--primary hv2-btn--lg"><i class="fa-solid fa-plus"></i>Add a rule</a>
+                    <a href="/bundle/create" class="hv2-btn hv2-btn--bundle hv2-btn--lg"><i class="fa-solid fa-box"></i>Create a bundle</a>
+                    <a href="/why_choose_rulezet" class="hv2-cta__why">Why Rulezet?<i class="fa-solid fa-arrow-right"></i></a>
+                </div>
+            </div>
 
-                <!-- Left: brand + title + CTAs + formats -->
-                <div class="col-lg-6">
-                    <div class="d-flex align-items-center gap-2 mb-3">
-                    <a href="https://github.com/rulezet/rulezet-core/releases" target="_blank" rel="noopener"
-                       class="hero-brand-badge" title="View releases on GitHub">
-                        <i class="fa-solid fa-shield-halved"></i>
-                        RULEZET
-                        <span class="badge rounded-pill border fw-normal ms-1"
-                              style="font-size:.6rem;background:transparent;color:#0d6efd;border-color:rgba(13,110,253,.3)!important;">
-                            v{{ app_version }}
-                        </span>
-                    </a>
-                    {% if mascot_enabled %}
-                    <div class="rulezy-say" tabindex="0">
-                        <img src="{{ url_for('static', filename='images/rulezy/repos.png') }}" alt="Rulezy" class="rulezy-say__avatar" style="width:52px;height:52px;">
-                        <div class="rulezy-say__bubble">
-                            {% if current_user.is_admin() or current_user.has_permission('ai.use') %}
-                            Hi, I'm Rulezy! I'll help you create rules, search the platform, and answer questions about Rulezet — just click the chat bubble in the corner anytime.
-                            {% else %}
-                            Hi, I'm Rulezy — Rulezet's mascot, and the platform's very first AI integration.
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endif %}
-                    </div>
+            <div class="hv2-stage" aria-hidden="true">
+                <div class="hv2-stage__glow"></div>
+                <picture class="hv2-stage__logo">
+                    <source media="(prefers-reduced-motion: reduce)" srcset="{{ url_for('static', filename='image/animation/rulezet_logo_final.png') }}">
+                    <img src="{{ url_for('static', filename='image/animation/rulezet_logo_build.webp') }}"
+                         alt="" width="380" height="380" fetchpriority="high" decoding="async">
+                </picture>
+            </div>
+        </div>
 
-                    <h1 class="hero-big-title mb-3">
-                        The Open Source<br>
-                        <span class="hero-title-gradient">Security Intelligence</span><br>
-                        Repository
-                    </h1>
+        <!-- key figures, one strip -->
+        <div class="hv2-wrap">
+            <div class="hv2-stats">
+                <a href="/rule/rules_list" class="hv2-stat" style="--c:#0d6efd">
+                    <span class="hv2-stat__icon"><i class="fa-solid fa-shield-halved"></i></span>
+                    <span><span class="hv2-stat__num" data-count="{{ total_rules }}">{{ "{:,}".format(total_rules) }}</span><span class="hv2-stat__lbl">detection rules</span></span>
+                </a>
+                <a href="/bundle/list" class="hv2-stat" style="--c:#198754">
+                    <span class="hv2-stat__icon"><i class="fa-solid fa-box"></i></span>
+                    <span><span class="hv2-stat__num" data-count="{{ total_bundles }}">{{ "{:,}".format(total_bundles) }}</span><span class="hv2-stat__lbl">rule bundles</span></span>
+                </a>
+                <a href="/attack/heatmap" class="hv2-stat" style="--c:#fd7e14">
+                    <span class="hv2-stat__icon"><i class="fa-solid fa-crosshairs"></i></span>
+                    <span><span class="hv2-stat__num" data-count="{{ total_attacks }}">{{ "{:,}".format(total_attacks) }}</span><span class="hv2-stat__lbl">ATT&amp;CK techniques covered</span></span>
+                </a>
+                <a href="/vulnerability/" class="hv2-stat" style="--c:#dc3545">
+                    <span class="hv2-stat__icon"><i class="fa-solid fa-bug"></i></span>
+                    <span><span class="hv2-stat__num" data-count="{{ total_cves }}">{{ "{:,}".format(total_cves) }}</span><span class="hv2-stat__lbl">CVEs covered</span></span>
+                </a>
+            </div>
+        </div>
 
-                    <p class="home-hero-sub mb-4">
-                        Explore, share and manage detection rules across all major formats.
-                        Built for security teams who move fast.
-                    </p>
+        <!-- every format, scrolling slowly, never empty -->
+        {% if rule_formats %}
+        <div class="hv2-marquee" aria-label="Supported formats">
+            <div class="hv2-marquee__track">
+                {# two identical halves, each at least as wide as the screen: sliding by one half loops with no gap #}
+                {% for half in range(2) %}
+                <div class="hv2-marquee__group" {% if half %}aria-hidden="true"{% endif %}>
+                    {% for _ in range(3) %}{% for fmt in rule_formats %}
+                    <a href="/rule/rules_list?rule_type={{ fmt.name | urlencode }}" class="hv2-marquee__item" {% if half or _ %}tabindex="-1"{% endif %}>{{ fmt.name | upper }}</a>
+                    {% endfor %}{% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </section>
 
-                    <div class="d-flex align-items-center gap-2 flex-wrap mb-4">
-                        <a href="/rule/rules_list" class="btn-home-primary" style="padding:.62rem 1.5rem;font-size:.88rem;">
-                            <i class="fa-solid fa-magnifying-glass"></i>Explore Rules
-                        </a>
-                        <a href="/rule/create_rule" class="btn-home-outline" style="padding:.62rem 1.5rem;font-size:.88rem;">
-                            <i class="fa-solid fa-plus"></i>Add a Rule
-                        </a>
-                        {% if current_user.is_authenticated %}
-                        {# Seasonal (end of year): switches to the Christmas theme and back — js/themes/holidayToggle.js #}
-                        {% set _holiday_on = user_config and (user_config.theme or '').startswith('christmas') %}
-                        <button type="button" class="holiday-toggle" id="holidayToggle"
-                                title="A seasonal theme for the end of the year — click again to go back to yours">
-                            <i class="fa-solid fa-tree"></i><span data-holiday-label>{{ 'Back to your theme' if _holiday_on else 'Holiday theme' }}</span><span class="holiday-toggle__new">New</span>
-                        </button>
+        {% if latest_blog_posts %}
+        <!-- ══ FROM THE BLOG ════════════════════════════════════════════════ -->
+        <section class="hv2-wrap hv2-section">
+            <header class="hv2-head hv2-head--row" data-reveal>
+                <div>
+                    <span class="hv2-head__kicker">From the blog</span>
+                    <h2 class="hv2-head__title">News &amp; write-ups</h2>
+                </div>
+                <a href="/blog/" class="hv2-link">All posts <i class="fa-solid fa-arrow-right"></i></a>
+            </header>
+            <div class="hv2-posts" data-reveal data-reveal-stagger>
+                {% for post in latest_blog_posts %}
+                <a href="/blog/post/{{ post.uuid }}" class="hv2-post">
+                    <div class="hv2-post__cover">
+                        {% if post.cover_image_url %}
+                        <img src="{{ post.cover_image_url }}" alt="{{ post.title }}" loading="lazy">
+                        {% else %}
+                        <i class="fa-solid fa-newspaper"></i>
                         {% endif %}
                     </div>
-
-                    <div class="hero-formats">
-                        {% for fmt in rule_formats %}
-                        <a href="/rule/rules_list?rule_type={{ fmt.name | urlencode }}" class="hero-fmt-pill">{{ fmt.name | upper }}</a>
-                        {% endfor %}
-                        <a href="/rule/formats" class="hero-fmt-pill" style="opacity:.55;">+ more</a>
+                    <div class="hv2-post__body">
+                        <div class="hv2-post__meta">
+                            <span><i class="fa-regular fa-calendar"></i>{{ post.published_at or post.created_at }}</span>
+                            {% for tag in (post.tag_names or [])[:3] %}<span class="blog-tag">{{ tag }}</span>{% endfor %}
+                        </div>
+                        <h3 class="hv2-post__title">{{ post.title }}</h3>
+                        {% if post.excerpt %}<p class="hv2-post__excerpt">{{ post.excerpt }}</p>{% endif %}
+                        <span class="hv2-post__more">Read more <i class="fa-solid fa-arrow-right"></i></span>
                     </div>
+                </a>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+    <template v-if="is_loading">
+
+        <!-- ══ HOW IT WORKS: three cards, each with a preview═════════════════════════ -->
+        <section class="hv2-wrap hv2-section">
+            <header class="hv2-head hv2-head--row" data-reveal>
+                <div>
+                    <span class="hv2-head__kicker">How it works</span>
+                    <h2 class="hv2-head__title">Find it. Write it. Share it.</h2>
+                </div>
+                {% if current_user.is_authenticated and current_user.is_admin() %}
+                <a href="/connector/list" class="hv2-link"><i class="fa-solid fa-plug"></i> Connectors</a>
+                {% else %}
+                <a href="/platform/insights" class="hv2-link">Platform insights <i class="fa-solid fa-arrow-right"></i></a>
+                {% endif %}
+            </header>
+            <div class="hv2-steps" data-reveal data-reveal-stagger>
+                <a href="/rule/rules_list" class="hv2-step" style="--c:#0d6efd">
+                    <div class="hv2-step__visual" aria-hidden="true">
+                        <div class="hv2-mock-search"><i class="fa-solid fa-magnifying-glass"></i>CVE-2024-3400<span class="hv2-mock-caret"></span></div>
+                        <div class="hv2-mock-row"><span class="hv2-mock-tag">YARA</span><span class="hv2-mock-line" style="--w:70%"></span></div>
+                        <div class="hv2-mock-row"><span class="hv2-mock-tag hv2-mock-tag--b">SIGMA</span><span class="hv2-mock-line" style="--w:55%"></span></div>
+                        <div class="hv2-mock-row"><span class="hv2-mock-tag hv2-mock-tag--c">SURICATA</span><span class="hv2-mock-line" style="--w:62%"></span></div>
+                    </div>
+                    <div class="hv2-step__body">
+                        <span class="hv2-step__pill"><i class="fa-solid fa-magnifying-glass-chart"></i>Step 1</span>
+                        <span class="hv2-step__title">Find</span>
+                        <span class="hv2-step__text">Search every rule by format, tag, CVE or ATT&amp;CK technique, and download what you need.</span>
+                        <span class="hv2-step__go">Browse rules <i class="fa-solid fa-arrow-right"></i></span>
+                    </div>
+                </a>
+                <a href="/rule/create_rule" class="hv2-step" style="--c:#198754">
+                    <div class="hv2-step__visual" aria-hidden="true">
+                        <pre class="hv2-mock-code"><b>rule</b> Suspicious_Loader
+{
+  <i>strings:</i> $a = "LoadLibrary"
+  <i>condition:</i> $a
+}</pre>
+                        <span class="hv2-mock-ok"><i class="fa-solid fa-circle-check"></i>Valid</span>
+                    </div>
+                    <div class="hv2-step__body">
+                        <span class="hv2-step__pill"><i class="fa-solid fa-pen-ruler"></i>Step 2</span>
+                        <span class="hv2-step__title">Write</span>
+                        <span class="hv2-step__text">Use the editor, paste a rule or import a GitHub repository: Rulezet checks it for you.</span>
+                        <span class="hv2-step__go">Add a rule <i class="fa-solid fa-arrow-right"></i></span>
+                    </div>
+                </a>
+                <a href="/bundle/list" class="hv2-step" style="--c:#b45309">
+                    <div class="hv2-step__visual" aria-hidden="true">
+                        <div class="hv2-mock-bundle">
+                            <span class="hv2-mock-card"><i class="fa-solid fa-file-shield"></i><span class="hv2-mock-line" style="--w:60%"></span></span>
+                            <span class="hv2-mock-card"><i class="fa-solid fa-file-shield"></i><span class="hv2-mock-line" style="--w:75%"></span></span>
+                            <span class="hv2-mock-card"><i class="fa-solid fa-box-open"></i><span class="hv2-mock-line" style="--w:50%"></span></span>
+                        </div>
+                    </div>
+                    <div class="hv2-step__body">
+                        <span class="hv2-step__pill"><i class="fa-solid fa-boxes-stacked"></i>Step 3</span>
+                        <span class="hv2-step__title">Share</span>
+                        <span class="hv2-step__text">Group rules into bundles for a threat, a product or a team, and let the community improve them.</span>
+                        <span class="hv2-step__go">See bundles <i class="fa-solid fa-arrow-right"></i></span>
+                    </div>
+                </a>
+            </div>
+        </section>
+
+        <!-- ══ FRESH RULES ══════════════════════════════════════════════════ -->
+        <section class="hv2-wrap hv2-section">
+            <header class="hv2-head hv2-head--row" data-reveal>
+                <div>
+                    <span class="hv2-head__kicker">Fresh rules</span>
+                    <h2 class="hv2-head__title">Just landed</h2>
+                </div>
+                <div class="hv2-segmented" role="tablist">
+                    <button type="button" role="tab" :class="{ on: latestTab === 'recent' }" @click="latestTab = 'recent'"><i class="fa-solid fa-clock-rotate-left"></i>Recently added</button>
+                    <button type="button" role="tab" :class="{ on: latestTab === 'cve' }" @click="latestTab = 'cve'"><i class="fa-solid fa-bug"></i>CVE coverage</button>
+                </div>
+            </header>
+            <div data-reveal>
+                <div v-show="latestTab === 'recent'">
+                    <rules-carousel route="/get_last_rules" :current-user-id="currentUserId"
+                        :current-user-is-admin="current_user_is_admin" :current-user-is-connected="current_user_is_connected"></rules-carousel>
+                </div>
+                <div v-show="latestTab === 'cve'">
+                    <rules-carousel route="/rule/get_last_cve_rules" :current-user-id="currentUserId"
+                        :current-user-is-admin="current_user_is_admin" :current-user-is-connected="current_user_is_connected"></rules-carousel>
+                </div>
+            </div>
+        </section>
+
+        <!-- ══ LIVE: Rulezy hosts the activity feed ═════════════════════════ -->
+        <section class="hv2-live-zone">
+            <div class="hv2-wrap hv2-live-row">
+                <div class="hv2-live-row__host" data-reveal>
+                    <span class="hv2-head__kicker">Live</span>
+                    <h2 class="hv2-head__title">The community, as it happens</h2>
+                    <p class="hv2-live-row__text">Every rule, vote, comment and bundle, the moment it happens.</p>
+                    {% if mascot_enabled %}
+                    {# Rulezy: floats, changes pose and says something new every few seconds (js/home/home.js) #}
+                    {% set _rulezy_poses = [
+                        {'img': url_for('static', filename='images/rulezy/simple.png'), 'text': "Hi, I'm Rulezy — welcome to Rulezet!"},
+                        {'img': url_for('static', filename='images/rulezy/lookup.png'), 'text': 'New rules land every day. I look at each one.'},
+                        {'img': url_for('static', filename='images/rulezy/analyseRule.png'), 'text': 'Every rule is checked before it is shared.'},
+                        {'img': url_for('static', filename='images/rulezy/db.png'), 'text': "{:,}".format(total_rules) ~ ' detection rules, ready to use.'},
+                        ({'img': url_for('static', filename='images/rulezy/chatbot.png'), 'text': 'Need help? Click the chat bubble in the corner.'}
+                         if current_user.is_authenticated and (current_user.is_admin() or current_user.has_permission('ai.use'))
+                         else {'img': url_for('static', filename='images/rulezy/armcross.png'), 'text': 'Open source, built by the community.'}),
+                    ] %}
+                    <div class="hv2-rulezy" data-rulezy='{{ _rulezy_poses | tojson }}' tabindex="0" title="Click Rulezy for the next tip">
+                        <div class="hv2-rulezy__body">
+                            <img src="{{ url_for('static', filename='images/rulezy/simple.png') }}" alt="Rulezy, the Rulezet mascot" data-rulezy-img>
+                            <span class="hv2-rulezy__shadow" aria-hidden="true"></span>
+                        </div>
+                        <div class="hv2-rulezy__bubble" data-rulezy-text aria-live="polite">Hi, I'm Rulezy — welcome to Rulezet!</div>
+                    </div>
+                    {% endif %}
                 </div>
 
-                <!-- Right: big KPI cards -->
-                <div class="col-lg-6">
-                    <div class="hero-kpi-grid mb-3">
-                        <div class="hero-kpi-big" data-kpi-href="/rule/rules_list" data-kpi-type="rules" data-kpi-color="#0d6efd">
-                            <div class="hkb-top" style="background:#0d6efd;"></div>
-                            <div class="hkb-icon" style="color:#0d6efd;"><i class="fa-solid fa-shield-halved"></i></div>
-                            <div class="hkb-num" style="color:#0d6efd;">{{ "{:,}".format(total_rules) }}</div>
-                            <div class="hkb-lbl">Detection Rules</div>
-                        </div>
-                        <div class="hero-kpi-big" data-kpi-href="/bundle/list" data-kpi-type="bundles" data-kpi-color="#198754">
-                            <div class="hkb-top" style="background:#198754;"></div>
-                            <div class="hkb-icon" style="color:#198754;"><i class="fa-solid fa-box"></i></div>
-                            <div class="hkb-num" style="color:#198754;">{{ "{:,}".format(total_bundles) }}</div>
-                            <div class="hkb-lbl">Rule Bundles</div>
-                        </div>
-                        <div class="hero-kpi-big" data-kpi-href="/attack/heatmap" data-kpi-type="attacks" data-kpi-color="#fd7e14">
-                            <div class="hkb-top" style="background:#fd7e14;"></div>
-                            <div class="hkb-icon" style="color:#fd7e14;"><i class="fa-solid fa-crosshairs"></i></div>
-                            <div class="hkb-num" style="color:#fd7e14;">{{ "{:,}".format(total_attacks) }}</div>
-                            <div class="hkb-lbl">ATT&amp;CK Techniques</div>
-                        </div>
+                <div class="hv2-panel hv2-panel--feed" data-reveal>
+                    <div class="hv2-feed__head">
+                        <span class="hv2-live"><span class="hv2-live__dot"></span>Live activity</span>
+                        <span class="hv2-feed__count">[[ feed.length ]] events</span>
                     </div>
-
-                    <div class="text-center">
-                        <a href="/why_choose_rulezet" class="text-muted" style="font-size:.75rem;text-decoration:none;opacity:.55;">
-                            <i class="fa-solid fa-circle-question me-1"></i>Why choose Rulezet?
-                        </a>
+                    <div class="hv2-feed">
+                        <div v-if="feedLoading" class="hv2-loading"><span class="spinner-border spinner-border-sm text-primary"></span>Loading…</div>
+                        <div v-else-if="feed.length === 0" class="hv2-empty"><i class="fa-solid fa-satellite-dish"></i>No activity yet — be the first to contribute!</div>
+                        <ol v-else class="hv2-timeline">
+                            <li v-for="item in feed" :key="item.id" :class="{ 'is-link': !!feedUrl(item) }" @click="feedUrl(item) && openFeedItem(item)">
+                                <span class="hv2-timeline__dot" :style="feedBubbleStyle(item.action)"><i :class="item.icon || 'fa-solid fa-circle-dot'"></i></span>
+                                <div class="hv2-timeline__body">
+                                    <div class="hv2-timeline__who">
+                                        <user-chip v-if="item.user_id" :user-id="item.user_id" :username="item.username" size="xs" @click.stop></user-chip>
+                                        <span v-else class="hv2-timeline__someone">Someone</span>
+                                        <span class="hv2-timeline__what">[[ friendlyAction(item.action) ]]</span>
+                                    </div>
+                                    <div v-if="item.description" class="hv2-timeline__desc" :title="item.description">[[ item.description ]]</div>
+                                </div>
+                                <time class="hv2-timeline__time">[[ formatTime(item.created_at) ]]</time>
+                            </li>
+                        </ol>
                     </div>
                 </div>
-
             </div>
-        </div>
+        </section>
 
-        <!-- ══ ACTION CARDS ══════════════════════════════════════════════════ -->
-        <div class="row g-3 mb-4">
-            <div class="col-6 col-lg-3">
-                <a href="/rule/rules_list" class="home-action-card">
-                    <div class="action-icon" style="background:rgba(13,110,253,.1);color:#0d6efd;"><i class="fa-solid fa-magnifying-glass-chart"></i></div>
-                    <div><div class="action-title">Explore</div><div class="action-sub">Browse all detection rules</div></div>
-                    <i class="fa-solid fa-chevron-right action-arrow text-primary"></i>
-                </a>
-            </div>
-            <div class="col-6 col-lg-3">
-                <a href="/rule/create_rule" class="home-action-card">
-                    <div class="action-icon" style="background:rgba(25,135,84,.1);color:#198754;"><i class="fa-solid fa-file-circle-plus"></i></div>
-                    <div><div class="action-title">Contribute</div><div class="action-sub">Upload your own rules</div></div>
-                    <i class="fa-solid fa-chevron-right action-arrow text-success"></i>
-                </a>
-            </div>
-            <div class="col-6 col-lg-3">
-                <a href="/bundle/list" class="home-action-card">
-                    <div class="action-icon" style="background:rgba(255,193,7,.12);color:#b45309;"><i class="fa-solid fa-boxes-stacked"></i></div>
-                    <div><div class="action-title">Bundles</div><div class="action-sub">Organize into shareable sets</div></div>
-                    <i class="fa-solid fa-chevron-right action-arrow" style="color:#b45309;"></i>
-                </a>
-            </div>
-            {% if current_user.is_authenticated and current_user.is_admin() %}
-            <div class="col-6 col-lg-3">
-                <a href="/connector/list" class="home-action-card">
-                    <div class="action-icon" style="background:rgba(111,66,193,.1);color:#6f42c1;"><i class="fa-solid fa-plug"></i></div>
-                    <div><div class="action-title">Connectors</div><div class="action-sub">Sync from remote instances</div></div>
-                    <i class="fa-solid fa-chevron-right action-arrow" style="color:#6f42c1;"></i>
-                </a>
-            </div>
-            {% else %}
-            <div class="col-6 col-lg-3">
-                <a href="/platform/insights" class="home-action-card">
-                    <div class="action-icon" style="background:rgba(13,202,240,.1);color:#0891b2;"><i class="fa-solid fa-chart-pie"></i></div>
-                    <div><div class="action-title">Insights</div><div class="action-sub">Platform analytics & stats</div></div>
-                    <i class="fa-solid fa-chevron-right action-arrow" style="color:#0891b2;"></i>
-                </a>
-            </div>
-            {% endif %}
-        </div>
-
-        <!-- ══ CHARTS + FEED ══════════════════════════════════════════════════ -->
-        <div class="row g-4 mb-4" style="min-height:370px;">
-
-            <!-- Charts card -->
-            <div class="col-lg-8 d-flex flex-column">
-                <div class="home-stats-card flex-grow-1">
-                    <div class="home-stats-header">
-                        <i class="fa-solid fa-chart-line text-primary me-1" style="font-size:.8rem;"></i>
-                        <span style="font-size:.82rem;font-weight:700;color:var(--text-color);">Platform Stats</span>
-                        <div class="ms-auto d-flex gap-1 flex-wrap">
-                            <button class="home-stats-tab" :class="{active: chartTab==='total'}"
-                                    @click="switchTab('total')">
-                                <i class="fa-solid fa-arrow-trend-up me-1"></i>Total Rules
-                            </button>
-                            <button class="home-stats-tab" :class="{active: chartTab==='timeline'}"
-                                    @click="switchTab('timeline')">
-                                <i class="fa-solid fa-chart-area me-1"></i>Timeline
-                            </button>
-                            <button class="home-stats-tab" :class="{active: chartTab==='formats'}"
-                                    @click="switchTab('formats')">
-                                <i class="fa-solid fa-chart-pie me-1"></i>Formats
-                            </button>
-                            <button class="home-stats-tab" :class="{active: chartTab==='top_cve'}"
-                                    @click="switchTab('top_cve')">
-                                <i class="fa-solid fa-shield-virus me-1"></i>CVEs
-                            </button>
-                            <button class="home-stats-tab" :class="{active: chartTab==='top_atk'}"
-                                    @click="switchTab('top_atk')">
-                                <i class="fa-solid fa-crosshairs me-1"></i>ATT&amp;CK
-                            </button>
-                        </div>
-                        <a href="/platform/insights" class="ms-3 text-muted" style="font-size:.72rem;text-decoration:none;opacity:.65;" title="Full insights">
-                            <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                        </a>
-                    </div>
-
-                    <div v-if="chartsLoading" class="d-flex align-items-center justify-content-center" style="height:310px;">
-                        <div class="text-center text-muted">
-                            <div class="spinner-border spinner-border-sm text-primary mb-2"></div>
-                            <p class="small mb-0">Loading charts…</p>
-                        </div>
-                    </div>
-
+        <!-- ══ INSIGHTS: tabs on the side, the chart wide ═══════════════════ -->
+        <section class="hv2-wrap hv2-section hv2-section--last">
+            <header class="hv2-head hv2-head--row" data-reveal>
+                <div>
+                    <span class="hv2-head__kicker">Insights</span>
+                    <h2 class="hv2-head__title">Coverage at a glance</h2>
+                </div>
+                <a href="/platform/insights" class="hv2-link">Full insights <i class="fa-solid fa-arrow-right"></i></a>
+            </header>
+            <div class="hv2-insights" data-reveal>
+                <div class="hv2-insights__tabs" role="tablist">
+                    <button type="button" role="tab" :class="{ on: chartTab === 'total' }" @click="switchTab('total')"><i class="fa-solid fa-arrow-trend-up"></i><span>Total rules<small>Growth over time</small></span></button>
+                    <button type="button" role="tab" :class="{ on: chartTab === 'timeline' }" @click="switchTab('timeline')"><i class="fa-solid fa-calendar"></i><span>Timeline<small>Rules added per month</small></span></button>
+                    <button type="button" role="tab" :class="{ on: chartTab === 'formats' }" @click="switchTab('formats')"><i class="fa-solid fa-layer-group"></i><span>Formats<small>Rules per format</small></span></button>
+                    <button type="button" role="tab" :class="{ on: chartTab === 'top_cve' }" @click="switchTab('top_cve')"><i class="fa-solid fa-bug"></i><span>Top CVE<small>Most covered vulnerabilities</small></span></button>
+                    <button type="button" role="tab" :class="{ on: chartTab === 'top_atk' }" @click="switchTab('top_atk')"><i class="fa-solid fa-crosshairs"></i><span>Top ATT&amp;CK<small>Most covered techniques</small></span></button>
+                </div>
+                <div class="hv2-panel hv2-insights__chart">
+                    <div v-if="chartsLoading" class="hv2-loading"><span class="spinner-border spinner-border-sm text-primary"></span>Loading charts…</div>
                     <template v-else>
-                        <div v-show="chartTab==='total'" style="padding:.5rem .75rem;">
-                            <chart-viewer v-if="charts.total" :data="charts.total" views="area" height="300px"
-                                @chart-click="goToRuleList"></chart-viewer>
-                        </div>
-                        <div v-show="chartTab==='timeline'" style="padding:.5rem .75rem;">
-                            <chart-viewer v-if="charts.timeline" :data="charts.timeline" views="area" height="300px"
-                                @chart-click="goToRuleList"></chart-viewer>
-                        </div>
-                        <div v-show="chartTab==='formats'" style="padding:.5rem .75rem;">
-                            <chart-viewer v-if="charts.formats" :data="charts.formats" views="bar-h" height="300px"
-                                @chart-click="onFormatClick"></chart-viewer>
-                        </div>
-                        <div v-show="chartTab==='top_cve'" style="padding:.5rem .75rem;">
-                            <chart-viewer v-if="charts.top_cve" :data="charts.top_cve" views="bar-h" height="300px"
-                                @chart-click="onCveClick"></chart-viewer>
-                        </div>
-                        <div v-show="chartTab==='top_atk'" style="padding:.5rem .75rem;">
-                            <chart-viewer v-if="charts.top_atk" :data="charts.top_atk" views="bar-h" height="300px"
-                                @chart-click="onAtkClick"></chart-viewer>
-                        </div>
+                        <div v-show="chartTab==='total'"><chart-viewer v-if="charts.total" :data="charts.total" views="area" height="360px" @chart-click="goToRuleList"></chart-viewer></div>
+                        <div v-show="chartTab==='timeline'"><chart-viewer v-if="charts.timeline" :data="charts.timeline" views="area" height="360px" @chart-click="goToRuleList"></chart-viewer></div>
+                        <div v-show="chartTab==='formats'"><chart-viewer v-if="charts.formats" :data="charts.formats" views="bar-h" height="360px" @chart-click="onFormatClick"></chart-viewer></div>
+                        <div v-show="chartTab==='top_cve'"><chart-viewer v-if="charts.top_cve" :data="charts.top_cve" views="bar-h" height="360px" @chart-click="onCveClick"></chart-viewer></div>
+                        <div v-show="chartTab==='top_atk'"><chart-viewer v-if="charts.top_atk" :data="charts.top_atk" views="bar-h" height="360px" @chart-click="onAtkClick"></chart-viewer></div>
                     </template>
                 </div>
             </div>
-
-            <!-- Activity feed -->
-            <div class="col-lg-4 d-flex flex-column">
-                <div class="home-feed-card flex-grow-1">
-                    <div class="home-feed-header">
-                        <div class="home-feed-title">
-                            <span class="feed-live-dot"></span>
-                            Community Activity
-                        </div>
-                        <span class="badge rounded-pill border fw-normal"
-                              style="font-size:.68rem;background:var(--card-bg-color);color:var(--subtle-text-color);">
-                            [[ feed.length ]] events
-                        </span>
-                    </div>
-
-                    <div class="home-feed-scroll" style="max-height:330px;">
-                        <template v-if="feedLoading">
-                            <div class="d-flex align-items-center justify-content-center py-5">
-                                <div class="text-center text-muted">
-                                    <div class="spinner-border spinner-border-sm text-primary mb-2"></div>
-                                    <p class="small mb-0">Loading…</p>
-                                </div>
-                            </div>
-                        </template>
-                        <template v-else-if="feed.length === 0">
-                            <div class="d-flex align-items-center justify-content-center py-5">
-                                <div class="text-center text-muted">
-                                    <i class="fa-solid fa-satellite-dish fa-2x mb-3 d-block opacity-20"></i>
-                                    <p class="small mb-0">No activity yet.<br>Be the first to contribute!</p>
-                                </div>
-                            </div>
-                        </template>
-                        <template v-else>
-                            <div v-for="item in feed" :key="item.id"
-                                 :class="['feed-row', feedUrl(item) ? '' : 'no-link']"
-                                 @click="feedUrl(item) && openFeedItem(item)">
-                                <div class="feed-bubble" :style="feedBubbleStyle(item.action)">
-                                    <i :class="item.icon || 'fa-solid fa-circle-dot'"></i>
-                                </div>
-                                <div class="flex-grow-1 min-width-0">
-                                    <div class="d-flex align-items-baseline gap-1 flex-wrap">
-                                        <user-chip v-if="item.user_id" :user-id="item.user_id" :username="item.username" size="xs" @click.stop></user-chip>
-                                        <span v-else class="feed-uname">Someone</span>
-                                        <span class="feed-action">[[ friendlyAction(item.action) ]]</span>
-                                    </div>
-                                    <div v-if="item.description" class="feed-desc" :title="item.description">[[ item.description ]]</div>
-                                    <div class="feed-time"><i class="fa-regular fa-clock me-1 opacity-40"></i>[[ formatTime(item.created_at) ]]</div>
-                                </div>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-
-        {% if latest_blog_posts %}
-        <!-- ══ FROM THE BLOG ═══════════════════════════════════════════════════ -->
-        <hr class="home-divider">
-        <div class="home-sh mb-3">
-            <div class="home-sh-title"><span class="home-sh-dot" style="background:#6f42c1;"></span>From the <span class="text-primary ms-1">Blog</span></div>
-            <a href="/blog/" class="home-sh-sub text-decoration-none">All posts <i class="fa-solid fa-arrow-right ms-1" style="font-size:.68rem;"></i></a>
-        </div>
-        <div class="row g-3">
-            {% for post in latest_blog_posts %}
-            <div class="col-12 col-md-6 d-flex">
-                <a href="/blog/post/{{ post.uuid }}" class="home-blog-card">
-                    {% if post.cover_image_url %}
-                    <img src="{{ post.cover_image_url }}" alt="{{ post.title }}" class="home-blog-cover">
-                    {% else %}
-                    <div class="home-blog-cover-placeholder">
-                        <i class="fa-solid fa-newspaper fa-2x" style="color:#0d6efd;opacity:.25;"></i>
-                    </div>
-                    {% endif %}
-                    <div class="d-flex flex-column overflow-hidden" style="flex:1;">
-                        <div class="home-blog-title">{{ post.title }}</div>
-                        {% if post.excerpt %}
-                        <p class="home-blog-excerpt">{{ post.excerpt }}</p>
-                        {% endif %}
-                        <div class="home-blog-meta">
-                            <span class="flex-shrink-0"><i class="fa-regular fa-calendar me-1"></i>{{ post.published_at or post.created_at }}</span>
-                            {% if post.tag_names %}
-                            <span class="d-flex flex-wrap gap-1">
-                                {% for tag in post.tag_names[:3] %}
-                                <span class="blog-tag">{{ tag }}</span>
-                                {% endfor %}
-                            </span>
-                            {% endif %}
-                        </div>
-                        <div class="home-blog-read-more mt-auto pt-2">Read more <i class="fa-solid fa-arrow-right ms-1"></i></div>
-                    </div>
-                </a>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-
-        <!-- ══ RECENTLY ADDED ════════════════════════════════════════════════ -->
-        <hr class="home-divider">
-        <div class="home-sh mb-3">
-            <div class="home-sh-title"><span class="home-sh-dot"></span>Recently Added <span class="text-primary ms-1">Intelligence</span></div>
-            <div class="home-sh-sub d-none d-md-block">Latest community contributions</div>
-        </div>
-        <rules-carousel route="/get_last_rules" :current-user-id="currentUserId"
-            :current-user-is-admin="current_user_is_admin" :current-user-is-connected="current_user_is_connected">
-        </rules-carousel>
-
-        <!-- ══ CVE COVERAGE ══════════════════════════════════════════════════ -->
-        <hr class="home-divider">
-        <div class="home-sh mb-3">
-            <div class="home-sh-title"><span class="home-sh-dot" style="background:#dc3545;"></span>Recent <span class="text-danger ms-1">CVE Coverage</span></div>
-            <div class="home-sh-sub d-none d-md-block">Rules linked to known vulnerabilities</div>
-        </div>
-        <rules-carousel route="/rule/get_last_cve_rules" :current-user-id="currentUserId"
-            :current-user-is-admin="current_user_is_admin" :current-user-is-connected="current_user_is_connected">
-        </rules-carousel>
-
-        <!-- ══ SEE MORE ══════════════════════════════════════════════════════ -->
-        <div class="text-center mt-4 mb-2">
-            <a href="/rule/rules_list" class="btn btn-see-more px-4 py-2 rounded-pill fw-semibold">
-                <i class="fa-solid fa-layer-group me-2 opacity-60"></i>Browse all rules
-                <i class="fa-solid fa-arrow-right ms-2 opacity-50"></i>
-            </a>
-        </div>
+        </section>
 
     </template>
 
     <template v-else>
-        <div class="text-center py-5">
-            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
-        </div>
+        <div class="hv2-loading hv2-loading--page"><span class="spinner-border text-primary"></span></div>
     </template>
 </div>
 {% endblock %}
 
 {% block script %}
-<script src="{{ url_for('static', filename='js/themes/holidayToggle.js') }}"></script>
 <script type="module">
     const { createApp, ref, onMounted } = Vue
-    import { message_list, create_message } from '/static/js/toaster.js'
+    import { message_list } from '/static/js/toaster.js'
     import RulesCarousel from '/static/js/rule/rulesCarousel.js'
     import UserChip from '/static/js/components/UserChip.js'
     import ChartViewer from '/static/js/components/chart-viewer.js'
 
-    // Pre-warm the two chart renderers used on this page so get_renderer() hits the cache
     import('/static/js/components/charts/chart-area.js').catch(() => {})
     import('/static/js/components/charts/chart-bar-h.js').catch(() => {})
 
@@ -682,7 +363,6 @@ body.dark-mode .hero-orb-2 {
         'user':    { bg: 'rgba(108,117,125,.12)', color: '#6c757d' },
         'tag':     { bg: 'rgba(111,66,193,.12)',  color: '#6f42c1' },
     }
-
     function feedBubbleStyle(action) {
         const c = ACTION_COLORS[action.split('.')[0]] || { bg: 'rgba(108,117,125,.1)', color: '#6c757d' }
         return `background:${c.bg};color:${c.color};`
@@ -699,13 +379,12 @@ body.dark-mode .hero-orb-2 {
             if (item.target_uuid) return `/bundle/detail/${item.target_uuid}`
             if (item.target_id)   return `/bundle/detail/${item.target_id}`
         }
-        if (item.target_type === 'user' && item.target_id)
-            return `/account/detail_user/${item.target_id}`
+        if (item.target_type === 'user' && item.target_id) return `/account/detail_user/${item.target_id}`
         if (item.action === 'github.import_started' && item.extra?.url)
             return `/rule/github_detail?url=${encodeURIComponent(item.extra.url)}`
         if (item.target_type === 'comment' && item.target_id) {
-            const base = item.extra?.rule_uuid  ? `/rule/detail_rule/${item.extra.rule_uuid}`
-                       : item.extra?.rule_id    ? `/rule/detail_rule/${item.extra.rule_id}` : null
+            const base = item.extra?.rule_uuid ? `/rule/detail_rule/${item.extra.rule_uuid}`
+                       : item.extra?.rule_id   ? `/rule/detail_rule/${item.extra.rule_id}` : null
             if (base) return `${base}?comment=${item.target_id}`
         }
         if (item.target_type === 'bundle_comment' && item.target_id) {
@@ -719,113 +398,75 @@ body.dark-mode .hero-orb-2 {
         }
         return null
     }
-    function formatTime(ts) {
-        if (!ts) return ''
-        return dayjs.utc(ts).fromNow()
-    }
+    function formatTime(ts) { return ts ? dayjs.utc(ts).fromNow() : '' }
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: {
-            'rules-carousel': RulesCarousel,
-            'user-chip':      UserChip,
-            'chart-viewer':   ChartViewer,
-        },
+        components: { 'rules-carousel': RulesCarousel, 'user-chip': UserChip, 'chart-viewer': ChartViewer },
         setup() {
-            const is_loading                = ref(false)
-            const current_user_is_admin     = ref(false)
+            const is_loading = ref(false)
+            const current_user_is_admin = ref(false)
             const current_user_is_connected = ref(false)
-            const currentUserId             = ref(null)
-            const feed                      = ref([])
-            const feedLoading               = ref(true)
-            const charts                    = ref({})
-            const chartsLoading             = ref(false)
-            const chartTab                  = ref('total')
+            const currentUserId = ref(null)
+            const feed = ref([])
+            const feedLoading = ref(true)
+            const charts = ref({})
+            const chartsLoading = ref(false)
+            const chartTab = ref('total')
+            const latestTab = ref('recent')
 
             async function fetchFeed() {
                 feedLoading.value = true
                 try {
-                    const res  = await fetch('/activity_feed?page=1&per_page=20')
-                    const data = await res.json()
-                    feed.value = data.logs || []
+                    const res = await fetch('/activity_feed?page=1&per_page=20')
+                    feed.value = (await res.json()).logs || []
                 } catch {}
                 feedLoading.value = false
             }
-
             async function switchTab(tab) {
                 chartTab.value = tab
                 if (charts.value[tab]) return
                 chartsLoading.value = true
                 try {
-                    const res  = await fetch('/home_charts/' + tab)
+                    const res = await fetch('/home_charts/' + tab)
                     charts.value = { ...charts.value, [tab]: await res.json() }
                 } catch {}
                 chartsLoading.value = false
             }
-
-            function goToRuleList() {
-                window.location.href = '/rule/rules_list';
+            const goToRuleList = () => { window.location.href = '/rule/rules_list' }
+            const to = (param, item) => {
+                const v = (item.name || '').trim()
+                window.location.href = v ? `/rule/rules_list?${param}=` + encodeURIComponent(param === 'rule_type' ? v.toLowerCase() : v) : '/rule/rules_list'
             }
-
-            function onFormatClick(item) {
-                const fmt = (item.name || '').trim().toLowerCase();
-                window.location.href = fmt
-                    ? '/rule/rules_list?rule_type=' + encodeURIComponent(fmt)
-                    : '/rule/rules_list';
-            }
-
-            function onCveClick(item) {
-                const cve = (item.name || '').trim();
-                window.location.href = cve
-                    ? '/rule/rules_list?vulnerabilities=' + encodeURIComponent(cve)
-                    : '/rule/rules_list';
-            }
-
-            function onAtkClick(item) {
-                const tid = (item.name || '').trim();
-                window.location.href = tid
-                    ? '/rule/rules_list?attacks=' + encodeURIComponent(tid)
-                    : '/rule/rules_list';
-            }
-
-            function openFeedItem(item) {
-                const url = feedUrl(item)
-                if (url) window.open(url, '_blank')
-            }
+            const onFormatClick = (item) => to('rule_type', item)
+            const onCveClick = (item) => to('vulnerabilities', item)
+            const onAtkClick = (item) => to('attacks', item)
+            function openFeedItem(item) { const url = feedUrl(item); if (url) window.open(url, '_blank') }
 
             async function checkIfUserIsConnected() {
-                const res  = await fetch('/get_current_user_connected')
-                const data = await res.json()
+                const data = await (await fetch('/get_current_user_connected')).json()
                 current_user_is_connected.value = data.is_authenticated
                 if (data.is_authenticated) {
-                    const ur = await fetch('/rule/get_current_user')
-                    const ud = await ur.json()
+                    const ud = await (await fetch('/rule/get_current_user')).json()
                     current_user_is_admin.value = ud.user
                     currentUserId.value = ud.id ?? null
                 }
             }
-
-            async function init() {
-                is_loading.value = false
-                // Load default tab immediately
+            onMounted(async () => {
                 switchTab('total')
                 fetchFeed()
                 await checkIfUserIsConnected()
                 is_loading.value = true
-            }
-
-            onMounted(() => init())
+            })
 
             return {
-                message_list, is_loading,
-                current_user_is_admin, current_user_is_connected, currentUserId,
-                feed, feedLoading, charts, chartsLoading, chartTab,
+                message_list, is_loading, current_user_is_admin, current_user_is_connected, currentUserId,
+                feed, feedLoading, charts, chartsLoading, chartTab, latestTab,
                 openFeedItem, goToRuleList, onFormatClick, onCveClick, onAtkClick, switchTab,
                 feedBubbleStyle, friendlyAction, feedUrl, formatTime,
             }
-        }
+        },
     }).mount('#main-container')
 </script>
-
-<script src="{{ url_for('static', filename='js/home/kpiTransition.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/home/home.js') }}" defer></script>
 {% endblock %}

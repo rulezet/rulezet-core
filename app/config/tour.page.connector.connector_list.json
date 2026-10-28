@@ -1,0 +1,26 @@
+{
+  "label": "Tutorial: Connectors",
+  "category": "Tutorial",
+  "description": "Steps of the Tutorial button on the Connectors page (endpoint connector.connector_list). A step: target (CSS selector, empty = centred card), title, text (blank line = new paragraph, **bold**, `code`), roles (optional: anonymous, user, member, admin, perm:<key>), demo (rule / bundle: example shown when the target is missing, e.g. an empty list).",
+  "public": false,
+  "value": {
+    "title": "Connectors",
+    "steps": [
+      {
+        "target": ".explorer-banner",
+        "title": "Connectors",
+        "text": "Link this instance to other Rulezet instances and pull their rules and bundles — the quickest way to fill a new Rulezet, and to keep it in sync."
+      },
+      {
+        "target": "[data-tour=\"connector-howto\"]",
+        "title": "How connectors work",
+        "text": "Pull modes, matching and filters, explained."
+      },
+      {
+        "target": "[data-tour=\"connector-table\"]",
+        "title": "Rulezet instances",
+        "text": "**Add** an instance with its URL and an API key of an account on it, **test** the connection, then **pull**. **Soft** pull adds missing rules; **hard** pull also updates the ones you have. Matching is by UUID only: pulling twice never duplicates a rule. Each pull is a background job with its own history."
+      }
+    ]
+  }
+}

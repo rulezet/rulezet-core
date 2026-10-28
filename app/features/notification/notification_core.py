@@ -1181,12 +1181,16 @@ def mark_read(notif_id, user_id):
         return False
 
 
-def mark_all_read(user_id):
+def mark_all_read(user_id, jobs_only=False):
+    """Mark the user's unread notifications as read; only the job ones (job_*) with jobs_only."""
     try:
-        Notification.query.filter_by(user_id=user_id, is_read=False).update({
+        query = Notification.query.filter_by(user_id=user_id, is_read=False)
+        if jobs_only:
+            query = query.filter(Notification.notif_type.like('job%'))
+        query.update({
             'is_read': True,
             'read_at': datetime.datetime.utcnow(),
-        })
+        }, synchronize_session=False)
         db.session.commit()
         return True
     except Exception as e:

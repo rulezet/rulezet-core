@@ -1,0 +1,21 @@
+{
+  "label": "Tutorial: Dashboard",
+  "category": "Tutorial",
+  "description": "Steps of the Tutorial button on the Dashboard page (endpoint dashboard.dashboard). A step: target (CSS selector, empty = centred card), title, text (blank line = new paragraph, **bold**, `code`), roles (optional: anonymous, user, member, admin, perm:<key>), demo (rule / bundle: example shown when the target is missing, e.g. an empty list).",
+  "public": false,
+  "value": {
+    "title": "Dashboard",
+    "steps": [
+      {
+        "target": "[data-tour=\"dash-controls\"]",
+        "title": "Your own dashboard",
+        "text": "**Add widget** opens the catalogue: charts (rules per format, activity over time…), lists (latest rules, your favorites…) and counters. The banner above can be hidden; the controls stay."
+      },
+      {
+        "target": "[data-tour=\"dash-grid\"]",
+        "title": "Widgets",
+        "text": "Drag a widget by its title to move it, by its corner to resize it, and close it with its ×. The layout is saved on your account, on every device."
+      }
+    ]
+  }
+}

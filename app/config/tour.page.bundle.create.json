@@ -1,0 +1,21 @@
+{
+  "label": "Tutorial: Create a bundle",
+  "category": "Tutorial",
+  "description": "Steps of the Tutorial button on the Create a bundle page (endpoint bundle.create). A step: target (CSS selector, empty = centred card), title, text (blank line = new paragraph, **bold**, `code`), roles (optional: anonymous, user, member, admin, perm:<key>), demo (rule / bundle: example shown when the target is missing, e.g. an empty list).",
+  "public": false,
+  "value": {
+    "title": "Create a bundle",
+    "steps": [
+      {
+        "target": "[data-tour=\"bundle-create-main\"]",
+        "title": "Name and description",
+        "text": "The **name** is what people search for; the **description** (Markdown) says what the bundle covers, for whom, and how to deploy it. Add tags to make it findable."
+      },
+      {
+        "target": "[data-tour=\"bundle-create-side\"]",
+        "title": "Visibility and next steps",
+        "text": "**Public**: everyone sees it. **Private**: only you, and whoever has its share link. After creation you add rules (search or pick from lists), organise them in folders, and attach documents."
+      }
+    ]
+  }
+}

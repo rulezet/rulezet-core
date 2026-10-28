@@ -8,6 +8,8 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/rule_metadata.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/ruleMetadataExtractor.css') }}">
 <!-- Reuses the blog editor's step-progress bar (.blog-stepper/.blog-step*)
      for the Platform Tags 3-step wizard below — same look, no reason to
      duplicate ~100 lines of CSS for an identical component. -->
@@ -64,6 +66,9 @@
         {% if is_admin %}
         <a class="dr-nav__item" data-bs-toggle="tab" href="#pane-imported-tags" role="tab">
             <i class="fas fa-user-tag"></i><span>Imported Tags</span>
+        </a>
+        <a class="dr-nav__item" data-bs-toggle="tab" href="#pane-rule-metadata" role="tab">
+            <i class="fas fa-book-bookmark"></i><span>References &amp; metadata</span>
         </a>
         <span class="dr-nav__sep"></span>
         {{ anav.admin_nav_toggle() }}
@@ -261,6 +266,15 @@
                 @notify="notify">
             </imported-tags-extractor>
         </div>
+
+        <!-- TAB — References & metadata read from each rule's text (rule_metadata_core.py) -->
+        <div class="tab-pane fade" id="pane-rule-metadata" role="tabpanel">
+            <rule-metadata-extractor
+                :csrf-token="csrfToken"
+                :formats="metadataFormats"
+                @notify="notify">
+            </rule-metadata-extractor>
+        </div>
         {% endif %}
 
     </div>
@@ -275,6 +289,7 @@ import FieldParserUpdater from '/static/js/admin/bulkParseFields.js'
 import BulkImportRunner from '/static/js/tags/manage/BulkImportRunner.js'
 import PlatformTagConfigEditor from '/static/js/admin/platformTagConfigEditor.js'
 import ImportedTagsExtractor from '/static/js/admin/importedTagsExtractor.js'
+import RuleMetadataExtractor from '/static/js/admin/ruleMetadataExtractor.js'
 import RuleList from '/static/js/rule/ruleList.js'
 import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js'
 import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
@@ -283,6 +298,7 @@ import { create_message } from '/static/js/toaster.js'
 const fieldMeta       = {{ field_meta | tojson | safe }};
 const parseableFields = {{ parseable_fields | tojson | safe }};
 const importedTagFormats = {{ imported_tag_formats | tojson | safe }};
+const metadataFormats = {{ metadata_formats | tojson | safe }};
 const csrfToken       = '{{ csrf_token() }}';
 
 createApp({
@@ -292,6 +308,7 @@ createApp({
         'bulk-import-runner': BulkImportRunner,
         'platform-tag-config-editor': PlatformTagConfigEditor,
         'imported-tags-extractor': ImportedTagsExtractor,
+        'rule-metadata-extractor': RuleMetadataExtractor,
         'rule-list': RuleList,
         'tags-displays-list': TagsDisplaysList,
         'vulnerability-displays-list': VulnerabilityDisplaysList,
@@ -444,7 +461,7 @@ createApp({
         });
 
         return {
-            fieldMeta, parseableFields, importedTagFormats, csrfToken, notify,
+            fieldMeta, parseableFields, importedTagFormats, metadataFormats, csrfToken, notify,
             selectedPlatformConfigId, selectedPlatformConfigName, onPlatformConfigSelected,
             platformReadyToRun, platformRunnerDescription,
             platformSelectionMode, platformSelectedIds, platformFormatFilter, platformPickerCollapsed,

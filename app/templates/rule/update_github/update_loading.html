@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/chart-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/github/session_report.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/github/ruleOwnerPicker.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
 {% endblock %}
 {% block content %}
@@ -597,6 +598,11 @@
                     </div>
                     <div v-else-if="new_rules && new_rules.length || nrActiveFilterCount > 0" class="card shadow border-0 mb-4 p-3">
 
+                        <!-- who the new rules will belong to (admins / GitHub Managers) -->
+                        <div v-if="ownerInfo && ownerInfo.can_choose" class="nr-owner mb-3">
+                            <span class="nr-owner__label"><i class="fa-solid fa-user-shield me-1"></i>New rules belong to</span>
+                            <rule-owner-picker v-model="newRulesOwner" :me="ownerInfo.me" :suggestion="ownerInfo.suggestion"></rule-owner-picker>
+                        </div>
                         <!-- Toolbar (ruleList style) -->
                         <div class="rl-toolbar">
                             <div class="rl-toolbar-left">
@@ -801,6 +807,7 @@
 
 {% block script %}
 <script type="module">
+    import RuleOwnerPicker, { ownerParam } from '/static/js/rule/github/ruleOwnerPicker.js';
     const { createApp, ref, onMounted, computed, nextTick, watch } = Vue;
     import { message_list, create_message } from '/static/js/toaster.js';
     import CodeViewer from '/static/js/components/code-viewer.js';
@@ -812,7 +819,8 @@
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { CodeViewer, DiffViewer, ChartViewer, PaginationComponent, 'user-chip': UserChip, 'ansi-terminal': AnsiTerminal },
+        components: { CodeViewer, DiffViewer, ChartViewer, PaginationComponent, 'user-chip': UserChip, 'ansi-terminal': AnsiTerminal,
+                      'rule-owner-picker': RuleOwnerPicker },
         setup() {
             const progress = ref(0)
             const progressDone = ref(0)
@@ -1219,7 +1227,7 @@
                     const res  = await fetch('/rule/bulk_new_rules_decision/{{sid}}', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf_token },
-                        body: JSON.stringify({ action }),
+                        body: JSON.stringify({ action, owner_id: ownerParam(newRulesOwner.value) }),
                     })
                     const data = await res.json()
                     create_message(data.message, data.toast_class)
@@ -1270,7 +1278,8 @@
 
                 const params = new URLSearchParams({
                     new_rule_id: ruleId,
-                    sid: '{{sid}}'
+                    sid: '{{sid}}',
+                    owner_id: ownerParam(newRulesOwner.value),
                 });
 
                 try {
@@ -1413,6 +1422,11 @@
                 });
             }
 
+            // who the new rules go to: null = automatic (owner of this source's rules), else a user
+            const newRulesOwner = ref(null)
+            const ownerInfo = ref(null)
+            fetch('/rule/new_rules_owner/{{sid}}').then(r => r.ok ? r.json() : null).then(d => { ownerInfo.value = d }).catch(() => {})
+
             onMounted(() => {
                 fetchInfoSession()
                 pollScan();
@@ -1473,7 +1487,7 @@
                 addRule,
 
                 bulkUpdateDecision, bulkUpdating, bulkUpdateAction,
-                bulkNewRulesDecision, bulkNewRules, bulkNewAction,
+                bulkNewRulesDecision, bulkNewRules, bulkNewAction, newRulesOwner, ownerInfo,
                 decisionRule,
                 loading_rule_id,
 

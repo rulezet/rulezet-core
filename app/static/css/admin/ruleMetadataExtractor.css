@@ -1,0 +1,25 @@
+/* Admin → Bulk parse fields → References & metadata (js/admin/ruleMetadataExtractor.js) */
+.rmx-title {
+    display: inline-flex; align-items: center; gap: .5rem;
+    font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--subtle-text-color);
+}
+.rmx-title::before { content: ''; width: 3px; height: 14px; border-radius: 2px; background: #0d6efd; }
+.rmx-small-btn { font-size: .72rem; padding: 2px 10px; }
+.rmx-formats { max-height: 460px; overflow: auto; }
+.rmx-format {
+    display: flex; align-items: center; gap: .75rem; margin: 0; padding: .5rem .9rem; cursor: pointer;
+    border-radius: 12px; border: 1px solid var(--border-color); background: var(--light-bg-color);
+}
+.rmx-format.is-on { border-color: rgba(13,110,253,.35); background: rgba(13,110,253,.03); }
+.rmx-format.is-locked { cursor: default; }
+.rmx-format__main { min-width: 0; }
+.rmx-format__name { font-size: .85rem; }
+.rmx-format__where { font-size: .74rem; color: var(--subtle-text-color); }
+.rmx-count { font-size: .7rem; background: var(--card-bg-color); color: var(--subtle-text-color); border: 1px solid var(--border-color); }
+.rmx-select { width: auto; font-size: .8rem; }
+.rmx-textarea {
+    font-family: var(--bs-font-monospace); font-size: .78rem;
+    background: var(--light-bg-color); color: var(--text-color); border-color: var(--border-color);
+}
+.rmx-result { background: var(--light-bg-color); min-height: 3rem; }
+.rmx-result .rule-refs li, .rmx-result .rule-meta-cell { background: var(--card-bg-color); }

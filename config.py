@@ -54,6 +54,13 @@ class Config:
     # See docs/design/suricata_language_server_integration.md.
     SURICATA_BINARY_PATH = os.environ.get('SURICATA_BINARY_PATH', '')
 
+    # Rule tests on samples (the editor's Test button, app/modules/rulezet-tester), read by
+    # app/features/editor/editor_core.py: RULE_TESTS_SANDBOX = bwrap (default, needs
+    # `apt install bubblewrap`), process (limits only: development) or off;
+    # RULE_TESTS_SAMPLES = extra sample folders, separated by ':' (never real malware on the
+    # web server); RULE_TESTS_LAB / _KEY / _KNOWN_HOSTS = the isolated lab VM over SSH, where
+    # real samples live (app/modules/rulezet-tester/docs/lab.md). See docs/future/test_panel.md.
+
     # Number of reverse proxies (nginx, ...) this instance sits behind — 0
     # (default) means "no proxy, trust nothing" and leaves remote_addr as
     # the raw TCP peer. Set to the real hop count to make Werkzeug's

@@ -140,6 +140,14 @@ def create_rulezet_metadata_misp_object(rule_id: int) -> MISPObject:
     for cve in cve_list(rule.cve_id):
         misp_object.add_attribute('cve-id', value=cve)
 
+    # references (from the rule's text + added by hand) and the rule's other metadata
+    for ref in rule.all_references:
+        is_url = ref.lower().startswith(('http://', 'https://'))
+        misp_object.add_attribute('reference' if is_url else 'reference-text', value=ref)
+    for key, value in (rule.extra_metadata or {}).items():
+        for v in (value if isinstance(value, list) else [value]):
+            misp_object.add_attribute('extra-metadata', value=f'{key}: {v}')
+
     # ATT&CK techniques used by this rule → multiple attributes, same pattern as cve-id
     for technique in get_techniques_for_rule(rule_id):
         technique_id = technique.get('technique_id')

@@ -130,8 +130,10 @@ def create_app(start_worker=True):
     from app.features.starfield.starfield import starfield_blueprint
     from app.features.nightshift.nightshift import nightshift_blueprint
     from app.features.vulnerability.vulnerability import vulnerability_blueprint
+    from app.features.tour.tour import tour_blueprint
     from app.features.rule.rule_from_github.git_settings.git_settings_routes import git_settings_blueprint
     from app.features.alert.alert import alert_blueprint
+    from app.features.editor.editor import editor_blueprint, editor_page_blueprint
 
     app.register_blueprint(home_blueprint, url_prefix="/")
     app.register_blueprint(account_blueprint, url_prefix="/account")
@@ -166,8 +168,11 @@ def create_app(start_worker=True):
     app.register_blueprint(starfield_blueprint)
     app.register_blueprint(nightshift_blueprint)
     app.register_blueprint(vulnerability_blueprint)
+    app.register_blueprint(tour_blueprint)
     app.register_blueprint(git_settings_blueprint)
     app.register_blueprint(alert_blueprint, url_prefix='/alert')
+    app.register_blueprint(editor_blueprint, url_prefix='/editor-api')
+    app.register_blueprint(editor_page_blueprint, url_prefix='/editor')
 
     from app.api.api import api_blueprint
 
@@ -220,6 +225,7 @@ def create_app(start_worker=True):
         return response
 
     from app.features.jobs import job_handlers  # noqa
+    from app.features.editor import editor_jobs  # noqa  (registers the editor's job)
     if start_worker:
         from app.features.jobs.job_worker import start_worker as _start_worker
         _start_worker(app)
@@ -267,10 +273,18 @@ def create_app(start_worker=True):
                 themes_js = [{'css_key': t.css_key, 'is_dark': t.is_dark, 'name': t.name} for t in themes if not t.is_builtin]
             except Exception:
                 pass
+        try:
+            from app.features.rule_tester.sample_test_core import can_use_editor, can_use_tests
+            tests_allowed = can_use_tests(_cu)       # setting editor.test_access: editor Test button, Samples tab
+            editor_allowed = can_use_editor(_cu)     # setting editor.access: YARA editor tabs
+        except Exception:
+            tests_allowed = editor_allowed = False
         return {
             'user_config': config,
             'custom_themes_for_js': themes_js,
             'is_admin': _cu.is_authenticated and _cu.is_admin(),
+            'can_use_tests': tests_allowed,
+            'can_use_editor': editor_allowed,
         }
 
     @app.context_processor

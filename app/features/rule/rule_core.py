@@ -38,7 +38,7 @@ from app.core.db_class.similarity import RuleSimilarity, SimilarResult
 from app.core.db_class.tag import RuleTagAssociation, Tag
 
 from ..account import account_core as AccountModel
-from app.core.utils.utils import bump_version
+from app.core.utils.utils import as_db_id, bump_version
 
 ###################
 #   Rule action   #
@@ -761,11 +761,14 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
         if bit_risk['rejected']:
             return False, "; ".join(bit_risk['reasons_reject'])
 
-        # Identify user
-        if current_user and current_user.is_authenticated:
+        # The owner: the user given (every caller passes the acting user, except a GitHub update's
+        # new rules given to someone else: resolve_new_rule_owner), else whoever is logged in
+        if user is not None:
+            user_id = user.id
+        elif current_user and current_user.is_authenticated:
             user_id = current_user.id
         else:
-            user_id = user.id if user else None
+            user_id = None
 
         # Resolve vulnerabilities to a clean Python list, handling all input forms:
         # - Python list (from format parsers)
@@ -800,6 +803,9 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
             github_path=form_dict.get("github_path") or None,
             branch=form_dict.get("branch") or None
         )
+        if form_dict.get("references"):
+            from app.features.rule.rule_metadata_core import set_manual_references
+            set_manual_references(new_rule, form_dict.get("references"))
 
         db.session.add(new_rule)
         db.session.flush()
@@ -977,6 +983,9 @@ def edit_rule_core(form_dict, id) -> tuple[bool, Rule]:
     vuln_edit = [v for v in vuln_edit if isinstance(v, str) and v.strip()]
     rule.cve_id = json.dumps(vuln_edit)
     rule.last_modif = datetime.datetime.now(tz=datetime.timezone.utc)
+    if "references" in form_dict:
+        from app.features.rule.rule_metadata_core import set_manual_references
+        set_manual_references(rule, form_dict.get("references"))
 
 
     if "tags" in form_dict:
@@ -3522,7 +3531,39 @@ def get_all_github_urls_matching(search: str = None, search_field: str = 'url', 
 # a repo's rules are whatever matches this against Rule.source.
 
 
-def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, author_names: list = None, editor_names: list = None, license_filter: str = None, conflicts_only: bool = False, sort: str = None, sort_dir: str = 'asc', provider_filter: str = None):
+def _circl_keywords():
+    from app.core.utils.app_settings import get_setting
+    conf = get_setting('git.org_badge') or {}
+    return [k.strip().lower() for k in (conf.get('keywords') or []) if isinstance(k, str) and k.strip()]
+
+
+def has_circl_badge(repo):
+    """CIRCL badge of a git repository: the admin's choice, else its url or author holds a keyword."""
+    if repo.circl_badge is not None:
+        return repo.circl_badge
+    text = f"{repo.url or ''} {repo.author or ''}".lower()
+    return any(k in text for k in _circl_keywords())
+
+
+def circl_badge_expr():
+    """SQL version of has_circl_badge(), for the CIRCL filter."""
+    from sqlalchemy import false
+    auto = or_(*[or_(GithubRepo.url.ilike(f"%{k}%"), GithubRepo.author.ilike(f"%{k}%")) for k in _circl_keywords()]) \
+        if _circl_keywords() else false()
+    return or_(GithubRepo.circl_badge == True, and_(GithubRepo.circl_badge.is_(None), auto))
+
+
+def set_circl_badge(url, value):
+    """Admin: force the badge on (True) / off (False), or back to automatic (None)."""
+    repo = GithubRepo.query.filter_by(url=url).first()
+    if not repo:
+        return None
+    repo.circl_badge = value
+    db.session.commit()
+    return repo
+
+
+def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, author_names: list = None, editor_names: list = None, license_filter: str = None, conflicts_only: bool = False, sort: str = None, sort_dir: str = 'asc', provider_filter: str = None, circl_only: bool = False):
     """Paginates AND filters/sorts entirely off GithubRepo (a small,
     incrementally-synced table — see github_repo_core.py) instead of
     running a live GROUP BY / per-rule scan over the whole Rule table.
@@ -3592,6 +3633,9 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
     if conflicts_only:
         query = query.filter(GithubRepo.conflict_count > 0)
 
+    if circl_only:
+        query = query.filter(circl_badge_expr())
+
     if sort in ('url', 'author', 'rule_count', 'cve_count'):
         sort_column = getattr(GithubRepo, sort)
     else:
@@ -3655,6 +3699,8 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
             "branches": branch_names,
             "cve_count": repo.cve_count,
             "has_conflicts": repo.conflict_count > 0,
+            "circl": has_circl_badge(repo),
+            "circl_badge": repo.circl_badge,
             "last_import": {
                 "date": last_import.query_date.strftime('%Y-%m-%d %H:%M') if last_import else None,
                 "url_imported": "/rule/import_loading/"+ last_import.uuid if last_import else None,
@@ -4866,7 +4912,68 @@ def change_message_new_rule(id, new_message):
     return True
 
 
-def import_single_new_rule(nr, user):
+def _source_variants(source_url):
+    """A repository URL as rules may have stored it: with / without a trailing slash or .git."""
+    url = (source_url or '').strip()
+    if not url:
+        return []
+    base = url.rstrip('/')
+    base = base[:-4] if base.endswith('.git') else base
+    return list({url, base, base + '/', base + '.git'})
+
+
+def source_owner_suggestion(source_url):
+    """Who owns most of the active rules already imported from this source — the natural owner of
+    its new rules. {id, name, count} or None."""
+    from app.core.db_class.user import User
+    variants = _source_variants(source_url)
+    if not variants:
+        return None
+    row = (db.session.query(Rule.user_id, func.count(Rule.id))
+           .filter(Rule.is_deleted == False, Rule.source.in_(variants), Rule.user_id.isnot(None))  # noqa: E712
+           .group_by(Rule.user_id).order_by(func.count(Rule.id).desc()).first())
+    if not row:
+        return None
+    user = db.session.get(User, row[0])
+    if not user:
+        return None
+    return {'id': user.id, 'name': f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username,
+            'count': row[1]}
+
+
+def can_choose_new_rule_owner(user):
+    """Admins and GitHub Managers (full control over GitHub imports) may give the new rules of a
+    source to someone else; anyone else owns what they add."""
+    return bool(user) and (user.is_admin() or user.has_permission('github.manage'))
+
+
+def resolve_new_rule_owner(actor, source_url, owner_id=None):
+    """The user new rules from `source_url` are created for: the chosen one (owner_id), else the
+    owner of most rules of that source, else the actor. Only an admin / GitHub Manager may give
+    them to someone else: for anyone else it is always the actor."""
+    from app.core.db_class.user import User
+    if not can_choose_new_rule_owner(actor):
+        return actor
+    if owner_id:
+        chosen = db.session.get(User, as_db_id(owner_id)) if as_db_id(owner_id) else None
+        if chosen:
+            return chosen
+    suggestion = source_owner_suggestion(source_url)
+    if suggestion:
+        return db.session.get(User, suggestion['id']) or actor
+    return actor
+
+
+def updater_source_url(updater):
+    """The repository URL an update session checked (from its stored info)."""
+    import json as _json
+    try:
+        return _json.loads(updater.info).get('repo_url') if updater else None
+    except Exception:
+        return None
+
+
+def import_single_new_rule(nr, user, owner=None):
     """Validate + import one NewRule row exactly like the manual 'Add all new
     rules' bulk action does (handle_bulk_new_rules_decision) — full
     re-validation via parse_rule_by_format, so a syntactically invalid row
@@ -4887,8 +4994,9 @@ def import_single_new_rule(nr, user):
             pass
 
     change_message_new_rule(nr.id, 'imported')
+    # owner: who the new rule belongs to (resolve_new_rule_owner), the acting user by default
     success, message, imported = parse_rule_by_format(
-        nr.rule_content, user, nr.format, source_info, github_path=nr.github_path
+        nr.rule_content, owner or user, nr.format, source_info, github_path=nr.github_path
     )
     if success and imported:
         profil = AccountModel.get_or_create_gamification_profile(imported.user_id)

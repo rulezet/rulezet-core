@@ -67,7 +67,7 @@
     </div>
 
     <!-- Search + filters -->
-    <div class="row g-3 mb-4">
+    <div data-tour="blog-filters" class="row g-3 mb-4">
         <div class="col-12 col-md-6">
             <div class="input-group">
                 <span class="input-group-text border-0" style="background:var(--light-bg-color);">
@@ -110,6 +110,10 @@
 
             <!-- Admin badges -->
             <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2" style="z-index:2;">
+                <span v-if="(post.tag_names || []).some(t => t.toLowerCase() === 'release')"
+                      class="badge shadow-sm blog-release-badge" style="font-size:.65rem;">
+                    <i class="fa-solid fa-rocket me-1"></i>RELEASE
+                </span>
                 <span v-if="isAdmin && post.is_draft"
                       class="badge shadow-sm" style="font-size:.65rem;background:#fd7e14;color:#fff;">
                     <i class="fa-solid fa-file-pen me-1"></i>DRAFT

@@ -20,10 +20,14 @@ Commands:
     help        Show this help message
 """
 
+import contextlib
 import json
 import os
+import socket
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -39,22 +43,237 @@ PIP      = str(VENV_BIN / "pip")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+class _Spinner:
+    """One animated line ("⠋ Checking the sandbox… 3s") while a step runs, so a slow step never
+    looks frozen. Messages printed meanwhile (ok/info/error) go above it; a subprocess that
+    writes to the terminal (run(), input()) pauses it. Plain text when stdout is not a terminal."""
+    FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.label = None
+        self.paused = 0
+        self.thread = None
+
+    def _draw(self, frame):
+        elapsed = int(time.monotonic() - self.t0)
+        sys.stdout.write(f"\r\033[K  \033[1;36m{frame}\033[0m {self.label}\033[0;90m  {elapsed}s\033[0m")
+        sys.stdout.flush()
+
+    def _loop(self):
+        i = 0
+        while self.label is not None:
+            with self.lock:
+                if self.label is not None and not self.paused:
+                    self._draw(self.FRAMES[i % len(self.FRAMES)])
+            i += 1
+            time.sleep(0.08)
+
+    def clear(self):
+        if self.label is not None and not self.paused and sys.stdout.isatty():
+            sys.stdout.write("\r\033[K")
+            sys.stdout.flush()
+
+    def start(self, label):
+        self.label, self.t0, self.paused = label, time.monotonic(), 0
+        if sys.stdout.isatty():
+            self.thread = threading.Thread(target=self._loop, daemon=True)
+            self.thread.start()
+        else:
+            print(f"  … {label}")
+
+    def stop(self):
+        with self.lock:
+            self.clear()
+            self.label = None
+        if self.thread:
+            self.thread.join()
+            self.thread = None
+
+    @contextlib.contextmanager
+    def pause(self):
+        with self.lock:
+            self.clear()
+            self.paused += 1
+        try:
+            yield
+        finally:
+            with self.lock:
+                self.paused -= 1
+
+
+_SPIN = _Spinner()
+
+
+def _say(text: str, stream=None) -> None:
+    with _SPIN.lock:
+        _SPIN.clear()
+        print(text, file=stream or sys.stdout, flush=True)
+
+
+@contextlib.contextmanager
+def step(n: int, total: int, label: str):
+    """A numbered startup step with a spinner: "[2/4] Rule editor & tester" … ✓ done (1.2s)."""
+    _say(f"\n\033[1;34m  [{n}/{total}]\033[0m \033[1m{label}\033[0m")
+    t0 = time.monotonic()
+    _SPIN.start(f"{label}…")
+    try:
+        yield
+    finally:
+        _SPIN.stop()
+    _say(f"\033[0;90m        done in {time.monotonic() - t0:.1f}s\033[0m")
+
+
 def header(text: str) -> None:
-    print(f"\n\033[1;34m{'─' * 52}\033[0m")
-    print(f"\033[1;34m  {text}\033[0m")
-    print(f"\033[1;34m{'─' * 52}\033[0m")
+    _say(f"\n\033[1;34m{'─' * 52}\033[0m\n\033[1;34m  {text}\033[0m\n\033[1;34m{'─' * 52}\033[0m")
 
 
 def ok(text: str) -> None:
-    print(f"\033[1;32m  ✓ {text}\033[0m")
+    _say(f"\033[1;32m  ✓ {text}\033[0m")
 
 
 def info(text: str) -> None:
-    print(f"\033[0;37m  · {text}\033[0m")
+    _say(f"\033[0;37m  · {text}\033[0m")
+
+
+def warn(text: str) -> None:
+    _say(f"\033[1;33m  ! {text}\033[0m")
 
 
 def error(text: str) -> None:
-    print(f"\033[1;31m  ✗ {text}\033[0m", file=sys.stderr)
+    _say(f"\033[1;31m  ✗ {text}\033[0m", sys.stderr)
+
+
+def banner(mode: str) -> None:
+    b, c, r = "\033[1;34m", "\033[1;36m", "\033[0m"
+    _say(f"""
+{b}  ╭──────────────────────────────────────────────────╮
+  │{r}  {c}RULEZET{r}  v{app_version():<10}{"·  " + mode:<28}{b}│
+  │{r}  \033[0;90mcommunity detection rules platform{r}              {b}│
+  ╰──────────────────────────────────────────────────╯{r}""")
+
+
+def _announce_when_up(url: str, port: str, mode: str) -> None:
+    """Background: spinner while gunicorn and the app boot, then a clear "ready" box once the
+    site really answers an HTTP request (the port opens before the app is loaded)."""
+    import urllib.error
+    import urllib.request
+
+    def wait():
+        t0 = time.monotonic()
+        _SPIN.start("Booting the web server and the job worker…")
+        try:
+            while time.monotonic() - t0 < 180:
+                try:
+                    urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5)
+                    break
+                except urllib.error.HTTPError:
+                    break                                   # any HTTP answer: the app is up
+                except (OSError, ValueError):
+                    time.sleep(0.4)
+            else:
+                return warn(f"The server is still not answering on port {port} after 3 min — see the logs above.")
+        finally:
+            _SPIN.stop()
+        g, d, r = "\033[1;32m", "\033[0;90m", "\033[0m"
+        _say(f"""
+{g}  ╭──────────────────────────────────────────────────╮
+  │  ✓  Rulezet is up{r}{d}  ({mode}, {time.monotonic() - t0:.1f}s){r}{" " * max(0, 25 - len(mode) - len(f"{time.monotonic() - t0:.1f}"))}{g}│
+  ╰──────────────────────────────────────────────────╯{r}
+     \033[1;36m→ {url}{r}
+     {d}debug mode · reloads on code changes · CTRL+C to stop{r}
+     {d}── logs ─────────────────────────────────────────────{r}""")
+    threading.Thread(target=wait, daemon=True).start()
+
+
+_LOG_NOISE = ("Starting gunicorn", "Listening at:", "Using worker:",
+              "THIS APP IS IN DEBUG MODE", "Handling signal:", "Shutting down: Master",
+              "Worker exiting (pid", "Control socket", "Autorestarting worker after current request")
+_STOPPING = threading.Event()          # CTRL+C: children ending is expected, not an incident
+
+
+def _event(color: str, icon: str, tag: str, text: str) -> None:
+    """A lifecycle line (start, restart, job done…): icon + bold text, stands out from plain logs."""
+    _say(f"\033[0;90m  {tag} │\033[0m \033[1;{color}m{icon} {text}\033[0m")
+
+
+def _relay(proc, tag: str) -> None:
+    """Prints a child's output, tidied: gunicorn's boot chatter hidden, request lines coloured by
+    status, errors in red, the job worker's lines tagged so both streams stay readable.
+    Lifecycle gets its own look: worker (re)started, web worker recycled, each job's start / end."""
+    import re
+    access_re = re.compile(r'"(\w+) (\S+) [^"]*" (\d{3}) \S+ ([\d.]+)s')
+    job_start = re.compile(r"\[worker:(\w+)\] Starting job (\S+) type=(\S+)")
+    job_end = re.compile(r"\[worker:(\w+)\] Job (\S+) finished with status=(\w+)")
+    job_fail = re.compile(r"\[worker:(\w+)\] Job (\S+) failed: (.*)")
+    job_types = {}                      # uuid → type, to name the job again when it ends
+    booted = False
+    for line in proc.stdout:
+        line = line.rstrip("\n")
+        if not line.strip() or any(n in line for n in _LOG_NOISE):
+            continue
+        if "Worker reloading:" in line:
+            _event("33", "↻", tag, f"reloading — {line.split('Worker reloading:', 1)[1].strip()} changed")
+            continue
+        if "Booting worker with pid" in line:          # gunicorn web worker: first boot, then recycles
+            if booted:
+                _event("36", "↻", tag, f"web worker restarted (pid {line.rsplit(':', 1)[1].strip()})")
+            booted = True
+            continue
+        if "[worker-process] Background worker running" in line:
+            _event("36", "▶", tag, "job worker running (job queue, telemetry, update-checker)")
+            continue
+        if "[worker-process] Stopped." in line or ("[worker] " in line and "worker started." in line):
+            continue                                    # summed up by the line above / the exit line
+        m = job_start.search(line)
+        if m:
+            job_types[m.group(2)] = m.group(3)
+            _event("34", "▶", tag, f"{m.group(3)} \033[0;90m{m.group(2)[:8]} · {m.group(1)} lane")
+            continue
+        m = job_end.search(line)
+        if m:
+            kind, status = job_types.pop(m.group(2), "job"), m.group(3)
+            color, icon = {"done": ("32", "✓"), "failed": ("31", "✗")}.get(status, ("33", "!"))
+            _event(color, icon, tag, f"{kind} {status} \033[0;90m{m.group(2)[:8]}")
+            continue
+        m = job_fail.search(line)
+        if m:
+            _event("31", "✗", tag, f"{job_types.pop(m.group(2), 'job')} failed: {m.group(3)}")
+            continue
+        if "Recovered" in line and "interrupted job" in line:
+            _event("33", "↻", tag, re.sub(r"^\[[^\]]+\] ", "", line))
+            continue
+        clean = re.sub(r"^\[[^\]]+\] \[\d+\] |^\[worker[-:\w]*\] ", "", line)   # drop "[date] [pid] " / "[worker] "
+        if "[ERROR]" in line or "[CRITICAL]" in line or "Traceback" in line or "Error" in clean[:40]:
+            _say(f"\033[1;31m  {tag} │ {clean}\033[0m")
+        elif line.startswith("[site]") or line.startswith("[api]"):
+            if "Python-urllib" in line:
+                continue                                        # our own "is it up?" probe
+            m = access_re.search(line)
+            if not m:
+                _say(f"\033[0;90m  {tag} │\033[0m {line}")
+                continue
+            method, path, code, secs = m.group(1), m.group(2), int(m.group(3)), float(m.group(4))
+            color = "32" if code < 300 else "36" if code < 400 else "33" if code < 500 else "31"
+            _say(f"\033[0;90m  {tag} │\033[0m \033[{color}m{code}\033[0m {method:<6} {path}"
+                 f" \033[0;90m{secs * 1000:.0f} ms\033[0m")
+        else:
+            _say(f"\033[0;90m  {tag} │\033[0m {clean}")
+    code = proc.wait()
+    if _STOPPING.is_set() or code == 0:
+        _event("90", "■", tag, "stopped")
+    else:
+        _event("31", "✗", tag, f"process ended unexpectedly (exit code {code})")
+
+
+def _spawn(cmd: list, flaskenv: str, pretty: bool, tag: str):
+    env = {**_venv_env(), "FLASKENV": flaskenv}
+    if not pretty:
+        return subprocess.Popen(cmd, cwd=ROOT, env=env)
+    proc = subprocess.Popen(cmd, cwd=ROOT, env={**env, "PYTHONUNBUFFERED": "1"}, text=True, bufsize=1,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    threading.Thread(target=_relay, args=(proc, tag), daemon=True).start()
+    return proc
 
 
 def app_version() -> str:
@@ -78,7 +297,8 @@ def run(cmd: list[str], cwd: Path = ROOT, check: bool = True, extra_env: dict | 
     if extra_env:
         env.update(extra_env)
     info(f"$ {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=cwd, env=env)
+    with _SPIN.pause():                     # the command writes to the terminal itself
+        result = subprocess.run(cmd, cwd=cwd, env=env)
     # returncode 130 = Ctrl+C sent to child process
     if result.returncode in (130, -2):
         raise KeyboardInterrupt
@@ -112,7 +332,7 @@ def _sync_submodules() -> None:
     """Bring tracked-branch submodules up to their remote tip.
 
     Mirrors update.sh's submodule step: rulezet-cast, misp-taxonomies,
-    misp-galaxy and rulezet-validation float to their remote branch on every
+    misp-galaxy, rulezet-validation, rulezet-editor and rulezet-tester float to their remote branch on every
     update (--remote) since we want their latest content automatically —
     rulezet-validation in particular used to require a separate manual pull
     on prod; pivotick stays pinned to the committed submodule ref (its dist
@@ -121,11 +341,11 @@ def _sync_submodules() -> None:
     --remote; refreshed via the admin UI instead).
     """
     run(["git", "submodule", "update", "--init", "--recursive",
-         "app/modules/rulezet-validation"])
+         "app/modules/rulezet-validation", "app/modules/rulezet-editor", "app/modules/rulezet-tester"])
     result = subprocess.run(
         ["git", "submodule", "update", "--remote", "app/modules/rulezet-cast",
          "app/modules/misp-taxonomies", "app/modules/misp-galaxy",
-         "app/modules/rulezet-validation"],
+         "app/modules/rulezet-validation", "app/modules/rulezet-editor", "app/modules/rulezet-tester"],
         cwd=ROOT,
     )
     if result.returncode != 0:
@@ -335,7 +555,8 @@ def _check_pivograph_assets() -> None:
 def _confirm(prompt: str) -> bool:
     """Ask for confirmation. Returns True if confirmed, False if cancelled (or Ctrl+C)."""
     try:
-        answer = input(f"\033[1;33m  {prompt} [yes/N]: \033[0m").strip().lower()
+        with _SPIN.pause():
+            answer = input(f"\033[1;33m  {prompt} [yes/N]: \033[0m").strip().lower()
         return answer == "yes"
     except KeyboardInterrupt:
         return False
@@ -548,6 +769,8 @@ def cmd_init() -> None:
     info("Initialising Git submodules…")
     run(["git", "submodule", "update", "--init", "--recursive", "--depth", "1",
          "app/modules/rulezet-validation"])
+    run(["git", "submodule", "update", "--init", "--recursive", "app/modules/rulezet-editor"])
+    run(["git", "submodule", "update", "--init", "--recursive", "app/modules/rulezet-tester"])
     ok("Submodules initialised")
 
     info("Installing Python dependencies…")
@@ -638,10 +861,9 @@ def _run_gunicorn_with_worker(flaskenv: str, port: str, reload: bool = False) ->
       LOG_DIR             write access/error logs to files there
                           (site-*.log, api-*.log) instead of stdout.
     """
-    worker_proc = subprocess.Popen(
-        [PYTHON, "worker.py"], cwd=ROOT,
-        env={**_venv_env(), "FLASKENV": flaskenv},
-    )
+    # dev in a terminal: tidied, coloured output (see _relay); prod / logs to a file: raw output
+    pretty = reload and sys.stdout.isatty()
+    worker_proc = _spawn([PYTHON, "worker.py"], flaskenv, pretty, "jobs")
     _load_launch_env()
     host = os.environ.get("GUNICORN_BIND_HOST", "0.0.0.0").strip() or "0.0.0.0"
     api_port = os.environ.get("API_PORT", "").strip()
@@ -654,9 +876,15 @@ def _run_gunicorn_with_worker(flaskenv: str, port: str, reload: bool = False) ->
                 cwd=ROOT, env={**_venv_env(), "FLASKENV": flaskenv},
             )
         threads = os.environ.get("GUNICORN_THREADS", "8")
-        run(_gunicorn_cmd(f"{host}:{port}", threads, "site", reload), extra_env={"FLASKENV": flaskenv})
+        if pretty:
+            site_proc = _spawn(_gunicorn_cmd(f"{host}:{port}", threads, "site", reload), flaskenv, True, "web ")
+            site_proc.wait()
+        else:
+            run(_gunicorn_cmd(f"{host}:{port}", threads, "site", reload), extra_env={"FLASKENV": flaskenv})
     except KeyboardInterrupt:
-        print("\n\033[0;37m  · Server stopped.\033[0m")
+        _STOPPING.set()
+        _SPIN.stop()
+        _say("\n\033[0;37m  · Server stopped.\033[0m")
     finally:
         for name, proc in (("API process", api_proc), ("background worker process", worker_proc)):
             if proc is not None and proc.poll() is None:
@@ -668,19 +896,153 @@ def _run_gunicorn_with_worker(flaskenv: str, port: str, reload: bool = False) ->
                     proc.kill()
 
 
+def _ensure_editor() -> None:
+    """The rule editor (app/modules/rulezet-editor) and the rule tester (app/modules/rulezet-tester)
+    are submodules installed editable by requirements.txt. A checkout made before they existed has
+    neither: fetch and install them here so start-dev / start-prod never boot without them."""
+    for folder, module, label in (("rulezet-editor", "rulezet_editor", "rule editor"),
+                                  ("rulezet-tester", "rulezet_tester", "rule tester")):
+        path = os.path.join(ROOT, "app", "modules", folder)
+        if not os.path.isfile(os.path.join(path, "pyproject.toml")):
+            info(f"Fetching the {label} submodule (app/modules/{folder})…")
+            run(["git", "submodule", "update", "--init", "--recursive", f"app/modules/{folder}"])
+        probe = subprocess.run([PYTHON, "-c", f"import {module}"], cwd=ROOT, env=_venv_env(),
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if probe.returncode != 0:
+            info(f"Installing the {label} (pip install -e app/modules/{folder})…")
+            run([PIP, "install", "-e", f"./app/modules/{folder}"])
+
+
+def _env_value(key: str, default: str = "") -> str:
+    """A setting from the environment, else from .env (the app reads it the same way)."""
+    if key in os.environ:
+        return os.environ[key]
+    env_file = ROOT / ".env"
+    if env_file.is_file():
+        for line in env_file.read_text().splitlines():
+            name, sep, value = line.strip().partition("=")
+            if sep and name.strip() == key and not line.strip().startswith("#"):
+                return value.strip().strip('"').strip("'")
+    return default
+
+
+_SANDBOX_PROBE = """
+import sys
+from rulezet_tester import FolderSampleStore, Sandbox, TestService
+from rulezet_tester.web import SAMPLES
+service = TestService(FolderSampleStore(SAMPLES), Sandbox(mode=sys.argv[1]), executor=lambda fn: fn())
+reason = service.unavailable()
+if reason:
+    print(reason); sys.exit(2)
+run = service.start('yara', 'rule probe { condition: filesize >= 0 }', ['synthetic-yara'])
+run = service.state(run['id'])
+if run['status'] != 'done':
+    print(run.get('error') or 'the test run failed'); sys.exit(1)
+"""
+
+
+def _ensure_sandbox() -> None:
+    """Tests on samples (YARA editor: Test button, "Test on samples" step of Create) run in a
+    bubblewrap sandbox. Run one tiny test through it; when bwrap is missing, offer to install it
+    (apt); when it is there but refused (e.g. user namespaces blocked by AppArmor), say how to fix.
+    Never blocks the start: without a sandbox the tests are simply switched off."""
+    import shutil as _shutil
+    mode = _env_value("RULE_TESTS_SANDBOX", "bwrap").strip().lower() or "bwrap"
+    if mode in ("off", "none", "false") or _env_value("RULE_TESTS_LAB"):
+        return                                   # switched off, or every run goes to the lab VM
+
+    def probe():
+        return subprocess.run([PYTHON, "-c", _SANDBOX_PROBE, mode], cwd=ROOT, env=_venv_env(),
+                              capture_output=True, text=True)
+
+    res = probe()
+    if res.returncode == 2 and mode == "bwrap" and not _shutil.which("bwrap") and _shutil.which("apt-get"):
+        if sys.stdin.isatty() and _confirm("Tests on samples need bubblewrap. Install it now (sudo apt-get install bubblewrap)?"):
+            with _SPIN.pause():
+                subprocess.run(["sudo", "apt-get", "install", "-y", "bubblewrap"])
+            res = probe()
+    if res.returncode == 0:
+        ok(f"Sample tests ready (sandbox: {mode})")
+        return
+    reason = (res.stdout or res.stderr or "").strip().splitlines()[-1:] or ["unknown error"]
+    error(f"Sample tests switched off: {reason[0]}")
+    if mode == "bwrap" and _shutil.which("bwrap"):
+        info("bwrap is installed but cannot start: on Ubuntu 24.04+ unprivileged user namespaces are")
+        info("restricted by AppArmor — see app/modules/rulezet-tester/docs/design.md (sandbox).")
+        info("Development only: RULE_TESTS_SANDBOX=process in .env (no isolation).")
+    elif mode == "bwrap":
+        info("Install bubblewrap (apt install bubblewrap), or for development only set")
+        info("RULE_TESTS_SANDBOX=process in .env (no isolation).")
+
+
+def _quiet(cmd: list, label: str, extra_env: dict | None = None) -> bool:
+    """Run a command with its output captured (the spinner keeps turning); shown only on failure."""
+    res = subprocess.run(cmd, cwd=ROOT, env={**_venv_env(), **(extra_env or {})}, capture_output=True, text=True)
+    if res.returncode in (130, -2):
+        raise KeyboardInterrupt
+    if res.returncode != 0:
+        error(f"{label} failed:")
+        _say("\n".join((res.stdout + res.stderr).strip().splitlines()[-15:]))
+        return False
+    return True
+
+
+def _prepare_dev() -> None:
+    """Everything a fresh clone or a `git pull` needs, done automatically on start-dev: the
+    virtualenv, the Python dependencies (only when requirements.txt changed) and the database
+    migrations. Nothing to run by hand first."""
+    import hashlib
+    if not VENV_BIN.exists():
+        info(f"No virtualenv yet: creating {VENV}")
+        _quiet([sys.executable, "-m", "venv", str(VENV)], "Creating the virtualenv") or sys.exit(1)
+    ok(f"Virtualenv {VENV}")
+    stamp = VENV / ".requirements.sha256"
+    digest = hashlib.sha256((ROOT / "requirements.txt").read_bytes()).hexdigest()
+    if not stamp.is_file() or stamp.read_text().strip() != digest:
+        _SPIN.label = "Installing the Python dependencies (requirements.txt changed)…"
+        if not _quiet([PIP, "install", "-q", "-r", "requirements.txt"], "pip install"):
+            sys.exit(1)
+        stamp.write_text(digest)
+        ok("Python dependencies installed")
+    else:
+        ok("Python dependencies up to date")
+    _SPIN.label = "Applying the database migrations…"
+    if _quiet([FLASK, "db", "upgrade"], "Database migrations", {"FLASKENV": "development"}):
+        ok("Database schema up to date")
+    else:
+        warn("Start continues; first install? run: python3 manage.py db-init")
+
+
+def _first_login(flaskenv: str) -> None:
+    """The first admin has not chosen a password yet: print a fresh one, here in the launch terminal
+    (app.py --first-admin-password; nothing is printed once the admin has changed it)."""
+    res = subprocess.run([PYTHON, "app.py", "--first-admin-password"], cwd=ROOT, capture_output=True, text=True,
+                         env={**_venv_env(), "FLASKENV": flaskenv})
+    box = "\n".join(l for l in res.stdout.splitlines() if "DEBUG MODE" not in l and "TESTING MODE" not in l).strip()
+    if box:
+        _say("\n" + box)
+
+
 def cmd_start_dev() -> None:
-    _check_venv()
+    banner("development")
+    with step(1, 4, "Environment, dependencies & database"):
+        _prepare_dev()
+    with step(2, 4, "Rule editor & rule tester"):
+        _ensure_editor()
+        ok("rulezet-editor and rulezet-tester installed")
+    with step(3, 4, "Sample-test sandbox (runs a probe rule)"):
+        _ensure_sandbox()
     port = os.environ.get("FLASK_PORT", "7009")
     url = f"http://{os.environ.get('FLASK_URL', '127.0.0.1')}:{port}"
-    header(f"Starting Rulezet v{app_version()} (development)")
-    info(f"Serving at {url}")
-    info("Debug mode — reloads on code changes (Python and templates)")
-    info("Press CTRL+C to stop")
+    _first_login("development")
+    _say(f"\n\033[1;34m  [4/4]\033[0m \033[1mStarting the server\033[0m \033[0;90m(gunicorn: web · worker.py: jobs)\033[0m")
+    _announce_when_up(url, port, "development")
     _run_gunicorn_with_worker("development", port, reload=True)
 
 
 def cmd_start_prod() -> None:
     _check_venv()
+    _ensure_editor()
 
     # 1. Backup
     cmd_backup()
@@ -709,6 +1071,11 @@ def cmd_start_prod() -> None:
     info("Seeding default data (formats, platform-tag configs, AI agent configs)…")
     run([PYTHON, "app.py", "--seed-defaults"], extra_env={"FLASKENV": "production"})
     ok("Default data up to date")
+
+    # after the code and the dependencies are up to date: checks the rulezet-tester just installed
+    _ensure_editor()
+    _ensure_sandbox()
+    _first_login("production")
 
     # 3. Start — same gunicorn+worker.py launch as `start-dev`, see
     # _run_gunicorn_with_worker's docstring for why this isn't `flask run`
@@ -774,6 +1141,15 @@ def cmd_update() -> None:
     _check_venv()
     header("Updating Rulezet")
 
+    # update is also run on development checkouts: the hard reset below would silently drop
+    # uncommitted work (deploy keeps discarding it — production has none on purpose)
+    dirty = _git_out(["status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all"], ROOT)
+    if dirty:
+        error("Local changes not committed — update resets to origin and would delete them:")
+        print(dirty)
+        info("Commit or stash them first (or run 'git stash', update, then 'git stash pop').")
+        sys.exit(1)
+
     info("Syncing with origin…")
     _sync_with_origin()
     ok("Code updated")
@@ -797,6 +1173,8 @@ def cmd_update() -> None:
     info("Seeding default data (formats, platform-tag configs)…")
     run([PYTHON, "app.py", "--seed-defaults"], extra_env={"FLASKENV": "development"})
     ok("Default data up to date")
+
+    _ensure_sandbox()
 
 
 def cmd_pivotick() -> None:

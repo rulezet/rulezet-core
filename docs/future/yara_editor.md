@@ -1,6 +1,10 @@
 # YARA Editor — a VS Code–like workspace for YARA on Rulezet
 
-> Status: **planning** — feature inventory and action plan, nothing built yet.
+> Status: **in progress** on the `editor` branch — the editor is its own project
+> ([rulezet-editor](https://github.com/rulezet/rulezet-editor), submodule `app/modules/rulezet-editor`,
+> CodeMirror 6) and tests on samples are another one
+> ([rulezet-tester](https://github.com/rulezet/rulezet-tester), submodule `app/modules/rulezet-tester`).
+> What is built and what comes next: [§8](#8-where-we-are) and [§9](#9-roadmap--what-comes-next).
 > First format of the [Rule Workbench](./ROADMAP.md#1-rule-workbench--a-full-environment-for-every-rule)
 > (roadmap item #1). Everything learned here is meant to be reused for Sigma,
 > Suricata and the other formats afterwards.
@@ -107,6 +111,8 @@ Priority: **P0** = first usable version, **P1** = next, **P2** = later / nice to
 | Paste or drop a `.yar` file / a ZIP → opened in the editor | P1 | |
 
 ### 3.5 Test as you write
+
+> Design: [test_panel.md](./test_panel.md) — same system for every format, YARA first.
 
 | Feature | Priority | Notes |
 |---|---|---|
@@ -265,3 +271,41 @@ until step 7.
   all?
 - A companion VS Code extension (push / pull rules with the API) — now, or
   once the web editor is done?
+
+## 8. Where we are
+
+Built (branch `editor`), each feature documented in `app/modules/rulezet-editor/docs/rulezet/`:
+
+| Area | What works |
+|---|---|
+| Editor | CodeMirror 6: highlighting, completion (keywords, modifiers, modules, `$` strings, rule names from Rulezet), hovers, diagnostics as you type, lint, Format, command palette, F12 / references / rename, outline, undo / redo, resizable panels, guided tutorial with a complete example |
+| Many rules | Several rules per document, each with its status; Check & preview; one Create job that checks every rule (already in Rulezet → reused, changed → updated if yours, otherwise an edit proposal to its owner) and links them |
+| Fields | Fields panel (title, description, licence, version, CVE, ATT&CK, tags, linked rules), written into the rule or not; same panel on the edit page |
+| Edit page | "YARA editor" tab next to the classic editor, the rule with every rule it needs (locked, unlockable by their owner or an admin) |
+| Tests on samples | Test button (rulezet-tester: bubblewrap sandbox, or the lab VM over SSH); runs kept in the database; "Test on samples" step of Create (setting `editor.test_on_create`, false positives = warning or blocking); result kept per rule version; badge on the rule page and a **Samples** tab (verdict, sets, the rule with what each string matched, every match with its bytes, history) |
+
+Who does what: rulezet-tester **runs** (drivers, sandbox, sample sets, lab VM); Rulezet **stores
+and shows** (runs, per-rule results, the Samples tab) and decides **when** to run (Test button,
+Create step). The editor is the UI, the same in Rulezet and standalone.
+
+## 9. Roadmap — what comes next
+
+In this order: 1 and 2 give the Samples tab its meaning, 3 and 4 are what researchers will use
+every day.
+
+| # | Feature | Why | Where | Size |
+|---|---|---|---|---|
+| 1 | **Real sample sets** — *started: documents and PE of the machine (read in place, by type), `rulezet-tester add-set` to add any set (Windows goodware copied from a Windows machine, malware on the lab VM only)* — Windows goodware (system DLLs, common installers, Office / PDF documents) and malicious sets per family on the lab VM (MalwareBazaar import exists; the VM is not provisioned yet) | Today only `/usr/bin` of the server and a few text files: a rule for a Windows malware cannot show a false positive on ELF files, so "0 FP" reassures for nothing; with no malicious set, "detected / missed" stay empty | rulezet-tester (sets, lab), deploy | L |
+| 2 | **Sets chosen from the rule** — the file type it targets (`uint16(0) == 0x5A4D` → PE, `0x464c457f` → ELF, `%PDF`…), its tags, CVE and ATT&CK | Test on what makes sense, without the user picking sets | rulezet-tester (step 4) + editor | M |
+| 3 | **Regression tests** — samples that must / must not match saved with the rule, re-run on every change: "this change breaks 1 of 5 tests" | What a maintainer needs before touching a rule others use | Rulezet + editor | M |
+| 4 | **Why a sample is missed** — which strings were found, which part of the condition failed ("2 of (...): only 1 found") | The question asked after every "missed" | rulezet-tester (driver: per-string results) + editor | M |
+| 5 | **Performance** — scan time per rule, too short / too common strings (slow atoms), unbounded regex; YARA-X warnings | Slow rules get disabled in production | rulezet-tester + editor lint | M |
+| 6 | **Compare two versions** — results of v1 and v2 side by side: what v2 gains or loses | Reviewing an edit proposal with evidence | Rulezet (Samples tab, proposals) | S–M |
+| 7 | **Test on my own file** — private upload, scanned in the sandbox, never kept, never visible to others | Researchers test on their own sample first | rulezet-tester + Rulezet | M |
+| 8 | **Help to write strings** — from a sample, propose the rare strings absent from the goodware corpus (yarGen-like), with Rulezy | Faster first draft of a good rule | rulezet-tester + AI | L |
+
+Smaller items kept from §3: publish selected rules / as a bundle, drop a `.yar` or ZIP, hex string
+hover (ASCII / UTF-16), CyberChef / VirusTotal links, history and diff in the editor, server-side
+drafts, Rulezy in the editor (generate / fix as a diff / explain), live quality score, similar
+rules before publishing.
+

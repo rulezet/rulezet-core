@@ -94,6 +94,8 @@ def flatten_rule_json(parsed: dict) -> dict:
         "tags": relations.get("tags") or [],
         "attacks": relations.get("attacks") or parsed.get("attacks") or [],
         "cve_id": vulnerability.get("cve_ids") or [],
+        "references_manual": (parsed.get("references") or {}).get("manual") or []
+        if isinstance(parsed.get("references"), dict) else [],
     }
     return flat
 
@@ -120,6 +122,9 @@ def normalize_rule_json(parsed) -> tuple[dict | None, str | None]:
         "cve_id": _vuln_list(flat.get("cve_id") or flat.get("vulnerabilities")),
         "tag_names": _name_list(flat.get("tags"), "name", "tag_name"),
         "attacks": [a.upper() for a in _name_list(flat.get("attacks"), "technique_id", "id")],
+        # the references added by hand on the other instance (the rule's own are read again from
+        # its text); older exports have none
+        "references": _name_list(flat.get("references_manual")),
     }
     if not rule_dict["title"] or not rule_dict["format"] or not rule_dict["to_string"].strip():
         return None, 'The JSON must include at least "title", "format" and "to_string".'
@@ -247,6 +252,8 @@ def update_rule_from_portable(rule_dict: dict, existing: Rule, user) -> tuple[bo
     form = {key: (rule_dict.get(key) or getattr(existing, key)) for key in UPDATABLE_FIELDS if key != "cve_id"}
     form["cve_id"] = rule_dict.get("cve_id") or _vuln_list(existing.cve_id)
     form["original_uuid"] = existing.original_uuid
+    if rule_dict.get("references"):
+        form["references"] = rule_dict["references"]     # an import without any keeps the existing ones
     ok, rule = RuleModel.edit_rule_core(form, existing.id)
     if not ok:
         return False, "update failed"

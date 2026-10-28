@@ -123,6 +123,26 @@ def resolve_repo_urls(repo_mode, repo_filters, selected_repo_urls, excluded_repo
     return ordered
 
 
+def _owner_id(value):
+    """An existing user id for new_rule_owner_id, or None (automatic). Who may set it is checked
+    by the routes (strip_owner_choices)."""
+    from app.core.db_class.user import User
+    from app.core.utils.utils import as_db_id
+    uid = as_db_id(value)
+    return uid if uid and db.session.get(User, uid) else None
+
+
+def strip_owner_choices(data):
+    """Users who may not give new rules to someone else (not admin / GitHub Manager) never set an
+    owner: their schedules add the rules for the automatic owner rules (themselves)."""
+    for cfg in (data.get('repo_settings') or []):
+        if isinstance(cfg, dict):
+            cfg.pop('new_rule_owner_id', None)
+    if isinstance(data.get('default_repo_settings'), dict):
+        data['default_repo_settings'].pop('new_rule_owner_id', None)
+    return data
+
+
 def _sync_repo_rows(schedule, repo_urls, repo_settings=None, default_settings=None):
     """Replace schedule.repos with repo_urls. `repo_settings` (a list of
     {repo_url, auto_accept_update, auto_add_new_rule}) covers manually-picked
@@ -141,6 +161,7 @@ def _sync_repo_rows(schedule, repo_urls, repo_settings=None, default_settings=No
             auto_accept_update=bool(cfg.get('auto_accept_update', False)),
             auto_add_new_rule=bool(cfg.get('auto_add_new_rule', False)),
             is_generic_source=bool(cfg.get('is_generic_source', False)),
+            new_rule_owner_id=_owner_id(cfg.get('new_rule_owner_id')),
         ))
 
 
@@ -232,6 +253,8 @@ def update_schedule(schedule_uuid, data):
                 repo.auto_accept_update = bool(cfg.get('auto_accept_update', repo.auto_accept_update))
                 repo.auto_add_new_rule = bool(cfg.get('auto_add_new_rule', repo.auto_add_new_rule))
                 repo.is_generic_source = bool(cfg.get('is_generic_source', repo.is_generic_source))
+                if 'new_rule_owner_id' in cfg:
+                    repo.new_rule_owner_id = _owner_id(cfg.get('new_rule_owner_id'))
 
     db.session.commit()
     _register_live(schedule)

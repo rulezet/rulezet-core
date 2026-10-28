@@ -1,0 +1,7 @@
+{
+  "label": "YARA editor",
+  "category": "Editor",
+  "description": "Who may use the YARA editor (app/modules/rulezet-editor): \"off\" (nobody: no YARA editor tab when creating or editing a rule), \"admins\" (admins only, while you try it), \"everyone\" (every logged-in user). The tests on samples have their own setting (editor.test_access). Also set from Admin → Settings → Configuration → Application.",
+  "public": false,
+  "value": "everyone"
+}

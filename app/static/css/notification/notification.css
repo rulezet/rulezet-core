@@ -572,6 +572,18 @@
     transition: color 0.13s;
 }
 .notif-prominent-banner__link:hover { color: #fff; }
+.notif-prominent-banner__action {
+    background: rgba(255,255,255,.18);
+    border: none;
+    color: #fff;
+    border-radius: 6px;
+    padding: 2px 10px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background 0.13s;
+}
+.notif-prominent-banner__action:hover { background: rgba(255,255,255,.3); }
 .notif-prominent-banner__dismiss {
     margin-left: auto;
     background: rgba(255,255,255,.18);

@@ -36,7 +36,7 @@
    {{ anav.admin_nav('connectors') }}
 
    <!-- ── How connectors work — link to doc page ─────────── -->
-   <div class="mb-4">
+   <div class="mb-4" data-tour="connector-howto">
       <a href="{{ url_for('connector.connector_how_it_works') }}"
          class="d-inline-flex align-items-center gap-2 px-4 py-2 rounded-pill text-decoration-none fw-semibold shadow-sm"
          style="background:var(--card-bg-color);border:1px solid var(--border-color);color:var(--text-color);font-size:.875rem;transition:box-shadow .15s;">
@@ -55,6 +55,7 @@
    </div>
 
    <connector-table
+      data-tour="connector-table"
       ref="rulezetTable"
       section="rulezet"
       :is-admin="IS_ADMIN"

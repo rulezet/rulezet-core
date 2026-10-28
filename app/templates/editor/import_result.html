@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
+{% endblock %}
+{% macro rule_card(c) %}
+{% set r = c.rule %}
+<div class="card border-0 shadow-sm mb-3 card-security-premium position-relative" style="border-radius:12px;">
+  <div class="premium-accent-line"></div>
+  <div class="card-body p-3">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      {% if c.status == 'created' %}
+      <span class="badge rounded-pill bg-success-subtle text-success-emphasis"><i class="fas fa-plus me-1"></i>Created</span>
+      {% elif c.status == 'updated' %}
+      <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis"><i class="fas fa-pen me-1"></i>Updated</span>
+      {% elif c.status == 'proposed' %}
+      <span class="badge rounded-pill bg-info-subtle text-info-emphasis"><i class="fas fa-code-pull-request me-1"></i>Edit proposed</span>
+      {% else %}
+      <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis"><i class="fas fa-recycle me-1"></i>Already in Rulezet</span>
+      {% endif %}
+      <a href="{{ url_for('rule.detail_rule', rule_id=r.id) }}" class="fw-semibold font-monospace text-decoration-none">{{ r.title }}</a>
+      <span class="text-muted small ms-auto">{{ r.author or '' }}</span>
+    </div>
+    {% if r.description %}<div class="text-muted small mt-1">{{ r.description[:200] }}</div>{% endif %}
+    {% if c.proposal_url %}
+    <div class="small mt-2"><i class="fas fa-code-pull-request me-1 text-info"></i>You may not edit this rule: an edit proposal was sent to its owner —
+      <a href="{{ c.proposal_url }}">see the proposal</a></div>
+    {% endif %}
+    {% if c.needs %}
+    <div class="small mt-2"><i class="fas fa-link me-1 text-primary"></i>Needs
+      {% for d in c.needs %}<a href="{{ url_for('rule.detail_rule', rule_id=d.id) }}" class="font-monospace ms-1">{{ d.title }}</a>{% if not loop.last %},{% endif %}{% endfor %}
+    </div>
+    {% endif %}
+    {% if c.needed_by %}
+    <div class="small mt-1"><i class="fas fa-arrow-turn-up me-1 text-muted"></i>Used by
+      {% for d in c.needed_by %}<a href="{{ url_for('rule.detail_rule', rule_id=d.id) }}" class="font-monospace ms-1">{{ d.title }}</a>{% if not loop.last %},{% endif %}{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+{% block content %}
+<div class="container mt-4">
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-laptop-code banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-2">
+      <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('rule.rule', tab='yara_editor') }}" class="text-decoration-none text-muted">YARA editor</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">Result</li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-2">
+      <div class="banner-icon"><i class="fa-solid fa-laptop-code"></i></div>
+      <div>
+        <h2 class="fw-bold mb-1">Rules from the editor</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <span class="badge rounded-pill bg-success-subtle text-success-emphasis fs-6">{{ created|length }} created</span>
+      {% if updated %}<span class="badge rounded-pill bg-warning-subtle text-warning-emphasis fs-6">{{ updated|length }} updated</span>{% endif %}
+      {% if proposals %}<span class="badge rounded-pill bg-info-subtle text-info-emphasis fs-6">{{ proposals|length }} edit proposal{{ '' if proposals|length == 1 else 's' }}</span>{% endif %}
+      <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis fs-6">{{ reused|length }} already in Rulezet</span>
+      <span class="badge rounded-pill bg-primary-subtle text-primary-emphasis fs-6">{{ links }} dependency link{{ '' if links == 1 else 's' }}</span>
+    </div>
+  </div>
+
+  {% if created %}
+  <h5 class="fw-bold mb-3"><i class="fas fa-plus-circle text-success me-2"></i>Created</h5>
+  {% for c in created %}{{ rule_card(c) }}{% endfor %}
+  {% endif %}
+
+  {% if updated %}
+  <h5 class="fw-bold mb-1 mt-4"><i class="fas fa-pen text-warning me-2"></i>Updated</h5>
+  <p class="text-muted small mb-3">Rules you may edit, changed in the editor: a new version was saved (see their history).</p>
+  {% for c in updated %}{{ rule_card(c) }}{% endfor %}
+  {% endif %}
+
+  {% if proposals %}
+  <h5 class="fw-bold mb-1 mt-4"><i class="fas fa-code-pull-request text-info me-2"></i>Edit proposals</h5>
+  <p class="text-muted small mb-3">Rules of other users changed in the editor: their owner reviews your proposal.</p>
+  {% for c in proposals %}{{ rule_card(c) }}{% endfor %}
+  {% endif %}
+
+  {% if reused %}
+  <h5 class="fw-bold mb-1 mt-4"><i class="fas fa-recycle text-secondary me-2"></i>Already in Rulezet</h5>
+  <p class="text-muted small mb-3">Not created again: the new rules that need them are linked to these.</p>
+  {% for c in reused %}{{ rule_card(c) }}{% endfor %}
+  {% endif %}
+
+  {% if not created and not reused and not updated and not proposals %}
+  <div class="alert alert-info">Nothing to show.</div>
+  {% endif %}
+
+  <div class="d-flex gap-2 mt-4 mb-5">
+    <a href="{{ url_for('rule.rule', tab='yara_editor') }}" class="btn btn-primary"><i class="fas fa-laptop-code me-2"></i>Back to the YARA editor</a>
+    <a href="{{ url_for('rule.owner_rules') }}" class="btn btn-outline-secondary"><i class="fas fa-list me-2"></i>My rules</a>
+  </div>
+</div>
+{% endblock %}

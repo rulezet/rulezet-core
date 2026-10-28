@@ -1,4 +1,5 @@
 import PaginationComponent from '/static/js/rule/paginationComponent.js';
+import { loadOrgBadge } from '/static/js/rule/github/orgBadge.js';
 import GithubFilter from '/static/js/rule/github/githubFilter.js';
 import GithubActionModal from '/static/js/rule/github/githubActionModal.js';
 import JobTracker from '/static/js/jobs/JobTracker.js';
@@ -56,6 +57,8 @@ const GitHubSelectionTable = {
             // Live GitHub API rate-limit status (admin/GitHub-manager only —
             // fetched once on mount and after a Backfill run, never polled).
             rateLimitStatus: null,
+            // Organisation badge (setting git.org_badge): name + logo.
+            org: { label: '', logoUrl: '' },
 
             sortKey: new URLSearchParams(window.location.search).get('sort') || 'url',
             sortDir: new URLSearchParams(window.location.search).get('dir') || 'asc',
@@ -134,11 +137,27 @@ const GitHubSelectionTable = {
     mounted() {
         document.addEventListener('click', this.handleColPickerOutsideClick);
         if (this.isAdmin) this.fetchRateLimitStatus();
+        loadOrgBadge().then(o => { this.org = o; });
     },
     beforeUnmount() {
         document.removeEventListener('click', this.handleColPickerOutsideClick);
     },
     methods: {
+        async setCirclBadge(item, value) {
+            const res = await fetch('/rule/github_repo/circl_badge', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrfToken },
+                body: JSON.stringify({ url: item.url, value }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.success) {
+                create_message(data.message || 'Could not change the ' + this.org.label + ' badge', 'danger-subtle');
+                return;
+            }
+            // Every row of the same repository (one per branch) shares the badge.
+            this.githubUrls.forEach(r => { if (r.url === item.url) { r.circl = data.circl; r.circl_badge = data.circl_badge; } });
+            create_message(this.org.label + (data.circl ? ' badge shown' : ' badge hidden'), 'success-subtle');
+        },
         gitProviderIcon,
         gitProviderLabel,
         setSort(key) {
@@ -604,6 +623,10 @@ const GitHubSelectionTable = {
                                     </div>
                                     <div class="fw-bold" style="white-space:nowrap;color:var(--text-color);">
                                         [[ item.url ]]
+                                        <span v-if="item.circl" class="ghst-circl-badge ms-1"
+                                              :title="item.circl_badge === true ? org.label + ' (set by an admin)' : org.label">
+                                            <img v-if="org.logoUrl" :src="org.logoUrl" alt="" class="ghst-circl-logo">[[ org.label ]]
+                                        </span>
                                         <span v-if="isRepoGroupStart(index)"
                                               class="badge bg-primary-soft text-primary rounded-pill ms-1"
                                               style="font-size:.65rem;font-weight:600;"
@@ -714,6 +737,21 @@ const GitHubSelectionTable = {
                                                 </div>
                                             </div>
                                         </div>
+                                    </div>
+
+                                    <div v-if="isAdmin" class="dropdown d-inline-block">
+                                        <button class="dt-action-btn" data-bs-toggle="dropdown" aria-expanded="false"
+                                                :class="{ 'ghst-circl-on': item.circl }" :title="org.label + ' badge'">
+                                            <i class="fas fa-shield-halved"></i>
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end">
+                                            <li><button class="dropdown-item" :class="{ active: item.circl_badge === true }" @click="setCirclBadge(item, true)">
+                                                <i class="fas fa-plus me-2"></i>Add the [[ org.label ]] badge</button></li>
+                                            <li><button class="dropdown-item" :class="{ active: item.circl_badge === false }" @click="setCirclBadge(item, false)">
+                                                <i class="fas fa-minus me-2"></i>Remove the [[ org.label ]] badge</button></li>
+                                            <li><button class="dropdown-item" :class="{ active: item.circl_badge === null }" @click="setCirclBadge(item, null)">
+                                                <i class="fas fa-wand-magic-sparkles me-2"></i>Automatic (from the keywords)</button></li>
+                                        </ul>
                                     </div>
 
                                     <a :href="'/rule/github_detail?url=' + encodeURIComponent(item.url) + (item.branch ? '&branch=' + encodeURIComponent(item.branch) : '')"

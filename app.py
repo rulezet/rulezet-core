@@ -21,6 +21,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-i", "--init_db", help="Initialise the db if it not exist", action="store_true")
 parser.add_argument("-r", "--recreate_db", help="Delete and initialise the db", action="store_true")
 parser.add_argument("-d", "--delete_db", help="Delete the db", action="store_true")
+parser.add_argument("--first-admin-password", help="While the first admin has not changed the generated password: give it a new one and print it (manage.py start-dev / start-prod run this at launch)", action="store_true")
 parser.add_argument("--seed-defaults", help="Idempotently (re)seed default data (formats, platform-tag configs, AI agent configs) on an existing DB — run after 'manage.py update' on an already-deployed instance", action="store_true")
 args = parser.parse_args()
 
@@ -30,7 +31,7 @@ os.environ.setdefault('FLASKENV', 'development')
 
 load_dotenv()
 
-_cli_mode = args.init_db or args.recreate_db or args.delete_db or args.seed_defaults
+_cli_mode = args.init_db or args.recreate_db or args.delete_db or args.seed_defaults or args.first_admin_password
 # manage.py's `start-dev` launches worker.py as its own process alongside this
 # one (same split as production's start-prod/worker.py — see there for why)
 # and sets this so app.py doesn't ALSO start a second, duplicate copy of the
@@ -46,7 +47,12 @@ def error_page_not_found(e):
     return render_template('404.html'), 404
     
 
-if args.init_db:
+if args.first_admin_password:
+    with app.app_context():
+        from app.core.utils.init_db import renew_first_admin_password
+        renew_first_admin_password()
+
+elif args.init_db:
     with app.app_context():
         db.create_all()
         admin, raw_password = create_admin()

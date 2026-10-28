@@ -1,0 +1,26 @@
+{
+  "label": "Tutorial: Notifications",
+  "category": "Tutorial",
+  "description": "Steps of the Tutorial button on the Notifications page (endpoint notification.page_notifications). A step: target (CSS selector, empty = centred card), title, text (blank line = new paragraph, **bold**, `code`), roles (optional: anonymous, user, member, admin, perm:<key>), demo (rule / bundle: example shown when the target is missing, e.g. an empty list).",
+  "public": false,
+  "value": {
+    "title": "Notifications",
+    "steps": [
+      {
+        "target": ".explorer-banner",
+        "title": "Everything that happened around you",
+        "text": "Comments on your rules, votes, edit proposals, new rules from people you follow, alerts that matched, background jobs that finished."
+      },
+      {
+        "target": "[data-tour=\"notif-toolbar\"]",
+        "title": "Find a notification",
+        "text": "**Search** the text, pick a **date range**, **group by type** to see one block per kind, or show **only unread** ones."
+      },
+      {
+        "target": "[data-tour=\"notif-types\"]",
+        "title": "Types",
+        "text": "Keep only some types: comments, votes, proposals, follows, alerts, jobs, system messages…"
+      }
+    ]
+  }
+}

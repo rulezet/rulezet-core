@@ -389,3 +389,16 @@
 .blog-cover-library__item img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .blog-cover-library__item:hover { border-color: rgba(13, 110, 253, .5); }
 .blog-cover-library__item.active { border-color: #0d6efd; box-shadow: 0 0 0 3px rgba(13, 110, 253, .18); }
+
+/* ── Release posts (tag "release"): badge, pill above the title, info strip ── */
+.blog-release-badge { background: #6f42c1; color: #fff; letter-spacing: .04em; }
+.blog-release-banner { border-left: 4px solid #6f42c1; }
+.blog-release-pill { display: inline-flex; align-items: center; gap: .4rem; margin-bottom: .35rem; padding: .2rem .65rem;
+    border-radius: 999px; font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: #6f42c1; background: rgba(111, 66, 193, .12); border: 1px solid rgba(111, 66, 193, .35); }
+.blog-release-strip { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; margin-top: 1rem; padding: .75rem 1rem; border-radius: 10px;
+    font-size: .88rem; color: var(--text-color); background: var(--light-bg-color); border: 1px solid var(--border-color); }
+.blog-release-strip i { margin-right: .4rem; color: #6f42c1; }
+.blog-release-strip a { color: #6f42c1; font-weight: 600; text-decoration: none; }
+.blog-release-strip a:hover { text-decoration: underline; }
+body.dark-mode .blog-release-pill, body.dark-mode .blog-release-strip i, body.dark-mode .blog-release-strip a { color: #b197fc; }

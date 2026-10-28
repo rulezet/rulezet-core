@@ -7,6 +7,8 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/license-input.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ai-thinking-steps.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule_relation/rulePicker.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/editor/editor-ui.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/rule-import-preview.css') }}">
 <style>
 .rf-label-hint {
@@ -127,22 +129,28 @@
 
 
 
-  <nav class="dr-nav mb-3">
+  <nav data-tour="create-tabs" class="dr-nav mb-3">
     <a href="#" class="dr-nav__item" :class="activeTab === 'manual' ? 'active' : ''" @click.prevent="activeTab = 'manual'">
       <i class="fas fa-pen-to-square"></i><span>Manual</span>
     </a>
-    <a href="#" class="dr-nav__item" :class="activeTab === 'parse' ? 'active' : ''" @click.prevent="activeTab = 'parse'">
+    <a data-tour="create-tab-parse" href="#" class="dr-nav__item" :class="activeTab === 'parse' ? 'active' : ''" @click.prevent="activeTab = 'parse'">
       <i class="fas fa-wand-magic-sparkles"></i><span>Parse</span>
     </a>
-    <a href="#" class="dr-nav__item" :class="activeTab === 'github' ? 'active' : ''" @click.prevent="activeTab = 'github'">
+    <a data-tour="create-tab-git" href="#" class="dr-nav__item" :class="activeTab === 'github' ? 'active' : ''" @click.prevent="activeTab = 'github'">
       <i class="fa-brands fa-git-alt"></i><span>Git</span>
     </a>
-    <a href="#" class="dr-nav__item" :class="activeTab === 'zip' ? 'active' : ''" @click.prevent="activeTab = 'zip'">
+    <a data-tour="create-tab-zip" href="#" class="dr-nav__item" :class="activeTab === 'zip' ? 'active' : ''" @click.prevent="activeTab = 'zip'">
       <i class="fas fa-file-zipper"></i><span>Zip</span>
     </a>
     <a href="#" class="dr-nav__item" :class="activeTab === 'json' ? 'active' : ''" @click.prevent="activeTab = 'json'">
       <i class="fas fa-code"></i><span>Json</span>
     </a>
+    {% if can_use_editor %}{# setting editor.access #}
+    <a data-tour="create-tab-editor" href="#" class="dr-nav__item" :class="activeTab === 'yara_editor' ? 'active' : ''" @click.prevent="activeTab = 'yara_editor'">
+      <i class="fas fa-laptop-code"></i><span>YARA editor</span>
+      <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill ms-1" style="font-size:.6rem;">BETA</span>
+    </a>
+    {% endif %}
     {% if ai_generate_available %}
     <a href="#" class="dr-nav__item" :class="activeTab === 'ai_generate' ? 'active' : ''" @click.prevent="activeTab = 'ai_generate'">
       <i class="fas fa-robot"></i><span>AI</span>
@@ -189,7 +197,7 @@
           </div>
 
           <!-- Identity -->
-          <p class="form-section-title"><i class="fas fa-id-card me-1"></i>Identity</p>
+          <p data-tour="create-identity" class="form-section-title"><i class="fas fa-id-card me-1"></i>Identity</p>
           <div class="row g-3 mb-4">
             <div class="col-md-6">
               <div class="d-flex align-items-center gap-1 mb-1">
@@ -234,7 +242,7 @@
           </div>
 
           <!-- Classification -->
-          <p class="form-section-title mt-2"><i class="fas fa-layer-group me-1"></i>Classification</p>
+          <p data-tour="create-classification" class="form-section-title mt-2"><i class="fas fa-layer-group me-1"></i>Classification</p>
           <div class="row mb-3">
             <div class="col-12">
               <tag-input v-model="selectedTags" label="Rule Tags" :user-id="{{current_user.id}}"
@@ -281,10 +289,17 @@
               </div>
               {{ form.original_uuid(class_="form-control", placeholder="e.g. 550e8400-e29b-41d4-a716-446655440000") }}
             </div>
+            <div class="col-md-12">
+              <div class="d-flex align-items-center gap-1 mb-1">
+                <label class="form-label-styled mb-0" for="references">{{ form.references.label.text }}<span class="opt-badge">optional</span></label>
+                <i class="rf-label-hint" data-tip="One per line (URL, report, CVE…). References written in the rule itself (YARA meta reference, Sigma references…) are added automatically.">?</i>
+              </div>
+              {{ form.references(class_="form-control", rows=3, placeholder="https://example.org/report") }}
+            </div>
           </div>
 
           <!-- Rule Content -->
-          <p class="form-section-title"><i class="fas fa-code me-1"></i>Rule Content</p>
+          <p data-tour="create-content" class="form-section-title"><i class="fas fa-code me-1"></i>Rule Content</p>
           <div class="mb-4">
             <div class="d-flex align-items-center gap-1 mb-1">
               <label class="form-label-styled mb-0" for="editor">{{ form.to_string.label.text }}<span class="req-badge">required</span></label>
@@ -322,6 +337,21 @@
         </div>
       </div>
     </div>
+
+    <!-- ── Tab : YARA editor (app/modules/rulezet-editor) ── -->
+    {% if can_use_editor %}
+    <div v-show="activeTab === 'yara_editor'">
+      <div class="card border-0 card_detail border-top shadow-lg mb-4" style="border-radius: 12px;">
+        <div class="card-body p-4" style="position: relative; z-index: 1;">
+          <yara-editor-panel
+            :active="activeTab === 'yara_editor'"
+            :tests="{{ can_use_tests | tojson }}"
+            csrf-token="{{ csrf_token() }}"
+            author="{{ ((current_user.first_name or "") ~ " " ~ (current_user.last_name or ""))|trim or current_user.get_username() }}"></yara-editor-panel>
+        </div>
+      </div>
+    </div>
+    {% endif %}
 
     <!-- ── Tab 2 : Parse a Rule ── -->
     <div v-show="activeTab === 'parse'">
@@ -906,9 +936,10 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
       import LicenseInput from '/static/js/components/LicenseInput.js';
       import AIThinkingSteps from '/static/js/components/ai-thinking-steps.js';
       import DeepValidateSuricata from '/static/js/rule/DeepValidateSuricata.js';
+      import YaraEditorPanel from '/static/js/rule/YaraEditorPanel.js';
       import RuleImportPreview from '/static/js/components/RuleImportPreview.js';
 
-      const VALID_TABS = ['manual', 'parse', 'github', 'zip', 'json', 'ai_generate'];
+      const VALID_TABS = ['manual', 'parse', 'github', 'zip', 'json', 'yara_editor', 'ai_generate'];
 
       createApp({
             delimiters: ['[[', ']]'],
@@ -922,6 +953,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                   'license-input': LicenseInput,
                   'ai-thinking-steps': AIThinkingSteps,
                   'deep-validate-suricata': DeepValidateSuricata,
+                  'yara-editor-panel': YaraEditorPanel,
                   'rule-import-preview': RuleImportPreview,
             },
             setup() {

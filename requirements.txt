@@ -52,3 +52,5 @@ anthropic
 openai
 authlib
 -e ./app/modules/rulezet-validation
+-e ./app/modules/rulezet-editor
+-e ./app/modules/rulezet-tester

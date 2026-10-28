@@ -18,7 +18,7 @@
             <ul class="navbar-nav mx-auto align-items-center gap-1">
 
                <!-- ── Bundles ── -->
-               <li class="nav-item dropdown">
+               <li class="nav-item dropdown" data-tour="nav-bundles">
                   <a class="nav-link dropdown-toggle custom-nav-link {% if request.path.startswith('/bundle') %}active{% endif %} fw-bold"
                      href="#" role="button" data-bs-toggle="dropdown">
                      <i class="fa-solid fa-box fa-fw me-1 text-primary"></i>Bundle
@@ -36,7 +36,7 @@
                
 
                <!-- ── Security Rules ── -->
-               <li class="nav-item dropdown">
+               <li class="nav-item dropdown" data-tour="nav-rules">
                   <a class="nav-link dropdown-toggle custom-nav-link fw-bold {% if (request.path.startswith('/rule') and '/github' not in request.path and '/admin' not in request.path) or request.path == '/attack/heatmap' %}active{% endif %}"
                      href="#" role="button" data-bs-toggle="dropdown">
                      <i class="fa-solid fa-shield-halved fa-fw me-1 text-primary"></i>Security Rules
@@ -118,7 +118,7 @@
                {% endif %}
 
                <!-- ── Community ── -->
-               <li class="nav-item dropdown">
+               <li class="nav-item dropdown" data-tour="nav-community">
                   <a class="nav-link dropdown-toggle custom-nav-link fw-bold {% if request.path.startswith('/blog') or request.path.startswith('/platform') or request.path.startswith('/community') or request.path == '/account/contributor' %}active{% endif %}"
                      href="#" role="button" data-bs-toggle="dropdown">
                      <i class="fa-solid fa-users fa-fw me-1 text-primary"></i>Community
@@ -137,7 +137,7 @@
 
                <!-- ── Admin (dropdown, admin only) ── -->
                {% if current_user.is_authenticated and current_user.is_admin() %}
-               <li class="nav-item dropdown">
+               <li class="nav-item dropdown" data-tour="nav-admin">
                   <a class="nav-link dropdown-toggle custom-nav-link fw-bold {% if '/admin' in request.path or request.path.startswith('/tags/admin') or request.path.startswith('/attack/admin') or request.path.startswith('/jobs') or request.path.startswith('/connector') or request.path == '/rule/bulk_tag' or request.path == '/rule/trash' %}active{% endif %}"
                      href="#" role="button" data-bs-toggle="dropdown">
                      <i class="fa-solid fa-shield-halved fa-fw me-1 text-danger"></i>Admin
@@ -338,8 +338,18 @@
             <!-- ── Right: search + notifications + profile ── -->
             <div class="d-flex align-items-center gap-3 ms-auto">
 
-               <global-search class="d-none d-xl-block" :pages="NAV_PAGES"
+               <global-search data-tour="nav-search" class="d-none d-xl-block" :pages="NAV_PAGES"
                   :is-authenticated="isAuthenticated" :is-admin="isAdmin"></global-search>
+
+               {% if tour_ctx %}
+               <!-- Tutorial: this page's tour and the full tour (js/tour/tourLauncher.js) -->
+               <div class="rz-tour-launch" id="rz-tour-launch">
+                  <button type="button" class="nav-icon-btn rz-tour-launch__btn" aria-haspopup="menu" aria-expanded="false"
+                          title="Tutorial" aria-label="Tutorial">
+                     <i class="fa-solid fa-graduation-cap fs-5"></i>
+                  </button>
+               </div>
+               {% endif %}
 
                <!-- Settings -->
                <a href="/settings" class="nav-icon-btn" title="Settings">
@@ -348,7 +358,7 @@
 
                <!-- Notifications bell -->
                {% if current_user.is_authenticated %}
-               <div id="notif-bell-app"></div>
+               <div id="notif-bell-app" data-tour="nav-notifications"></div>
                {% else %}
                <a class="nav-icon-btn" href="/account/login" title="Sign in to see notifications">
                   <i class="fa-solid fa-bell fs-5"></i>
@@ -356,7 +366,7 @@
                {% endif %}
 
                <!-- Profile -->
-               <div class="dropdown">
+               <div class="dropdown" data-tour="nav-profile">
                   <a class="btn btn-profile d-flex align-items-center gap-2 rounded-pill ps-1 pe-3 py-1"
                      href="#" role="button" data-bs-toggle="dropdown">
 

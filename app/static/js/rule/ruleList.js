@@ -273,7 +273,7 @@ export default {
 
             <div class="rl-toolbar-right">
                 <!-- Sort dropdown (card mode) -->
-                <select v-if="viewMode === 'card'" v-model="cardSort" class="rl-sort-select"
+                <select data-tour="rl-sort" v-if="viewMode === 'card'" v-model="cardSort" class="rl-sort-select"
                         @change="onCardSortChange" aria-label="Sort rules">
                     <option value="newest">Newest</option>
                     <option value="oldest">Oldest</option>
@@ -282,7 +282,7 @@ export default {
                 </select>
 
                 <!-- View toggle -->
-                <div class="dt-view-toggle" title="Switch view">
+                <div data-tour="rl-view-toggle" class="dt-view-toggle" title="Switch view">
                     <button class="dt-view-btn" :class="{ 'dt-view-btn--active': viewMode === 'card' }"
                             @click="viewMode = 'card'" aria-label="Card view">
                         <i class="fas fa-rectangle-list"></i>
@@ -321,7 +321,7 @@ export default {
                 </teleport>
 
                 <!-- Filters toggle -->
-                <button v-if="showFilters"
+                <button data-tour="rl-filters-btn" v-if="showFilters"
                         class="dt-toolbar-btn"
                         :class="{ 'dt-toolbar-btn--active': filtersOpen }"
                         @click="filtersOpen = !filtersOpen"
@@ -382,10 +382,10 @@ export default {
 
         <!-- ── Filter panel (below toolbar) ── -->
         <template v-if="showFilters">
-            <div v-show="filtersOpen" class="rl-filter-panel">
+            <div v-show="filtersOpen" class="rl-filter-panel" data-tour="rl-filter-panel">
 
                 <!-- Row 1: quick options -->
-                <div class="rl-fp-row">
+                <div data-tour="rl-fp-quick" class="rl-fp-row">
                     <div class="rl-fp-item rl-fp-fmt-wrap" v-if="!isFilterHidden('format')">
                         <div class="rl-fmt-badge" :class="{ 'rl-fmt-badge--set': ruleType }">
                             <span v-if="ruleType" class="rl-fmt-badge__label">{{ ruleType.toUpperCase() }}</span>
@@ -441,7 +441,7 @@ export default {
                         </label>
                     </template>
 
-                    <div class="rl-quality-range" v-if="!isFilterHidden('quality')" title="Filter by quality score">
+                    <div data-tour="rl-fp-quality" class="rl-quality-range" v-if="!isFilterHidden('quality')" title="Filter by quality score">
                         <i class="fa-solid fa-gauge-high rl-quality-range__icon"></i>
                         <input type="number" min="0" max="100" step="1"
                                v-model.number="qualityMin" @change="onQualityRangeChange"
@@ -472,12 +472,12 @@ export default {
                 </div>
 
                 <!-- Row 2: multi-selects (sources, vulns, licenses, tags) -->
-                <div class="rl-fp-row rl-fp-row--multi">
+                <div data-tour="rl-fp-multi" class="rl-fp-row rl-fp-row--multi">
                     <div class="rl-fp-multi-item" v-if="!isFilterHidden('sources') && !source">
                         <span class="rl-fp-multi-label">
                             <i class="fa-solid fa-code-branch text-primary"></i> Sources
                         </span>
-                        <multi-source-filter v-model="selectedSources"
+                        <multi-source-filter data-tour="rl-fp-sources" v-model="selectedSources"
                             api-endpoint="/rule/get_rules_sources_usage"
                             placeholder="Filter sources…"
                             :userId="numericUserId"
@@ -504,7 +504,7 @@ export default {
                         <span class="rl-fp-multi-label">
                             <i class="fa-solid fa-shield-virus text-danger"></i> Vulnerabilities
                         </span>
-                        <multi-vulnerability-filter v-model="selectedVulns"
+                        <multi-vulnerability-filter data-tour="rl-fp-vulns" v-model="selectedVulns"
                             api-endpoint="/rule/get_all_rules_vulnerabilities_usage"
                             placeholder="CVE, GHSA…"
                             :user-id="numericUserId"
@@ -518,7 +518,7 @@ export default {
                         <span class="rl-fp-multi-label">
                             <i class="fa-solid fa-crosshairs text-warning"></i> ATT&amp;CK
                         </span>
-                        <multi-attack-filter v-model="selectedAttacks"
+                        <multi-attack-filter data-tour="rl-fp-attacks" v-model="selectedAttacks"
                             placeholder="T1059, Command…"
                             :filter-context="facetContextParams"
                             @change="onFilterChange">
@@ -529,7 +529,7 @@ export default {
                         <span class="rl-fp-multi-label">
                             <i class="fa-solid fa-scale-balanced text-info"></i> Licenses
                         </span>
-                        <multi-license-filter v-model="selectedLicenses"
+                        <multi-license-filter data-tour="rl-fp-licenses" v-model="selectedLicenses"
                             api-endpoint="/rule/get_rules_licenses_usage"
                             placeholder="Filter licenses…"
                             :user-id="numericUserId"
@@ -543,7 +543,7 @@ export default {
                         <span class="rl-fp-multi-label">
                             <i class="fa-solid fa-tags text-primary"></i> Tags
                         </span>
-                        <multi-tag-filter v-model="selectedTags"
+                        <multi-tag-filter data-tour="rl-fp-tags" v-model="selectedTags"
                             api-endpoint="/rule/get_all_tags_usage"
                             placeholder="Filter tags…"
                             :user-id="numericUserId"
@@ -557,7 +557,7 @@ export default {
                         <span class="rl-fp-multi-label">
                             <i class="fa-solid fa-person-circle-check text-warning"></i> Author / Editor
                         </span>
-                        <multi-person-filter v-model="personFilter"
+                        <multi-person-filter data-tour="rl-fp-person" v-model="personFilter"
                             :user-id="numericUserId"
                             :source-rules="source || ''"
                             :filter-context="facetContextParams"
@@ -572,7 +572,7 @@ export default {
                         <span class="rl-fp-multi-label">
                             <i class="fa-solid fa-triangle-exclamation text-danger"></i> Risk level
                         </span>
-                        <multi-risk-filter v-model="riskFilter"
+                        <multi-risk-filter data-tour="rl-fp-risk" v-model="riskFilter"
                             :levels="validationRiskLevels"
                             placeholder="Filter by risk…"
                             @change="onFilterChange">
@@ -602,7 +602,7 @@ export default {
                 </div>
 
                 <!-- ── Export / Bundle — visible only when at least one filter is active ── -->
-                <div v-if="showExport && hasActiveFilters" class="rl-fp-export-row">
+                <div data-tour="rl-fp-export" v-if="showExport && hasActiveFilters" class="rl-fp-export-row">
                     <rule-export-action
                         :search-query="search"
                         :sort-by="sortKey"
@@ -716,7 +716,7 @@ export default {
                 </div>
 
                 <!-- Badges top-right -->
-                <div class="position-absolute top-0 end-0 me-3 d-flex gap-2"
+                <div data-tour="rl-card-badges" class="position-absolute top-0 end-0 me-3 d-flex gap-2"
                      :style="{ zIndex: 2, marginTop: isResolved(rule) ? '2.5rem' : '.75rem' }">
                     <span v-if="showTestResults && rule.test_result" class="badge shadow-sm pt-1"
                           :class="rule.test_result.matched ? 'bg-success' : (rule.test_result.error ? 'bg-danger' : 'bg-secondary')">
@@ -740,7 +740,7 @@ export default {
                     <span v-if="isOwner(rule)" class="badge bg-success shadow-sm pt-1" title="You own this rule">
                         <i class="fa-solid fa-crown me-1"></i>OWNER
                     </span>
-                    <span v-if="currentUserIsAdmin" class="badge bg-warning shadow-sm pt-1">
+                    <span v-if="currentUserIsAdmin" class="badge bg-warning shadow-sm pt-1 rl-badge-admin">
                         <i class="fa-solid fa-crown me-1"></i>ADMIN
                     </span>
                     <span v-if="rule.is_code_format" class="badge bg-danger shadow-sm pt-1"
@@ -790,7 +790,7 @@ export default {
                     </div>
 
                     <!-- Title + editor + date -->
-                    <div class="mb-3 pe-5">
+                    <div data-tour="rl-card-title" class="mb-3 pe-5">
                         <h5 class="fw-bold mb-1">
                             <a :href="'/rule/detail_rule/' + rule.id"
                                class="fw-bold h5 border-start border-primary border-4 ps-3 custom-rule-link text-decoration-none d-block"
@@ -812,7 +812,7 @@ export default {
                     </div>
 
                     <!-- Description -->
-                    <p class="rl-card-desc mb-2"
+                    <p data-tour="rl-card-desc" class="rl-card-desc mb-2"
                        style="-webkit-line-clamp:3;-webkit-box-orient:vertical;display:-webkit-box;overflow:hidden;">
                         <span v-html="highlight(rule.description || 'No description.')"></span>
                     </p>
@@ -841,26 +841,26 @@ export default {
                     </div>
 
                     <!-- CVEs -->
-                    <div v-if="colVisible.cves" class="mb-2" @click.stop>
+                    <div data-tour="rl-card-cves" v-if="colVisible.cves" class="mb-2" @click.stop>
                         <vulnerability-displays-list object-type="rule" :object-id="rule.id" :max-visible="3"
                             :initial-vulnerabilities="rule.cves || []">
                         </vulnerability-displays-list>
                     </div>
 
                     <!-- ATT&CK techniques -->
-                    <div v-if="colVisible.attacks && rule.attacks && rule.attacks.length" class="mb-2" @click.stop>
+                    <div data-tour="rl-card-attack" v-if="colVisible.attacks && rule.attacks && rule.attacks.length" class="mb-2" @click.stop>
                         <attack-display-list :initial-attacks="rule.attacks" :max-visible="3"></attack-display-list>
                     </div>
 
                     <!-- Tags -->
-                    <div class="mb-3" @click.stop>
+                    <div data-tour="rl-card-tags" class="mb-3" @click.stop>
                         <tags-displays-list object-type="rule" :object-id="rule.id" :max-visible="3"
                             :initial-tags="rule.tags || []">
                         </tags-displays-list>
                     </div>
 
                     <!-- Metadata strip -->
-                    <div class="rl-card-meta">
+                    <div data-tour="rl-card-meta" class="rl-card-meta">
                         <span class="rl-meta-item rl-meta-item--source" :title="rule.source">
                             <i class="fas fa-link"></i>
                             <span>{{ rule.source || '—' }}</span>
@@ -873,7 +873,7 @@ export default {
                             <i class="fas fa-code-branch"></i>
                             <span>v{{ rule.version && rule.version !== 'Unknown' ? rule.version : '1.0' }}</span>
                         </span>
-                        <span v-if="rule.author && rule.author !== 'Unknown'" class="rl-meta-item">
+                        <span v-if="rule.author && rule.author !== 'Unknown'" class="rl-meta-item rl-meta-item--author">
                             <i class="fas fa-user"></i>
                             <span>{{ rule.author }}</span>
                         </span>
@@ -896,7 +896,7 @@ export default {
                     <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-auto">
 
                         <!-- Votes -->
-                        <div v-if="colVisible.votes" class="btn-group shadow-sm border rounded-pill overflow-hidden">
+                        <div data-tour="rl-card-votes" v-if="colVisible.votes" class="btn-group shadow-sm border rounded-pill overflow-hidden">
                             <button @click="handleVote('up', rule)"
                                     class="btn btn-sm px-3 border-0 border-end border-light shadow-none btn-animate home-btn"
                                     :class="{ 'rl-vote-disabled': !canVote, 'rl-vote-btn--active-up': rule.user_vote === 'up' }"
@@ -921,7 +921,7 @@ export default {
                         <div class="d-flex gap-2 align-items-center">
 
                             <!-- Collapse toggle -->
-                            <button class="btn btn-sm rounded-circle shadow-sm p-0 d-flex align-items-center justify-content-center home-btn"
+                            <button data-tour="rl-card-collapse" class="btn btn-sm rounded-circle shadow-sm p-0 d-flex align-items-center justify-content-center home-btn"
                                     style="width:32px;height:32px;border:1px solid #eee;"
                                     :title="expandedIds.has(rule.id) ? 'Hide content' : 'Show content'"
                                     @click="toggleExpand(rule)">
@@ -930,7 +930,7 @@ export default {
                             </button>
 
                             <!-- Favorite -->
-                            <button v-if="canFavorite"
+                            <button data-tour="rl-card-favorite" v-if="canFavorite"
                                     @click="handleFavorite(rule)"
                                     class="btn btn-sm rounded-circle shadow-sm p-0 d-flex align-items-center justify-content-center home-btn"
                                     style="width:32px;height:32px;border:1px solid #eee;"
@@ -939,7 +939,7 @@ export default {
                             </button>
 
                             <!-- More dropdown -->
-                            <div class="dropup">
+                            <div data-tour="rl-card-more" class="dropup">
                                 <button class="btn btn-sm rounded-circle shadow-sm p-0 d-flex align-items-center justify-content-center home-btn"
                                         style="width:32px;height:32px;border:1px solid #eee;"
                                         data-bs-toggle="dropdown" aria-expanded="false">
@@ -1790,10 +1790,13 @@ export default {
         const cardSort = ref('newest')
 
         // ── UI state ──────────────────────────────────────────────────────
-        const _defaultView = props.defaultView !== 'card'
+        // On a phone the table is unreadable: cards, whatever was chosen on a wider screen
+        const _isPhone = window.matchMedia && window.matchMedia('(max-width: 640px)').matches
+        const _defaultView = _isPhone ? 'card'
+            : props.defaultView !== 'card'
             ? props.defaultView
             : (localStorage.getItem('rz-list-view') || 'card')
-        const viewMode    = ref(_p('view', _defaultView))
+        const viewMode    = ref(_isPhone ? 'card' : _p('view', _defaultView))
         const _hasUrlFilters = ['tags','sources','branches','licenses','vulnerabilities','attacks','authors','editors',
                                 'rule_type','search_field','exact_match','person_mode','scope']
                                .some(k => _url.has(k))

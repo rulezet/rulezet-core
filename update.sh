@@ -43,8 +43,11 @@ echo -e "\n${YELLOW}Updating Git submodules...${NC}"
 # the served JS/CSS the next time upstream pushes to its main branch).
 # rulezet-validation used to require a separate manual pull on prod — it now floats to its
 # remote branch here too, just like misp-taxonomies/misp-galaxy.
-git submodule update --init --recursive app/modules/rulezet-validation
-git submodule update --remote app/modules/rulezet-cast app/modules/misp-taxonomies app/modules/misp-galaxy app/modules/rulezet-validation 2>/dev/null || git submodule update --remote
+# rulezet-editor (the rule editor, Python server + dist/ JS) floats too: it is developed
+# alongside Rulezet and requirements.txt installs it editable from the checkout.
+# rulezet-tester (rule tests on samples, used by the editor's Test panel) floats the same way.
+git submodule update --init --recursive app/modules/rulezet-validation app/modules/rulezet-editor app/modules/rulezet-tester
+git submodule update --remote app/modules/rulezet-cast app/modules/misp-taxonomies app/modules/misp-galaxy app/modules/rulezet-validation app/modules/rulezet-editor app/modules/rulezet-tester 2>/dev/null || git submodule update --remote
 # pivotick + pivotick-converters stay pinned; their browser builds are committed
 # (app/static/js/pivotick.iife.js, app/static/js/pivotick/) — see `manage.py pivotick`.
 git submodule update --init app/modules/pivotick app/modules/pivotick-converters

@@ -1,0 +1,29 @@
+{
+  "label": "Tutorial: who you are browsing as",
+  "category": "Tutorial",
+  "description": "First step of every tour: what the visitor can do, depending on who they are. One entry per role (anonymous, member, admin), plus one line per granted permission (permissions.<key>) for members who hold a role.",
+  "public": false,
+  "value": {
+    "anonymous": {
+      "badge": "Visitor",
+      "title": "You are browsing as a visitor",
+      "text": "You can read every public rule and bundle, search, filter and download them.\n\n**Create a free account** to add your own rules, vote, comment, keep favorites, follow people and get alerts."
+    },
+    "member": {
+      "badge": "Member",
+      "title": "You are logged in",
+      "text": "You can **add rules** (by hand, from a Git repository, a zip or JSON), **build bundles**, vote, comment, keep favorites and propose changes to other people's rules.\n\nYou can edit and delete **your own** rules and bundles; for anyone else's, you send an edit proposal that its owner accepts or not."
+    },
+    "admin": {
+      "badge": "Administrator",
+      "title": "You are an administrator",
+      "text": "Everything a member can do, on **every** rule and bundle, plus the **Admin** menu: users and roles, configuration, imports and Git sources, background jobs, connectors to other instances, logs and moderation.\n\nTours show you the admin parts too: regular users never see those steps."
+    },
+    "permissions": {
+      "github.manage": "**Git Manager**: you also manage the Git sources (imports, sync, Rulesets mirror).",
+      "ai.manage": "**AI manager**: you also configure the AI features and their models.",
+      "ai.use": "**AI user**: you can use the AI assistant, rule analysis and generation.",
+      "rule.tag_any": "**Tagger**: you can tag any rule, not only your own."
+    }
+  }
+}

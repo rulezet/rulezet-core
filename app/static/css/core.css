@@ -278,7 +278,11 @@ label,
 @media (max-width: 700px) {
   .admin-mega-menu {
     width: 92vw;
+    max-height: 75vh;
+    overflow-y: auto;
   }
+  /* the three columns stack: full width, every label readable */
+  .admin-mega-menu .row > .col-4 { flex: 0 0 100%; max-width: 100%; }
 }
 
 .avatar-circle {
@@ -3177,6 +3181,15 @@ button.dr-nav__item {
     .dr-nav__item { padding: 9px 13px; }
     .dr-nav__sep { display: none; }
 }
+/* Admin navigation (navbar mega-menu + the inline panel): on a phone the labels stay,
+   the links wrap / stack instead — icons alone are unreadable there. */
+@media (max-width: 600px) {
+    .admin-mega-menu .dr-nav__item span,
+    #adminNavPanel .dr-nav__item span { display: inline; }
+    #adminNavPanel .dr-nav { flex-wrap: wrap; overflow: visible; }
+    #adminNavPanel .dr-nav__label { width: 100%; }
+    #adminNavPanel .dr-nav__item { padding: 7px 11px; font-size: .8rem; }
+}
 
 /* ── Admin nav toggle (collapsed by default, see macros/admin_nav.html) ────
    Sits inline as a dr-nav__item so it reads as "one more tab" next to a
@@ -3348,3 +3361,20 @@ button.dr-nav__item {
     background: var(--light-bg-color);
     border: 1px solid var(--border-color);
 }
+
+/* First login of a new instance (base.html body.rz-first-setup): the profile page only — the menus,
+   search, bell, settings, chatbot and footer stay visible but cannot be clicked until the password and
+   email are set (the server sends any other page back here anyway); the profile menu keeps Logout */
+body.rz-first-setup .main-navbar .navbar-nav,
+body.rz-first-setup .main-navbar .navbar-brand,
+body.rz-first-setup .main-navbar global-search,
+body.rz-first-setup .main-navbar .nav-icon-btn,
+body.rz-first-setup #notif-bell-app,
+body.rz-first-setup #chatbot-widget,
+body.rz-first-setup footer,
+body.rz-first-setup main nav[aria-label="breadcrumb"] { pointer-events: none !important; opacity: .45; filter: grayscale(.4); user-select: none; }
+body.rz-first-setup .main-navbar .dropdown-menu a:not([href*="logout"]) { pointer-events: none; opacity: .45; }
+/* the two fields to change first */
+body.rz-first-setup .rz-setup-field { position: relative; border-radius: 12px; padding: .75rem; margin: 0 0 .75rem;
+    background: rgba(255, 193, 7, .12); box-shadow: 0 0 0 2px rgba(255, 193, 7, .75); }
+body.rz-first-setup .rz-setup-field input { border-color: #f0ad00; }

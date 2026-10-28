@@ -146,6 +146,60 @@ class RuleTestResult(db.Model):
         }
 
 
+
+########################################
+#   Tests on sample sets               #
+########################################
+
+class SampleTestRun(db.Model):
+    """One run of rulezet-tester (a document of rules × sample sets): the run state it reports,
+    kept here so every web process sees it (DbRunRegistry) and the result outlives the page.
+    origin: 'editor' (Test button) or 'create' (the YARA editor's Create job)."""
+    __tablename__ = 'sample_test_run'
+
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    run_id      = db.Column(db.String(32), unique=True, nullable=False, index=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+    format      = db.Column(db.String(32), nullable=False)
+    origin      = db.Column(db.String(16), nullable=False, default='editor')
+    status      = db.Column(db.String(16), nullable=False, default='queued', index=True)
+    state       = db.Column(db.JSON, nullable=False)
+    # the tested document (Test button runs only): a rule saved right after its test gets the result
+    # (sample_test_core.record_saved_rule). Never sent to the browser.
+    document    = db.Column(db.Text, nullable=True)
+    created_at  = db.Column(db.DateTime, nullable=False,
+                            default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+    finished_at = db.Column(db.DateTime, nullable=True)
+
+
+class RuleSampleResult(db.Model):
+    """What one run said about one rule, for the version of the rule that was tested
+    (content_hash = sha256 of its text): the "tested on N samples" badge of the rule page."""
+    __tablename__ = 'rule_sample_result'
+
+    id              = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    rule_id         = db.Column(db.Integer, db.ForeignKey('rule.id', ondelete='CASCADE'), nullable=False, index=True)
+    run_id          = db.Column(db.Integer, db.ForeignKey('sample_test_run.id', ondelete='CASCADE'), nullable=False, index=True)
+    content_hash    = db.Column(db.String(64), nullable=False)
+    total           = db.Column(db.Integer, nullable=False, default=0)
+    detected        = db.Column(db.Integer, nullable=False, default=0)
+    missed          = db.Column(db.Integer, nullable=False, default=0)
+    false_positives = db.Column(db.Integer, nullable=False, default=0)
+    errors          = db.Column(db.Integer, nullable=False, default=0)
+    sets            = db.Column(db.JSON, nullable=True)       # [{id, name, kind}]
+    rule_text       = db.Column(db.Text, nullable=True)       # the rule as it was tested (its version)
+    created_at      = db.Column(db.DateTime, nullable=False,
+                                default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    run = db.relationship('SampleTestRun')
+
+    def to_json(self):
+        return {
+            'total': self.total, 'detected': self.detected, 'missed': self.missed,
+            'id': self.id, 'false_positives': self.false_positives, 'errors': self.errors, 'sets': self.sets or [],
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
 # Imported last: these models are only used inside methods, and importing them
 # at the top would be circular.
 from app.core.db_class.user import User  # noqa: E402

@@ -1106,3 +1106,24 @@
 /* extraRowActions (page-specific per-rule buttons, e.g. bundle "Show in structure") */
 .dt-action-btn.rl-extra-action { color: #0d6efd; }
 .dt-action-btn.rl-extra-action:hover { background: rgba(13, 110, 253, .1); }
+
+/* ── Phone: lighter rule cards (cards are the forced view there, see ruleList.js) ──
+   Only what helps pick a rule stays: title, author/date, short description, CVE /
+   ATT&CK / tags, votes and actions. Source, licence, version, id and UUIDs are on
+   the rule page. The table view toggle goes too: a table does not fit. */
+@media (max-width: 640px) {
+    .dt-view-toggle { display: none; }
+    .rl-toolbar, .rl-toolbar-left { flex-wrap: wrap; min-width: 0; }
+    .rl-toolbar-left { width: 100%; }
+    .rl-toolbar-left .dt-search { flex: 1 1 100%; }
+    .rl-toolbar-left > .small { margin: .4rem 0 0 !important; }
+    .rl-rule-card .card-body { padding: 1.1rem !important; }
+    .rl-rule-card .card-watermark-list,
+    .rl-rule-card .rl-badge-admin { display: none; }
+    .rl-rule-card h5, .rl-rule-card h5 a { font-size: 1rem; }
+    .rl-rule-card .mb-3.pe-5 { margin-bottom: .6rem !important; }
+    .rl-card-desc { -webkit-line-clamp: 2; line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; font-size: .85rem; }
+    .rl-card-meta .rl-meta-item:not(.rl-meta-item--author) { display: none; }
+    .rl-card-meta:not(:has(.rl-meta-item--author)) { display: none; }
+    .rl-rule-card .border-top.mt-auto { padding-top: .6rem !important; }
+}

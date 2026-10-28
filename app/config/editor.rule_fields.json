@@ -1,0 +1,282 @@
+{
+  "label": "Rule editor fields",
+  "category": "Editor",
+  "description": "Fields panel of the rule editor, per format: the rule's Rulezet metadata, each one optionally written into the rule (YARA meta: key, aliases read too). report = written into the rule by default when creating (on the edit page nothing is written unless the user asks: editing the rule text stops automatic updates, e.g. from GitHub). extract pulls values out of other keys (CVE ids from a reference). options \"licenses\" = Rulezet's licence list. suggest = autocompletion from Rulezet (tags, attack).",
+  "public": false,
+  "value": {
+    "yara": [
+      {
+        "id": "title",
+        "label": "Title",
+        "type": "text",
+        "required": true,
+        "help": "The rule's title in Rulezet. For a rule written here, it also names the YARA rule (My rule -> My_rule).",
+        "ruleName": true,
+        "fromRuleName": true
+      },
+      {
+        "id": "description",
+        "label": "Description",
+        "type": "textarea",
+        "meta": {
+          "key": "description",
+          "aliases": [
+            "desc"
+          ]
+        }
+      },
+      {
+        "id": "author",
+        "label": "Author",
+        "type": "text",
+        "meta": {
+          "key": "author",
+          "aliases": [
+            "creator",
+            "authors"
+          ]
+        },
+        "me": true
+      },
+      {
+        "id": "license",
+        "label": "License",
+        "type": "select",
+        "options": "licenses",
+        "meta": {
+          "key": "license",
+          "aliases": [
+            "licence",
+            "licensing",
+            "spdx"
+          ]
+        },
+        "searchable": true,
+        "placeholder": "Search a license (e.g. MIT, GPL-3.0)…",
+        "free": true,
+        "help": "Pick a license from Rulezet's list or type your own. Read from the rule's license / licence key."
+      },
+      {
+        "id": "version",
+        "label": "Version",
+        "type": "version",
+        "meta": {
+          "key": "version"
+        },
+        "version": {
+          "min": "1.0",
+          "minorMax": 9
+        },
+        "help": "major.minor, as on the manual form: − / + only, never below 1.0."
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "type": "text",
+        "help": "Where the rule comes from (a URL, a project).",
+        "meta": {
+          "key": "source"
+        }
+      },
+      {
+        "id": "original_uuid",
+        "label": "Original UUID",
+        "type": "text",
+        "help": "The rule's id where it comes from. Rulezet uses it to recognise the rule later.",
+        "meta": {
+          "key": "id",
+          "aliases": [
+            "uuid"
+          ]
+        }
+      },
+      {
+        "id": "cve",
+        "label": "Vulnerabilities",
+        "type": "list",
+        "pattern": "^(CVE[-\\s]\\d{4}[-\\s]\\d{4,7}|GCVE-\\d+-\\d{4}-\\d+|GHSA-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}|PYSEC-\\d{4}-\\d{2,5}|GSD-\\d{4}-\\d{4,5}|wid-sec-w-\\d{4}-\\d{4}|cisco-sa-\\d{8}-[a-zA-Z0-9]+|RHSA-\\d{4}:\\d{4}|msrc_CVE-\\d{4}-\\d{4,}|CERTFR-\\d{4}-[A-Z]{3}-\\d{3})$",
+        "upper": true,
+        "placeholder": "CVE-2024-3094, GHSA-…",
+        "meta": {
+          "key": "cve",
+          "aliases": [
+            "cve_id",
+            "cves",
+            "vulnerability"
+          ],
+          "extract": "vuln",
+          "extractFrom": [
+            "reference",
+            "references",
+            "description"
+          ]
+        },
+        "help": "Same formats as the manual form: CVE, GHSA, PYSEC, GSD, GCVE, RHSA, CERTFR, Cisco, MSRC. Pick a format to prefill its prefix.",
+        "formats": [
+          {
+            "label": "CVE",
+            "prefix": "CVE-"
+          },
+          {
+            "label": "GHSA",
+            "prefix": "GHSA-"
+          },
+          {
+            "label": "PYSEC",
+            "prefix": "PYSEC-"
+          },
+          {
+            "label": "GSD",
+            "prefix": "GSD-"
+          },
+          {
+            "label": "GCVE",
+            "prefix": "GCVE-"
+          },
+          {
+            "label": "RHSA",
+            "prefix": "RHSA-"
+          },
+          {
+            "label": "CERTFR",
+            "prefix": "CERTFR-"
+          },
+          {
+            "label": "Cisco",
+            "prefix": "cisco-sa-"
+          },
+          {
+            "label": "MSRC",
+            "prefix": "msrc_CVE-"
+          }
+        ],
+        "chipColors": [
+          {
+            "prefix": "CVE",
+            "color": "#dc3545"
+          },
+          {
+            "prefix": "GHSA",
+            "color": "#ffc107"
+          },
+          {
+            "prefix": "PYSEC",
+            "color": "#0dcaf0"
+          },
+          {
+            "prefix": "GSD",
+            "color": "#6c757d"
+          },
+          {
+            "prefix": "GCVE",
+            "color": "#0d6efd"
+          },
+          {
+            "prefix": "RHSA",
+            "color": "#f8d7da"
+          },
+          {
+            "prefix": "CERTFR",
+            "color": "#198754"
+          },
+          {
+            "prefix": "CISCO-SA",
+            "color": "#212529"
+          },
+          {
+            "prefix": "WID-SEC-W",
+            "color": "#6c757d"
+          },
+          {
+            "prefix": "MSRC",
+            "color": "#6f42c1"
+          }
+        ]
+      },
+      {
+        "id": "attack",
+        "label": "ATT&CK techniques",
+        "type": "list",
+        "suggest": true,
+        "free": true,
+        "pattern": "^T\\d{4}(\\.\\d{3})?$",
+        "upper": true,
+        "placeholder": "T1059 or a technique name",
+        "meta": {
+          "key": "mitre_attack",
+          "aliases": [
+            "attack",
+            "mitre",
+            "technique",
+            "techniques"
+          ],
+          "extract": "attack",
+          "extractFrom": [
+            "tags",
+            "description"
+          ]
+        },
+        "browse": true,
+        "chipDetail": true,
+        "help": "Search a technique by id or name, or browse by tactic (as on the manual form)."
+      },
+      {
+        "id": "tags",
+        "label": "Tags",
+        "type": "list",
+        "suggest": true,
+        "free": false,
+        "help": "Rulezet tags: search, or browse the folders (namespaces) as on the manual form. Tags the rule already carries (rule Name : a b, meta tags / tag) are detected and kept as imported tags, as everywhere in Rulezet. Not written into the rule unless you tick it. The default TLP and PAP tags are added anyway.",
+        "browse": true,
+        "placeholder": "Search a tag…",
+        "meta": {
+          "key": "tags",
+          "aliases": [
+            "tag",
+            "rulezet_tags",
+            "@tags"
+          ],
+          "split": "[,;\\s]+"
+        },
+        "report": false
+      },
+      {
+        "id": "related",
+        "label": "Linked rules",
+        "type": "list",
+        "suggest": true,
+        "picker": true,
+        "insertable": true,
+        "insertMax": 10,
+        "insertTotalMax": 30,
+        "free": false,
+        "max": 20,
+        "chipDetail": true,
+        "placeholder": "Search a rule by title…",
+        "help": "Rules this one is linked to, as on the manual form (at most 20): search by title, or Browse to choose in the full rule list with its filters. Pick the relation on each chip.",
+        "kinds": [
+          {
+            "value": "references",
+            "label": "References"
+          },
+          {
+            "value": "depends_on",
+            "label": "Depends on"
+          },
+          {
+            "value": "related",
+            "label": "Related to"
+          },
+          {
+            "value": "variant_of",
+            "label": "Variant of"
+          },
+          {
+            "value": "duplicate_of",
+            "label": "Duplicate of"
+          }
+        ]
+      }
+    ]
+  }
+}

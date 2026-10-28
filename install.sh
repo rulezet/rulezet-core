@@ -16,12 +16,14 @@ python3 -m venv env
 . env/bin/activate
 
 # Init required git submodules (before pip install: requirements.txt installs
-# rulezet-validation editable from its submodule checkout)
+# rulezet-validation and rulezet-editor editable from their submodule checkouts)
 echo -e "${CYAN}📂 Initialising git submodules...${RESET}"
 git submodule update --init --recursive --depth 1 app/modules/rulezet-cast
 git submodule update --init --recursive --depth 1 app/modules/pivotick
 git submodule update --init --depth 1 app/modules/pivotick-converters
 git submodule update --init --recursive --depth 1 app/modules/rulezet-validation
+git submodule update --init --recursive app/modules/rulezet-editor
+git submodule update --init --recursive app/modules/rulezet-tester
 
 echo -e "${CYAN}📦 Install the Python dependencies...${RESET}"
 pip install -r requirements.txt

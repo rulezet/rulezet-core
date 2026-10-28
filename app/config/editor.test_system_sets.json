@@ -1,0 +1,7 @@
+{
+  "label": "Test on this server's own files",
+  "category": "Editor",
+  "description": "Lets the YARA editor's tests use sample sets read from this server's own folders (/usr/bin programs, documents and Windows PE files installed under /usr). They are good false-positive checks, but they show what is installed on the server (paths, packages) to anyone who runs a test or opens a rule's Samples tab: keep it off on a public instance and provide your own sample sets instead (rulezet-tester add-set, RULE_TESTS_SAMPLES, the lab VM).",
+  "public": false,
+  "value": false
+}

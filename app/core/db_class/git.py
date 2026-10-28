@@ -336,6 +336,10 @@ class GithubSyncScheduleRepo(db.Model):
     auto_accept_update = db.Column(db.Boolean, default=False)
     auto_add_new_rule  = db.Column(db.Boolean, default=False)
     is_generic_source  = db.Column(db.Boolean, default=False, nullable=False)
+    # Who the new rules added from this repo belong to (auto_add_new_rule). NULL = automatic: the
+    # owner of most rules of this source, else the schedule's editor (rule_core.resolve_new_rule_owner).
+    new_rule_owner_id  = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    new_rule_owner     = db.relationship("User", foreign_keys=[new_rule_owner_id])
     # Git host the item comes from: github | gitlab | gitea | bitbucket | generic
     # (None = not from a git repository). Kept up to date by the listeners at
     # the end of this file — see git_provider.detect_provider().
@@ -351,6 +355,9 @@ class GithubSyncScheduleRepo(db.Model):
             "auto_add_new_rule": self.auto_add_new_rule,
             "is_generic_source": self.is_generic_source,
             "git_provider": self.git_provider,
+            "new_rule_owner": ({"id": self.new_rule_owner.id,
+                                "name": f"{self.new_rule_owner.first_name or ''} {self.new_rule_owner.last_name or ''}".strip()}
+                               if self.new_rule_owner else None),
         }
 
 
@@ -586,6 +593,9 @@ class GithubRepo(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.datetime.now(tz=datetime.timezone.utc),
                            onupdate=datetime.datetime.now(tz=datetime.timezone.utc))
     last_synced_at = db.Column(db.DateTime, nullable=True)  # set by a full rebuild, not by incremental deltas
+    # Organisation badge (setting git.org_badge, CIRCL by default) set by an admin: True = always, False = never, None = automatic
+    # (the url or author contains a keyword of the setting git.org_badge).
+    circl_badge = db.Column(db.Boolean, nullable=True, default=None)
 
     def to_json(self):
         return {

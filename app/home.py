@@ -6,7 +6,7 @@ from flask_login import current_user, login_required
 from flask import get_flashed_messages
 from flask_login import login_required, current_user
 
-from app import cache
+from app import cache, db
 from app.core.utils.utils import get_version
 from app.core.utils.activity_log import log_activity
 
@@ -105,7 +105,7 @@ def home() -> render_template:
     # and the CSRF token below are per-user/per-session and must never be
     # served from a shared cache.
     try:
-        platform_stats = cache.get('home_platform_stats')
+        platform_stats = cache.get('home_platform_stats_v2')
     except Exception:            # cache backend down (e.g. Redis restarting)
         platform_stats = None
     if platform_stats is None:
@@ -114,17 +114,29 @@ def home() -> render_template:
             'total_bundles': Bundle.query.count(),
             'total_attacks': AttackTechnique.query.count(),
             'rule_formats':  RuleModel.get_all_rule_format(),
+            'total_cves':    sum(1 for v in RuleModel.get_rules_vulnerabilities_usage()
+                                 if str(v.get('name', '')).upper().startswith('CVE-')),
         }
         try:
-            cache.set('home_platform_stats', platform_stats, timeout=60 * 60 * 6)
+            cache.set('home_platform_stats_v2', platform_stats, timeout=60 * 60 * 6)
         except Exception:
             pass
     total_rules   = platform_stats['total_rules']
     total_bundles = platform_stats['total_bundles']
     total_attacks = platform_stats['total_attacks']
     rule_formats  = platform_stats['rule_formats']
+    total_cves    = platform_stats['total_cves']
 
     from app.features.blog import blog_core as BlogModel
+    from app.core.db_class.blog import BlogPost, BlogPostTagAssociation
+    from app.core.db_class.tag import Tag
+    # "Open source · vX" badge: the blog post of the latest release (posts made from a GitHub
+    # release carry the tag "release"), else the GitHub releases page
+    release_post = (BlogPost.query.join(BlogPostTagAssociation, BlogPostTagAssociation.post_id == BlogPost.id)
+                    .join(Tag, Tag.id == BlogPostTagAssociation.tag_id)
+                    .filter(BlogPost.is_public.is_(True), BlogPost.is_draft.is_(False), db.func.lower(Tag.name) == 'release')
+                    .order_by(BlogPost.published_at.desc()).first())
+    release_url = f"/blog/post/{release_post.uuid}" if release_post else "https://github.com/rulezet/rulezet-core/releases"
     latest_posts = BlogModel.get_posts_paginated(page=1, per_page=2, is_admin=False)
     latest_blog_posts = [p.to_json() for p in latest_posts.items]
 
@@ -134,6 +146,8 @@ def home() -> render_template:
         total_bundles=total_bundles,
         total_attacks=total_attacks,
         rule_formats=rule_formats,
+        total_cves=total_cves,
+        release_url=release_url,
         latest_blog_posts=latest_blog_posts,
     )
 
@@ -1609,6 +1623,40 @@ def admin_settings_email_toggle():
                  f"{'Enabled' if cfg.email_enabled else 'Disabled'} email features instance-wide",
                  target_type='instance_config', target_id=cfg.id, is_public=False)
     return jsonify({'success': True, **email_status()})
+
+
+@home_blueprint.route('/admin/settings/rule_tests_access', methods=['POST'])
+@login_required
+def admin_settings_rule_tests_access():
+    """Who may use the tests on samples: off | admins | everyone (setting editor.test_access) —
+    the editor's Test button, the test step of Create, the Samples tab and badge of rule pages."""
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    from .core.utils.activity_log import log_activity
+    from .features.rule_tester import sample_test_core as SampleTests
+    mode = (request.get_json(silent=True) or {}).get('mode')
+    if mode not in SampleTests.TEST_ACCESS_MODES:
+        return jsonify({'success': False, 'error': 'Unknown mode.'}), 400
+    SampleTests.set_test_access(mode, user_id=current_user.id)
+    log_activity('admin.rule_tests_access', f"Rule tests on samples: {mode}", is_public=False)
+    return jsonify({'success': True, 'mode': mode})
+
+
+@home_blueprint.route('/admin/settings/editor_access', methods=['POST'])
+@login_required
+def admin_settings_editor_access():
+    """Who may use the YARA editor: off | admins | everyone (setting editor.access) —
+    the YARA editor tab of the create page and of the edit page."""
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    from .core.utils.activity_log import log_activity
+    from .features.rule_tester import sample_test_core as SampleTests
+    mode = (request.get_json(silent=True) or {}).get('mode')
+    if mode not in SampleTests.TEST_ACCESS_MODES:
+        return jsonify({'success': False, 'error': 'Unknown mode.'}), 400
+    SampleTests.set_editor_access(mode, user_id=current_user.id)
+    log_activity('admin.editor_access', f"YARA editor: {mode}", is_public=False)
+    return jsonify({'success': True, 'mode': mode})
 
 
 @home_blueprint.route('/admin/settings/chatbot_toggle', methods=['POST'])

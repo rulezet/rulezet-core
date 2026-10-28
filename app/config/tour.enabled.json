@@ -1,0 +1,7 @@
+{
+  "label": "Tutorial button",
+  "category": "Tutorial",
+  "description": "Show the Tutorial icon (top bar, next to the settings gear): the tour of the page and the full tour of Rulezet.",
+  "public": false,
+  "value": true
+}

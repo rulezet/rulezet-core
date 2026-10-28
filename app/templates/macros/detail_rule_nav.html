@@ -1,17 +1,17 @@
 {% macro detail_rule_nav(rule, active, similarity_count=0, history_count=0, proposal_count=0, scope_count=0, test_count=0, ai_analysis_count=0, linked_rules_count=0) %}
-<nav class="dr-nav">
+<nav class="dr-nav" data-tour="rule-nav">
     <a href="/rule/detail_rule/{{ rule.id }}"
-       class="dr-nav__item {% if active == 'detail' %}active{% endif %}">
+       data-tour="rnav-overview" class="dr-nav__item {% if active == 'detail' %}active{% endif %}">
         <i class="fa-solid fa-shield-halved"></i>
         <span>Overview</span>
     </a>
     <a href="/rule/detail_rule/{{ rule.id }}/propose_edit"
-       class="dr-nav__item {% if active == 'propose_edit' %}active{% endif %}">
+       data-tour="rnav-propose" class="dr-nav__item {% if active == 'propose_edit' %}active{% endif %}">
         <i class="fa-solid fa-pen-to-square"></i>
         <span>Suggest an Edit</span>
     </a>
     <a href="/rule/detail_rule/{{ rule.id }}/pull_request"
-       class="dr-nav__item {% if active == 'pull_request' %}active{% endif %}">
+       data-tour="rnav-proposals" class="dr-nav__item {% if active == 'pull_request' %}active{% endif %}">
         <i class="fa-solid fa-code-pull-request"></i>
         <span>Proposals</span>
         {% if proposal_count > 0 %}
@@ -19,7 +19,7 @@
         {% endif %}
     </a>
     <a href="/rule/detail_rule/{{ rule.id }}/scope"
-       class="dr-nav__item {% if active == 'scope' %}active{% endif %}">
+       data-tour="rnav-scope" class="dr-nav__item {% if active == 'scope' %}active{% endif %}">
         <i class="fa-solid fa-globe"></i>
         <span>Scope</span>
         {% if scope_count > 0 %}
@@ -27,7 +27,7 @@
         {% endif %}
     </a>
     <a href="/rule/detail_rule/{{ rule.id }}/history"
-       class="dr-nav__item {% if active == 'history' %}active{% endif %}">
+       data-tour="rnav-history" class="dr-nav__item {% if active == 'history' %}active{% endif %}">
         <i class="fa-solid fa-clock-rotate-left"></i>
         <span>History</span>
         {% if history_count > 0 %}
@@ -36,7 +36,7 @@
     </a>
     {% if similarity_count > 0 or active == 'similarity' %}
     <a href="/rule/detail_rule/{{ rule.id }}/similarity"
-       class="dr-nav__item {% if active == 'similarity' %}active{% endif %}">
+       data-tour="rnav-similarity" class="dr-nav__item {% if active == 'similarity' %}active{% endif %}">
         <i class="fa-solid fa-code-compare"></i>
         <span>Similarity</span>
         {% if similarity_count > 0 %}
@@ -47,7 +47,7 @@
     {# bundle_count comes from the page context (_nav_counts) — the macro is
        imported "with context", so callers don't have to thread it through. #}
     <a href="/rule/detail_rule/{{ rule.id }}/bundles"
-       class="dr-nav__item {% if active == 'bundles' %}active{% endif %}">
+       data-tour="rnav-bundles" class="dr-nav__item {% if active == 'bundles' %}active{% endif %}">
         <i class="fa-solid fa-layer-group"></i>
         <span>Bundles</span>
         {% if (bundle_count|default(0)) > 0 %}
@@ -56,7 +56,7 @@
     </a>
     {% if linked_rules_count > 0 or active == 'linked_rules' %}
     <a href="/rule/detail_rule/{{ rule.id }}/linked_rules"
-       class="dr-nav__item {% if active == 'linked_rules' %}active{% endif %}">
+       data-tour="rnav-linked" class="dr-nav__item {% if active == 'linked_rules' %}active{% endif %}">
         <i class="fa-solid fa-diagram-project"></i>
         <span>Linked Rules</span>
         {% if linked_rules_count > 0 %}
@@ -64,8 +64,19 @@
         {% endif %}
     </a>
     {% endif %}
+    {# tests on sample sets (YARA editor) — sample_tests_count comes from the page context (_nav_counts) #}
+    {% if (sample_tests_count|default(-1)) >= 0 and ((sample_tests_count|default(0)) > 0 or active == 'samples' or (rule.format or '')|lower == 'yara') %}
+    <a href="/rule/detail_rule/{{ rule.id }}/samples"
+       data-tour="rnav-samples" class="dr-nav__item {% if active == 'samples' %}active{% endif %}">
+        <i class="fa-solid fa-vial-circle-check"></i>
+        <span>Samples</span>
+        {% if (sample_tests_count|default(0)) > 0 %}
+        <span class="dr-nav__badge">{{ sample_tests_count }}</span>
+        {% endif %}
+    </a>
+    {% endif %}
     <a href="/rule/detail_rule/{{ rule.id }}/ai_analysis"
-       class="dr-nav__item {% if active == 'ai_analysis' %}active{% endif %}">
+       data-tour="rnav-ai" class="dr-nav__item {% if active == 'ai_analysis' %}active{% endif %}">
         <i class="fa-solid fa-robot"></i>
         <span>AI Analysis</span>
         {% if ai_analysis_count > 0 %}
@@ -75,7 +86,7 @@
     {# Rule Tester temporarily suspended — remove this {% if False %} guard to re-enable #}
     {% if False %}
     <a href="/rule/detail_rule/{{ rule.id }}/test_history"
-       class="dr-nav__item {% if active == 'test_history' or active == 'test' %}active{% endif %}">
+       data-tour="rnav-tests" class="dr-nav__item {% if active == 'test_history' or active == 'test' %}active{% endif %}">
         <i class="fa-solid fa-flask-vial"></i>
         <span>Tests</span>
         {% if test_count > 0 %}

@@ -31,6 +31,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
 <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_bundles.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/rule_metadata.css') }}">
 {% endblock %}
 {% import 'macros/form_macros.html' as f %}
 {% import 'macros/detail_rule_nav.html' as nav with context %}
@@ -132,6 +133,14 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                               title="Perfect quality score (100/100) — this rule is extremely well documented, traceable and valid.">
                             <i class="fa-solid fa-medal me-1"></i> 100
                         </span>
+                        {% if sample_result %}
+                        {# last test on sample sets for this exact version of the rule (YARA editor's Create) #}
+                        {% set _sr = sample_result %}
+                        <span class="badge rounded-pill shadow-sm pt-1 rule-sample-badge {{ 'rule-sample-badge--fp' if _sr.false_positives else 'rule-sample-badge--ok' }}"
+                              title="Tested on {{ _sr.total }} samples ({{ _sr.sets | map(attribute='name') | join(', ') }}){% if _sr.detected or _sr.missed %}: {{ _sr.detected }} detected, {{ _sr.missed }} missed{% endif %}, {{ _sr.false_positives }} false positive(s){% if _sr.errors %}, {{ _sr.errors }} error(s){% endif %}. This version of the rule.">
+                            <i class="fa-solid fa-vial-circle-check me-1"></i>{{ _sr.total }} samples · {{ _sr.false_positives }} FP
+                        </span>
+                        {% endif %}
                         <format-chip :format="currentRule.format"></format-chip>
                     </div>
 
@@ -252,9 +261,51 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                             </div>
                         </div>
 
+                        {% if rule.all_references or rule_metadata %}
+                        <!-- References and other metadata, read from the rule's own text (rule_metadata_core.py) -->
+                        <div data-tour="rule-metadata" class="rule-meta mb-4">
+                            {% if rule.all_references %}
+                            <div class="rule-meta-block">
+                                <div class="rule-meta-head"><i class="fa-solid fa-book-bookmark"></i>References <span>{{ rule.all_references | length }}</span></div>
+                                {# v-pre: the values come from the rule's text, Vue must never read them as a template #}
+                                <ul class="rule-refs" v-pre>
+                                    {% for ref in rule.all_references %}
+                                    {% set is_url = ref.lower().startswith('http://') or ref.lower().startswith('https://') %}
+                                    <li>
+                                        <i class="fa-solid {{ 'fa-arrow-up-right-from-square' if is_url else 'fa-quote-left' }}"></i>
+                                        {% if is_url %}<a href="{{ ref }}" target="_blank" rel="noopener noreferrer">{{ ref }}</a>
+                                        {% else %}<span>{{ ref }}</span>{% endif %}
+                                        {% if ref in (rule.manual_references or []) and ref not in (rule.rule_references or []) %}<em class="rule-ref-manual">added by hand</em>{% endif %}
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+                            {% if rule_metadata %}
+                            <div class="rule-meta-block">
+                                <div class="rule-meta-head"><i class="fa-solid fa-circle-info"></i>Other metadata <span>{{ rule_metadata | length }}</span></div>
+                                <div class="rule-meta-grid">
+                                    {% for field in rule_metadata %}
+                                    <div class="rule-meta-cell {{ 'rule-meta-cell--wide' if field.is_hash or (field['values'] | join(' ') | length) > 90 }}">
+                                        <div class="rule-meta-cell__label" v-pre><i class="fa-solid {{ field.icon }}"></i>{{ field.label }}</div>
+                                        {% for value in field['values'] %}
+                                        <div class="rule-meta-cell__value {{ 'is-hash' if field.is_hash }}">
+                                            <span v-pre>{{ value }}</span>
+                                            {% if field.is_hash %}
+                                            <button type="button" class="rule-meta-copy" title="Copy" data-value="{{ value }}" @click="copyMetaValue"><i class="fa-regular fa-copy"></i></button>
+                                            {% endif %}
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
 
                         <!-- Taxonomies-->
-                        <div class="mt-2">
+                        <div data-tour="rule-tags" class="mt-2">
                             <vulnerability-display :vulnerabilities="displayVulnerabilities"
                                 :loading="loadingDisplayVulnerabilities" section-title="Security Identifiers"
                                 css-path="{{ url_for('static', filename='/css/tag/tags.css') }}">
@@ -268,11 +319,11 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                             </tag-display>
                         </div>
                         <!-- ATT&CK Techniques -->
-                        <div class="mt-2 mb-4">
+                        <div data-tour="rule-attack" class="mt-2 mb-4">
                             <attack-display :rule-id="{{ rule.id }}"></attack-display>
                         </div>
                         <!-- Rule Content Card -->
-                        <div class="mb-4">
+                        <div data-tour="rule-content" class="mb-4">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div class="d-flex align-items-center gap-2">
                                     <div class="d-flex align-items-center gap-2">
@@ -300,7 +351,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                             <div class="border rounded-3 overflow-hidden shadow-sm">
 
 
-                                <ul class="nav nav-tabs nav-fill border-bottom rule-tabs" id="ruleTabs" role="tablist">
+                                <ul data-tour="rule-tabs" class="nav nav-tabs nav-fill border-bottom rule-tabs" id="ruleTabs" role="tablist">
                                     <li class="nav-item" role="presentation">
                                         <button class="nav-link active small fw-bold py-2 border-0" id="normal-tab"
                                             data-bs-toggle="tab" data-bs-target="#normal" type="button" role="tab">
@@ -310,7 +361,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                         </button>
                                     </li>
                                     <li class="nav-item" role="presentation">
-                                        <button class="nav-link small fw-bold py-2 border-0" id="json-tab"
+                                        <button data-tour="rule-json-tab" class="nav-link small fw-bold py-2 border-0" id="json-tab"
                                             data-bs-toggle="tab" data-bs-target="#json" type="button" role="tab">
                                             <img src="{{ url_for('static', filename='custom-icon/json.svg') }}"
                                                 alt="JSON" style="height:14px;width:14px;object-fit:contain;vertical-align:-2px;" class="me-1">
@@ -655,7 +706,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                         </div>
 
                         <!-- Actions bar -->
-                        <div class="mt-4 mb-3 rounded-3 border" style="background: var(--light-bg-color);">
+                        <div data-tour="rule-actions" class="mt-4 mb-3 rounded-3 border" style="background: var(--light-bg-color);">
                             <div class="px-3 pt-3 pb-2 d-flex align-items-center gap-2" style="border-bottom:1px solid var(--border-color);">
                                 <div style="width:3px; height:14px; background:#0d6efd; border-radius:2px; flex-shrink:0;"></div>
                                 <span class="fw-bold" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--subtle-text-color);">
@@ -665,7 +716,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                             <div class="p-3 d-flex flex-wrap align-items-center gap-2">
 
                                 <!-- Votes + favorite (same pill as the bundle detail page) -->
-                                <div class="vote-pill">
+                                <div data-tour="rule-vote" class="vote-pill">
                                     <voter-popover :fetch-url="'/rule/voters/' + currentRule.id + '?type=up'" label="Liked by">
                                         <button type="button" @click="vote('up', currentRule.id); animateClick($event)"
                                                 class="vote-pill__btn btn-animate" :class="{ 'vote-pill__btn--up': userVote === 'up' }"
@@ -688,7 +739,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                 </div>
 
                                 <!-- Download -->
-                                <div class="dropdown">
+                                <div data-tour="rule-download" class="dropdown">
                                     <button class="btn btn-sm rounded-pill px-3 dropdown-toggle"
                                             style="background:transparent; border:1px solid var(--border-color); color:var(--text-color);"
                                             data-bs-toggle="dropdown"
@@ -724,7 +775,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                 </div>
 
                                 <!-- Git source (GitHub, GitLab, Gitea, …) -->
-                                <a v-if="currentRule.github_path"
+                                <a data-tour="rule-git-source" v-if="currentRule.github_path"
                                    :href="githubBlobUrl(currentRule)"
                                    target="_blank" rel="noopener noreferrer"
                                    class="btn btn-sm rounded-pill px-3"
@@ -770,7 +821,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
 
                                 <!-- Report -->
                                 {% if current_user.is_authenticated %}
-                                <report-modal
+                                <report-modal data-tour="rule-report"
                                     object-type="rule"
                                     :object-id="currentRule.id"
                                     :object-label="currentRule.title"
@@ -830,7 +881,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                         </div>
 
                         <!-- Contributors -->
-                        <div class="mb-3 mt-3">
+                        <div data-tour="rule-contributors" class="mb-3 mt-3">
                             <template v-if="contributor_list.length > 0">
                                 <div class="rounded-3 border overflow-hidden position-relative" style="background:var(--light-bg-color);">
                                     <div class="contributor-watermark"><i class="fa-solid fa-users-gear"></i></div>
@@ -866,7 +917,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                         </div>
                         <!-- Bundles containing this rule — compact strip; full view
                              (folder location, stats, filters) lives in the Bundles tab. -->
-                        <div class="mt-3 mb-4">
+                        <div data-tour="rule-bundles" class="mt-3 mb-4">
                             <div v-if="bundleListRule.length > 0" class="rb-strip">
                                 <span class="rb-strip__label">
                                     <i class="fa-solid fa-layer-group"></i>
@@ -897,7 +948,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                         </div>
 
                         <!-- Related rules (same source / author) -->
-                        <div v-if="relatedTotalCount > 0" class="mt-3 rounded-4 overflow-hidden border position-relative mb-4" style="background:var(--light-bg-color);">
+                        <div data-tour="rule-related" v-if="relatedTotalCount > 0" class="mt-3 rounded-4 overflow-hidden border position-relative mb-4" style="background:var(--light-bg-color);">
                             <div class="contributor-watermark">
                                 <i class="fa-solid fa-share-nodes"></i>
                             </div>
@@ -943,7 +994,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                         {# Whole card hidden when the rule graph is switched off in /admin/pivotick #}
                         {% if pivotick_graph_enabled('rule') %}
                         <!-- Visualization -->
-                        <div class="mt-3 rounded-4 overflow-hidden border position-relative mb-2" style="background:var(--light-bg-color);">
+                        <div data-tour="rule-visualization" class="mt-3 rounded-4 overflow-hidden border position-relative mb-2" style="background:var(--light-bg-color);">
                             <div class="contributor-watermark"><i class="fa-solid fa-diagram-project"></i></div>
                             <div class="p-4 position-relative" style="z-index:1;">
                                 <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
@@ -1008,7 +1059,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                         {% endif %}
 
                         <!-- Quality Score -->
-                        <div class="mt-3 rounded-4 overflow-hidden border position-relative mb-2" style="background:var(--light-bg-color);">
+                        <div data-tour="rule-quality" class="mt-3 rounded-4 overflow-hidden border position-relative mb-2" style="background:var(--light-bg-color);">
                             <div class="contributor-watermark"><i class="fa-solid fa-gauge-high"></i></div>
                             <div class="p-4 position-relative" style="z-index:1;">
                                 <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
@@ -1257,7 +1308,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                     </div>
                 </div>
                 <!-- Comment section -->
-                <div class="card border-0 shadow-sm rounded-3 mt-5 mb-4">
+                <div data-tour="rule-comments" class="card border-0 shadow-sm rounded-3 mt-5 mb-4">
                     <div class="card-body p-4">
                         <h4 class="fw-bold mb-4 border-start border-primary border-4 ps-3">Community Discussion</h4>
                         <comment-thread
@@ -1972,7 +2023,14 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                 });
             }
 
+            function copyMetaValue(event) {
+                navigator.clipboard.writeText(event.currentTarget.dataset.value || '').then(
+                    () => create_message('Copied.', 'success-subtle'),
+                    () => create_message('Could not copy.', 'danger-subtle'));
+            }
+
             return {
+                copyMetaValue,
                 getRandomColor,
                 bundleListRule, bundleListLoaded,
                 relatedMatchField,

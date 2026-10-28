@@ -1,3 +1,4 @@
+import { loadOrgBadge } from '/static/js/rule/github/orgBadge.js';
 import MultiPersonFilter from '/static/js/rule/multiPersonFilter.js'
 
 const GithubFilter = {
@@ -27,6 +28,9 @@ const GithubFilter = {
         const availableProviders = Vue.ref([]);
         const providersTotal = Vue.computed(() => availableProviders.value.reduce((n, p) => n + p.count, 0));
         const conflictsOnly   = Vue.ref(_p('conflicts_only') === 'true')
+        const circlOnly       = Vue.ref(_p('circl_only') === 'true')
+        const org             = Vue.ref({ label: '', logoUrl: '' })
+        loadOrgBadge().then(o => { org.value = o })
         const personFilter    = Vue.ref({
             mode:   _p('person_mode', 'author'),
             values: (_p('editors') || _p('authors') || '').split(',').filter(Boolean),
@@ -46,6 +50,7 @@ const GithubFilter = {
             (selectedFormat.value ? 1 : 0) +
             (selectedLicense.value ? 1 : 0) +
             (conflictsOnly.value ? 1 : 0) +
+            (circlOnly.value ? 1 : 0) +
             (personFilter.value.values.length ? 1 : 0)
         );
 
@@ -81,6 +86,7 @@ const GithubFilter = {
             _upd('license',        selectedLicense.value || null)
             _upd('provider',       selectedProvider.value || null)
             _upd('conflicts_only', conflictsOnly.value ? 'true' : null)
+            _upd('circl_only',     circlOnly.value ? 'true' : null)
             _upd('page',           currentPage.value > 1 ? currentPage.value : null)
             if (props.sortKey) { p.set('sort', props.sortKey); p.set('dir', props.sortDir) }
             else               { p.delete('sort'); p.delete('dir') }
@@ -111,6 +117,7 @@ const GithubFilter = {
                 license: selectedLicense.value || '',
                 provider: selectedProvider.value || '',
                 conflicts_only: conflictsOnly.value ? 'true' : 'false',
+                circl_only: circlOnly.value ? 'true' : 'false',
             });
             if (props.sortKey) {
                 params.set('sort', props.sortKey);
@@ -152,6 +159,7 @@ const GithubFilter = {
             selectedFormat.value = '';
             selectedLicense.value = '';
             conflictsOnly.value = false;
+            circlOnly.value = false;
             personFilter.value = { mode: 'author', values: [] };
             fetchUrls(1);
         };
@@ -176,7 +184,7 @@ const GithubFilter = {
             searchField,
             selectedFormat,
             selectedLicense, selectedProvider, availableProviders, providersTotal, setProvider,
-            conflictsOnly,
+            conflictsOnly, circlOnly, org,
             personFilter,
             searchIsLoading,
             totalUrls,
@@ -226,7 +234,7 @@ const GithubFilter = {
             </div>
         </div>
 
-        <div v-if="availableProviders.length > 1" class="ghf-hosts" role="group" aria-label="Filter by git host">
+        <div v-if="availableProviders.length" class="ghf-hosts" role="group" aria-label="Filter by git host">
             <span class="ghf-hosts__label">Host</span>
             <button type="button" class="ghf-host" :class="{ 'ghf-host--active': !selectedProvider }"
                     :aria-pressed="!selectedProvider" @click="setProvider('')">
@@ -238,6 +246,12 @@ const GithubFilter = {
                     :aria-pressed="selectedProvider === p.name" @click="setProvider(p.name)">
                 <i :class="p.icon"></i>[[ p.label ]]
                 <span class="ghf-host__count">[[ p.count ]]</span>
+            </button>
+            <span class="ghf-hosts__sep" aria-hidden="true"></span>
+            <button type="button" class="ghf-host ghf-host--circl" :class="{ 'ghf-host--active': circlOnly }"
+                    :aria-pressed="circlOnly" :title="'Only repositories with the ' + org.label + ' badge'"
+                    @click="circlOnly = !circlOnly; fetchUrls(1)">
+                <img v-if="org.logoUrl" :src="org.logoUrl" alt="" class="ghf-host__logo">[[ org.label ]]
             </button>
         </div>
 
@@ -274,6 +288,11 @@ const GithubFilter = {
                 <label class="rl-fp-switch" title="Only repositories with a high-similarity conflict">
                     <input type="checkbox" v-model="conflictsOnly" @change="fetchUrls(1)" />
                     <span>Conflicts only</span>
+                </label>
+
+                <label class="rl-fp-switch" :title="'Only repositories with the ' + org.label + ' badge'">
+                    <input type="checkbox" v-model="circlOnly" @change="fetchUrls(1)" />
+                    <span>[[ org.label ]]</span>
                 </label>
 
                 <button v-if="activeFilterCount > 0" class="rl-fp-reset" @click="resetFilters">

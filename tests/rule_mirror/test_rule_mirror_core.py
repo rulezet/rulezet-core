@@ -363,3 +363,36 @@ def test_commit_works_with_no_global_git_identity(app, monkeypatch, tmp_path):
         assert written == 3
         assert len(_rule_dirs_on_disk(local_dir)) == 3
         assert repo.head.commit.author.email == 'noreply@rulezet-mirror.local'
+
+
+def test_sync_refuses_a_rejected_token_before_writing_anything(app, monkeypatch, tmp_path):
+    """An expired / revoked token must stop the sync up front, not after hundreds of local commits."""
+    with app.app_context():
+        config = mirror.create_config(1, name='rs', enabled=True,
+                                      repo_url='https://github.com/example/rs', github_token='bad')
+        config.is_verified = True
+        db.session.commit()
+        monkeypatch.setattr(mirror.git_provider, 'check_push_access',
+                            lambda url, token: (False, 'The GitHub token was rejected (401).', None))
+        monkeypatch.setattr(mirror, '_local_repo_dir', lambda c: str(tmp_path / 'never'))
+        with pytest.raises(RuntimeError, match='rejected'):
+            mirror._sync_one_config(config)
+        assert not (tmp_path / 'never').exists()
+
+
+def test_unpushed_commits_of_a_previous_run_are_counted(tmp_path):
+    remote = git.Repo.init(tmp_path / 'remote.git', bare=True, initial_branch='main')
+    repo = git.Repo.init(tmp_path / 'local', initial_branch='main')
+    with repo.config_writer() as cw:
+        cw.set_value('user', 'name', 't')
+        cw.set_value('user', 'email', 't@t')
+    repo.create_remote('origin', remote.working_dir)
+    assert mirror._unpushed_commits(repo, 'main') == 0                     # empty repo
+    (tmp_path / 'local' / 'a').write_text('a')
+    repo.git.add('a'); repo.git.commit('-m', 'a')
+    repo.git.push('origin', 'main'); repo.remotes.origin.fetch()
+    assert mirror._unpushed_commits(repo, 'main') == 0                     # all pushed
+    for name in ('b', 'c'):
+        (tmp_path / 'local' / name).write_text(name)
+        repo.git.add(name); repo.git.commit('-m', name)
+    assert mirror._unpushed_commits(repo, 'main') == 2                     # push refused: 2 stranded

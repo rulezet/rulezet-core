@@ -16,6 +16,8 @@ from app.core.utils.utils import  DB_ID_MAX, as_db_id, bump_version, form_to_dic
 
 from app.features.account.account_core import add_favorite, remove_favorite, is_rule_favorited_by_user
 from app.features.misp.misp_core import  convert_misp_to_stix
+from app.features.rule_tester import sample_test_core as SampleTests
+from app.features.rule.rule_metadata_core import display_metadata
 from app.features.rule.rule_format.main_format import  parse_rule_by_format, process_and_import_fixed_rule, verify_syntax_rule_by_format, import_bad_rule_with_dependency
 from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, generic_repo_metadata, get_github_branches, get_github_host, get_github_rate_limit_status, get_github_repo_live_info, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
 
@@ -585,6 +587,7 @@ def edit_rule(rule_id) -> render_template:
         form.version.data = rule.version
         form.to_string.data = rule.to_string
         form.original_uuid.data = rule.original_uuid
+        form.references.data = "\n".join(rule.manual_references or [])
         from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
         return render_template("rule/edit_rule.html", form=form, rule=rule, restricted_edit=True,
                                deep_validation_available=is_deep_validation_configured())
@@ -691,6 +694,12 @@ def edit_rule(rule_id) -> render_template:
                     "change_type": "metadata",
                 })
 
+            # tested with the editor's Test button right before saving: that result is this version's
+            try:
+                SampleTests.record_saved_rule(current_rule, current_user)
+            except Exception:
+                db.session.rollback()
+
             flash("Rule modified with success!", "success")
 
             return redirect(url_for('rule.detail_rule', rule_id=current_rule.id))
@@ -720,6 +729,7 @@ def edit_rule(rule_id) -> render_template:
             form.version.data = rule.version
             form.to_string.data = rule.to_string
             form.original_uuid.data = rule.original_uuid
+            form.references.data = "\n".join(rule.manual_references or [])
 
         from app.features.rule.rule_format.deep_validate import is_deep_validation_configured
         return render_template("rule/edit_rule.html", form=form, rule=rule,
@@ -970,6 +980,8 @@ def detail_rule_by_uuid(rule_uuid):
                                rule_to_json=rule_to_json, active_tab=active_tab,
                                current_user_vote=current_user_vote, rule_risk=rule_risk,
                                mirror_github_urls=get_mirror_github_urls(rule),
+                               sample_result=SampleTests.latest_result(rule) if SampleTests.can_use_tests(current_user) else None,
+                               rule_metadata=display_metadata(rule.extra_metadata),
                                **_nav_counts(rule.id))
     return render_template("404.html")
 
@@ -1048,6 +1060,8 @@ def _nav_counts(rule_id):
         'test_count':          _rule_test_count(rule_id),
         'ai_analysis_count':   _rule_ai_analysis_count(rule_id),
         'linked_rules_count':  _rule_linked_rules_count(rule_id),
+        # -1: the Samples tab is hidden (tests not enabled for this viewer, setting editor.test_access)
+        'sample_tests_count':  SampleTests.rule_sample_count(rule_id) if SampleTests.can_use_tests(current_user) else -1,
     }
 
 
@@ -1099,6 +1113,8 @@ def detail_rule(rule_id)-> render_template:
                                rule_to_json=rule_to_json, active_tab=active_tab,
                                current_user_vote=current_user_vote, rule_risk=rule_risk,
                                mirror_github_urls=get_mirror_github_urls(rule),
+                               sample_result=SampleTests.latest_result(rule) if SampleTests.can_use_tests(current_user) else None,
+                               rule_metadata=display_metadata(rule.extra_metadata),
                                **_nav_counts(rule.id))
     return render_template("404.html")
 
@@ -1188,6 +1204,22 @@ def detail_rule_linked_rules(rule_id):
     if rule.is_deleted:
         return render_template("rule/rule_in_trash.html", rule=rule)
     return render_template("rule/detail_rule/detail_rule_linked_rules.html", rule=rule,
+                           **_nav_counts(rule.id))
+
+
+@rule_blueprint.route("/detail_rule/<int:rule_id>/samples", methods=['GET'])
+def detail_rule_samples(rule_id):
+    """Samples sub-page: the rule's tests on sample sets (YARA editor), per version — what was
+    detected, missed, the false positives, and where each string hit."""
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return render_template("404.html")
+    if rule.is_deleted:
+        return render_template("rule/rule_in_trash.html", rule=rule)
+    if not SampleTests.can_use_tests(current_user):
+        return render_template("404.html"), 404
+    return render_template("rule/detail_rule/detail_rule_samples.html", rule=rule,
+                           samples=SampleTests.rule_sample_details(rule, request.args.get('result', type=int)),
                            **_nav_counts(rule.id))
 
 
@@ -4765,6 +4797,29 @@ def bulk_update_decision(sid):
     return {'message': f'Background job started: {label}', 'job_id': job.id, 'job_uuid': job.uuid, 'toast_class': 'success-subtle'}, 201
 
 
+def _owner_param(value):
+    """owner_id sent by the page: 'me', a user id, or nothing (automatic)."""
+    if value in (None, '', 'auto'):
+        return None
+    if value == 'me':
+        return current_user.id
+    return value
+
+
+@rule_blueprint.route("/new_rules_owner/<sid>", methods=['GET'])
+@login_required
+def new_rules_owner(sid):
+    """Who the new rules of an update session would belong to: may the user choose, and the
+    automatic choice (the owner of most rules of that source)."""
+    updater = RuleModel.get_updater_result(sid)
+    if not updater:
+        return {'message': 'Session not found', 'toast_class': 'danger-subtle'}, 404
+    source = RuleModel.updater_source_url(updater)
+    me = {'id': current_user.id, 'name': f"{current_user.first_name or ''} {current_user.last_name or ''}".strip()}
+    return {'can_choose': RuleModel.can_choose_new_rule_owner(current_user), 'source': source,
+            'suggestion': RuleModel.source_owner_suggestion(source), 'me': me}, 200
+
+
 @rule_blueprint.route("/bulk_new_rules_decision/<sid>", methods=['POST'])
 @login_required
 def bulk_new_rules_decision(sid):
@@ -4786,8 +4841,11 @@ def bulk_new_rules_decision(sid):
     else:
         job_total = max(RuleModel.count_pending_new_rules(sid), 1)
 
+    owner = RuleModel.resolve_new_rule_owner(current_user, RuleModel.updater_source_url(RuleModel.get_updater_result(sid)),
+                                             _owner_param(data.get('owner_id')))
     job = JobsModel.create_job(job_type='bulk_new_rules_decision',
-                               payload={'sid': sid, 'action': action, 'user_id': current_user.id},
+                               payload={'sid': sid, 'action': action, 'user_id': current_user.id,
+                                        'owner_id': owner.id if owner else None},
                                label=label, created_by=current_user.id,
                                total=job_total)
     return {'message': f'Background job started: {label}', 'job_id': job.id, 'job_uuid': job.uuid, 'toast_class': 'success-subtle'}, 201
@@ -5019,6 +5077,7 @@ def get_url_github():
     license_filter = request.args.get("license", default=None, type=str)
     conflicts_only = request.args.get("conflicts_only", default='false', type=str) == 'true'
     provider_filter = request.args.get("provider", default=None, type=str) or None
+    circl_only = request.args.get("circl_only", default='false', type=str) == 'true'
     page = request.args.get("page", default=1, type=int)
     sort = request.args.get("sort", default=None, type=str)
     sort_dir = request.args.get("dir", default='asc', type=str)
@@ -5039,6 +5098,7 @@ def get_url_github():
         license_filter=license_filter,
         conflicts_only=conflicts_only,
         provider_filter=provider_filter,
+        circl_only=circl_only,
         sort=sort,
         sort_dir=sort_dir
     )
@@ -5049,6 +5109,26 @@ def get_url_github():
         "total_url": total_url,
         "total_pages": total_pages
     }), 200
+
+
+@rule_blueprint.route("/github_repo/circl_badge", methods=['POST'])
+@login_required
+def set_github_repo_circl_badge():
+    """Admin: add / remove the organisation badge (setting git.org_badge) of a git repository, or give it back to the automatic rule."""
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Admins only"}), 403
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or "").strip()
+    value = data.get("value")
+    if not url or value not in (True, False, None):
+        return jsonify({"success": False, "message": "url and value (true, false or null) required"}), 400
+    repo = RuleModel.set_circl_badge(url, value)
+    if not repo:
+        return jsonify({"success": False, "message": "Repository not found"}), 404
+    state = {True: 'added', False: 'removed', None: 'set back to automatic'}[value]
+    log_activity('git.circl_badge', f"Organisation badge {state} on {url}",
+                 target_type='github_repo', target_id=repo.id, extra={'url': url, 'value': value})
+    return jsonify({"success": True, "circl": RuleModel.has_circl_badge(repo), "circl_badge": repo.circl_badge}), 200
 
 
 @rule_blueprint.route("/get_github_authors_usage", methods=['GET'])
@@ -5682,7 +5762,10 @@ def add_new_rule():
     if not s:
         return jsonify({"success": False, "message": "Error while updating rule", "toast_class": "danger-subtle"}), 500
         
-    success, message, imported_object = parse_rule_by_format(content, current_user, format, source_info, github_path=temp_rule.github_path) 
+    # who the new rule belongs to: chosen on the page (admins / GitHub Managers), else the owner of
+    # this source's other rules, else the user adding it
+    owner = RuleModel.resolve_new_rule_owner(current_user, source_info, _owner_param(request.args.get('owner_id')))
+    success, message, imported_object = parse_rule_by_format(content, owner, format, source_info, github_path=temp_rule.github_path) 
     
     if success:
         profil_game_user_ = AccountModel.get_or_create_gamification_profile(imported_object.user_id)

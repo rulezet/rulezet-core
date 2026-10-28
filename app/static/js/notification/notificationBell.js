@@ -132,7 +132,16 @@ const NotificationBell = {
         async function markAllRead() {
             await apiFetch('/notifications/read_all', { method: 'POST' })
             items.value.forEach(n => { n.is_read = true })
+            window.dispatchEvent(new Event('rz:notif-read'))
         }
+
+        async function markJobsRead() {
+            await apiFetch('/notifications/read_all?jobs=true', { method: 'POST' })
+            items.value.forEach(n => { if (n.notif_type?.startsWith('job')) n.is_read = true })
+            window.dispatchEvent(new Event('rz:notif-read'))
+        }
+
+        const unreadJobCount = computed(() => items.value.filter(n => !n.is_read && n.notif_type?.startsWith('job')).length)
 
         async function clickNotif(notif) {
             await markRead(notif)
@@ -172,7 +181,7 @@ const NotificationBell = {
         return {
             items, loading, activeTab, unreadCount, showBanner,
             filteredItems,
-            openBell, markRead, deleteNotif, markAllRead, clickNotif, dismissBanner,
+            openBell, markRead, deleteNotif, markAllRead, markJobsRead, unreadJobCount, clickNotif, dismissBanner,
             progressFillClass, progressWidth,
             bubbleClass, typeLabel, relativeTime,
         }
@@ -195,6 +204,12 @@ const NotificationBell = {
             <i class="fa-solid fa-bell me-2"></i>
             <span>You have <strong>[[ unreadCount ]]</strong> unread notification[[ unreadCount !== 1 ? 's' : '' ]]</span>
             <a href="/notifications/" class="notif-prominent-banner__link">View all</a>
+            <button type="button" class="notif-prominent-banner__action" @click.stop="markAllRead" title="Mark all notifications as read">
+                <i class="fa-solid fa-check-double"></i> Mark all as read
+            </button>
+            <button v-if="unreadJobCount > 0" type="button" class="notif-prominent-banner__action" @click.stop="markJobsRead" title="Mark job notifications as read">
+                <i class="fa-solid fa-gears"></i> Mark jobs as read
+            </button>
             <button class="notif-prominent-banner__dismiss" @click.stop="dismissBanner" title="Dismiss">
                 <i class="fa-solid fa-xmark"></i>
             </button>

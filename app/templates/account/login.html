@@ -16,6 +16,17 @@
       <h1 class="auth-title">Welcome back</h1>
       <p class="auth-subtitle">Log in to your Rulezet account</p>
 
+      {% if first_login %}
+      {# new instance: the first admin's password is in the terminal that started Rulezet #}
+      <div class="auth-first-login" role="note">
+        <div class="auth-first-login__title"><i class="fa-solid fa-terminal me-2"></i>First login on this Rulezet</div>
+        <p>The administrator account is <code>admin@admin.admin</code>. Its password was generated for you and
+          printed in the <strong>terminal where Rulezet was started</strong> (<code>python3 manage.py start-dev</code>),
+          in the yellow <em>First login</em> box.</p>
+        <p class="mb-0">Restart Rulezet to get a new one. You will choose your own password right after logging in.</p>
+      </div>
+      {% endif %}
+
       <form action="" method="post">
         {{ form.hidden_tag() }}
 
