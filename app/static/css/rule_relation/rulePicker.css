@@ -1,0 +1,8 @@
+/* Rule picker modal (js/rule_relation/rulePicker.js): the rules chosen so far above the rule list */
+.rp-count { font-size: .78rem; font-weight: 600; color: var(--subtle-text-color); padding: .1rem .6rem; border-radius: 999px;
+    background: var(--light-bg-color); border: 1px solid var(--border-color); }
+.rp-chosen { display: flex; flex-wrap: wrap; gap: .35rem; }
+.rp-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .15rem .3rem .15rem .65rem; border-radius: 999px; font-size: .8rem; font-weight: 600;
+    color: #0d6efd; background: rgba(13,110,253,.08); border: 1px solid rgba(13,110,253,.25); }
+.rp-chip button { border: 0; background: none; color: inherit; font-size: 1rem; line-height: 1; padding: 0 .25rem; opacity: .7; }
+.rp-chip button:hover { opacity: 1; }

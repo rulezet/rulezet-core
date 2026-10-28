@@ -20,6 +20,7 @@
  * Props:  active, ruleId, modelValue (the form's to_string), csrfToken, author
  * Emits:  update:modelValue, fields (values of the edited rule's fields), ready
  */
+import { linkedRulesPicker } from '/static/js/rule_relation/rulePicker.js'
 import { create_message } from '/static/js/toaster.js'
 
 const { ref, watch, onMounted, onBeforeUnmount, nextTick } = Vue
@@ -48,6 +49,7 @@ export default {
         ruleId:     { type: [String, Number], required: true },
         modelValue: { type: String, default: '' },
         csrfToken:  { type: String, default: '' },
+        tests:      { type: Boolean, default: false },
         author:     { type: String, default: '' },
     },
     emits: ['update:modelValue', 'fields', 'ready'],
@@ -155,6 +157,8 @@ export default {
                     value: buildDocument(props.modelValue, deps.value.map(d => d.content)),
                     // an existing rule: fields are stored by Rulezet, the rule text is only touched on request
                     fieldsReport: false,
+                    pickValues: linkedRulesPicker(props.csrfToken, [Number(props.ruleId)]),   // "Linked rules" → Browse: Rulezet's rule list in a modal
+                    tests: props.tests ? 'auto' : false,      // tests on samples: Rulezet setting editor.test_access
                     toast: (message, tone) => create_message(message, { success: 'success', warning: 'warning', error: 'danger' }[tone] || 'info'),
                 })
                 editor.on('fields', (payload) => {

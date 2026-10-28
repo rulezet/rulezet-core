@@ -28,7 +28,7 @@ SYNC = "/api/sync"
 BAD_KEY = {"X-API-KEY": "no-such-key"}
 
 RULE_FIELDS = {"uuid", "format", "title", "description", "to_string", "author", "version", "license", "source",
-               "tags", "cve_ids", "attack_ids", "last_modif", "created_at", "update_history"}
+               "tags", "cve_ids", "attack_ids", "references_manual", "last_modif", "created_at", "update_history"}
 BUNDLE_FIELDS = {"uuid", "name", "description", "rules", "tags", "vulnerability_identifiers", "updated_at",
                  "created_at", "structure"}
 

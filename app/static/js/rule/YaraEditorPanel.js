@@ -21,6 +21,7 @@
  *   csrfToken  String
  *   author     String — offered by the "Set author" rule tool
  */
+import { linkedRulesPicker } from '/static/js/rule_relation/rulePicker.js'
 import EditorImportModal from '/static/js/editor/EditorImportModal.js'
 import { create_message } from '/static/js/toaster.js'
 
@@ -95,6 +96,7 @@ export default {
     props: {
         active:    { type: Boolean, default: false },
         csrfToken: { type: String, default: '' },
+        tests:     { type: Boolean, default: false },
         author:    { type: String, default: '' },
     },
     setup(props) {
@@ -250,6 +252,8 @@ export default {
                     author: props.author || null,
                     host: new lib.EditorServerHost({ baseUrl: '/editor-api', csrfToken: props.csrfToken, name: 'Rulezet' }),
                     draftKey: 'rulezet-create-yara',
+                    pickValues: linkedRulesPicker(props.csrfToken),   // "Linked rules" → Browse: Rulezet's rule list in a modal
+                    tests: props.tests ? 'auto' : false,      // tests on samples: Rulezet setting editor.test_access
                     lockPasted: true,          // a pasted rule keeps its text; unlock it to edit
                     toast: (message, tone) => create_message(message, TOAST_CLASS[tone] || 'info'),   // Rulezet's own toasts
                     buttons: [{

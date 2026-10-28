@@ -5,6 +5,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/license-input.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule_relation/rulePicker.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/yara_edit_panel.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/rule_metadata.css') }}">
 <style>
@@ -296,7 +297,7 @@
                                 {% if not restricted_edit %}
                                 <yara-edit-rule-panel v-if="isYara && yaraTabOpened" v-show="editorTab === 'yara'" ref="yaraPanel"
                                     :active="editorTab === 'yara'" :rule-id="ruleId" v-model="currentRule.to_string"
-                                    @ready="pushFormToPanel" @fields="pullPanelToForm"
+                                    @ready="pushFormToPanel" @fields="pullPanelToForm" :tests="{{ can_use_tests | tojson }}"
                                     csrf-token="{{ csrf_token() }}" author="{{ ((current_user.first_name or '') ~ ' ' ~ (current_user.last_name or ''))|trim or current_user.get_username() }}">
                                 </yara-edit-rule-panel>
                                 {% endif %}

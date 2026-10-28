@@ -245,11 +245,15 @@
         "label": "Linked rules",
         "type": "list",
         "suggest": true,
+        "picker": true,
+        "insertable": true,
+        "insertMax": 10,
+        "insertTotalMax": 30,
         "free": false,
         "max": 20,
         "chipDetail": true,
         "placeholder": "Search a rule by title…",
-        "help": "Rules this one is linked to, as on the manual form (at most 20). Pick the relation on each chip.",
+        "help": "Rules this one is linked to, as on the manual form (at most 20): search by title, or Browse to choose in the full rule list with its filters. Pick the relation on each chip.",
         "kinds": [
           {
             "value": "references",

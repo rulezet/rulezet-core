@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/license-input.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ai-thinking-steps.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule_relation/rulePicker.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/editor/editor-ui.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/rule-import-preview.css') }}">
 <style>
@@ -341,6 +342,7 @@
         <div class="card-body p-4" style="position: relative; z-index: 1;">
           <yara-editor-panel
             :active="activeTab === 'yara_editor'"
+            :tests="{{ can_use_tests | tojson }}"
             csrf-token="{{ csrf_token() }}"
             author="{{ ((current_user.first_name or "") ~ " " ~ (current_user.last_name or ""))|trim or current_user.get_username() }}"></yara-editor-panel>
         </div>
