@@ -4,6 +4,8 @@ from flask import Blueprint, jsonify, render_template, request
 from flask_login import current_user, login_required
 from rulezet_editor import create_blueprint
 
+from app.features.rule_tester import sample_test_core as SampleTests
+
 from . import editor_core as EditorModel
 from . import editor_jobs as EditorJobs
 
@@ -21,6 +23,11 @@ editor_blueprint = create_blueprint(EditorModel.backend, name='editor_api',
 def _login_required():
     if not current_user.is_authenticated:
         return jsonify({'error': 'Log in to use the editor.'}), 401
+    # tests on samples: only for who the admin allows (setting editor.test_access)
+    if request.path.startswith('/editor-api/test') and not SampleTests.can_use_tests(current_user):
+        if request.method == 'GET' and request.path.rstrip('/').endswith('/sets'):
+            return jsonify({'available': False, 'sets': []})
+        return jsonify({'error': 'Tests on samples are not available.'}), 403
     return None
 
 

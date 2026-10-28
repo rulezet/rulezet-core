@@ -459,6 +459,22 @@
                                     </span>
                                 </div>
                             </div>
+                            <!-- tests on samples: who may use them (setting editor.test_access) -->
+                            <div class="config-row">
+                                <div class="config-row__key">Rule tests on samples</div>
+                                <div class="config-row__value">
+                                    <div class="settings-segmented" role="radiogroup" aria-label="Rule tests on samples">
+                                        <button v-for="m in TEST_ACCESS" :key="m.id" type="button" role="radio"
+                                                :aria-checked="config.app.rule_tests_access === m.id"
+                                                :class="{ on: config.app.rule_tests_access === m.id }" :disabled="testAccessSaving"
+                                                @click="setTestAccess(m.id)"><i :class="m.icon"></i>[[ m.label ]]</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="small mb-2" style="color:var(--subtle-text-color);font-size:.75rem;">
+                                The YARA editor's Test button, the test step when creating rules, and the Samples tab of rule pages.
+                                <b>Admins only</b> keeps it private while you try it; <b>Everyone</b> makes it public.
+                            </div>
                         </div>
 
                         <!-- Security -->
@@ -1252,7 +1268,7 @@
 
 {% block script %}
 <script type="module">
-const { createApp, ref, computed, reactive } = Vue
+const { createApp, ref, computed, reactive, onMounted } = Vue
 
 createApp({
     delimiters: ['[[', ']]'],
@@ -1537,6 +1553,29 @@ createApp({
             create_message(data.message || (data.success ? 'Saved.' : 'Failed.'), data.success ? 'success-subtle' : 'danger-subtle')
         }
 
+        const TEST_ACCESS = [
+            { id: 'off', label: 'Off', icon: 'fa-solid fa-power-off' },
+            { id: 'admins', label: 'Admins only', icon: 'fa-solid fa-user-shield' },
+            { id: 'everyone', label: 'Everyone', icon: 'fa-solid fa-users' },
+        ]
+        const testAccessSaving = ref(false)
+        async function setTestAccess(mode) {
+            if (config.value.app.rule_tests_access === mode) return
+            testAccessSaving.value = true
+            try {
+                const data = await post('/admin/settings/rule_tests_access', { mode })
+                const { create_message } = await import('/static/js/toaster.js')
+                if (data.success) {
+                    config.value.app.rule_tests_access = data.mode
+                    create_message(`Rule tests on samples: ${TEST_ACCESS.find(m => m.id === data.mode).label}.`, 'success-subtle')
+                } else {
+                    create_message(data.error || 'Failed.', 'danger-subtle')
+                }
+            } finally {
+                testAccessSaving.value = false
+            }
+        }
+
         const emailToggleSaving = ref(false)
         async function toggleEmailFeatures(enabled) {
             emailToggleSaving.value = true
@@ -1623,8 +1662,28 @@ createApp({
         loadSystem()
         loadSubmodules()
 
+        // the open tab follows the address (?tab=config…): a reload or a shared link opens the same one
+        const TAB_LOADERS = { system: null, submodules: loadSubmodules, config: loadConfig, instance: loadInstance }
+        onMounted(() => {
+            const tabs = document.getElementById('settingsTabs')
+            tabs.addEventListener('shown.bs.tab', (e) => {
+                const name = (e.target.getAttribute('href') || '').replace('#pane-', '')
+                if (!(name in TAB_LOADERS)) return
+                const url = new URL(window.location.href)
+                if (name === 'system') url.searchParams.delete('tab'); else url.searchParams.set('tab', name)
+                history.replaceState(null, '', url)
+            })
+            const wanted = new URLSearchParams(window.location.search).get('tab')
+            const link = wanted && wanted !== 'system' && wanted in TAB_LOADERS
+                ? tabs.querySelector(`a[href="#pane-${wanted}"]`) : null
+            if (link) {
+                bootstrap.Tab.getOrCreateInstance(link).show()
+                if (TAB_LOADERS[wanted] && wanted !== 'submodules') TAB_LOADERS[wanted]()    // submodules load at start already
+            }
+        })
+
         return {
-            emailToggleSaving, toggleEmailFeatures,
+            emailToggleSaving, toggleEmailFeatures, TEST_ACCESS, testAccessSaving, setTestAccess,
             system, systemLoading,
             packages, packagesLoading, pkgSearch, filteredPackages, loadPackages,
             createPkgJob, confirmPkgUninstall, pkgToUninstall, doPkgUninstall,

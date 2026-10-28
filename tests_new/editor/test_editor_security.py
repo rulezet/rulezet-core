@@ -42,3 +42,31 @@ def test_this_servers_own_files_are_only_used_when_an_admin_allows_it(clients, m
     assert "benign-usr-bin" not in ids()                                    # off by default
     monkeypatch.setattr(app_settings, "get_setting", lambda k: True if k == "editor.test_system_sets" else real(k))
     assert "benign-usr-bin" in ids()
+
+
+@pytest.mark.parametrize("mode,user_ok,admin_ok", [("off", False, False), ("admins", False, True), ("everyone", True, True)])
+def test_who_may_use_the_tests(clients, users, monkeypatch, mode, user_ok, admin_ok):
+    from app.features.rule_tester import sample_test_core as SampleTests
+    from tests_new.helpers.rules import make_rule
+    monkeypatch.setattr(SampleTests, "test_access", lambda: mode)
+    rule = make_rule(users.owner)
+    for who, allowed in (("user", user_ok), ("admin", admin_ok)):
+        sets = clients[who].get("/editor-api/test/sets?format=yara").json
+        assert (sets["available"] if EditorModel.tests else allowed) == allowed or not EditorModel.tests
+        start = clients[who].post("/editor-api/test/", json={"format": "yara", "text": "rule x { condition: true }", "sets": []})
+        assert (start.status_code == 403) == (not allowed)
+        assert (clients[who].get(f"/rule/detail_rule/{rule.id}/samples").status_code == 200) == allowed
+        page = clients[who].get(f"/rule/detail_rule/{rule.id}").get_data(as_text=True)
+        assert (f"/rule/detail_rule/{rule.id}/samples" in page) == allowed
+    assert clients["anonymous"].get(f"/rule/detail_rule/{rule.id}/samples").status_code == (200 if mode == "everyone" else 404)
+
+
+def test_admin_sets_the_access_from_the_settings_page(clients):
+    from app.core.utils.app_settings import clear_cache, get_setting
+    assert get_setting("editor.test_access") == "admins"                       # private by default
+    assert clients["user"].post("/admin/settings/rule_tests_access", json={"mode": "off"}).status_code == 403
+    res = clients["admin"].post("/admin/settings/rule_tests_access", json={"mode": "everyone"})
+    assert res.json == {"success": True, "mode": "everyone"}
+    clear_cache()
+    assert get_setting("editor.test_access") == "everyone"
+    assert clients["admin"].post("/admin/settings/rule_tests_access", json={"mode": "nope"}).status_code == 400

@@ -271,10 +271,16 @@ def create_app(start_worker=True):
                 themes_js = [{'css_key': t.css_key, 'is_dark': t.is_dark, 'name': t.name} for t in themes if not t.is_builtin]
             except Exception:
                 pass
+        try:
+            from app.features.rule_tester.sample_test_core import can_use_tests
+            tests_allowed = can_use_tests(_cu)       # setting editor.test_access: editor Test button, Samples tab
+        except Exception:
+            tests_allowed = False
         return {
             'user_config': config,
             'custom_themes_for_js': themes_js,
             'is_admin': _cu.is_authenticated and _cu.is_admin(),
+            'can_use_tests': tests_allowed,
         }
 
     @app.context_processor

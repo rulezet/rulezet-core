@@ -1611,6 +1611,23 @@ def admin_settings_email_toggle():
     return jsonify({'success': True, **email_status()})
 
 
+@home_blueprint.route('/admin/settings/rule_tests_access', methods=['POST'])
+@login_required
+def admin_settings_rule_tests_access():
+    """Who may use the tests on samples: off | admins | everyone (setting editor.test_access) —
+    the editor's Test button, the test step of Create, the Samples tab and badge of rule pages."""
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    from .core.utils.activity_log import log_activity
+    from .features.rule_tester import sample_test_core as SampleTests
+    mode = (request.get_json(silent=True) or {}).get('mode')
+    if mode not in SampleTests.TEST_ACCESS_MODES:
+        return jsonify({'success': False, 'error': 'Unknown mode.'}), 400
+    SampleTests.set_test_access(mode, user_id=current_user.id)
+    log_activity('admin.rule_tests_access', f"Rule tests on samples: {mode}", is_public=False)
+    return jsonify({'success': True, 'mode': mode})
+
+
 @home_blueprint.route('/admin/settings/chatbot_toggle', methods=['POST'])
 @login_required
 def admin_settings_chatbot_toggle():

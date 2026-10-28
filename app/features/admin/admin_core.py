@@ -206,6 +206,11 @@ def update_submodule(path: str) -> dict:
 # App configuration
 # ──────────────────────────────────────────────
 
+def _rule_tests_access():
+    from app.features.rule_tester.sample_test_core import test_access
+    return test_access()
+
+
 def get_app_config() -> dict:
     """Return current application configuration (sensitive values masked)."""
     from app.core.utils.mail_status import email_status
@@ -237,6 +242,7 @@ def get_app_config() -> dict:
             'flask_port': cfg.get('FLASK_PORT', 7009),
             'debug': cfg.get('DEBUG', False),
             'environment': os.environ.get('FLASKENV', 'unknown'),
+            'rule_tests_access': _rule_tests_access(),
             'secret_key_set': bool(secret),
             # Nothing derived from the key itself (no prefix, no length).
             'secret_key_preview': '••••••••••••' if secret else 'not set',

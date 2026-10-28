@@ -254,3 +254,33 @@ def record_saved_rule(rule, user):
                 return 0
             return record_rule_results(row.state, [(rule.corpus_identifier or rule.title, rule)])
     return 0
+
+
+TEST_ACCESS_MODES = ('off', 'admins', 'everyone')
+
+
+def test_access():
+    """Who may use the tests on samples (setting editor.test_access): off | admins | everyone."""
+    from app.core.utils.app_settings import get_setting
+    try:
+        mode = str(get_setting('editor.test_access') or 'admins')
+    except Exception:
+        mode = 'admins'
+    return mode if mode in TEST_ACCESS_MODES else 'admins'
+
+
+def can_use_tests(user):
+    """May this user run tests, and see test results (Samples tab, badge)?"""
+    mode = test_access()
+    if mode == 'everyone':
+        return True
+    if mode == 'admins':
+        return bool(user and getattr(user, 'is_authenticated', False) and user.is_admin())
+    return False
+
+
+def set_test_access(mode, user_id=None):
+    from app.core.utils.app_settings import set_setting
+    if mode not in TEST_ACCESS_MODES:
+        raise ValueError(mode)
+    set_setting('editor.test_access', mode, user_id=user_id)

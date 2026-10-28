@@ -1,0 +1,7 @@
+{
+  "label": "Rule tests on samples",
+  "category": "Editor",
+  "description": "Who may use the tests on sample sets: \"off\" (nobody: no Test button, no test step when creating, no Samples tab nor badge on rule pages), \"admins\" (admins only, the feature stays private), \"everyone\" (every logged-in user runs tests; results are public on rule pages). Also set from Admin → Settings → Configuration → Application.",
+  "public": false,
+  "value": "admins"
+}

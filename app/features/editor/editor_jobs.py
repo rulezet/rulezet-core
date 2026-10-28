@@ -109,6 +109,9 @@ def handle_editor_yara_import(job, app):
 def _test_on_samples(plan, payload, user, step):
     """Runs the document on the sample sets chosen by the setting (benign by default: false
     positives). A warning only, unless block_on_false_positives. Returns the run (or None)."""
+    if not SampleTests.can_use_tests(user):
+        step('samples', 'skipped', 'tests on samples are not enabled for you')
+        return None
     conf = get_setting('editor.test_on_create') or {}
     if not any(e['status'] in ('new', 'update', 'proposal') for e in plan['rules']):
         step('samples', 'skipped', 'nothing new to test: every rule is already in Rulezet')

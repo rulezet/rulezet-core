@@ -980,7 +980,7 @@ def detail_rule_by_uuid(rule_uuid):
                                rule_to_json=rule_to_json, active_tab=active_tab,
                                current_user_vote=current_user_vote, rule_risk=rule_risk,
                                mirror_github_urls=get_mirror_github_urls(rule),
-                               sample_result=SampleTests.latest_result(rule),
+                               sample_result=SampleTests.latest_result(rule) if SampleTests.can_use_tests(current_user) else None,
                                rule_metadata=display_metadata(rule.extra_metadata),
                                **_nav_counts(rule.id))
     return render_template("404.html")
@@ -1060,7 +1060,8 @@ def _nav_counts(rule_id):
         'test_count':          _rule_test_count(rule_id),
         'ai_analysis_count':   _rule_ai_analysis_count(rule_id),
         'linked_rules_count':  _rule_linked_rules_count(rule_id),
-        'sample_tests_count':  SampleTests.rule_sample_count(rule_id),
+        # -1: the Samples tab is hidden (tests not enabled for this viewer, setting editor.test_access)
+        'sample_tests_count':  SampleTests.rule_sample_count(rule_id) if SampleTests.can_use_tests(current_user) else -1,
     }
 
 
@@ -1112,7 +1113,7 @@ def detail_rule(rule_id)-> render_template:
                                rule_to_json=rule_to_json, active_tab=active_tab,
                                current_user_vote=current_user_vote, rule_risk=rule_risk,
                                mirror_github_urls=get_mirror_github_urls(rule),
-                               sample_result=SampleTests.latest_result(rule),
+                               sample_result=SampleTests.latest_result(rule) if SampleTests.can_use_tests(current_user) else None,
                                rule_metadata=display_metadata(rule.extra_metadata),
                                **_nav_counts(rule.id))
     return render_template("404.html")
@@ -1215,6 +1216,8 @@ def detail_rule_samples(rule_id):
         return render_template("404.html")
     if rule.is_deleted:
         return render_template("rule/rule_in_trash.html", rule=rule)
+    if not SampleTests.can_use_tests(current_user):
+        return render_template("404.html"), 404
     return render_template("rule/detail_rule/detail_rule_samples.html", rule=rule,
                            samples=SampleTests.rule_sample_details(rule, request.args.get('result', type=int)),
                            **_nav_counts(rule.id))
