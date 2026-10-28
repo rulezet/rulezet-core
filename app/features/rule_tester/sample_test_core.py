@@ -259,6 +259,33 @@ def record_saved_rule(rule, user):
 TEST_ACCESS_MODES = ('off', 'admins', 'everyone')
 
 
+def editor_access():
+    """Who may use the YARA editor (setting editor.access): off | admins | everyone."""
+    from app.core.utils.app_settings import get_setting
+    try:
+        mode = str(get_setting('editor.access') or 'everyone')
+    except Exception:
+        mode = 'everyone'
+    return mode if mode in TEST_ACCESS_MODES else 'everyone'
+
+
+def can_use_editor(user):
+    """May this user open the YARA editor (create and edit pages)?"""
+    mode = editor_access()
+    if mode == 'everyone':
+        return bool(user and getattr(user, 'is_authenticated', False))
+    if mode == 'admins':
+        return bool(user and getattr(user, 'is_authenticated', False) and user.is_admin())
+    return False
+
+
+def set_editor_access(mode, user_id=None):
+    from app.core.utils.app_settings import set_setting
+    if mode not in TEST_ACCESS_MODES:
+        raise ValueError(mode)
+    set_setting('editor.access', mode, user_id=user_id)
+
+
 def test_access():
     """Who may use the tests on samples (setting editor.test_access): off | admins | everyone."""
     from app.core.utils.app_settings import get_setting

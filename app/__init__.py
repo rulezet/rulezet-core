@@ -272,15 +272,17 @@ def create_app(start_worker=True):
             except Exception:
                 pass
         try:
-            from app.features.rule_tester.sample_test_core import can_use_tests
+            from app.features.rule_tester.sample_test_core import can_use_editor, can_use_tests
             tests_allowed = can_use_tests(_cu)       # setting editor.test_access: editor Test button, Samples tab
+            editor_allowed = can_use_editor(_cu)     # setting editor.access: YARA editor tabs
         except Exception:
-            tests_allowed = False
+            tests_allowed = editor_allowed = False
         return {
             'user_config': config,
             'custom_themes_for_js': themes_js,
             'is_admin': _cu.is_authenticated and _cu.is_admin(),
             'can_use_tests': tests_allowed,
+            'can_use_editor': editor_allowed,
         }
 
     @app.context_processor

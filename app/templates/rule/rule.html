@@ -145,10 +145,12 @@
     <a href="#" class="dr-nav__item" :class="activeTab === 'json' ? 'active' : ''" @click.prevent="activeTab = 'json'">
       <i class="fas fa-code"></i><span>Json</span>
     </a>
+    {% if can_use_editor %}{# setting editor.access #}
     <a href="#" class="dr-nav__item" :class="activeTab === 'yara_editor' ? 'active' : ''" @click.prevent="activeTab = 'yara_editor'">
       <i class="fas fa-laptop-code"></i><span>YARA editor</span>
       <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill ms-1" style="font-size:.6rem;">BETA</span>
     </a>
+    {% endif %}
     {% if ai_generate_available %}
     <a href="#" class="dr-nav__item" :class="activeTab === 'ai_generate' ? 'active' : ''" @click.prevent="activeTab = 'ai_generate'">
       <i class="fas fa-robot"></i><span>AI</span>
@@ -337,6 +339,7 @@
     </div>
 
     <!-- ── Tab : YARA editor (app/modules/rulezet-editor) ── -->
+    {% if can_use_editor %}
     <div v-show="activeTab === 'yara_editor'">
       <div class="card border-0 card_detail border-top shadow-lg mb-4" style="border-radius: 12px;">
         <div class="card-body p-4" style="position: relative; z-index: 1;">
@@ -348,6 +351,7 @@
         </div>
       </div>
     </div>
+    {% endif %}
 
     <!-- ── Tab 2 : Parse a Rule ── -->
     <div v-show="activeTab === 'parse'">

@@ -1642,6 +1642,23 @@ def admin_settings_rule_tests_access():
     return jsonify({'success': True, 'mode': mode})
 
 
+@home_blueprint.route('/admin/settings/editor_access', methods=['POST'])
+@login_required
+def admin_settings_editor_access():
+    """Who may use the YARA editor: off | admins | everyone (setting editor.access) —
+    the YARA editor tab of the create page and of the edit page."""
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    from .core.utils.activity_log import log_activity
+    from .features.rule_tester import sample_test_core as SampleTests
+    mode = (request.get_json(silent=True) or {}).get('mode')
+    if mode not in SampleTests.TEST_ACCESS_MODES:
+        return jsonify({'success': False, 'error': 'Unknown mode.'}), 400
+    SampleTests.set_editor_access(mode, user_id=current_user.id)
+    log_activity('admin.editor_access', f"YARA editor: {mode}", is_public=False)
+    return jsonify({'success': True, 'mode': mode})
+
+
 @home_blueprint.route('/admin/settings/chatbot_toggle', methods=['POST'])
 @login_required
 def admin_settings_chatbot_toggle():

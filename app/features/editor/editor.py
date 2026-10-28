@@ -23,6 +23,10 @@ editor_blueprint = create_blueprint(EditorModel.backend, name='editor_api',
 def _login_required():
     if not current_user.is_authenticated:
         return jsonify({'error': 'Log in to use the editor.'}), 401
+    # the editor itself: only for who the admin allows (setting editor.access); the Samples tab of
+    # rule pages also calls /editor-api/test, so tests are checked on their own setting below
+    if not request.path.startswith('/editor-api/test') and not SampleTests.can_use_editor(current_user):
+        return jsonify({'error': 'The YARA editor is not available.'}), 403
     # tests on samples: only for who the admin allows (setting editor.test_access)
     if request.path.startswith('/editor-api/test') and not SampleTests.can_use_tests(current_user):
         if request.method == 'GET' and request.path.rstrip('/').endswith('/sets'):

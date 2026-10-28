@@ -271,7 +271,7 @@
                                 {# YARA rules: a second tab with the full rule editor (dependencies, locks,
                                    tests). The classic editor stays the default and keeps posting to_string;
                                    the YARA tab only writes into the same value. #}
-                                {% if not restricted_edit %}
+                                {% if not restricted_edit and can_use_editor %}{# setting editor.access #}
                                 <div v-if="isYara" class="yara-edit-tabs mb-2" role="tablist">
                                     <button type="button" role="tab" class="yara-edit-tab" :class="{ active: editorTab === 'classic' }"
                                             :aria-selected="editorTab === 'classic'" @click="editorTab = 'classic'">
@@ -294,7 +294,7 @@
                                     max-height="80vh">
                                 </smart-editor>
                                 </div>
-                                {% if not restricted_edit %}
+                                {% if not restricted_edit and can_use_editor %}
                                 <yara-edit-rule-panel v-if="isYara && yaraTabOpened" v-show="editorTab === 'yara'" ref="yaraPanel"
                                     :active="editorTab === 'yara'" :rule-id="ruleId" v-model="currentRule.to_string"
                                     @ready="pushFormToPanel" @fields="pullPanelToForm" :tests="{{ can_use_tests | tojson }}"
