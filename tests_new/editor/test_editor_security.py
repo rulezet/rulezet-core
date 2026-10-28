@@ -10,6 +10,12 @@ from tests_new.editor.test_editor_yara_import import body
 INCLUDE = 'include "/etc/passwd"\nrule leak { condition: true }'
 
 
+def _sandbox_runs():
+    """Tests on samples really run here: switched on and the sandbox starts (bubblewrap is often
+    missing or refused on CI runners, where /sets then answers available: false)."""
+    return EditorModel.tests is not None and not EditorModel.tests.unavailable()
+
+
 def test_editor_validation_never_reads_a_server_file(clients):
     res = clients["user"].post("/editor-api/yara/plan", json=body('rule ok_inc { condition: true }') | {"rules": [{"name": "leak", "text": INCLUDE}]})
     text = str(res.json)
@@ -34,8 +40,8 @@ def test_one_create_at_a_time_per_user(clients):
 
 
 def test_this_servers_own_files_are_only_used_when_an_admin_allows_it(clients, monkeypatch):
-    if EditorModel.tests is None:
-        pytest.skip("rule tests are switched off")
+    if not _sandbox_runs():
+        pytest.skip("rule tests switched off or no sandbox on this machine")
     from app.core.utils import app_settings
     real = app_settings.get_setting
     ids = lambda: {s["id"] for s in clients["user"].get("/editor-api/test/sets?format=yara").json["sets"]}   # noqa: E731
@@ -52,7 +58,7 @@ def test_who_may_use_the_tests(clients, users, monkeypatch, mode, user_ok, admin
     rule = make_rule(users.owner)
     for who, allowed in (("user", user_ok), ("admin", admin_ok)):
         sets = clients[who].get("/editor-api/test/sets?format=yara").json
-        assert (sets["available"] if EditorModel.tests else allowed) == allowed or not EditorModel.tests
+        assert sets["available"] == (allowed and _sandbox_runs())
         start = clients[who].post("/editor-api/test/", json={"format": "yara", "text": "rule x { condition: true }", "sets": []})
         assert (start.status_code == 403) == (not allowed)
         assert (clients[who].get(f"/rule/detail_rule/{rule.id}/samples").status_code == 200) == allowed
