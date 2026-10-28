@@ -1,0 +1,198 @@
+{
+  "label": "Tutorial: Rules Explorer",
+  "category": "Tutorial",
+  "description": "Steps of the Tutorial button on the Rules Explorer page (endpoint rule.rules_list). A step: target (CSS selector, empty = centred card), title, text (blank line = new paragraph, **bold**, `code`), roles (optional: anonymous, user, member, admin, perm:<key>), demo (rule / bundle: example shown when the target is missing, e.g. an empty list).",
+  "public": false,
+  "value": {
+    "title": "Rules Explorer",
+    "steps": [
+      {
+        "target": ".explorer-banner",
+        "title": "Every rule in one place",
+        "text": "All public rules of this instance, whatever their format. This tour goes through the search, every filter and what a rule card tells you."
+      },
+      {
+        "target": ".rl-toolbar .dt-search",
+        "title": "Search",
+        "text": "Type words, a rule name, a CVE or a technique id. The search runs on the field chosen in the filters (all fields by default) and the list updates as you type."
+      },
+      {
+        "target": "[data-tour=\"rl-sort\"]",
+        "title": "Sort",
+        "text": "Newest, recently updated, most liked, best quality… the order of the cards.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-view-toggle\"]",
+        "title": "Cards or table",
+        "text": "Cards show a preview of each rule. The table shows more rules at once: the column picker next to it chooses which columns to show.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-filters-btn\"]",
+        "title": "Filters",
+        "text": "Opens the filter box. The number on the button is how many filters are active. Every filter is kept in the address of the page: copy it and others see the same list.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-filter-panel\"]",
+        "open": "[data-tour=\"rl-filters-btn\"]",
+        "title": "The filter box",
+        "text": "Narrow the list down by **format**, **quality score**, **source**, **CVE**, **ATT&CK technique**, **licence**, **tags**, **author** and **risk level**, plus quick switches (only rules with a CVE, with tags, mapped to ATT&CK…). Once a filter is set, export the result or turn it into a bundle."
+      },
+      {
+        "target": "[data-tour=\"rl-fp-quick\"]",
+        "open": "[data-tour=\"rl-filters-btn\"]",
+        "title": "Format and quick options",
+        "text": "**Format**: only YARA, Sigma, Suricata…\n\n**Search in**: where the search box looks (title, description, content, author…).\n\nThe switches keep only rules that: match exactly, are linked to other rules, have a CVE, have tags, have a real licence, are mapped to ATT&CK.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-fp-quality\"]",
+        "open": "[data-tour=\"rl-filters-btn\"]",
+        "title": "Quality score",
+        "text": "Keep only rules whose quality score (0 to 100) is in this range — e.g. 70 to 100 for the best ones.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-fp-sources\"]",
+        "open": "[data-tour=\"rl-filters-btn\"]",
+        "title": "Sources",
+        "text": "Where the rules come from: a Git repository, an import, a file. Pick one or several.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-fp-vulns\"]",
+        "open": "[data-tour=\"rl-filters-btn\"]",
+        "title": "Vulnerabilities",
+        "text": "Rules that detect given CVEs or GHSA ids.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-fp-attacks\"]",
+        "open": "[data-tour=\"rl-filters-btn\"]",
+        "title": "ATT&CK techniques",
+        "text": "Rules mapped to given MITRE ATT&CK techniques (T1059, Command and Scripting Interpreter…).",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-fp-licenses\"]",
+        "open": "[data-tour=\"rl-filters-btn\"]",
+        "title": "Licences",
+        "text": "Only rules under the licences you can use (MIT, DRL, GPL…).",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-fp-tags\"]",
+        "open": "[data-tour=\"rl-filters-btn\"]",
+        "title": "Tags",
+        "text": "Malware families, platforms, TLP / PAP levels, threat actors… Several tags = rules having all of them.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-fp-person\"]",
+        "open": "[data-tour=\"rl-filters-btn\"]",
+        "title": "Author or editor",
+        "text": "Rules written by someone, or published by a given Rulezet user.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-fp-risk\"]",
+        "open": "[data-tour=\"rl-filters-btn\"]",
+        "title": "Risk level",
+        "text": "The risk level computed for each rule (how likely it is to be noisy or dangerous to deploy).",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-fp-export\"]",
+        "open": "[data-tour=\"rl-filters-btn\"]",
+        "title": "Take the result",
+        "text": "Once a filter is set: export the matching rules or turn them into a bundle in one click.",
+        "level": "detail"
+      },
+      {
+        "target": ".rl-alert-row",
+        "title": "Alert me",
+        "roles": [
+          "user"
+        ],
+        "text": "Turn the current filters into an alert: you get a notification each time a new rule matches them."
+      },
+      {
+        "target": ".rl-cards .rl-rule-card",
+        "title": "A rule card",
+        "demo": "rule",
+        "text": "One card per rule. Click its title to open the rule; the parts of the card follow."
+      },
+      {
+        "target": "[data-tour=\"rl-card-badges\"]",
+        "title": "Badges",
+        "text": "Format, version and quality of the rule at a glance.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-card-title\"]",
+        "title": "Title, author and date",
+        "text": "Who published it and when it last changed.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-card-desc\"]",
+        "title": "Description",
+        "text": "What the rule detects, in the author's words.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-card-cves\"]",
+        "title": "CVEs",
+        "text": "Vulnerabilities this rule detects — click one to open its response kit.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-card-attack\"]",
+        "title": "ATT&CK",
+        "text": "Techniques this rule detects — click one to see every rule for it.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-card-tags\"]",
+        "title": "Tags",
+        "text": "Click a tag to filter the list on it.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-card-meta\"]",
+        "title": "Details",
+        "text": "Source, licence and other details of the rule.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-card-votes\"]",
+        "title": "Votes",
+        "text": "What the community thinks of the rule. Logged-in users can vote.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-card-collapse\"]",
+        "title": "Peek at the rule",
+        "text": "Shows the rule's content right in the list, without opening it.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-card-favorite\"]",
+        "title": "Favorite",
+        "roles": [
+          "user"
+        ],
+        "text": "Keeps the rule in your favorites (your account page).",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rl-card-more\"]",
+        "title": "More actions",
+        "text": "Download, copy, add to a bundle, report…",
+        "level": "detail"
+      }
+    ]
+  }
+}

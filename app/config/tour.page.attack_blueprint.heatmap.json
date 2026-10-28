@@ -1,0 +1,31 @@
+{
+  "label": "Tutorial: ATT&CK",
+  "category": "Tutorial",
+  "description": "Steps of the Tutorial button on the ATT&CK page (endpoint attack_blueprint.heatmap). A step: target (CSS selector, empty = centred card), title, text (blank line = new paragraph, **bold**, `code`), roles (optional: anonymous, user, member, admin, perm:<key>), demo (rule / bundle: example shown when the target is missing, e.g. an empty list).",
+  "public": false,
+  "value": {
+    "title": "ATT&CK",
+    "steps": [
+      {
+        "target": ".explorer-banner",
+        "title": "MITRE ATT&CK coverage",
+        "text": "How well the rules of this instance cover the ATT&CK techniques adversaries use."
+      },
+      {
+        "target": "[data-tour=\"attack-views\"]",
+        "title": "Three views",
+        "text": "**Matrix**: tactics in columns, techniques coloured by number of rules. **Graph**: techniques and the rules linking them. **Charts**: top techniques, coverage per tactic, covered vs not covered."
+      },
+      {
+        "target": "[data-tour=\"attack-search\"]",
+        "title": "Find a technique",
+        "text": "Search by id (T1059, T1059.001) or name (PowerShell); the matrix highlights the matches."
+      },
+      {
+        "target": "[data-tour=\"attack-matrix\"]",
+        "title": "Coverage heatmap",
+        "text": "The darker a technique, the more rules detect it; grey ones have none — gaps to fill. Click a technique to open its page: every rule for it, coverage per format, a zip and a bundle."
+      }
+    ]
+  }
+}

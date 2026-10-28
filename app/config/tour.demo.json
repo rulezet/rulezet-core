@@ -1,0 +1,53 @@
+{
+  "label": "Tutorial: example rule and bundle",
+  "category": "Tutorial",
+  "description": "What the tour shows when this instance has no rule or no bundle yet (an example, never saved): on the demo pages /tour/demo/rule and /tour/demo/bundle, and in the steps of empty lists.",
+  "public": false,
+  "value": {
+    "rule": {
+      "title": "Example_Suspicious_PowerShell_Download",
+      "format": "yara",
+      "author": "Rulezet tutorial",
+      "version": "1.0",
+      "description": "Flags PowerShell scripts that download and run a payload in one line (IEX + DownloadString) — a classic first stage of many intrusions.",
+      "tags": [
+        "tlp:clear",
+        "pap:clear",
+        "malware-type:downloader",
+        "os:windows"
+      ],
+      "cves": [],
+      "techniques": [
+        "T1059.001",
+        "T1105"
+      ],
+      "content": "rule Example_Suspicious_PowerShell_Download\n{\n    meta:\n        description = \"PowerShell download-and-run one-liner\"\n        author = \"Rulezet tutorial\"\n    strings:\n        $iex = \"IEX\" nocase\n        $dl1 = \"DownloadString\" nocase\n        $dl2 = \"DownloadFile\" nocase\n        $web = \"Net.WebClient\" nocase\n    condition:\n        $iex and $web and 1 of ($dl*)\n}\n",
+      "votes_up": 12,
+      "votes_down": 1
+    },
+    "bundle": {
+      "title": "Example: Windows initial access kit",
+      "author": "Rulezet tutorial",
+      "description": "A bundle groups rules of any format around one subject — here, the first steps of an intrusion on Windows — so a team can review, download or deploy them together.",
+      "tags": [
+        "tlp:clear",
+        "os:windows",
+        "kill-chain:delivery"
+      ],
+      "rules": [
+        {
+          "title": "Example_Suspicious_PowerShell_Download",
+          "format": "yara"
+        },
+        {
+          "title": "Office spawning a script interpreter",
+          "format": "sigma"
+        },
+        {
+          "title": "HTTP download of an executable after a macro",
+          "format": "suricata"
+        }
+      ]
+    }
+  }
+}

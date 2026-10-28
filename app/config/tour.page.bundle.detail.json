@@ -1,0 +1,131 @@
+{
+  "label": "Tutorial: Bundle",
+  "category": "Tutorial",
+  "description": "Steps of the Tutorial button on the Bundle page (endpoint bundle.detail). A step: target (CSS selector, empty = centred card), title, text (blank line = new paragraph, **bold**, `code`), roles (optional: anonymous, user, member, admin, perm:<key>), demo (rule / bundle: example shown when the target is missing, e.g. an empty list).",
+  "public": false,
+  "value": {
+    "title": "Bundle",
+    "steps": [
+      {
+        "target": ".explorer-banner",
+        "title": "A bundle",
+        "text": "Rules of any format gathered around one subject. This tour goes through its actions and every tab."
+      },
+      {
+        "target": "[data-tour=\"bundle-description\"]",
+        "title": "What the bundle is for",
+        "text": "Its description, written by its author."
+      },
+      {
+        "target": "[data-tour=\"bundle-kpis\"]",
+        "title": "At a glance",
+        "text": "Number of rules, formats, votes and downloads."
+      },
+      {
+        "target": "[data-tour=\"bundle-vote\"]",
+        "title": "Vote",
+        "text": "Like or dislike the bundle. Hover the numbers to see who voted.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"bundle-download\"]",
+        "title": "Download",
+        "text": "**Everything** (README, description, tags and every file), the **structure** (its folders as a zip) or just the **rules** with their JSON metadata.",
+        "level": "detail"
+      },
+      {
+        "target": "button:has([data-tour=\"bundle-share\"])",
+        "title": "Share",
+        "text": "A private link: whoever has it can see the bundle even when it is private.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"bundle-edit\"]",
+        "title": "Edit",
+        "text": "Change its name, description, visibility, rules and folders — its owner and admins only.",
+        "level": "detail"
+      },
+      {
+        "target": "button:has([data-tour=\"bundle-report\"])",
+        "title": "Report",
+        "text": "Something wrong with this bundle? Tell the administrators.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"bundle-tags\"]",
+        "title": "Tags",
+        "text": "Tags of the bundle; click one to find the other bundles and rules with it."
+      },
+      {
+        "target": "[data-tour=\"bundle-tabs\"]",
+        "title": "Inside the bundle",
+        "text": "Each tab shows one side of the bundle."
+      },
+      {
+        "target": "[data-tour=\"btab-structure\"]",
+        "title": "Structure",
+        "text": "The bundle's folders and files, as a tree — the layout you get in the zip.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"btab-rules\"]",
+        "title": "Rules",
+        "text": "Every rule of the bundle, with the usual search and filters.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"btab-files\"]",
+        "title": "Files & documents",
+        "text": "Notes, reports and other non-rule files of the bundle.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"btab-attack\"]",
+        "title": "ATT&CK coverage",
+        "text": "Which techniques the bundle's rules detect, on the ATT&CK matrix.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"btab-releases\"]",
+        "title": "Releases",
+        "text": "Frozen versions of the bundle: what was deployed, exactly, at a given date.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"btab-health\"]",
+        "title": "Health",
+        "text": "Checks before deploying: rules that fail to compile, duplicates, missing dependencies…",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"btab-notes\"]",
+        "title": "Notes",
+        "text": "Known issues and remarks from the community about the bundle.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"btab-ai\"]",
+        "title": "AI analysis",
+        "text": "Rulezy's review of the whole bundle: coverage, gaps, suggestions.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"btab-history\"]",
+        "title": "History",
+        "text": "Every change made to the bundle.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"btab-misp\"]",
+        "title": "MISP event",
+        "text": "The bundle as a MISP event, ready to push to a connected MISP instance.",
+        "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"bundle-comments\"]",
+        "title": "Discussion",
+        "text": "Comments on the bundle."
+      }
+    ]
+  }
+}

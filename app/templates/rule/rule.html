@@ -129,24 +129,24 @@
 
 
 
-  <nav class="dr-nav mb-3">
+  <nav data-tour="create-tabs" class="dr-nav mb-3">
     <a href="#" class="dr-nav__item" :class="activeTab === 'manual' ? 'active' : ''" @click.prevent="activeTab = 'manual'">
       <i class="fas fa-pen-to-square"></i><span>Manual</span>
     </a>
-    <a href="#" class="dr-nav__item" :class="activeTab === 'parse' ? 'active' : ''" @click.prevent="activeTab = 'parse'">
+    <a data-tour="create-tab-parse" href="#" class="dr-nav__item" :class="activeTab === 'parse' ? 'active' : ''" @click.prevent="activeTab = 'parse'">
       <i class="fas fa-wand-magic-sparkles"></i><span>Parse</span>
     </a>
-    <a href="#" class="dr-nav__item" :class="activeTab === 'github' ? 'active' : ''" @click.prevent="activeTab = 'github'">
+    <a data-tour="create-tab-git" href="#" class="dr-nav__item" :class="activeTab === 'github' ? 'active' : ''" @click.prevent="activeTab = 'github'">
       <i class="fa-brands fa-git-alt"></i><span>Git</span>
     </a>
-    <a href="#" class="dr-nav__item" :class="activeTab === 'zip' ? 'active' : ''" @click.prevent="activeTab = 'zip'">
+    <a data-tour="create-tab-zip" href="#" class="dr-nav__item" :class="activeTab === 'zip' ? 'active' : ''" @click.prevent="activeTab = 'zip'">
       <i class="fas fa-file-zipper"></i><span>Zip</span>
     </a>
     <a href="#" class="dr-nav__item" :class="activeTab === 'json' ? 'active' : ''" @click.prevent="activeTab = 'json'">
       <i class="fas fa-code"></i><span>Json</span>
     </a>
     {% if can_use_editor %}{# setting editor.access #}
-    <a href="#" class="dr-nav__item" :class="activeTab === 'yara_editor' ? 'active' : ''" @click.prevent="activeTab = 'yara_editor'">
+    <a data-tour="create-tab-editor" href="#" class="dr-nav__item" :class="activeTab === 'yara_editor' ? 'active' : ''" @click.prevent="activeTab = 'yara_editor'">
       <i class="fas fa-laptop-code"></i><span>YARA editor</span>
       <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill ms-1" style="font-size:.6rem;">BETA</span>
     </a>
@@ -197,7 +197,7 @@
           </div>
 
           <!-- Identity -->
-          <p class="form-section-title"><i class="fas fa-id-card me-1"></i>Identity</p>
+          <p data-tour="create-identity" class="form-section-title"><i class="fas fa-id-card me-1"></i>Identity</p>
           <div class="row g-3 mb-4">
             <div class="col-md-6">
               <div class="d-flex align-items-center gap-1 mb-1">
@@ -242,7 +242,7 @@
           </div>
 
           <!-- Classification -->
-          <p class="form-section-title mt-2"><i class="fas fa-layer-group me-1"></i>Classification</p>
+          <p data-tour="create-classification" class="form-section-title mt-2"><i class="fas fa-layer-group me-1"></i>Classification</p>
           <div class="row mb-3">
             <div class="col-12">
               <tag-input v-model="selectedTags" label="Rule Tags" :user-id="{{current_user.id}}"
@@ -299,7 +299,7 @@
           </div>
 
           <!-- Rule Content -->
-          <p class="form-section-title"><i class="fas fa-code me-1"></i>Rule Content</p>
+          <p data-tour="create-content" class="form-section-title"><i class="fas fa-code me-1"></i>Rule Content</p>
           <div class="mb-4">
             <div class="d-flex align-items-center gap-1 mb-1">
               <label class="form-label-styled mb-0" for="editor">{{ form.to_string.label.text }}<span class="req-badge">required</span></label>

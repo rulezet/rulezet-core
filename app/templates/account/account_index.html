@@ -189,7 +189,7 @@
     </nav>
 
     <!-- ── Profile hero card (same pattern as account/detail_user.html) ── -->
-    <div class="ud-profile-hero mb-4">
+    <div data-tour="account-hero" class="ud-profile-hero mb-4">
         <div class="ud-profile-hero-bg"></div>
         <div class="ud-profile-hero-body">
 
@@ -272,17 +272,17 @@
     </div>
 
     <!-- ── Tabs ── -->
-    <div class="dr-nav mb-4">
-        <button type="button" class="dr-nav__item" :class="{ active: activeTab==='info' }" @click="activeTab='info'">
+    <div data-tour="account-tabs" class="dr-nav mb-4">
+        <button type="button" class="dr-nav__item" data-tour="atab-info" :class="{ active: activeTab==='info' }" @click="activeTab='info'">
             <i class="fa-solid fa-circle-user"></i><span>Profile</span>
         </button>
-        <button type="button" class="dr-nav__item" :class="{ active: activeTab==='follow' }" @click="activeTab='follow'; loadFollow()">
+        <button type="button" class="dr-nav__item" data-tour="atab-follow" :class="{ active: activeTab==='follow' }" @click="activeTab='follow'; loadFollow()">
             <i class="fa-solid fa-users"></i><span>Community</span>
             <span v-if="followersList.length + followingList.length > 0" class="dr-nav__badge">
                 [[ followersList.length + followingList.length ]]
             </span>
         </button>
-        <button type="button" class="dr-nav__item" :class="{ active: activeTab==='comments' }" @click="activeTab='comments'">
+        <button type="button" class="dr-nav__item" data-tour="atab-comments" :class="{ active: activeTab==='comments' }" @click="activeTab='comments'">
             <i class="fa-regular fa-comment"></i><span>Comments</span>
             <span v-if="myCommentCount > 0" class="dr-nav__badge">[[ myCommentCount ]]</span>
         </button>
@@ -420,7 +420,7 @@
         </div>
 
         <!-- ── API access ── -->
-        <div class="ud-section-header mb-3">
+        <div data-tour="account-api" class="ud-section-header mb-3">
             <i class="fas fa-key ud-section-icon"></i>
             <div>
                 <div class="ud-section-title">API Access</div>
