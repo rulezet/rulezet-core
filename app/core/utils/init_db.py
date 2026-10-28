@@ -34,6 +34,29 @@ def show_admin_first_connection(admin , raw_password):
 #   For the reel web site   #
 #############################
 
+# the first admin's placeholder address — replaced by a real one at first login (with the password)
+DEFAULT_ADMIN_EMAIL = "admin@admin.admin"
+
+
+def renew_first_admin_password():
+    """The first admin still has to change the password generated at install time (it was only
+    printed once, in the install terminal): give it a fresh one and print it, so whoever starts
+    Rulezet can log in. Nothing happens once the admin has chosen a password."""
+    user = User.query.filter_by(admin=True, must_change_password=True).order_by(User.id).first()
+    if not user:
+        return
+    raw_password = generate_api_key()
+    user.password = raw_password
+    db.session.commit()
+    YELLOW, BOLD, RESET = "\033[93m", "\033[1m", "\033[0m"
+    print(f"\n{YELLOW}  ╭─ First login ──────────────────────────────────────────────────────────╮{RESET}")
+    print(f"{YELLOW}  │{RESET}  Email    : {BOLD}{user.email}{RESET}")
+    print(f"{YELLOW}  │{RESET}  Password : {BOLD}{raw_password}{RESET}")
+    print(f"{YELLOW}  │{RESET}  You will be asked to choose your own password right after logging in.")
+    print(f"{YELLOW}  │{RESET}  (a new one is printed at each start until then)")
+    print(f"{YELLOW}  ╰────────────────────────────────────────────────────────────────────────╯{RESET}\n")
+
+
 def create_admin():
     raw_password = generate_api_key()
     
@@ -52,7 +75,8 @@ def create_admin():
         password=raw_password,
         admin=True,
         api_key=generate_api_key(),
-        is_verified=True
+        is_verified=True,
+        must_change_password=True,      # first login: change it before anything else
     )
     db.session.add(user)
     db.session.commit()
