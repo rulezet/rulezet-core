@@ -61,8 +61,8 @@
     <transition name="blog-page-fade">
     <div v-if="!isLoading" class="container py-5">
 
-    <div class="explorer-banner mb-4">
-        <i class="fa-solid fa-newspaper banner-watermark"></i>
+    <div :class="['explorer-banner mb-4', { 'blog-release-banner': isRelease }]">
+        <i :class="['fa-solid banner-watermark', isRelease ? 'fa-rocket' : 'fa-newspaper']"></i>
         <nav aria-label="breadcrumb" class="mb-2">
             <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
@@ -73,8 +73,11 @@
             </ol>
         </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
-            <div class="banner-icon"><i class="fa-solid fa-newspaper"></i></div>
+            <div class="banner-icon"><i :class="['fa-solid', isRelease ? 'fa-rocket' : 'fa-newspaper']"></i></div>
             <div>
+                <div v-if="isRelease" class="blog-release-pill">
+                    <i class="fa-solid fa-tag"></i>Release[[ releaseVersion ? ' ' + releaseVersion : '' ]]
+                </div>
                 <h2 class="fw-bold mb-1" style="word-break:break-word;">
                     [[ post.title ]]
                 </h2>
@@ -84,6 +87,12 @@
         <p class="text-muted mb-0" style="font-size:1.05rem;line-height:1.75;">
             [[ post.excerpt || 'Security blog post from the Rulezet team.' ]]
         </p>
+        <!-- release posts: what this page is, and where the code is -->
+        <div v-if="isRelease" class="blog-release-strip">
+            <span><i class="fa-solid fa-rocket"></i>Release notes of <strong>Rulezet [[ releaseVersion || '' ]]</strong></span>
+            <span v-if="post.published_at"><i class="fa-regular fa-calendar"></i>Released on [[ post.published_at ]]</span>
+            <a v-if="releaseLink" :href="releaseLink" target="_blank" rel="noopener"><i class="fa-brands fa-github"></i>View the release on GitHub</a>
+        </div>
     </div>
 
         <!-- Shared access banner (non-admin viewing via share link) -->
@@ -228,6 +237,9 @@
                  :style="post.cover_image_url
                      ? 'top:12px;right:12px;z-index:2;'
                      : 'top:12px;right:12px;z-index:2;'">
+                <span v-if="isRelease" class="badge shadow-sm pt-1 blog-release-badge" style="font-size:.72rem;">
+                    <i class="fa-solid fa-rocket me-1"></i>RELEASE
+                </span>
                 <span v-if="post.is_draft"
                       class="badge shadow-sm pt-1"
                       style="font-size:.72rem;background:#fd7e14;color:#fff;">
@@ -608,6 +620,11 @@
             const copied         = ref(false)
             const lightboxOpen   = ref(false)
 
+            // release posts (made from a GitHub release) carry the tag "release" and a "vX.Y.Z" tag
+            const isRelease = computed(() => (post.value.tag_names || []).some(t => t.toLowerCase() === 'release'))
+            const releaseVersion = computed(() => (post.value.tag_names || []).find(t => /^v\d/i.test(t)) || '')
+            const releaseLink = computed(() => ((post.value.external_links || []).find(l => /\/releases\//.test(l.url || '')) || {}).url || '')
+
             const currentShareUrl = computed(() => {
                 if (shareUrl.value) return shareUrl.value
                 if (post.value.share_key) {
@@ -800,7 +817,7 @@
 
             return {
                 graphFrame, graphUrl, graphFullscreen, exportGraph,
-                post, isLoading, ruleListUrl, bundleListUrl,
+                post, isLoading, ruleListUrl, bundleListUrl, isRelease, releaseVersion, releaseLink,
                 renderedContent, shareUrl, currentShareUrl, isRegenerating,
                 showSharePanel, copied, lightboxOpen, fileIcon,
                 isAuthenticated, isAdmin, currentUserId, csrfToken,

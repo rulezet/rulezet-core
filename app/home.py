@@ -6,7 +6,7 @@ from flask_login import current_user, login_required
 from flask import get_flashed_messages
 from flask_login import login_required, current_user
 
-from app import cache
+from app import cache, db
 from app.core.utils.utils import get_version
 from app.core.utils.activity_log import log_activity
 
@@ -128,11 +128,13 @@ def home() -> render_template:
     total_cves    = platform_stats['total_cves']
 
     from app.features.blog import blog_core as BlogModel
-    from app.core.db_class.blog import BlogPost
+    from app.core.db_class.blog import BlogPost, BlogPostTagAssociation
+    from app.core.db_class.tag import Tag
     # "Open source · vX" badge: the blog post of the latest release (posts made from a GitHub
-    # release are titled "Rulezet v…"), else the GitHub releases page
-    release_post = (BlogPost.query.filter(BlogPost.is_public.is_(True), BlogPost.is_draft.is_(False),
-                                          BlogPost.title.ilike('Rulezet v%'))
+    # release carry the tag "release"), else the GitHub releases page
+    release_post = (BlogPost.query.join(BlogPostTagAssociation, BlogPostTagAssociation.post_id == BlogPost.id)
+                    .join(Tag, Tag.id == BlogPostTagAssociation.tag_id)
+                    .filter(BlogPost.is_public.is_(True), BlogPost.is_draft.is_(False), db.func.lower(Tag.name) == 'release')
                     .order_by(BlogPost.published_at.desc()).first())
     release_url = f"/blog/post/{release_post.uuid}" if release_post else "https://github.com/rulezet/rulezet-core/releases"
     latest_posts = BlogModel.get_posts_paginated(page=1, per_page=2, is_admin=False)
