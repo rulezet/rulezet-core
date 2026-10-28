@@ -55,6 +55,9 @@ def schedule_create():
         return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
 
     data = json_object()
+    from app.features.rule.rule_core import can_choose_new_rule_owner
+    if not can_choose_new_rule_owner(current_user):
+        data = SyncScheduleModel.strip_owner_choices(data)
     schedule, err = SyncScheduleModel.create_schedule(data, current_user)
     if err:
         return jsonify({"message": err, "toast_class": "danger-subtle"}), 400
@@ -77,6 +80,9 @@ def schedule_update(uuid):
         return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
 
     data = json_object()
+    from app.features.rule.rule_core import can_choose_new_rule_owner
+    if not can_choose_new_rule_owner(current_user):
+        data = SyncScheduleModel.strip_owner_choices(data)
     schedule, err = SyncScheduleModel.update_schedule(uuid, data)
     if err:
         status = 404 if err == "Schedule not found." else 400

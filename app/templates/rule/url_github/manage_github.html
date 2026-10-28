@@ -9,6 +9,7 @@
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/rule/github/sync_schedule.css') }}">
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/rule/github/github-proposal-table.css') }}">
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/components/chart-viewer.css') }}">
+<link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/rule/github/ruleOwnerPicker.css') }}">
 <style>
 .row-highlight-import {
     outline: 2px solid #0d6efd !important;
@@ -849,6 +850,7 @@
                         <repo-selection-table :key="scheduleFormInstance"
                             :initial-selected-urls="scheduleForm.initialRepoUrls"
                             :initial-repo-settings="scheduleForm.initialRepoSettings"
+                            :owner-me="OWNER_ME"
                             @selection-change="onRepoSelectionChange">
                         </repo-selection-table>
                     </div>
@@ -919,6 +921,12 @@
     import { message_list, create_message } from '/static/js/toaster.js'
     import PaginationComponent from '/static/js/rule/paginationComponent.js'
     import RepoSelectionTable from '/static/js/rule/repoSelectionTable.js'
+    // who may give the new rules of a scheduled repo to someone else (rule_core.can_choose_new_rule_owner)
+    {% if current_user.is_authenticated and (current_user.is_admin() or current_user.has_permission('github.manage')) %}
+    const OWNER_ME = {{ {'id': current_user.id, 'name': ((current_user.first_name or '') ~ ' ' ~ (current_user.last_name or '')).strip()} | tojson }}
+    {% else %}
+    const OWNER_ME = null
+    {% endif %}
     import ScheduleRecurrencePicker from '/static/js/rule/scheduleRecurrencePicker.js'
     import UserChip from '/static/js/components/UserChip.js'
     import GithubProposalTable from '/static/js/rule/github/githubProposalTable.js'
@@ -1426,7 +1434,8 @@
                 scheduleForm.initialRepoUrls = (s.repos || []).map(r => r.repo_url)
                 const settingsMap = {}
                 for (const r of (s.repos || [])) {
-                    settingsMap[r.repo_url] = { auto_accept_update: r.auto_accept_update, auto_add_new_rule: r.auto_add_new_rule, is_generic_source: r.is_generic_source }
+                    settingsMap[r.repo_url] = { auto_accept_update: r.auto_accept_update, auto_add_new_rule: r.auto_add_new_rule, is_generic_source: r.is_generic_source,
+                                                new_rule_owner: r.new_rule_owner || null }
                 }
                 scheduleForm.initialRepoSettings = settingsMap
                 currentRecurrence = {}
@@ -1591,6 +1600,7 @@
             {% endif %}
 
             return {
+                OWNER_ME,
                 gitProviderIcon,
                 rateLimitStatus, fetchRateLimitStatus, rateLimitResetLabel, rateLimitChartData,
                 message_list,

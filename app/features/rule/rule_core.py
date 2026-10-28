@@ -38,7 +38,7 @@ from app.core.db_class.similarity import RuleSimilarity, SimilarResult
 from app.core.db_class.tag import RuleTagAssociation, Tag
 
 from ..account import account_core as AccountModel
-from app.core.utils.utils import bump_version
+from app.core.utils.utils import as_db_id, bump_version
 
 ###################
 #   Rule action   #
@@ -761,11 +761,14 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
         if bit_risk['rejected']:
             return False, "; ".join(bit_risk['reasons_reject'])
 
-        # Identify user
-        if current_user and current_user.is_authenticated:
+        # The owner: the user given (every caller passes the acting user, except a GitHub update's
+        # new rules given to someone else: resolve_new_rule_owner), else whoever is logged in
+        if user is not None:
+            user_id = user.id
+        elif current_user and current_user.is_authenticated:
             user_id = current_user.id
         else:
-            user_id = user.id if user else None
+            user_id = None
 
         # Resolve vulnerabilities to a clean Python list, handling all input forms:
         # - Python list (from format parsers)
@@ -4872,7 +4875,68 @@ def change_message_new_rule(id, new_message):
     return True
 
 
-def import_single_new_rule(nr, user):
+def _source_variants(source_url):
+    """A repository URL as rules may have stored it: with / without a trailing slash or .git."""
+    url = (source_url or '').strip()
+    if not url:
+        return []
+    base = url.rstrip('/')
+    base = base[:-4] if base.endswith('.git') else base
+    return list({url, base, base + '/', base + '.git'})
+
+
+def source_owner_suggestion(source_url):
+    """Who owns most of the active rules already imported from this source — the natural owner of
+    its new rules. {id, name, count} or None."""
+    from app.core.db_class.user import User
+    variants = _source_variants(source_url)
+    if not variants:
+        return None
+    row = (db.session.query(Rule.user_id, func.count(Rule.id))
+           .filter(Rule.is_deleted == False, Rule.source.in_(variants), Rule.user_id.isnot(None))  # noqa: E712
+           .group_by(Rule.user_id).order_by(func.count(Rule.id).desc()).first())
+    if not row:
+        return None
+    user = db.session.get(User, row[0])
+    if not user:
+        return None
+    return {'id': user.id, 'name': f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username,
+            'count': row[1]}
+
+
+def can_choose_new_rule_owner(user):
+    """Admins and GitHub Managers (full control over GitHub imports) may give the new rules of a
+    source to someone else; anyone else owns what they add."""
+    return bool(user) and (user.is_admin() or user.has_permission('github.manage'))
+
+
+def resolve_new_rule_owner(actor, source_url, owner_id=None):
+    """The user new rules from `source_url` are created for: the chosen one (owner_id), else the
+    owner of most rules of that source, else the actor. Only an admin / GitHub Manager may give
+    them to someone else: for anyone else it is always the actor."""
+    from app.core.db_class.user import User
+    if not can_choose_new_rule_owner(actor):
+        return actor
+    if owner_id:
+        chosen = db.session.get(User, as_db_id(owner_id)) if as_db_id(owner_id) else None
+        if chosen:
+            return chosen
+    suggestion = source_owner_suggestion(source_url)
+    if suggestion:
+        return db.session.get(User, suggestion['id']) or actor
+    return actor
+
+
+def updater_source_url(updater):
+    """The repository URL an update session checked (from its stored info)."""
+    import json as _json
+    try:
+        return _json.loads(updater.info).get('repo_url') if updater else None
+    except Exception:
+        return None
+
+
+def import_single_new_rule(nr, user, owner=None):
     """Validate + import one NewRule row exactly like the manual 'Add all new
     rules' bulk action does (handle_bulk_new_rules_decision) — full
     re-validation via parse_rule_by_format, so a syntactically invalid row
@@ -4893,8 +4957,9 @@ def import_single_new_rule(nr, user):
             pass
 
     change_message_new_rule(nr.id, 'imported')
+    # owner: who the new rule belongs to (resolve_new_rule_owner), the acting user by default
     success, message, imported = parse_rule_by_format(
-        nr.rule_content, user, nr.format, source_info, github_path=nr.github_path
+        nr.rule_content, owner or user, nr.format, source_info, github_path=nr.github_path
     )
     if success and imported:
         profil = AccountModel.get_or_create_gamification_profile(imported.user_id)

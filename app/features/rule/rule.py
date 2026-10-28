@@ -4794,6 +4794,29 @@ def bulk_update_decision(sid):
     return {'message': f'Background job started: {label}', 'job_id': job.id, 'job_uuid': job.uuid, 'toast_class': 'success-subtle'}, 201
 
 
+def _owner_param(value):
+    """owner_id sent by the page: 'me', a user id, or nothing (automatic)."""
+    if value in (None, '', 'auto'):
+        return None
+    if value == 'me':
+        return current_user.id
+    return value
+
+
+@rule_blueprint.route("/new_rules_owner/<sid>", methods=['GET'])
+@login_required
+def new_rules_owner(sid):
+    """Who the new rules of an update session would belong to: may the user choose, and the
+    automatic choice (the owner of most rules of that source)."""
+    updater = RuleModel.get_updater_result(sid)
+    if not updater:
+        return {'message': 'Session not found', 'toast_class': 'danger-subtle'}, 404
+    source = RuleModel.updater_source_url(updater)
+    me = {'id': current_user.id, 'name': f"{current_user.first_name or ''} {current_user.last_name or ''}".strip()}
+    return {'can_choose': RuleModel.can_choose_new_rule_owner(current_user), 'source': source,
+            'suggestion': RuleModel.source_owner_suggestion(source), 'me': me}, 200
+
+
 @rule_blueprint.route("/bulk_new_rules_decision/<sid>", methods=['POST'])
 @login_required
 def bulk_new_rules_decision(sid):
@@ -4815,8 +4838,11 @@ def bulk_new_rules_decision(sid):
     else:
         job_total = max(RuleModel.count_pending_new_rules(sid), 1)
 
+    owner = RuleModel.resolve_new_rule_owner(current_user, RuleModel.updater_source_url(RuleModel.get_updater_result(sid)),
+                                             _owner_param(data.get('owner_id')))
     job = JobsModel.create_job(job_type='bulk_new_rules_decision',
-                               payload={'sid': sid, 'action': action, 'user_id': current_user.id},
+                               payload={'sid': sid, 'action': action, 'user_id': current_user.id,
+                                        'owner_id': owner.id if owner else None},
                                label=label, created_by=current_user.id,
                                total=job_total)
     return {'message': f'Background job started: {label}', 'job_id': job.id, 'job_uuid': job.uuid, 'toast_class': 'success-subtle'}, 201
@@ -5711,7 +5737,10 @@ def add_new_rule():
     if not s:
         return jsonify({"success": False, "message": "Error while updating rule", "toast_class": "danger-subtle"}), 500
         
-    success, message, imported_object = parse_rule_by_format(content, current_user, format, source_info, github_path=temp_rule.github_path) 
+    # who the new rule belongs to: chosen on the page (admins / GitHub Managers), else the owner of
+    # this source's other rules, else the user adding it
+    owner = RuleModel.resolve_new_rule_owner(current_user, source_info, _owner_param(request.args.get('owner_id')))
+    success, message, imported_object = parse_rule_by_format(content, owner, format, source_info, github_path=temp_rule.github_path) 
     
     if success:
         profil_game_user_ = AccountModel.get_or_create_gamification_profile(imported_object.user_id)

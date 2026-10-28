@@ -1,4 +1,5 @@
 import PaginationComponent from '/static/js/rule/paginationComponent.js';
+import RuleOwnerPicker from '/static/js/rule/github/ruleOwnerPicker.js';
 import { gitProviderIcon, gitProviderLabel } from '/static/js/components/git-links.js';
 
 /**
@@ -15,9 +16,12 @@ const RepoSelectionTable = {
         apiEndpoint: { type: String, default: '/rule/github/schedule/repo_candidates' },
         initialSelectedUrls: { type: Array, default: () => [] },
         initialRepoSettings: { type: Object, default: () => ({}) },
+        // the current user ({ id, name }) when they may give new rules to someone else
+        // (admin / GitHub Manager): shows the "New rules owner" choice per repo
+        ownerMe: { type: Object, default: null },
     },
     delimiters: ['[[', ']]'],
-    components: { 'pagination-component': PaginationComponent },
+    components: { 'pagination-component': PaginationComponent, 'rule-owner-picker': RuleOwnerPicker },
     data() {
         return {
             repos: [],
@@ -38,7 +42,7 @@ const RepoSelectionTable = {
             excludedUrls: new Set(),
             isAllSelectedMode: false,
             perRepoSettings: new Map(Object.entries(this.initialRepoSettings)),
-            defaultSettings: { auto_accept_update: false, auto_add_new_rule: false, is_generic_source: false },
+            defaultSettings: { auto_accept_update: false, auto_add_new_rule: false, is_generic_source: false, new_rule_owner: null },
         };
     },
     computed: {
@@ -160,8 +164,13 @@ const RepoSelectionTable = {
             return cfg ? !!cfg[key] : false;
         },
 
+        repoOwner(url) {
+            const cfg = this.perRepoSettings.get(url);
+            return (cfg && cfg.new_rule_owner) || null;
+        },
+
         updateRepoSetting(url, key, value) {
-            const cfg = this.perRepoSettings.get(url) || { auto_accept_update: false, auto_add_new_rule: false, is_generic_source: false };
+            const cfg = this.perRepoSettings.get(url) || { auto_accept_update: false, auto_add_new_rule: false, is_generic_source: false, new_rule_owner: null };
             cfg[key] = value;
             this.perRepoSettings.set(url, cfg);
             this.emitChange();
@@ -176,6 +185,7 @@ const RepoSelectionTable = {
             const repo_settings = Array.from(this.perRepoSettings.entries()).map(([repo_url, cfg]) => ({
                 repo_url, auto_accept_update: !!cfg.auto_accept_update, auto_add_new_rule: !!cfg.auto_add_new_rule,
                 is_generic_source: !!cfg.is_generic_source,
+                new_rule_owner_id: cfg.new_rule_owner ? cfg.new_rule_owner.id : null,
             }));
             this.$emit('selection-change', {
                 repo_mode: this.isAllSelectedMode ? 'all' : 'partial',
@@ -183,7 +193,10 @@ const RepoSelectionTable = {
                 selected_repo_urls: Array.from(this.selectedUrls),
                 excluded_repo_urls: Array.from(this.excludedUrls),
                 repo_settings,
-                default_repo_settings: this.isAllSelectedMode ? { ...this.defaultSettings } : null,
+                default_repo_settings: this.isAllSelectedMode ? {
+                    ...this.defaultSettings,
+                    new_rule_owner_id: this.defaultSettings.new_rule_owner ? this.defaultSettings.new_rule_owner.id : null,
+                } : null,
                 count: this.selectedCount,
             });
         },
@@ -243,6 +256,11 @@ const RepoSelectionTable = {
                             <label class="form-check-label" style="font-size:.82rem;">Auto-add new rules</label>
                         </div>
                     </div>
+                    <div v-if="ownerMe" class="d-flex align-items-center gap-2 mt-2 flex-wrap">
+                        <span style="font-size:.82rem;">New rules belong to</span>
+                        <rule-owner-picker :model-value="defaultSettings.new_rule_owner" :me="ownerMe"
+                            @update:model-value="updateDefaultSetting('new_rule_owner', $event)"></rule-owner-picker>
+                    </div>
                 </div>
             </div>
         </div>
@@ -300,6 +318,7 @@ const RepoSelectionTable = {
                             <th class="dt-th">Repository</th>
                             <th class="dt-th text-center">Auto-accept updates</th>
                             <th class="dt-th text-center">Auto-add new rules</th>
+                            <th v-if="ownerMe" class="dt-th" title="Who the new rules added from this repo belong to">New rules owner</th>
                             <th class="dt-th text-center">Host</th>
                             <th class="dt-th dt-th--checkbox"></th>
                         </tr>
@@ -316,6 +335,10 @@ const RepoSelectionTable = {
                             <td class="dt-td text-center">
                                 <input type="checkbox" class="dt-checkbox" :checked="repoSetting(item.url, 'auto_add_new_rule')"
                                     @change="updateRepoSetting(item.url, 'auto_add_new_rule', $event.target.checked)">
+                            </td>
+                            <td v-if="ownerMe" class="dt-td">
+                                <rule-owner-picker compact :model-value="repoOwner(item.url)" :me="ownerMe"
+                                    @update:model-value="updateRepoSetting(item.url, 'new_rule_owner', $event)"></rule-owner-picker>
                             </td>
                             <td class="dt-td text-center">
                                 <span class="small text-muted" :title="'Hosted on ' + gitProviderLabel(item.url, item.git_provider) + ' — detected from the URL'">

@@ -2779,6 +2779,8 @@ def handle_bulk_new_rules_decision(job, app):
             return
 
         user   = User.query.get(user_id)
+        # who the new rules belong to (chosen on the page, resolve_new_rule_owner); older jobs: the user
+        owner  = User.query.get(job.payload.get('owner_id')) if job.payload.get('owner_id') else user
         added  = errors = 0
 
         for i, nr in enumerate(new_rules):
@@ -2792,7 +2794,7 @@ def handle_bulk_new_rules_decision(job, app):
                         level='info', event='paused')
                 return
 
-            added_ok, message = import_single_new_rule(nr, user)
+            added_ok, message = import_single_new_rule(nr, user, owner)
             if added_ok:
                 added += 1
                 log_job(job, message, level='success', event='progress')
@@ -4615,7 +4617,7 @@ def handle_github_sync_schedule_run(job, app):
     from app.core.db_class.git import GithubSyncRun, GithubSyncRunRepo, GithubSyncSchedule
     from app.features.rule.rule_core import (
         get_updater_result, get_rule_update_list_filtered, accept_all_update,
-        get_valid_new_rules_by_sid, import_single_new_rule,
+        get_valid_new_rules_by_sid, import_single_new_rule, resolve_new_rule_owner,
     )
     from app.features.rule.rule_from_github.update_rule import update_class as UpdateModel
 
@@ -4707,8 +4709,11 @@ def handle_github_sync_schedule_run(job, app):
             if repo_cfg.auto_add_new_rule:
                 new_rules = get_valid_new_rules_by_sid(sid)
                 added = 0
+                # owner of the new rules: chosen for this repo, else the owner of the source's rules,
+                # else the schedule's editor (resolve_new_rule_owner)
+                owner = resolve_new_rule_owner(schedule.editor, repo_cfg.repo_url, repo_cfg.new_rule_owner_id)
                 for nr in new_rules:
-                    added_ok, _message = import_single_new_rule(nr, schedule.editor)
+                    added_ok, _message = import_single_new_rule(nr, schedule.editor, owner)
                     if added_ok:
                         added += 1
                 run_repo.auto_added = added

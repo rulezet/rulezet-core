@@ -1,0 +1,22 @@
+/* Who the new rules of a GitHub update belong to (js/rule/github/ruleOwnerPicker.js) */
+.rop { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .6rem; }
+.rop-modes { display: inline-flex; padding: 2px; border-radius: 10px; background: var(--light-bg-color); border: 1px solid var(--border-color); }
+.rop-mode { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .65rem; border: 0; border-radius: 8px; background: none;
+    font-size: .78rem; font-weight: 600; color: var(--subtle-text-color); }
+.rop-mode:hover { color: var(--text-color); }
+.rop-mode.on { background: var(--card-bg-color); color: #0d6efd; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.rop--compact .rop-mode span { display: none; }
+.rop-hint { font-size: .76rem; color: var(--subtle-text-color); }
+.rop-chosen { display: inline-flex; align-items: center; gap: .35rem; padding: .15rem .6rem; border-radius: 999px; font-size: .78rem; font-weight: 600;
+    color: #0d6efd; background: rgba(13,110,253,.08); border: 1px solid rgba(13,110,253,.25); }
+.rop-search { position: relative; min-width: 220px; }
+.rop-results { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px); margin: 0; padding: .25rem; list-style: none;
+    border-radius: 10px; background: var(--card-bg-color); border: 1px solid var(--border-color); box-shadow: 0 10px 24px rgba(0,0,0,.12); }
+.rop-results li { display: flex; align-items: center; gap: .5rem; padding: .35rem .5rem; border-radius: 7px; font-size: .82rem; cursor: pointer; color: var(--text-color); }
+.rop-results li:hover { background: var(--light-bg-color); }
+.rop-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+
+/* update results page: the owner choice above the new rules */
+.nr-owner { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; padding: .6rem .9rem; border-radius: 12px;
+    background: var(--light-bg-color); border: 1px solid var(--border-color); }
+.nr-owner__label { font-size: .8rem; font-weight: 700; color: var(--text-color); }
