@@ -1,3 +1,4 @@
+import { loadOrgBadge } from '/static/js/rule/github/orgBadge.js';
 import MultiPersonFilter from '/static/js/rule/multiPersonFilter.js'
 
 const GithubFilter = {
@@ -28,6 +29,8 @@ const GithubFilter = {
         const providersTotal = Vue.computed(() => availableProviders.value.reduce((n, p) => n + p.count, 0));
         const conflictsOnly   = Vue.ref(_p('conflicts_only') === 'true')
         const circlOnly       = Vue.ref(_p('circl_only') === 'true')
+        const org             = Vue.ref({ label: '', logoUrl: '' })
+        loadOrgBadge().then(o => { org.value = o })
         const personFilter    = Vue.ref({
             mode:   _p('person_mode', 'author'),
             values: (_p('editors') || _p('authors') || '').split(',').filter(Boolean),
@@ -181,7 +184,7 @@ const GithubFilter = {
             searchField,
             selectedFormat,
             selectedLicense, selectedProvider, availableProviders, providersTotal, setProvider,
-            conflictsOnly, circlOnly,
+            conflictsOnly, circlOnly, org,
             personFilter,
             searchIsLoading,
             totalUrls,
@@ -246,9 +249,9 @@ const GithubFilter = {
             </button>
             <span class="ghf-hosts__sep" aria-hidden="true"></span>
             <button type="button" class="ghf-host ghf-host--circl" :class="{ 'ghf-host--active': circlOnly }"
-                    :aria-pressed="circlOnly" title="Only repositories with the CIRCL badge"
+                    :aria-pressed="circlOnly" :title="'Only repositories with the ' + org.label + ' badge'"
                     @click="circlOnly = !circlOnly; fetchUrls(1)">
-                <img src="/static/images/blog/circl-default.png" alt="" class="ghf-host__logo">CIRCL
+                <img v-if="org.logoUrl" :src="org.logoUrl" alt="" class="ghf-host__logo">[[ org.label ]]
             </button>
         </div>
 
@@ -287,9 +290,9 @@ const GithubFilter = {
                     <span>Conflicts only</span>
                 </label>
 
-                <label class="rl-fp-switch" title="Only repositories with the CIRCL badge">
+                <label class="rl-fp-switch" :title="'Only repositories with the ' + org.label + ' badge'">
                     <input type="checkbox" v-model="circlOnly" @change="fetchUrls(1)" />
-                    <span>CIRCL</span>
+                    <span>[[ org.label ]]</span>
                 </label>
 
                 <button v-if="activeFilterCount > 0" class="rl-fp-reset" @click="resetFilters">

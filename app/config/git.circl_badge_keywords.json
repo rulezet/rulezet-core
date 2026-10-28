@@ -1,7 +1,0 @@
-{
-  "label": "CIRCL badge: keywords",
-  "category": "Git",
-  "description": "A git repository whose URL or author contains one of these words (case ignored) gets the CIRCL badge automatically. An admin can still add or remove the badge on any repository from Git Sources.",
-  "public": false,
-  "value": ["circl"]
-}

@@ -5114,7 +5114,7 @@ def get_url_github():
 @rule_blueprint.route("/github_repo/circl_badge", methods=['POST'])
 @login_required
 def set_github_repo_circl_badge():
-    """Admin: add / remove the CIRCL badge of a git repository, or give it back to the automatic rule."""
+    """Admin: add / remove the organisation badge (setting git.org_badge) of a git repository, or give it back to the automatic rule."""
     if not current_user.is_admin():
         return jsonify({"success": False, "message": "Admins only"}), 403
     data = request.get_json(silent=True) or {}
@@ -5126,7 +5126,7 @@ def set_github_repo_circl_badge():
     if not repo:
         return jsonify({"success": False, "message": "Repository not found"}), 404
     state = {True: 'added', False: 'removed', None: 'set back to automatic'}[value]
-    log_activity('git.circl_badge', f"CIRCL badge {state} on {url}",
+    log_activity('git.circl_badge', f"Organisation badge {state} on {url}",
                  target_type='github_repo', target_id=repo.id, extra={'url': url, 'value': value})
     return jsonify({"success": True, "circl": RuleModel.has_circl_badge(repo), "circl_badge": repo.circl_badge}), 200
 

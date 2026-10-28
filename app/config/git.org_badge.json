@@ -1,0 +1,11 @@
+{
+  "label": "Organisation badge on git repositories",
+  "category": "Git",
+  "description": "Badge shown on Git Sources for the repositories of your organisation, with a filter button in the host bar. label = name on the badge, logo = image under static/ (or an https:// URL, empty for none), keywords = a repository whose URL or author contains one of these words (case ignored) gets the badge automatically. Admins can still add or remove it on any repository.",
+  "public": true,
+  "value": {
+    "label": "CIRCL",
+    "logo": "images/blog/circl-default.png",
+    "keywords": ["circl"]
+  }
+}

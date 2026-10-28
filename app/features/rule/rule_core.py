@@ -3533,7 +3533,8 @@ def get_all_github_urls_matching(search: str = None, search_field: str = 'url', 
 
 def _circl_keywords():
     from app.core.utils.app_settings import get_setting
-    return [k.strip().lower() for k in (get_setting('git.circl_badge_keywords') or []) if k and k.strip()]
+    conf = get_setting('git.org_badge') or {}
+    return [k.strip().lower() for k in (conf.get('keywords') or []) if isinstance(k, str) and k.strip()]
 
 
 def has_circl_badge(repo):
