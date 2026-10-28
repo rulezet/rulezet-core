@@ -70,3 +70,26 @@ def test_admin_sets_the_access_from_the_settings_page(clients):
     clear_cache()
     assert get_setting("editor.test_access") == "everyone"
     assert clients["admin"].post("/admin/settings/rule_tests_access", json={"mode": "nope"}).status_code == 400
+
+
+@pytest.mark.parametrize("mode,user_ok,admin_ok", [("off", False, False), ("admins", False, True), ("everyone", True, True)])
+def test_who_may_use_the_editor(clients, monkeypatch, mode, user_ok, admin_ok):
+    from app.features.rule_tester import sample_test_core as SampleTests
+    monkeypatch.setattr(SampleTests, "editor_access", lambda: mode)
+    for who, allowed in (("user", user_ok), ("admin", admin_ok)):
+        page = clients[who].get("/rule/create_rule").get_data(as_text=True)
+        assert ("<yara-editor-panel" in page) == allowed
+        plan = clients[who].post("/editor-api/yara/plan", json={"rules": []})
+        assert (plan.status_code == 403) == (not allowed)
+    assert clients["anonymous"].post("/editor-api/yara/plan", json={"rules": []}).status_code == 401
+
+
+def test_admin_sets_the_editor_access_from_the_settings_page(clients):
+    from app.core.utils.app_settings import clear_cache, get_setting
+    assert get_setting("editor.access") == "everyone"                           # open by default
+    assert clients["user"].post("/admin/settings/editor_access", json={"mode": "off"}).status_code == 403
+    res = clients["admin"].post("/admin/settings/editor_access", json={"mode": "admins"})
+    assert res.json == {"success": True, "mode": "admins"}
+    clear_cache()
+    assert get_setting("editor.access") == "admins"
+    assert clients["admin"].post("/admin/settings/editor_access", json={"mode": "nope"}).status_code == 400
