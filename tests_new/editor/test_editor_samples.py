@@ -163,3 +163,11 @@ def test_every_report_opens_with_its_version_of_the_rule(app, clients, users, te
     assert '"GNU"' in old["rule_text"] and old["latest"]["false_positives"] >= 1
     page = clients["anonymous"].get(f"/rule/detail_rule/{rule.id}/samples?result={first}").get_data(as_text=True)
     assert "Report of an older version" in page
+
+
+def test_too_many_runs_at_once_are_refused(clients, tester, monkeypatch):
+    from app.core.db_class.rule_tester import SampleTestRun
+    monkeypatch.setattr(EditorModel, "MAX_ACTIVE_RUNS_PER_USER", 0)
+    res = clients["user"].post("/editor-api/test/", json={"format": "yara", "text": QUIET, "sets": ["benign-text"]})
+    assert res.status_code == 400 and "already have tests running" in res.json["error"]
+    assert SampleTestRun.query.count() == 0

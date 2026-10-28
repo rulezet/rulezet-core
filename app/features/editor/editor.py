@@ -54,6 +54,11 @@ def yara_job_start():
     if not rules:
         return jsonify({'error': 'No rule in the document.'}), 400
     imports = [str(m) for m in (payload.get('imports') or [])][:50]
+    # one Create at a time per user: each one compiles up to MAX_RULES rules and tests them
+    from app.core.db_class.job import BackgroundJob
+    if BackgroundJob.query.filter(BackgroundJob.job_type == EditorJobs.JOB_TYPE, BackgroundJob.created_by == current_user.id,
+                                  BackgroundJob.status.in_(('pending', 'running'))).first():
+        return jsonify({'error': 'A Create of yours is still running: wait for it to finish.'}), 429
     job = create_job(EditorJobs.JOB_TYPE, EditorJobs.new_payload(imports, rules),
                      f"YARA editor: {len(rules)} rule(s)", current_user.id, total=len(rules))
     if not job:

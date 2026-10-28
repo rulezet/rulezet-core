@@ -16,7 +16,7 @@ class YaraDriver(BaseTesterDriver):
     def validate_syntax(self, rule_content: str) -> ValidationResult:
         try:
             import yara
-            yara.compile(source=rule_content)
+            yara.compile(source=rule_content, includes=False)
             return ValidationResult(valid=True)
         except ImportError:
             return ValidationResult(valid=False, errors=['yara-python not installed'])
@@ -37,7 +37,7 @@ class YaraDriver(BaseTesterDriver):
         t0 = time.monotonic()
 
         try:
-            rules = yara.compile(source=rule_content)
+            rules = yara.compile(source=rule_content, includes=False)
         except yara.SyntaxError as e:
             return MatchDetail(matched=False, score=0.0, details={},
                                quality_hints=[], error=f'Syntax error: {e}')
@@ -161,7 +161,7 @@ class YaraDriver(BaseTesterDriver):
 
         t0 = time.monotonic()
         try:
-            compiled = yara.compile(sources=sources)
+            compiled = yara.compile(sources=sources, includes=False)
         except Exception as e:
             err = MatchDetail(matched=False, score=0.0, details={}, quality_hints=[], error=str(e))
             return {rid: err for rid in rule_sources}

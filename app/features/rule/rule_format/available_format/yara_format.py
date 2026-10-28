@@ -190,7 +190,7 @@ def try_resolve_yara_missing_dependency(rule_instance, rule_text: str, metadata:
         return 'no_match', None
 
     try:
-        yara.compile(source=f"{target_rule.to_string or ''}\n\n{rule_text}")
+        yara.compile(source=f"{target_rule.to_string or ''}\n\n{rule_text}", includes=False)
     except Exception:
         return 'no_match', None
 
@@ -370,7 +370,7 @@ class YaraRule(RuleType):
             parts = [f'import "{m}"' for m in header_imports] + [d.to_string or '' for d in deps]
             source_text = '\n\n'.join(parts + [current_rule_text])
             try:
-                compiled = yara.compile(source=source_text, externals=externals)
+                compiled = yara.compile(source=source_text, externals=externals, includes=False)
                 # libyara compiles some broken text to an empty ruleset without
                 # an error (e.g. an unterminated string: '"><img ...'), so a
                 # clean compile isn't enough — the content must define at least

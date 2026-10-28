@@ -155,12 +155,31 @@ def rule_dependencies(rule_id, user):
     return {'rule': item(rule), 'dependencies': [item(found[i]) for i in order], 'truncated': graph['truncated']}
 
 
+MAX_ACTIVE_RUNS_PER_USER = 2
+MAX_ACTIVE_RUNS = 20
+
+
 def _rulezet_test_service(*args, **kwargs):
     """rulezet-tester's TestService, plus: a finished run from the Test button is kept with the
     Rulezet rules it tested unchanged (sample_test_core.record_editor_run)."""
     from rulezet_tester import TestService
 
     class RulezetTestService(TestService):
+        def start(self, fmt, text, set_ids, owner=None):
+            # one user may not flood the sandbox: a few runs at a time each, a bounded queue overall
+            from rulezet_tester import TestError
+            from app.core.db_class.rule_tester import SampleTestRun
+            import datetime
+            # a run left 'running' by a restart must not block anyone: only recent ones count
+            since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=30)
+            active = SampleTestRun.query.filter(SampleTestRun.status.in_(('queued', 'running')),
+                                                SampleTestRun.created_at >= since)
+            if owner is not None and active.filter(SampleTestRun.user_id == owner).count() >= MAX_ACTIVE_RUNS_PER_USER:
+                raise TestError('You already have tests running: wait for them to finish.')
+            if active.count() >= MAX_ACTIVE_RUNS:
+                raise TestError('The test sandbox is busy: try again in a minute.')
+            return super().start(fmt, text, set_ids, owner=owner)
+
         def _execute(self, run_id, fmt, text, paths):
             super()._execute(run_id, fmt, text, paths)
             registry = self.registry
@@ -198,9 +217,10 @@ def _test_service():
         return _rulezet_test_service(remote, remote, registry=DbRunRegistry('editor'))
     extra = [d for d in os.environ.get('RULE_TESTS_SAMPLES', '').split(os.pathsep) if d.strip()]
     # sets read from this server's own folders (/usr/bin, documents, PE) show what is installed on it:
-    # off in production (the samples there are the ones provided in RULE_TESTS_SAMPLES / the lab VM)
-    default = 'off' if os.environ.get('FLASKENV', 'development') == 'production' else 'on'
-    system_sets = os.environ.get('RULE_TESTS_SYSTEM_SETS', default).strip().lower() in ('1', 'on', 'true', 'yes')
+    # only when an admin allows it (setting editor.test_system_sets, off by default), read live
+    def system_sets():
+        from app.core.utils.app_settings import get_setting
+        return bool(get_setting('editor.test_system_sets'))
     return _rulezet_test_service(FolderSampleStore(SAMPLES, *extra, system_sets=system_sets), Sandbox(mode=mode),
                                  registry=DbRunRegistry('editor'))
 
@@ -563,7 +583,7 @@ def plan_yara(imports, rules, progress=None, user=None):
                 visit(n)
             prefix = ''.join(f'import "{mod}"\n' for mod in sorted(extra_imports)) + ''.join(t + '\n' for t in order)
             try:
-                yara.compile(source=prefix + e['text'])
+                yara.compile(source=prefix + e['text'], includes=False)
                 break
             except yara.SyntaxError as err:
                 message = str(err)

@@ -368,7 +368,7 @@ def import_bad_rule_with_dependency(bad_rule_obj: InvalidRuleModel, raw_content:
 
     combined_source = f"{target_rule.to_string or ''}\n\n{raw_content}"
     try:
-        yara.compile(source=combined_source)
+        yara.compile(source=combined_source, includes=False)
     except yara.SyntaxError as e:
         return False, f"Still doesn't compile together with '{target_rule.title}': {e}", None
     except Exception as e:
