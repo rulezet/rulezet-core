@@ -259,7 +259,9 @@ def _relay(proc, tag: str) -> None:
             color = "32" if code < 300 else "36" if code < 400 else "33" if code < 500 else "31"
             ip = line.split()[1] if len(line.split()) > 1 else ""
             ip = "" if ip in ("127.0.0.1", "::1", "-") else f" \033[0;90m{ip}\033[0m"   # the client, kept in prod
-            _say(f"\033[0;90m  {tag} │\033[0m \033[{color}m{code}\033[0m {method:<6} {path}"
+            # API calls (/api/…, or the dedicated API process) tagged "api ", the site's pages "web "
+            kind = "api " if line.startswith("[api]") or path.startswith("/api/") else tag
+            _say(f"\033[0;90m  {kind} │\033[0m \033[{color}m{code}\033[0m {method:<6} {path}"
                  f" \033[0;90m{secs * 1000:.0f} ms\033[0m{ip}")
         else:
             _say(f"\033[0;90m  {tag} │\033[0m {clean}")
@@ -900,10 +902,8 @@ def _run_gunicorn_with_worker(flaskenv: str, port: str, reload: bool = False) ->
     try:
         if api_port:
             info(f"API process on {host}:{api_port} (route /api/ to it in nginx)")
-            api_proc = subprocess.Popen(
-                _gunicorn_cmd(f"{host}:{api_port}", os.environ.get("API_GUNICORN_THREADS", "8"), "api", reload),
-                cwd=ROOT, env={**_venv_env(), "FLASKENV": flaskenv},
-            )
+            api_proc = _spawn(_gunicorn_cmd(f"{host}:{api_port}", os.environ.get("API_GUNICORN_THREADS", "8"), "api", reload),
+                              flaskenv, pretty, "api ")
         threads = os.environ.get("GUNICORN_THREADS", "8")
         if pretty:
             site_proc = _spawn(_gunicorn_cmd(f"{host}:{port}", threads, "site", reload), flaskenv, True, "web ")
