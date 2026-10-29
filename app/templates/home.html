@@ -15,7 +15,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="hv2" id="main-container">
+{# Vue is mounted only on the dynamic part below (#main-container): the hero (animated logo, search,
+   key figures, Coverage, blog) is plain server HTML Vue never re-renders — mounting on the whole page
+   rebuilt it after the first paint, the logo animation restarted #}
+<div class="hv2">
 
     {% if show_import_hint %}
     <div class="hv2-wrap">
@@ -171,6 +174,7 @@
         {% endif %}
 
 
+    <div id="main-container">
     <template v-if="is_loading">
 
         <!-- ══ HOW IT WORKS: three cards, each with a preview═════════════════════════ -->
@@ -349,6 +353,7 @@
     <template v-else>
         <div class="hv2-loading hv2-loading--page"><span class="spinner-border text-primary"></span></div>
     </template>
+    </div>
 </div>
 {% endblock %}
 

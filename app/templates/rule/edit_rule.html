@@ -43,6 +43,7 @@
 {% import 'macros/form_macros.html' as f %}
 
 {% block content %}
+<div id="main-container">{# this page's Vue root (its modals included) #}
 <div class="container mt-4 mb-5"  v-cloak>
     <nav aria-label="breadcrumb" class="mb-4">
         <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
@@ -330,6 +331,7 @@
             </div>
         </div>
     </div>
+</div>
 </div>
 {% endblock %}
 {% block script %}

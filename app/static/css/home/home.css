@@ -123,8 +123,10 @@ body.dark-mode .hv2-chip--fmt { color: color-mix(in srgb, var(--fmt) 65%, #fff);
 .hv2-stage { position: relative; aspect-ratio: 1; width: 100%; max-width: 560px; justify-self: center; display: grid; place-items: center; }
 .hv2-stage__glow { position: absolute; inset: 22%; border-radius: 50%; background: radial-gradient(circle, rgba(13, 110, 253, .16), transparent 70%); animation: hv2-breathe 6s ease-in-out infinite; }
 @keyframes hv2-breathe { 50% { transform: scale(1.12); opacity: .7; } }
-.hv2-stage__logo { position: relative; z-index: 2; width: 82%; opacity: 0; transform: scale(.94); animation: hv2-logo-in 1.1s cubic-bezier(.22, 1, .36, 1) .15s forwards; }
-/* a cached reload shows the last frame of the build at once: fade it in so it never pops */
+.hv2-stage__logo { position: relative; z-index: 2; width: 82%; opacity: 0; transform: scale(.94); }
+/* shown once the build animation is ready to play from its first frame (js/home/home.js adds
+   .is-ready): a cached reload would otherwise show the finished logo, then restart the build */
+.hv2-stage__logo.is-ready { animation: hv2-logo-in 1.1s cubic-bezier(.22, 1, .36, 1) forwards; }
 @keyframes hv2-logo-in { to { opacity: 1; transform: none; } }
 .hv2-stage__logo img { width: 100%; height: auto; display: block; }
 

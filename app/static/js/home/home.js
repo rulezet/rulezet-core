@@ -140,17 +140,24 @@
 // ── hero logo: replay the build animation on every visit ───────────────────────
 // A browser keeps the decoded animated WebP of a page it already showed, so a plain reload
 // shows the last frame. A fresh blob: URL (bytes still from the HTTP cache) starts it over.
+// The logo stays hidden (css: .hv2-stage__logo without .is-ready) until that fresh copy is
+// decoded, so it appears once and builds — never shown finished, then wiped and rebuilt.
 (function () {
-    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    function replay(img) {
-        const src = img.currentSrc || img.src;
-        if (!/\.webp(\?|$)/.test(src) || img.dataset.replayed) return;
-        img.dataset.replayed = '1';
-        fetch(src).then(r => r.ok ? r.blob() : null).then(blob => {
-            if (blob) img.src = URL.createObjectURL(blob);
-        }).catch(() => {});
-    }
     const find = () => document.querySelector('.hv2-stage__logo img');
+    function show(img) { img.closest('.hv2-stage__logo')?.classList.add('is-ready'); }
+    function replay(img) {
+        if (img.dataset.replayed) return;
+        img.dataset.replayed = '1';
+        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const src = img.currentSrc || img.src;
+        const fallback = setTimeout(() => show(img), 1500);   // never leave the logo hidden
+        if (reduce || !/\.webp(\?|$)/.test(src)) { clearTimeout(fallback); return show(img); }
+        fetch(src).then(r => r.ok ? r.blob() : null).then(blob => {
+            if (!blob) { clearTimeout(fallback); return show(img); }
+            img.addEventListener('load', () => { clearTimeout(fallback); show(img); }, { once: true });
+            img.src = URL.createObjectURL(blob);
+        }).catch(() => { clearTimeout(fallback); show(img); });
+    }
     const img = find();
     if (img) return replay(img);
     const mo = new MutationObserver(() => { const el = find(); if (el) { mo.disconnect(); replay(el); } });

@@ -99,6 +99,7 @@
   {% endif %}
 {% endfor %}
 {% block content %}
+<div id="main-container">{# this page's Vue root (its modals included) #}
 <div class="container mt-4" v-cloak >
 
   <!-- ── Page header ── -->
@@ -906,6 +907,7 @@
     {% endif %}
 
   </div><!-- /tab-content -->
+</div>
 </div>
 {% endblock %}
 

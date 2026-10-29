@@ -1,12 +1,13 @@
 {% extends 'base.html' %}
 
 {% block content %}
+<div id="main-container">{# this page's Vue root (its modals included) #}
 <div v-if="isLoading" class="d-flex justify-content-center align-items-center" style="min-height: 300px;">
     <div class="spinner-border text-primary" role="status"></div>
     <span class="ms-2">Loading...</span>
 </div>
 
-<div v-else class="container my-5" id="main-container" v-cloak>
+<div v-else class="container my-5" v-cloak>
     <div v-if="current_user && current_user_donne" class="row g-4">
         <!-- Header Section -->
         <div class="explorer-banner mb-4">
@@ -375,6 +376,7 @@
         </div>
 
     </div>
+</div>
 </div>
 {% endblock %}
 
