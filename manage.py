@@ -337,11 +337,13 @@ def _sync_submodules() -> None:
     rulezet-validation in particular used to require a separate manual pull
     on prod; pivotick stays pinned to the committed submodule ref (its dist
     build is hand-copied into static/ on version bumps, see
-    app/static/js/pivotick.iife.js) and cti is skipped here (too large for
-    --remote; refreshed via the admin UI instead).
+    app/static/js/pivotick.iife.js), so does yaraQA (third-party, external checks of the YARA
+    editor), and cti is skipped here (too large for --remote; refreshed via the admin UI instead).
     """
     run(["git", "submodule", "update", "--init", "--recursive",
          "app/modules/rulezet-validation", "app/modules/rulezet-editor", "app/modules/rulezet-tester"])
+    # yaraQA (YARA editor external checks): a third-party tool, kept on its committed commit
+    subprocess.run(["git", "submodule", "update", "--init", "app/modules/yaraQA"], cwd=ROOT)
     result = subprocess.run(
         ["git", "submodule", "update", "--remote", "app/modules/rulezet-cast",
          "app/modules/misp-taxonomies", "app/modules/misp-galaxy",

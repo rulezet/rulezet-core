@@ -13,12 +13,14 @@ from app.features.rule_tester import sample_test_core as SampleTests
 from app.features.jobs.job_worker import register_handler
 
 from . import editor_core as EditorModel
+from . import external_checks as ExternalChecks
 
 JOB_TYPE = 'editor_yara_import'
 
 STEPS = [
     ('existing', 'Already in Rulezet?'),
     ('syntax', 'Syntax: each rule compiled with the rules it needs'),
+    ('external', 'External checks: YARA-X, CCCS standard, yaraQA (advice)'),
     ('samples', 'Test on samples'),
     ('create', 'Create, update or propose, and link'),
 ]
@@ -83,8 +85,10 @@ def handle_editor_yara_import(job, app):
     step('syntax', 'error' if bad else 'ok', f'{bad} rule(s) to fix' if bad else f"{count('new', 'update', 'proposal')} rule(s) valid")
     run = None
     if plan['ok']:
+        _external_checks(plan, payload, step)
         run = _test_on_samples(plan, payload, user, step)
     else:
+        step('external', 'skipped', 'fix the errors first')
         step('samples', 'skipped', 'fix the errors first')
     if run and run.get('blocked'):
         plan['ok'] = False
@@ -104,6 +108,28 @@ def handle_editor_yara_import(job, app):
         written = [(e['name'], Rule.query.get(e['created']['id'])) for e in result['rules']
                    if e['status'] in ('created', 'updated') and e.get('created')]
         SampleTests.record_rule_results(run, [(n, r) for n, r in written if r])
+
+
+def _external_checks(plan, payload, step):
+    """YARA-X, CCCS and yaraQA on the document (external_checks.py): advice shown with the result,
+    never a reason to refuse — Rulezet's own syntax step above decides."""
+    tools = ExternalChecks.enabled_tools()
+    if not tools:
+        step('external', 'skipped', 'switched off (setting editor.external_checks)')
+        return
+    step('external', 'running', ', '.join(tools))
+    results = ExternalChecks.run_checks(EditorModel.test_document(plan, payload.get('imports')), tools)
+    payload['external'] = results
+    parts = []
+    for tool, r in results.items():
+        name = {'yarax': 'YARA-X', 'cccs': 'CCCS', 'yaraqa': 'yaraQA'}[tool]
+        if not r.get('available'):
+            parts.append(f'{name}: not available')
+        else:
+            n = len(r['errors']) + len(r['warnings'])
+            parts.append(f"{name}: {n} remark{'s' if n != 1 else ''}" if n else f'{name}: ok')
+    noisy = any(r.get('available') and (r['errors'] or r['warnings']) for r in results.values())
+    step('external', 'warning' if noisy else 'ok', ' · '.join(parts))
 
 
 def _test_on_samples(plan, payload, user, step):

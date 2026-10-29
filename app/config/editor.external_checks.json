@@ -1,0 +1,7 @@
+{
+  "label": "YARA editor: external checks",
+  "category": "Editor",
+  "description": "Extra checks of the YARA editor, next to Rulezet's own validation (which alone decides whether a rule can be saved): yarax = YARA-X diagnostics and formatter, cccs = CCCS YARA metadata standard, yaraqa = yaraQA logic / performance advice. true = offered in the editor (Check button and the 'External checks' step of Create, never blocking).",
+  "public": false,
+  "value": {"yarax": true, "cccs": true, "yaraqa": true}
+}

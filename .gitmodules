@@ -36,3 +36,6 @@
 	path = app/modules/rulezet-tester
 	url = https://github.com/rulezet/rulezet-tester.git
 	branch = main
+[submodule "app/modules/yaraQA"]
+	path = app/modules/yaraQA
+	url = https://github.com/Neo23x0/yaraQA.git

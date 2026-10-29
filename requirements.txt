@@ -51,6 +51,9 @@ psutil
 anthropic
 openai
 authlib
+# YARA editor external checks (app/features/editor/external_checks.py) — advice only, optional
+yara-x==1.22.1
+cccs-yara @ git+https://github.com/CybercentreCanada/CCCS-Yara@3ac8d8aa6ab38d90c1e0ea8d4719ba751b6e9fa4
 -e ./app/modules/rulezet-validation
 -e ./app/modules/rulezet-editor
 -e ./app/modules/rulezet-tester
