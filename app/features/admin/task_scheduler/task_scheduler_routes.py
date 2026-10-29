@@ -529,15 +529,22 @@ def export_workflow(uuid):
 @task_scheduler_blueprint.route('/workflows/import', methods=['POST'])
 def import_workflow():
     """A workflow file (export of this page): body = the JSON itself, or {"spec": ..., "title": ...}."""
-    if request.content_length and request.content_length > 512_000:
+    if request.content_length and request.content_length > 16 * 1024 * 1024:   # attached files ride along (8 MB)
         return jsonify({"message": "File too large.", "toast_class": "danger-subtle"}), 413
     data = request.get_json(silent=True)
     spec = data.get('spec') if isinstance(data, dict) and 'spec' in data else data
     title = (data.get('title') or '').strip() or None if isinstance(data, dict) and 'spec' in data else None
-    workflow, err = WorkflowSpec.create_from_spec(spec, current_user, title=title, root_paused=True)
+    report = []
+    workflow, err = WorkflowSpec.create_from_spec(spec, current_user, title=title, root_paused=True, report=report)
     if err:
         return jsonify({"message": err, "toast_class": "danger-subtle"}), 400
-    return _created(workflow, "Workflow imported", "admin.workflow_created")
+    resp, code = _created(workflow, "Workflow imported", "admin.workflow_created")
+    if report:
+        body = resp.get_json()
+        body.update(warnings=report, toast_class='warning-subtle',
+                    message=f'Workflow imported — {len(report)} thing(s) to check: see the pinned note.')
+        return jsonify(body), code
+    return resp, code
 
 
 @task_scheduler_blueprint.route('/workflows/<uuid>/duplicate', methods=['POST'])

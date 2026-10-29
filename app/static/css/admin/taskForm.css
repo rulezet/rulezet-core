@@ -272,9 +272,11 @@
 .wfd-kpi__value--sm { font-size: .85rem; font-weight: 700; align-items: center; }
 .wfd-kpi__value.is-good { color: #198754; } .wfd-kpi__value.is-bad { color: #dc3545; }
 
-.wfd-insights { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .8rem; }
+.wfd-insights { display: flex; flex-wrap: wrap; gap: .8rem; }
+.wfd-insights > .wfd-card { flex: 1 1 0; min-width: 0; }
+@media (max-width: 767px) { .wfd-insights > .wfd-card { flex-basis: 100%; } }
 .wfd-card { background: var(--card-bg-color); border: 1px solid var(--border-color); border-radius: 14px; padding: .9rem 1rem; box-shadow: 0 2px 10px rgba(13, 40, 90, .04); }
-.wfd-card--wide { grid-column: 1 / -1; }
+.wfd-insights > .wfd-card--wide { flex: 1 1 100%; }
 .wfd-card__head { display: flex; align-items: center; gap: .5rem; font-weight: 700; font-size: .82rem; margin-bottom: .6rem; color: var(--text-color); }
 .wfd-card__head > i { color: #0d6efd; }
 .wfd-bars { display: flex; align-items: flex-end; gap: 4px; height: 90px; padding-top: 4px; }

@@ -88,8 +88,12 @@ def _ordered_tasks(workflow):
     return ordered
 
 
-def export_workflow(workflow) -> dict:
-    """A workflow as a spec (no ids, no owner): download it, import it elsewhere, duplicate it."""
+def export_workflow(workflow, include_files=True) -> dict:
+    """A workflow as a spec (no ids, no owner): download it, import it elsewhere, duplicate it.
+    Every instance reference is made portable (workflow_portable.py); what may not exist on the
+    other side is listed in "warnings"."""
+    from app.features.admin.task_scheduler import workflow_portable as portable
+    warnings = []
     tasks = _ordered_tasks(workflow)
     refs = {t.id: f't{i + 1}' for i, t in enumerate(tasks)}
     out_tasks = []
@@ -112,18 +116,21 @@ def export_workflow(workflow) -> dict:
             if t.trigger_mode == 'cron':
                 trigger['cron_expr'] = t.cron_expr
         task = {'ref': refs[t.id], 'title': t.title, 'description': t.description, 'task_type': t.task_type,
-                'target_payload': t.target_payload or {}, 'is_active': bool(t.is_active), 'trigger': trigger,
+                'target_payload': portable.export_payload(t, warnings), 'is_active': bool(t.is_active), 'trigger': trigger,
                 'reliability': {k: getattr(t, k) for k in _RELIABILITY_KEYS}}
         if t.position_x is not None and t.position_y is not None:
             task['position'] = [t.position_x, t.position_y]
         out_tasks.append(task)
+    notes, files = portable.export_attachments(workflow, include_files, warnings)
     return {'rulezet_workflow': SPEC_VERSION, 'title': workflow.title, 'description': workflow.description,
             'notify_on_failure': bool(workflow.notify_on_failure), 'notify_on_success': bool(workflow.notify_on_success),
-            'tasks': out_tasks}
+            'notify_emails': list(workflow.notify_emails or []),
+            'warnings': warnings, 'tasks': out_tasks, 'notes': notes, 'files': files}
 
 
-def create_from_spec(spec, editor, title=None, root_paused=False):
-    """Create a workflow and its tasks from a spec. Returns (workflow, error). All or nothing:
+def create_from_spec(spec, editor, title=None, root_paused=False, report=None):
+    """Create a workflow and its tasks from a spec. Returns (workflow, error). `report`, a list,
+    gets what could not be carried over from another instance (also pinned as a note). All or nothing:
     a task the task window would refuse (unknown type, missing option, bad trigger) removes the
     workflow again and its error is returned."""
     from app.features.admin.task_scheduler import task_scheduler_core as core
@@ -137,10 +144,13 @@ def create_from_spec(spec, editor, title=None, root_paused=False):
         'description': spec.get('description'),
         'notify_on_failure': spec.get('notify_on_failure', True),
         'notify_on_success': spec.get('notify_on_success', False),
+        'notify_emails': [e for e in (spec.get('notify_emails') or []) if isinstance(e, str)][:20],
     }, editor)
     if err:
         return None, err
 
+    from app.features.admin.task_scheduler import workflow_portable as portable
+    warnings = []
     ids = {}
     try:
         for n, task in enumerate(spec['tasks'], start=1):
@@ -149,8 +159,8 @@ def create_from_spec(spec, editor, title=None, root_paused=False):
             trigger = task.get('trigger') or {}
             data = {'workflow_uuid': workflow.uuid, 'title': (task.get('title') or task.get('task_type') or f'Task {n}')[:150],
                     'description': task.get('description'), 'task_type': task.get('task_type'),
-                    'target_payload': task.get('target_payload') or {},
                     'is_active': bool(task.get('is_active', True))}
+            data['target_payload'] = portable.import_payload(data['title'], task.get('target_payload'), editor, warnings)
             if 'after' in trigger:
                 parent = ids.get(trigger.get('after'))
                 if not parent:
@@ -177,7 +187,12 @@ def create_from_spec(spec, editor, title=None, root_paused=False):
             if isinstance(pos, (list, tuple)) and len(pos) == 2 and all(isinstance(v, (int, float)) for v in pos):
                 schedule.position_x, schedule.position_y = float(pos[0]), float(pos[1])
             ids[task.get('ref') or f't{n}'] = schedule.id
+        portable.import_attachments(workflow, spec, editor, warnings)
+        if warnings:
+            portable.report_note(workflow, editor, warnings)
         db.session.commit()
+        if report is not None:
+            report.extend(warnings)
     except ValueError as e:
         db.session.rollback()
         core.delete_workflow(workflow.uuid)
@@ -206,7 +221,8 @@ def save_as_template(workflow, editor, label=None, description=None):
         key, n = f'{base}_{n}', n + 1
     current[key] = {'label': label, 'icon': 'fa-solid fa-diagram-project', 'custom': True,
                     'description': (description or workflow.description or f'Saved from the workflow "{workflow.title}".')[:300],
-                    'spec': export_workflow(workflow)}
+                    'spec': {k: v for k, v in export_workflow(workflow, include_files=False).items()
+                             if k not in ('notes', 'files', 'warnings', 'notify_emails')}}
     set_setting(TEMPLATES_SETTING, current, user_id=editor.id, action='saved')
     return key, None
 
@@ -226,7 +242,7 @@ def delete_template(key, editor):
 
 
 def duplicate_workflow(workflow, editor):
-    spec = export_workflow(workflow)
+    spec = export_workflow(workflow, include_files=False)
     return create_from_spec(spec, editor, title=f'{workflow.title} (copy)'[:150], root_paused=True)
 
 

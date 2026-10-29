@@ -193,7 +193,7 @@
                                         <button class="dt-action-btn" title="Open" @click="openWorkflow(w)"><i class="fa-solid fa-arrow-right"></i></button>
                                         <button class="dt-action-btn" title="Edit" @click="openEditWorkflow(w)"><i class="fa-solid fa-pen"></i></button>
                                         <button class="dt-action-btn" title="Duplicate (tasks copied, first one paused)" @click="duplicateWorkflow(w)"><i class="fa-regular fa-clone"></i></button>
-                                        <a class="dt-action-btn" title="Export as a .json file" :href="'/admin/tasks/workflows/' + w.uuid + '/export'"><i class="fa-solid fa-file-export"></i></a>
+                                        <button class="dt-action-btn" title="Export as a .json file (to import here or on another instance)" @click="exportWorkflow(w)"><i class="fa-solid fa-file-export"></i></button>
                                         <button class="dt-action-btn" title="Save as a template (reusable from Templates)" @click="saveAsTemplate(w)"><i class="fa-solid fa-bookmark"></i></button>
                                         <button class="dt-action-btn dt-action-btn--danger" title="Delete" @click="deleteWorkflow(w)"><i class="fa-solid fa-trash"></i></button>
                                     </div>
@@ -244,7 +244,7 @@
                         <ul class="dropdown-menu dropdown-menu-end shadow border-0">
                             <li><button class="dropdown-item" @click="openEditWorkflow(activeWorkflow)"><i class="fa-solid fa-pen me-2"></i>Edit (title, launch date, alerts)</button></li>
                             <li><button class="dropdown-item" @click="duplicateWorkflow(activeWorkflow)"><i class="fa-regular fa-clone me-2"></i>Duplicate</button></li>
-                            <li><a class="dropdown-item" :href="'/admin/tasks/workflows/' + activeWorkflow.uuid + '/export'"><i class="fa-solid fa-file-export me-2"></i>Export (.json)</a></li>
+                            <li><button class="dropdown-item" @click="exportWorkflow(activeWorkflow)"><i class="fa-solid fa-file-export me-2"></i>Export (.json)</button></li>
                             <li><button class="dropdown-item" @click="saveAsTemplate(activeWorkflow)"><i class="fa-solid fa-bookmark me-2"></i>Save as template</button></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><button class="dropdown-item text-danger" @click="deleteWorkflow(activeWorkflow)"><i class="fa-solid fa-trash me-2"></i>Delete</button></li>
@@ -1526,11 +1526,31 @@
                 if (!templates.value.length) loadTemplates();
                 bootstrap.Modal.getOrCreateInstance(document.getElementById('templatesModal')).show();
             }
+            // Export: download the file, and say what may not exist on another instance
+            // (hand-picked rules, connector, Git sync schedule — workflow_portable.py).
+            async function exportWorkflow(w) {
+                const res = await fetch(`/admin/tasks/workflows/${w.uuid}/export`);
+                if (!res.ok) { create_message('Export failed.', 'danger-subtle'); return; }
+                const blob = await res.blob();
+                const name = (res.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/);
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = name ? name[1] : 'rulezet-workflow.json';
+                a.click();
+                URL.revokeObjectURL(a.href);
+                const warnings = (JSON.parse(await blob.text()).warnings) || [];
+                if (warnings.length) {
+                    create_message(`Exported. On another instance, check: ${warnings.join(' · ')}`, 'warning-subtle');
+                } else {
+                    create_message('Exported — nothing tied to this instance: it imports as is anywhere.', 'success-subtle');
+                }
+            }
+
             async function postAndOpen(url, body, okMsg) {
                 const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                                                body: body === undefined ? null : JSON.stringify(body) });
                 const data = await res.json().catch(() => ({}));
-                create_message(data.message || (res.ok ? okMsg : 'Failed.'), res.ok ? 'success-subtle' : 'danger-subtle');
+                create_message(data.message || (res.ok ? okMsg : 'Failed.'), res.ok ? (data.toast_class || 'success-subtle') : 'danger-subtle');
                 if (res.ok && data.workflow) {
                     bootstrap.Modal.getInstance(document.getElementById('templatesModal'))?.hide();
                     fetchWorkflows(1);
@@ -2818,7 +2838,7 @@
             onUnmounted(() => stopLivePolling());
 
             return {
-                truncate, health, alertTaskCount, retryTaskCount, autoPausedCount, linkAlert, saveLinkAlert, taskAlert, ALERT_POINTS, notebook, noteOnRun, pinnedNotes, showPinned, share, openShare, shareAction, copyShare,
+                truncate, health, exportWorkflow, alertTaskCount, retryTaskCount, autoPausedCount, linkAlert, saveLinkAlert, taskAlert, ALERT_POINTS, notebook, noteOnRun, pinnedNotes, showPinned, share, openShare, shareAction, copyShare,
                 route, activeWorkflow, openWorkflow, backToWorkflows, runWorkflowNow,
                 runPreview, runPreviewLoading, askRunWorkflow, confirmRunWorkflow,
                 dashboard, loadDashboard, barHeight, toggleWorkflowActive, runFromHere, setTaskActive,
