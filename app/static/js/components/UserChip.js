@@ -168,7 +168,7 @@ const UserChip = defineComponent({
           <div>
             <div class="fw-semibold" style="font-size:.9rem;color:var(--text-color);">[[ displayName ]]
               <i v-if="tooltipData && tooltipData.identity_verified" class="fa-solid fa-circle-check ms-1"
-                 style="color:#0d6efd;font-size:.8rem;" title="Identity verified by an admin"></i>
+                 style="color:#0d6efd;font-size:.8rem;" data-rz-pop-title="Verified by an admin" data-rz-pop-text="An admin checked this person is who they claim to be." data-rz-pop-icon="fa-user-check" data-rz-pop-color="#0d6efd"></i>
             </div>
             <div v-if="tooltipData && tooltipData.location" class="text-muted" style="font-size:.75rem;">
               <i class="fa-solid fa-location-dot me-1" style="font-size:.65rem;"></i>[[ tooltipData.location ]]
@@ -192,7 +192,9 @@ const UserChip = defineComponent({
         <!-- Organisation (set by an admin) -->
         <div v-if="tooltipData && tooltipData.organisations && tooltipData.organisations.length"
              class="d-flex flex-wrap gap-1 mb-2" style="font-size:.75rem;">
-          <span v-for="o in tooltipData.organisations" :key="o.id" class="badge" :title="'Organisation: ' + o.name"
+          <span v-for="o in tooltipData.organisations" :key="o.id" class="badge"
+                :data-rz-pop-title="o.name" data-rz-pop-text="Organisation" :data-rz-pop-url="o.website || null"
+                :data-rz-pop-icon="o.icon" :data-rz-pop-color="o.color"
                 :style="{ background: o.color, color: '#fff', fontWeight: 600 }">
             <i class="fa-solid me-1" :class="o.icon"></i>[[ o.text ]]
           </span>

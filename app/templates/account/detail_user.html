@@ -86,19 +86,19 @@
                         <!-- Identity -->
                         <div class="ud-profile-identity">
                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <h2 class="ud-profile-name mb-0">[[ user.first_name ]] [[ user.last_name ]]{% if user.identity_verified %}<i class="fas fa-circle-check ud-identity-check" title="Identity verified by an admin"></i>{% endif %}</h2>
+                                <h2 class="ud-profile-name mb-0">[[ user.first_name ]] [[ user.last_name ]]{% if user.identity_verified %}<i class="fas fa-circle-check ud-identity-check" data-rz-pop-title="Verified by an admin" data-rz-pop-text="An admin checked this person is who they claim to be." data-rz-pop-icon="fa-user-check" data-rz-pop-color="#0d6efd"></i>{% endif %}</h2>
                                 {% if user.is_admin %}
                                 <span class="ud-profile-badge ud-profile-badge--admin">
                                     <i class="fas fa-crown me-1"></i>Admin
                                 </span>
                                 {% endif %}
                                 {% for org in user.organisations %}
-                                <span class="ud-profile-badge ud-profile-badge--org" title="Organisation: {{ org.name }}" style="background: {{ org.color }};">
+                                <span class="ud-profile-badge ud-profile-badge--org" style="background: {{ org.color }};" data-rz-pop-title="{{ org.name }}" data-rz-pop-text="Organisation"{% if org.website %} data-rz-pop-url="{{ org.website }}"{% endif %} data-rz-pop-icon="{{ org.icon }}" data-rz-pop-color="{{ org.color }}">
                                     <i class="fas {{ org.icon }} me-1"></i>{% if org.website %}<a href="{{ org.website }}" target="_blank" rel="noopener noreferrer" class="text-reset text-decoration-none">{{ org.text }}</a>{% else %}{{ org.text }}{% endif %}
                                 </span>
                                 {% endfor %}
                                 {% if user.identity_verified %}
-                                <span class="ud-profile-badge ud-profile-badge--identity" title="An admin checked this person is who they claim to be">
+                                <span class="ud-profile-badge ud-profile-badge--identity" data-rz-pop-title="Verified by an admin" data-rz-pop-text="An admin checked this person is who they claim to be." data-rz-pop-icon="fa-user-check" data-rz-pop-color="#0d6efd">
                                     <i class="fas fa-user-check me-1"></i>Verified by an admin
                                 </span>
                                 {% endif %}
