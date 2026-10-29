@@ -43,6 +43,7 @@
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/base/sidebar.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/components/global-search.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/base/toaster.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/components/badge-popover.css') }}">
     {% if tour_ctx %}<link rel="stylesheet" href="{{ url_for('static', filename='css/components/tour.css') }}">{% endif %}
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/jobWidget.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/chatbot/chatbot.css') }}">
@@ -263,6 +264,8 @@
     <script type="module" src="{{ url_for('static', filename='js/tour/tourLauncher.js') }}"></script>
     {% endif %}
     <script src="{{ url_for('static', filename='js/themes/christmas.js') }}" defer></script>
+    {# hover card of badges with data-rz-pop-title (organisation, Verified by an admin…) #}
+    <script type="module" src="{{ url_for('static', filename='js/components/badge-popover.js') }}"></script>
     {% block script %}
     {% endblock %}
 

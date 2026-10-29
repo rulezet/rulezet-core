@@ -1,0 +1,65 @@
+/* Hover card of badges (js/components/badge-popover.js) */
+.rz-badge-pop {
+    position: fixed;
+    z-index: 10000;
+    min-width: 200px;
+    max-width: min(320px, calc(100vw - 16px));
+    padding: .65rem .75rem;
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-top: 3px solid var(--pop-color, #0d6efd);
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, .16);
+    font-size: .82rem;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity .15s ease, transform .15s ease;
+}
+.rz-badge-pop.is-shown { opacity: 1; transform: none; }
+
+.rz-badge-pop__head { display: flex; align-items: center; gap: .5rem; }
+.rz-badge-pop__icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; flex-shrink: 0;
+    border-radius: 7px;
+    background: var(--pop-color, #0d6efd);
+    color: #fff;
+    font-size: .75rem;
+}
+.rz-badge-pop__title { font-weight: 700; font-size: .88rem; word-break: break-word; }
+.rz-badge-pop__text { margin-top: .3rem; color: var(--subtle-text-color); line-height: 1.35; }
+
+.rz-badge-pop__url {
+    display: flex; align-items: center; gap: .4rem;
+    margin-top: .5rem;
+    padding: .3rem .4rem .3rem .55rem;
+    background: var(--light-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+}
+.rz-badge-pop__link-icon { color: var(--subtle-text-color); font-size: .7rem; }
+.rz-badge-pop__url a {
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: var(--bs-font-monospace, monospace);
+    font-size: .76rem;
+    text-decoration: none;
+    user-select: all;
+}
+.rz-badge-pop__url a:hover { text-decoration: underline; }
+.rz-badge-pop__copy {
+    border: 0; background: none;
+    padding: .15rem .35rem; border-radius: 5px;
+    color: var(--subtle-text-color);
+    line-height: 1;
+}
+.rz-badge-pop__copy:hover { color: var(--text-color); background: var(--border-color); }
+.rz-badge-pop__copy.is-done { color: #198754; }
+
+[data-rz-pop-title] { cursor: default; }
+a[data-rz-pop-title], [data-rz-pop-title] a { cursor: pointer; }
+
+@media (prefers-reduced-motion: reduce) {
+    .rz-badge-pop { transition: none; }
+}
