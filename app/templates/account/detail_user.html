@@ -92,6 +92,11 @@
                                     <i class="fas fa-crown me-1"></i>Admin
                                 </span>
                                 {% endif %}
+                                {% if user.identity_verified %}
+                                <span class="ud-profile-badge ud-profile-badge--identity" title="An admin checked this person is who they claim to be">
+                                    <i class="fas fa-user-check me-1"></i>Verified by an admin
+                                </span>
+                                {% endif %}
                                 {% if user.is_verified %}
                                 <span class="ud-profile-badge ud-profile-badge--verified">
                                     <i class="fas fa-circle-check me-1"></i>Verified

@@ -1571,3 +1571,35 @@ def recompute_gamification_batch(user_ids: list) -> int:
 
 def get_total_users():
     return User.query.count()
+
+# ── Leaderboard cache ────────────────────────────────────────────────────────
+# The rankings only change for good when an admin runs Refresh (job recompute_gamification),
+# so their pages are cached until then: every key carries a version the job bumps.
+_LEADERBOARD_VERSION_KEY = 'leaderboard_version'
+
+
+def reset_leaderboard_cache():
+    from app import cache
+    try:
+        cache.set(_LEADERBOARD_VERSION_KEY, (cache.get(_LEADERBOARD_VERSION_KEY) or 0) + 1, timeout=0)
+    except Exception:
+        pass
+
+
+def get_leaderboard_cached(**kwargs) -> dict:
+    """get_leaderboard_paginated(), cached until the next Refresh (see reset_leaderboard_cache)."""
+    from app import cache
+    try:
+        version = cache.get(_LEADERBOARD_VERSION_KEY) or 0
+        key = 'leaderboard:%s:%s' % (version, ':'.join(f'{k}={kwargs[k]}' for k in sorted(kwargs)))
+        hit = cache.get(key)
+        if hit is not None:
+            return hit
+    except Exception:
+        return get_leaderboard_paginated(**kwargs)
+    data = get_leaderboard_paginated(**kwargs)
+    try:
+        cache.set(key, data, timeout=7 * 24 * 3600)
+    except Exception:
+        pass
+    return data

@@ -5631,6 +5631,8 @@ def handle_recompute_gamification(job, app):
                 f"Progress: {job.done}/{job.total} users ({job.progress_pct}%) — {recomputed} recomputed so far.",
                 level='info', event='progress')
 
+    from app.features.account.account_core import reset_leaderboard_cache
+    reset_leaderboard_cache()
     log_job(job, f"Gamification recompute complete — {recomputed} user(s) processed.", level='success', event='done')
 
 

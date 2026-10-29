@@ -181,6 +181,7 @@ TITLES: dict[str, str] = {
     "admin.logs_bulk_delete":   "Logs Bulk Delete Queued",
     "admin.submodule_update":   "Submodules Updated",
     "admin.cache_clear":        "Caches Cleared",
+    "admin.identity_verification": "Identity Verification",
     "admin.settings_changed":   "Admin Settings Changed",
     "admin.test_email_sent":    "Test Email Sent",
     "admin.instance_init":      "Instance Config Refreshed",

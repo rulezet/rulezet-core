@@ -400,3 +400,19 @@
     font-size: .78rem;
     color: var(--subtle-text-color);
 }
+
+/* Identity verified by an admin (account.set_identity_verification) */
+.ul-identity-badge {
+    display: inline-flex; align-items: center;
+    padding: .2rem .5rem; border-radius: 999px;
+    font-size: .68rem; font-weight: 600;
+    color: #0a58ca; background: rgba(13, 110, 253, .1); border: 1px solid rgba(13, 110, 253, .3);
+}
+.ul-identity-tick { color: #0d6efd; font-size: .75rem; margin-left: .25rem; }
+.ul-action-identity-on, .ul-action-secondary--identity { color: #0d6efd !important; }
+.ul-idv-history { max-height: 260px; overflow-y: auto; }
+.ul-idv-entry { border-left: 3px solid var(--border-color); padding: .35rem 0 .35rem .7rem; margin-bottom: .6rem; }
+.ul-idv-entry--on { border-left-color: #198754; }
+.ul-idv-entry--off { border-left-color: #dc3545; }
+.ul-idv-entry__head { font-size: .78rem; color: var(--subtle-text-color); }
+.ul-idv-entry__text { font-size: .85rem; white-space: pre-wrap; word-break: break-word; }

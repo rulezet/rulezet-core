@@ -139,6 +139,21 @@ class Gamification(db.Model):
             self.current_level = self.calculate_current_level(new_points)
 
 
+BADGE_CHECK_KEY = 'badge_check:{}'
+
+
+def mark_badge_check(user_id):
+    """The user's points just moved: their next page checks for newly unlocked badges (and
+    congratulates them). Pages never check otherwise — see account.check_new_badges."""
+    if not user_id:
+        return
+    try:
+        from app import cache
+        cache.set(BADGE_CHECK_KEY.format(user_id), 1, timeout=7 * 24 * 3600)
+    except Exception:
+        pass
+
+
 def receive_before_flush(session, flush_context, instances):
     """
     Listener to check and update Gamification scores before a transaction is committed.
@@ -159,6 +174,7 @@ def receive_before_flush(session, flush_context, instances):
             
             if has_changed:
                 instance.update_scores()
+                mark_badge_check(instance.user_id)
 
 
 event.listen(db.session, 'before_flush', receive_before_flush)

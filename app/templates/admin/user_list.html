@@ -46,7 +46,8 @@
         :initial-per-page="16"
         :sync-url="true"
         @toggle-admin="onToggleAdmin"
-        @delete-user="onDeleteUser">
+        @delete-user="onDeleteUser"
+        @identity="onIdentity">
     </user-list>
 
     <!-- Toggle admin modal -->
@@ -91,6 +92,56 @@
         </div>
     </teleport>
 
+    <!-- Identity verification modal: verify / withdraw with a justification, and the history -->
+    <teleport to="body">
+        <div class="modal fade" id="identityModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow-lg" style="border-radius:16px;">
+                    <div class="modal-header border-0 pb-0">
+                        <h6 class="modal-title fw-bold text-primary">
+                            <i class="fas fa-id-card me-2"></i>Identity of [[ idTarget?.first_name ]] [[ idTarget?.last_name ]]
+                        </h6>
+                        <button class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-3 small">
+                            <span v-if="idVerified" class="ul-identity-badge"><i class="fas fa-user-check me-1"></i>Verified by an admin</span>
+                            <span v-else class="text-muted">Not verified: nobody has confirmed this person is who they claim to be.</span>
+                        </p>
+
+                        <label class="form-label small fw-semibold mb-1">
+                            [[ idVerified ? 'Why withdraw the verification?' : 'How did you check this person is who they claim to be?' ]]
+                        </label>
+                        <textarea v-model="idJustification" class="form-control form-control-sm mb-1" rows="3" maxlength="2000"
+                                  :placeholder="idVerified ? 'e.g. the account was handed over to someone else' : 'e.g. met at the conference, confirmed by email from their company domain'"></textarea>
+                        <div class="text-muted mb-3" style="font-size:.72rem;">Required (10 characters at least). Kept in the history below.</div>
+
+                        <div class="fw-semibold small mb-2"><i class="fas fa-clock-rotate-left me-1"></i>History</div>
+                        <div v-if="idLoading" class="text-muted small"><span class="spinner-border spinner-border-sm me-1"></span>Loading…</div>
+                        <div v-else-if="!idHistory.length" class="text-muted small">No decision yet.</div>
+                        <div v-else class="ul-idv-history">
+                            <div v-for="h in idHistory" :key="h.id" class="ul-idv-entry" :class="h.verified ? 'ul-idv-entry--on' : 'ul-idv-entry--off'">
+                                <div class="ul-idv-entry__head">
+                                    <strong :class="h.verified ? 'text-success' : 'text-danger'">[[ h.verified ? 'Verified' : 'Withdrawn' ]]</strong>
+                                    by <strong>[[ h.by ? (h.by.first_name + ' ' + (h.by.last_name || '')) : 'a deleted admin' ]]</strong>
+                                    · [[ h.created_at ]]
+                                </div>
+                                <div class="ul-idv-entry__text">[[ h.justification ]]</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0 pt-0 justify-content-end gap-2">
+                        <button class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Close</button>
+                        <button class="btn rounded-pill px-4" :class="idVerified ? 'btn-outline-danger' : 'btn-primary'"
+                                :disabled="idWorking || idJustification.trim().length < 10" @click="saveIdentity">
+                            <span v-if="idWorking" class="spinner-border spinner-border-sm me-2"></span>
+                            [[ idVerified ? 'Withdraw verification' : 'Verify identity' ]]
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </teleport>
     <!-- Delete user modal -->
     <teleport to="body">
         <div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
@@ -189,6 +240,67 @@
                 }
             }
 
+            // ── Identity verification ─────────────────────────────────────
+            const idTarget        = ref(null)
+            const idVerified      = ref(false)
+            const idHistory       = ref([])
+            const idJustification = ref('')
+            const idLoading       = ref(false)
+            const idWorking       = ref(false)
+            let   _idModal        = null
+            const csrfHeaders = () => ({ 'Content-Type': 'application/json',
+                                         'X-CSRFToken': document.getElementById('csrf_token')?.value ?? '' })
+
+            async function loadIdentity(user) {
+                idLoading.value = true
+                try {
+                    const data = await fetch('/account/identity_verification/' + user.id).then(r => r.json())
+                    idVerified.value = !!data.identity_verified
+                    idHistory.value  = data.history || []
+                } catch {
+                    create_message('Network error', 'danger-subtle')
+                } finally {
+                    idLoading.value = false
+                }
+            }
+
+            function onIdentity(user) {
+                idTarget.value = user
+                idVerified.value = !!user.identity_verified
+                idHistory.value = []
+                idJustification.value = ''
+                _idModal = _idModal || new bootstrap.Modal(document.getElementById('identityModal'))
+                _idModal.show()
+                loadIdentity(user)
+            }
+
+            async function saveIdentity() {
+                if (!idTarget.value) return
+                idWorking.value = true
+                try {
+                    const res = await fetch('/account/identity_verification', {
+                        method: 'POST', headers: csrfHeaders(),
+                        body: JSON.stringify({ userId: idTarget.value.id, verified: !idVerified.value,
+                                               justification: idJustification.value.trim() }),
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                        idTarget.value.identity_verified = data.identity_verified
+                        create_message(data.identity_verified
+                            ? `${idTarget.value.first_name}'s identity is verified`
+                            : `Verification withdrawn from ${idTarget.value.first_name}`, 'success-subtle')
+                        idJustification.value = ''
+                        await loadIdentity(idTarget.value)
+                    } else {
+                        create_message(data.message || 'Failed.', 'danger-subtle')
+                    }
+                } catch {
+                    create_message('Network error', 'danger-subtle')
+                } finally {
+                    idWorking.value = false
+                }
+            }
+
             // ── Delete user ───────────────────────────────────────────────
             const deleteTarget  = ref(null)
             const deleteWorking = ref(false)
@@ -228,6 +340,7 @@
                 userListRef,
                 adminTarget,  adminWorking,  onToggleAdmin,  confirmToggleAdmin,
                 deleteTarget, deleteWorking, onDeleteUser,   confirmDeleteUser,
+                idTarget, idVerified, idHistory, idJustification, idLoading, idWorking, onIdentity, saveIdentity,
             }
         }
     }).mount('#main-container')

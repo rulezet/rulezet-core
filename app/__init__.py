@@ -308,7 +308,16 @@ def create_app(start_worker=True):
         except Exception:
             pass  # table may not exist yet (fresh install before migrations run)
         from app.core.utils.mail_status import is_email_available
+        badge_check_pending = False
+        try:
+            from flask_login import current_user
+            if current_user.is_authenticated:
+                from app.core.db_class.gamification import BADGE_CHECK_KEY
+                badge_check_pending = bool(cache.get(BADGE_CHECK_KEY.format(current_user.id)))
+        except Exception:
+            pass
         return {
+            'badge_check_pending': badge_check_pending,
             'app_version': current_app.config.get('APP_VERSION', 'unknown'),
             'is_official': current_app.config.get('IS_OFFICIAL_INSTANCE', False),
             'chatbot_enabled': chatbot_enabled,
