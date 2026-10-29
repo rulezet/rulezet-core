@@ -166,7 +166,10 @@ const UserChip = defineComponent({
             <template v-else>[[ initials ]]</template>
           </span>
           <div>
-            <div class="fw-semibold" style="font-size:.9rem;color:var(--text-color);">[[ displayName ]]</div>
+            <div class="fw-semibold" style="font-size:.9rem;color:var(--text-color);">[[ displayName ]]
+              <i v-if="tooltipData && tooltipData.identity_verified" class="fa-solid fa-circle-check ms-1"
+                 style="color:#0d6efd;font-size:.8rem;" title="Identity verified by an admin"></i>
+            </div>
             <div v-if="tooltipData && tooltipData.location" class="text-muted" style="font-size:.75rem;">
               <i class="fa-solid fa-location-dot me-1" style="font-size:.65rem;"></i>[[ tooltipData.location ]]
             </div>
