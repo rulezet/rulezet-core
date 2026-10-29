@@ -374,6 +374,61 @@ def _clean_website(value):
     return value
 
 
+def _org_fields(data, org=None):
+    """name, website and the badge's colour / icon / text from a request, checked: raises ValueError."""
+    import re as _re
+    from sqlalchemy import func
+    from app.core.db_class.user import Organisation
+    out = {}
+    if org is None or 'name' in data:
+        name = (data.get('name') or '').strip()
+        if not 2 <= len(name) <= 100:
+            raise ValueError("A name of 2 to 100 characters is required")
+        same = Organisation.query.filter(func.lower(Organisation.name) == name.lower()).first()
+        if same and (org is None or same.id != org.id):
+            raise ValueError("This organisation already exists")
+        out['name'] = name
+    if 'website' in data:
+        out['website'] = _clean_website(data.get('website'))
+    if 'color' in data:
+        color = (data.get('color') or '').strip()
+        if color and not _re.fullmatch(r'#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?', color):
+            raise ValueError("The colour must be a hex code like #6f42c1")
+        out['color'] = color or None
+    if 'icon' in data:
+        icon = (data.get('icon') or '').strip()
+        if icon and not _re.fullmatch(r'fa-[a-z0-9-]{1,40}', icon):
+            raise ValueError("The icon must be a Font Awesome name like fa-building")
+        out['icon'] = icon or None
+    if 'label' in data:
+        label = (data.get('label') or '').strip()
+        if len(label) > 40:
+            raise ValueError("The badge text is 40 characters at most")
+        out['label'] = label or None
+    return out
+
+
+@account_blueprint.route("/organisations/<int:org_id>", methods=['POST'])
+@login_required
+def update_organisation(org_id):
+    """Admin: rename an organisation, change its website or its badge (colour, icon, text)."""
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+    from app.core.db_class.user import Organisation
+    org = Organisation.query.get(org_id)
+    if not org:
+        return jsonify({"success": False, "message": "Organisation not found"}), 404
+    try:
+        fields = _org_fields(json_object(), org)
+    except ValueError as e:
+        return jsonify({"success": False, "message": str(e)}), 400
+    for k, v in fields.items():
+        setattr(org, k, v)
+    db.session.commit()
+    log_activity("admin.organisation", f"Edited the organisation {org.name}", target_type="organisation", target_id=org.id)
+    return jsonify({"success": True, "organisation": org.to_json()})
+
+
 @account_blueprint.route("/organisations", methods=['GET'])
 @login_required
 def list_organisations():
@@ -396,20 +451,14 @@ def create_organisation():
         return jsonify({"success": False, "message": "Forbidden"}), 403
     from sqlalchemy import func
     from app.core.db_class.user import Organisation
-    data = json_object()
-    name = (data.get('name') or '').strip()
-    if not 2 <= len(name) <= 100:
-        return jsonify({"success": False, "message": "A name of 2 to 100 characters is required"}), 400
     try:
-        website = _clean_website(data.get('website'))
+        fields = _org_fields(json_object())
     except ValueError as e:
-        return jsonify({"success": False, "message": str(e)}), 400
-    if Organisation.query.filter(func.lower(Organisation.name) == name.lower()).first():
-        return jsonify({"success": False, "message": "This organisation already exists"}), 409
-    org = Organisation(name=name, website=website, created_by=current_user.id)
+        return jsonify({"success": False, "message": str(e)}), 409 if 'exists' in str(e) else 400
+    org = Organisation(created_by=current_user.id, **fields)
     db.session.add(org)
     db.session.commit()
-    log_activity("admin.organisation", f"Created the organisation {name}", target_type="organisation", target_id=org.id)
+    log_activity("admin.organisation", f"Created the organisation {org.name}", target_type="organisation", target_id=org.id)
     return jsonify({"success": True, "organisation": org.to_json()}), 201
 
 
@@ -498,6 +547,8 @@ def users_data_table():
     f_admin  = request.args.get('admin',    '')
     f_conn   = request.args.get('connected','')
     f_verif  = request.args.get('verified', '')
+    f_ident  = request.args.get('identity', '')
+    f_org    = request.args.get('org',      '')
     sort_by  = request.args.get('sort',     'created_at')
     sort_dir = request.args.get('dir',      'desc')
 
@@ -518,6 +569,12 @@ def users_data_table():
 
     if f_verif == 'true':    query = query.filter(User.is_verified.is_(True))
     elif f_verif == 'false': query = query.filter(User.is_verified.is_(False))
+
+    if f_ident == 'true':    query = query.filter(User.identity_verified.is_(True))
+    elif f_ident == 'false': query = query.filter(User.identity_verified.is_(False))
+
+    if f_org == 'none':      query = query.filter(User.organisation_id.is_(None))
+    elif f_org.isdigit():    query = query.filter(User.organisation_id == int(f_org))
 
     _sort_map = {
         'created_at': User.created_at, 'last_seen': User.last_seen,

@@ -185,14 +185,42 @@
                             <div class="fw-semibold small mb-1">Existing organisations</div>
                             <div v-if="!organisations.length" class="text-muted small">None yet.</div>
                             <div v-else class="ul-org-list">
-                                <div v-for="o in organisations" :key="o.id" class="ul-org-row">
-                                    <i class="fas fa-building" style="color:#6f42c1;"></i>
-                                    <span class="fw-semibold">[[ o.name ]]</span>
+                                <template v-for="o in organisations" :key="o.id">
+                                <div class="ul-org-row">
+                                    <span class="ul-org-chip" :style="{ background: o.color }"><i class="fas me-1" :class="o.icon"></i>[[ o.text ]]</span>
+                                    <span class="fw-semibold" v-if="o.label">[[ o.name ]]</span>
                                     <a v-if="o.website" :href="o.website" target="_blank" rel="noopener" class="small text-truncate" style="max-width:160px;">[[ o.website ]]</a>
                                     <span class="text-muted small ms-auto">[[ o.members ]] member<span v-if="o.members !== 1">s</span></span>
+                                    <button class="btn btn-sm btn-link p-0 ms-2" title="Edit the name, website and badge"
+                                            @click="startEditOrganisation(o)"><i class="fas fa-pen"></i></button>
                                     <button class="btn btn-sm btn-link text-danger p-0 ms-2" title="Delete (members keep their account, without organisation)"
                                             :disabled="orgWorking" @click="deleteOrganisation(o)"><i class="fas fa-trash"></i></button>
                                 </div>
+                                <div v-if="orgEdit && orgEdit.id === o.id" class="ul-org-edit">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <span class="small text-muted">Preview</span>
+                                        <span class="ul-org-chip" :style="{ background: orgEdit.color }"><i class="fas me-1" :class="orgEdit.icon || 'fa-building'"></i>[[ orgEdit.label || orgEdit.name ]]</span>
+                                    </div>
+                                    <div class="row g-2">
+                                        <div class="col-sm-6"><label class="form-label small mb-1">Name</label>
+                                            <input v-model="orgEdit.name" class="form-control form-control-sm" maxlength="100"></div>
+                                        <div class="col-sm-6"><label class="form-label small mb-1">Badge text <span class="text-muted">(the name if empty)</span></label>
+                                            <input v-model="orgEdit.label" class="form-control form-control-sm" maxlength="40"></div>
+                                        <div class="col-12"><label class="form-label small mb-1">Website</label>
+                                            <input v-model="orgEdit.website" class="form-control form-control-sm" maxlength="256" placeholder="https://…"></div>
+                                        <div class="col-sm-7"><icon-picker v-model="orgEdit.icon"></icon-picker></div>
+                                        <div class="col-sm-5"><label class="form-label small mb-1">Colour</label>
+                                            <div class="d-flex gap-1">
+                                                <input type="color" class="form-control form-control-color" v-model="orgEdit.color" style="width:45px;">
+                                                <input v-model="orgEdit.color" class="form-control form-control-sm font-monospace" maxlength="7">
+                                            </div></div>
+                                    </div>
+                                    <div class="d-flex justify-content-end gap-2 mt-2">
+                                        <button class="btn btn-sm btn-light" @click="orgEdit = null">Cancel</button>
+                                        <button class="btn btn-sm btn-primary" :disabled="orgWorking" @click="saveOrganisation">Save</button>
+                                    </div>
+                                </div>
+                                </template>
                             </div>
                         </template>
                     </div>
@@ -253,12 +281,13 @@
     import UserList            from '/static/js/account/userList.js'
     import PaginationComponent from '/static/js/rule/paginationComponent.js'
     import UserChip            from '/static/js/components/UserChip.js'
+    import IconPicker          from '/static/js/tags/utils/iconPicker.js'
 
     const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }}
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { 'user-list': UserList, 'pagination-component': PaginationComponent, 'user-chip': UserChip },
+        components: { 'user-list': UserList, 'pagination-component': PaginationComponent, 'user-chip': UserChip, 'icon-picker': IconPicker },
         setup() {
             const userListRef   = ref(null)
 
@@ -372,6 +401,7 @@
             const orgName       = ref('')
             const orgWebsite    = ref('')
             const orgWorking    = ref(false)
+            const orgEdit       = ref(null)
             let   _orgModal     = null
 
             async function loadOrganisations() {
@@ -401,6 +431,28 @@
                         orgName.value = ''; orgWebsite.value = ''
                         await loadOrganisations()
                         if (orgUser.value) orgSelected.value = data.organisation.id
+                    } else {
+                        create_message(data.message || 'Failed.', 'danger-subtle')
+                    }
+                } catch { create_message('Network error', 'danger-subtle') }
+                finally { orgWorking.value = false }
+            }
+            function startEditOrganisation(o) {
+                orgEdit.value = { id: o.id, name: o.name, website: o.website || '', label: o.label || '', icon: o.icon, color: o.color }
+            }
+            async function saveOrganisation() {
+                const e = orgEdit.value
+                if (!e) return
+                orgWorking.value = true
+                try {
+                    const data = await fetch(`/account/organisations/${e.id}`, { method: 'POST', headers: csrfHeaders(),
+                        body: JSON.stringify({ name: e.name.trim(), website: e.website.trim(), label: e.label.trim(),
+                                               icon: e.icon, color: e.color }) }).then(r => r.json())
+                    if (data.success) {
+                        create_message(`Organisation "${data.organisation.name}" saved`, 'success-subtle')
+                        orgEdit.value = null
+                        await loadOrganisations()
+                        userListRef.value?.fetchData()
                     } else {
                         create_message(data.message || 'Failed.', 'danger-subtle')
                     }
@@ -481,6 +533,7 @@
                 idTarget, idVerified, idHistory, idJustification, idLoading, idWorking, onIdentity, saveIdentity,
                 organisations, orgUser, orgSelected, orgName, orgWebsite, orgWorking,
                 openOrganisations, onOrganisation, createOrganisation, deleteOrganisation, assignOrganisation,
+                orgEdit, startEditOrganisation, saveOrganisation,
             }
         }
     }).mount('#main-container')
