@@ -9,7 +9,8 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4" id="main-container" v-cloak>
+<div id="main-container">{# this page's Vue root (its modals included) #}
+<div class="container-fluid mt-4" v-cloak>
 
     <!-- Banner — full width, above the 2-col layout -->
     <div class="position-relative mb-4">
@@ -431,6 +432,7 @@
         </div>
     </div>
 </teleport>
+</div>
 {% endblock %}
 
 {% block script %}

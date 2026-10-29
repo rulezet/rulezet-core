@@ -11,6 +11,7 @@
 {% endblock %}
 
 {% block content %}
+<div id="main-container">{# this page's Vue root (its modals included) #}
 <div v-cloak>
 
   <div class="explorer-banner mb-4">
@@ -96,4 +97,5 @@
     },
   }).mount('#main-container')
 </script>
+</div>
 {% endblock %}

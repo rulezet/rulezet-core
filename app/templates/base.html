@@ -190,7 +190,8 @@
     </div>
 
     <div class="d-flex flex-column min-vh-100">
-        <div class="flex-grow-1 container" id="main-container">
+        {# not "main-container": that id is each page's own Vue root (mount('#main-container')); a second one here made Vue re-render the whole page #}
+        <div class="flex-grow-1 container" id="rz-page">
             <main class="col ps-md-4 pt-2">
                 {% set _update = pending_update_info() %}
                 {% if _update %}

@@ -49,6 +49,7 @@
 </style>
 {% endblock %}
 {% block content %}
+<div id="main-container">{# this page's Vue root (its modals included) #}
 <div class="container py-5" v-cloak>
     <div id="bundle-info" data-bundle-id="{{ bundle_id }}"></div>
 
@@ -842,6 +843,7 @@
         </div>
     </template>
 
+</div>
 </div>
 {% endblock %}
 

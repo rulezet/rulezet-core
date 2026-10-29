@@ -7,7 +7,8 @@
 {% endblock %}
 
 {% block content %}
-<div class="container mt-3" id="main-container" v-cloak>
+<div id="main-container">{# this page's Vue root (its modals included) #}
+<div class="container mt-3" v-cloak>
 
     <div class="explorer-banner mb-4">
         <img src="{{ url_for('static', filename='image/rulezet_rulesets_logo.png') }}" alt=""
@@ -240,6 +241,7 @@
     </div>
 </div>
 
+</div>
 {% endblock %}
 
 {% block script %}

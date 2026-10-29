@@ -1164,7 +1164,7 @@ export default {
                                 Format <i class="fas dt-sort-icon" :class="sortIcon('format')"></i>
                             </div>
                         </th>
-                        <th v-show="colVisible.editor" class="dt-th" style="width:140px;">
+                        <th v-show="colVisible.editor" class="dt-th" style="width:64px;" title="Editor">
                             Editor
                         </th>
                         <th v-show="colVisible.description" class="dt-th">Description</th>
@@ -1323,13 +1323,15 @@ export default {
                                              :active="ruleType === rule.format" @filter="filterByFormat"></format-chip>
                             </td>
 
-                            <td v-show="colVisible.editor" class="dt-td" style="max-width:140px;"
+                            <td v-show="colVisible.editor" class="dt-td" style="max-width:64px;"
                                 @click.stop>
+                                <!-- profile picture only (room); the name is on hover -->
                                 <user-chip
                                     :user-id="rule.user_id"
                                     :username="rule.editor"
                                     :avatar="rule.editor_avatar"
-                                    size="xs">
+                                    :show-name="false"
+                                    size="sm">
                                 </user-chip>
                             </td>
 
@@ -1938,8 +1940,19 @@ export default {
             { key: 'votes',       label: 'Votes' },
             { key: 'quality',     label: 'Quality' },
         ]
-        const colVisible = Vue.reactive(Object.fromEntries(TOGGLEABLE_COLS.map(c => [c.key, !props.hiddenColumns.includes(c.key)])))
+        // ID and Created are hidden by default (room for the rest): shown as soon as the list is
+        // sorted by creation date, searched by UUID / ID or restricted to given ids
+        const HIDDEN_BY_DEFAULT = ['id', 'created']
+        const colVisible = Vue.reactive(Object.fromEntries(TOGGLEABLE_COLS.map(c =>
+            [c.key, !props.hiddenColumns.includes(c.key) && !HIDDEN_BY_DEFAULT.includes(c.key)])))
         function toggleColumn(key) { colVisible[key] = !colVisible[key] }
+        function revealUsedColumns() {
+            if (sortKey.value === 'creation_date' && !props.hiddenColumns.includes('created')) colVisible.created = true
+            if (((searchField.value === 'uuid' && search.value.trim()) || props.ids)
+                && !props.hiddenColumns.includes('id')) colVisible.id = true
+        }
+        revealUsedColumns()
+        watch([sortKey, searchField, search], revealUsedColumns)
 
         // ── Column picker panel — teleported to <body>, positioned manually ──
         const showColPicker  = ref(false)

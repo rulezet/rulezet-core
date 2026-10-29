@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
 {% endblock %}
 {% block content %}
+<div id="main-container">{# this page's Vue root (its modals included) #}
 
 <div v-cloak v-if="info_session" class="container">
 
@@ -803,6 +804,7 @@
     </div>
 </div>
 
+</div>
 {% endblock %}
 
 {% block script %}
