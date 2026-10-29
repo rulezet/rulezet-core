@@ -232,6 +232,18 @@ def user_mini(user_id):
     })
 
 
+@account_blueprint.route("/verified_ids")
+def verified_ids():
+    """Ids of the accounts verified by an admin (public, like the badge): the UserChips of a page
+    fetch it once to show the check next to the name. Cached; reset when a verification changes."""
+    from app import cache
+    ids = cache.get('identity_verified_ids')
+    if ids is None:
+        ids = [uid for (uid,) in db.session.query(User.id).filter(User.identity_verified.is_(True)).all()]
+        cache.set('identity_verified_ids', ids, timeout=3600)
+    return jsonify({"ids": ids})
+
+
 @account_blueprint.route("/search_mentionable_users")
 @login_required
 def search_mentionable_users():
@@ -355,6 +367,8 @@ def set_identity_verification():
     if not user:
         return jsonify({"success": False, "message": "User not found"}), 404
     user.identity_verified = verified
+    from app import cache
+    cache.delete('identity_verified_ids')
     db.session.add(UserIdentityVerification(user_id=user.id, verified=verified,
                                             justification=justification, by_user_id=current_user.id))
     db.session.commit()
