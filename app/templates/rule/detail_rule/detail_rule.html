@@ -118,14 +118,17 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
 
                     <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2 z-index-2">
                         {% if current_user.id == rule.user_id %}
-                        <span class="badge bg-success shadow-sm pt-1" title="You are the owner">
-                            <i class="fa-solid fa-crown me-1"></i> OWNER
+                        <span class="rz-role-chip rz-role-chip--owner"
+                              data-rz-pop-title="Owner" data-rz-pop-text="You own this rule: you can edit or delete it."
+                              data-rz-pop-icon="fa-crown" data-rz-pop-color="#198754">
+                            <span class="rz-role-chip__icon"><i class="fa-solid fa-crown"></i></span>Owner
                         </span>
                         {% endif %}
                         {% if current_user.is_admin() %}
-                        <span class="badge bg-warning   shadow-sm pt-1"
-                            title="You are an admin, you have all the rights on this rule">
-                            <i class="fa-solid fa-crown me-1"></i> ADMIN
+                        <span class="rz-role-chip rz-role-chip--admin"
+                              data-rz-pop-title="Admin" data-rz-pop-text="You are an admin: you have every right on this rule."
+                              data-rz-pop-icon="fa-shield-halved" data-rz-pop-color="#d4a106">
+                            <span class="rz-role-chip__icon"><i class="fa-solid fa-shield-halved"></i></span>Admin
                         </span>
                         {% endif %}
                         <span v-if="currentRule.quality_score === 100" class="badge rounded-pill shadow-sm pt-1"

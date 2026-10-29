@@ -745,15 +745,20 @@ export default {
                           :title="rlRiskTitle(rule.validation_risk)">
                         <i class="fa-solid fa-triangle-exclamation me-1"></i>Disagrees with rule's own claim
                     </span>
-                    <span v-if="isOwner(rule)" class="badge bg-success shadow-sm pt-1" title="You own this rule">
-                        <i class="fa-solid fa-crown me-1"></i>OWNER
+                    <span v-if="isOwner(rule)" class="rz-role-chip rz-role-chip--owner"
+                          data-rz-pop-title="Owner" data-rz-pop-text="You own this rule: you can edit or delete it."
+                          data-rz-pop-icon="fa-crown" data-rz-pop-color="#198754">
+                        <span class="rz-role-chip__icon"><i class="fa-solid fa-crown"></i></span>Owner
                     </span>
-                    <span v-if="currentUserIsAdmin" class="badge bg-warning shadow-sm pt-1 rl-badge-admin">
-                        <i class="fa-solid fa-crown me-1"></i>ADMIN
+                    <span v-if="currentUserIsAdmin" class="rz-role-chip rz-role-chip--admin rl-badge-admin"
+                          data-rz-pop-title="Admin" data-rz-pop-text="You are an admin: you have every right on this rule."
+                          data-rz-pop-icon="fa-shield-halved" data-rz-pop-color="#d4a106">
+                        <span class="rz-role-chip__icon"><i class="fa-solid fa-shield-halved"></i></span>Admin
                     </span>
-                    <span v-if="rule.is_code_format" class="badge bg-danger shadow-sm pt-1"
-                          title="Executable code, not a declarative detection rule">
-                        <i class="fa-solid fa-code me-1"></i>CODE
+                    <span v-if="rule.is_code_format" class="rz-role-chip rz-role-chip--code"
+                          data-rz-pop-title="Code" data-rz-pop-text="Executable code, not a declarative detection rule."
+                          data-rz-pop-icon="fa-code" data-rz-pop-color="#dc3545">
+                        <span class="rz-role-chip__icon"><i class="fa-solid fa-code"></i></span>Code
                     </span>
                     <format-chip :format="rule.format" :can-filter="!isFilterHidden('format')"
                                  :active="ruleType === rule.format" @filter="filterByFormat"></format-chip>
