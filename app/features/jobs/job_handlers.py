@@ -818,6 +818,52 @@ def handle_clear_caches(job, app):
             level='success', event='done')
 
 
+# ─── submodules_update (Workflows) ─────────────────────────────────────────────
+
+# Data submodules a workflow may update (never code: the editor / tester / validation float with
+# manage.py update, on purpose, not from a scheduled task)
+DATA_SUBMODULES = {
+    'misp-taxonomies': 'app/modules/misp-taxonomies',
+    'misp-galaxy': 'app/modules/misp-galaxy',
+    'cti': 'app/modules/cti',
+}
+
+
+@register_handler('submodules_update')
+def handle_submodules_update(job, app):
+    """A Workflows task: pull the latest MISP taxonomies / galaxies and MITRE CTI data
+    (git submodule update --remote) — the data the MISP and ATT&CK update tasks read.
+    Payload: names (list of DATA_SUBMODULES keys)."""
+    names = [n for n in ((job.payload or {}).get('names') or []) if n in DATA_SUBMODULES]
+    if not names:
+        log_job(job, 'No data submodule chosen.', level='error', event='failed')
+        job.status, job.error = 'failed', 'No data submodule chosen.'
+        db.session.commit()
+        return
+    job.total, job.done = len(names), 0
+    db.session.commit()
+    failed = []
+    for name in names:
+        log_job(job, f'Updating {name}…', level='info', event='progress')
+        try:
+            res = subprocess.run(['git', 'submodule', 'update', '--init', '--remote', '--merge', '--', DATA_SUBMODULES[name]],
+                                 capture_output=True, text=True, timeout=1800, cwd=os.getcwd())
+            if res.returncode != 0:
+                failed.append(name)
+                log_job(job, f'{name}: {(res.stderr or res.stdout).strip()[-300:]}', level='warning', event='progress')
+        except Exception as e:
+            failed.append(name)
+            log_job(job, f'{name}: {str(e)[:200]}', level='warning', event='progress')
+        job.done += 1
+        db.session.commit()
+    if failed:
+        job.status, job.error = 'failed', f"Failed: {', '.join(failed)}"
+        db.session.commit()
+        log_job(job, f"Done with errors — {', '.join(failed)} not updated.", level='error', event='failed')
+    else:
+        log_job(job, f"Up to date: {', '.join(names)}.", level='success', event='done')
+
+
 # ─── bad_rules_retry ───────────────────────────────────────────────────────────
 
 @register_handler('bad_rules_retry')

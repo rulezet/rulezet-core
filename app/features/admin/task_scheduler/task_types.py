@@ -177,6 +177,21 @@ TASK_TYPES = {
         ],
         'required_options': ['schedule_uuid'],
     },
+    'submodules_update': {
+        'label': 'Data sources — update MISP taxonomies / galaxies and MITRE CTI',
+        'icon': 'fa-solid fa-code-branch',
+        'job_type': 'submodules_update',
+        'target_picker': 'none',
+        # data submodules only (job_handlers.DATA_SUBMODULES) — never Rulezet's code
+        'extra_options': [
+            {'key': 'names', 'type': 'multiselect', 'label': 'Data sources',
+             'options': [{'value': 'misp-taxonomies', 'label': 'MISP taxonomies'},
+                         {'value': 'misp-galaxy', 'label': 'MISP galaxies'},
+                         {'value': 'cti', 'label': 'MITRE CTI (ATT&CK — large)'}],
+             'default': ['misp-taxonomies', 'misp-galaxy']},
+        ],
+        'required_options': ['names'],
+    },
     'clear_caches': {
         'label': 'Caches — clear them (home figures, stats, pages)',
         'icon': 'fa-solid fa-broom',
@@ -361,6 +376,7 @@ _DESCRIPTIONS = {
     'suricata_deep_validate': 'Validates Suricata rules with the real Suricata engine, a batch per run, and records the result.',
     'gamification_recompute': 'Recomputes every user\'s points, level and badges; the leaderboard cache is reset at the end.',
     'github_sync_schedule_launch': 'Runs one Git sync schedule now: checks its repositories for updated and new rules, then accepts / adds them if the schedule says so — the same as its own timer.',
+    'submodules_update': 'Pulls the latest MISP taxonomies / galaxies (and MITRE CTI if chosen) from their git repositories; run the MISP / ATT&CK update tasks after it to load them.',
     'clear_caches': 'Empties the caches (home figures, ATT&CK / CVE stats, cached pages, leaderboard) so what the workflow changed shows right away. Put it last.',
     'ai_rule_analysis': 'Asks the AI agent to write an analysis report for rules that have none (a batch per run), published or kept private.',
 }

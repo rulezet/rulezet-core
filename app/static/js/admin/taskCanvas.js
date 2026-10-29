@@ -132,6 +132,21 @@ const TaskCanvas = {
                     color, child: s,
                 });
             }
+            // extra parents (a task waiting for several tasks): dashed, same colours
+            for (const s of this.schedules) {
+                for (const ep of (s.extra_parents || [])) {
+                    const parent = byId.get(ep.id);
+                    const p1 = parent && this.nodePositions[parent.uuid];
+                    const p2 = this.nodePositions[s.uuid];
+                    if (!p1 || !p2) continue;
+                    const x1 = p1.x + 170, y1 = p1.y + 28, x2 = p2.x, y2 = p2.y + 28, midX = (x1 + x2) / 2;
+                    edges.push({
+                        id: `${parent.uuid}-${s.uuid}-x`, dashed: true, child: s,
+                        d: `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`,
+                        color: { success: '#198754', failure: '#dc3545', always: '#6c757d' }[ep.condition] || '#0d6efd',
+                    });
+                }
+            }
             return edges;
         },
         canvasSize() {
@@ -167,6 +182,26 @@ const TaskCanvas = {
             return 'twg-node--active';
         },
         typeIcon(taskType) { return (this.taskTypes[taskType] || {}).icon || 'fa-solid fa-gear'; },
+        // hover card of a node: what it does, what it waits for, what runs next, how it usually goes
+        nodeInfo(s) {
+            const byId = new Map(this.schedules.map(x => [x.id, x]));
+            const cond = { success: 'succeeds', failure: 'fails', always: 'ends' };
+            const parts = [];
+            const desc = (this.taskTypes[s.task_type] || {}).description;
+            if (desc) parts.push(desc);
+            const parents = [];
+            if (s.trigger_mode === 'after_task' && byId.get(s.depends_on_schedule_id))
+                parents.push(`"${byId.get(s.depends_on_schedule_id).title}" ${cond[s.depends_on_condition] || 'ends'}`);
+            for (const ep of (s.extra_parents || [])) if (byId.get(ep.id)) parents.push(`"${byId.get(ep.id).title}" ${cond[ep.condition] || 'ends'}`);
+            if (parents.length) parts.push(`Runs when ${parents.join(s.depends_on_mode === 'any' ? ' or ' : ' and ')}.`);
+            const next = this.schedules.filter(x => x.depends_on_schedule_id === s.id || (x.extra_parents || []).some(p => p.id === s.id));
+            parts.push(next.length ? `Then: ${next.map(x => x.title).join(', ')}.` : 'Last task of its branch.');
+            const st = s.stats || {};
+            if (st.runs) parts.push(`${st.runs} runs${st.success_rate != null ? `, ${st.success_rate}% ok` : ''}${st.avg_seconds != null ? `, ~${st.avg_seconds < 60 ? st.avg_seconds + 's' : Math.round(st.avg_seconds / 60) + ' min'}` : ''}.`);
+            if (s.max_retries) parts.push(`Retried ${s.max_retries}× on failure.`);
+            if (s.auto_disabled_at) parts.push(`Paused automatically on ${s.auto_disabled_at} after repeated failures.`);
+            return parts.join(' ');
+        },
         typeLabel(taskType) { return (this.taskTypes[taskType] || {}).label || taskType; },
 
         toCanvasSpace(clientX, clientY) {
@@ -301,7 +336,8 @@ const TaskCanvas = {
         <div class="tc-wrap" ref="wrap" @mousedown="startPan" @wheel="onWheel">
             <div class="tc-inner" :style="[transformStyle, { width: canvasSize.w + 'px', height: canvasSize.h + 'px' }]">
                 <svg class="tc-edges" :width="canvasSize.w" :height="canvasSize.h">
-                    <path v-for="e in edges" :key="e.id" :d="e.d" :stroke="e.color" fill="none" stroke-width="2" opacity="0.8"></path>
+                    <path v-for="e in edges" :key="e.id" :d="e.d" :stroke="e.color" fill="none" stroke-width="2" opacity="0.8"
+                          :stroke-dasharray="e.dashed ? '6,5' : null"></path>
                     <!-- Wide, invisible overlay on top of each edge — a real
                          click target much easier to hit than the 2px line. -->
                     <path v-for="e in edges" :key="e.id + '-hit'" :d="e.d" stroke="transparent" stroke-width="16" fill="none"
@@ -312,6 +348,7 @@ const TaskCanvas = {
 
                 <div v-for="s in schedules" :key="s.id" class="tc-node" :data-uuid="s.uuid"
                      :class="statusClass(s)"
+                     :data-rz-pop-title="s.title" :data-rz-pop-text="nodeInfo(s)" data-rz-pop-color="#0d6efd"
                      :style="{ left: nodePositions[s.uuid].x + 'px', top: nodePositions[s.uuid].y + 'px' }"
                      @mousedown="startNodeDrag(s, $event)"
                      @contextmenu.prevent="onNodeContextMenu(s, $event)">
@@ -320,7 +357,9 @@ const TaskCanvas = {
                         <div class="twg-node-title">[[ s.title ]]</div>
                         <div class="twg-node-sub-row">
                             <span class="twg-node-sub">[[ typeLabel(s.task_type) ]]</span>
-                            <span class="twg-status-badge" :class="s.is_active ? 'twg-status-badge--active' : 'twg-status-badge--paused'">[[ s.is_active ? 'Active' : 'Paused' ]]</span>
+                            <span v-if="s.auto_disabled_at" class="twg-status-badge twg-status-badge--paused" style="background:rgba(220,53,69,.12);color:#dc3545;">Auto-paused</span>
+                            <span v-else class="twg-status-badge" :class="s.is_active ? 'twg-status-badge--active' : 'twg-status-badge--paused'">[[ s.is_active ? 'Active' : 'Paused' ]]</span>
+                            <span v-if="s.max_retries" class="twg-status-badge" title="Retries after a failure"><i class="fa-solid fa-rotate-right"></i> [[ s.max_retries ]]</span>
                         </div>
                     </div>
                     <div class="twg-node-actions" @mousedown.stop @click.stop>

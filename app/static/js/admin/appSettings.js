@@ -55,7 +55,7 @@ createApp({
         const modes = reactive({});
         const history = reactive({});
         const openVersion = reactive({});
-        const q = ref('');
+        const q = ref((params.get('q') || '').slice(0, 100));   // ?q= from a link (e.g. Workflows → Templates)
         const category = ref(null);
         const modifiedOnly = ref(false);
         const statusFilter = ref('all');

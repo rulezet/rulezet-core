@@ -148,7 +148,7 @@ def _creates_cycle(schedule_id, depends_on_schedule_id):
     return False
 
 
-def _fire_schedule(app, schedule_uuid, workflow_run_id=None, ignore_paused=False):
+def _fire_schedule(app, schedule_uuid, workflow_run_id=None, ignore_paused=False, attempt=1):
     """Runs in the APScheduler thread (or synchronously for a manual
     run_now/chained fire). Only ever creates an AdminTaskRun + BackgroundJob
     row — the real work happens later on job_worker's thread.
@@ -183,14 +183,14 @@ def _fire_schedule(app, schedule_uuid, workflow_run_id=None, ignore_paused=False
                 return
 
             run = AdminTaskRun(uuid=str(_uuid_mod.uuid4()), schedule_id=schedule.id, status='pending',
-                                workflow_run_id=workflow_run_id)
+                                workflow_run_id=workflow_run_id, attempt=attempt)
             db.session.add(run)
             db.session.flush()
 
             job = create_job(
                 job_type=task_def['job_type'],
                 payload=schedule.target_payload or {},
-                label=f"{schedule.title} — {task_def['label']}",
+                label=f"{schedule.title} — {task_def['label']}" + (f" (retry {attempt - 1})" if attempt > 1 else ''),
                 created_by=schedule.editor_id,
             )
             if job is None:
@@ -249,8 +249,14 @@ def tick(app, now=None):
                    AdminTaskSchedule.next_run_at <= now)
            .order_by(AdminTaskSchedule.next_run_at.asc())
            .all())
+    _fire_due_retries(app, now)
+    _enforce_timeouts(now)
     for schedule in due:
         try:
+            if (now - schedule.next_run_at).total_seconds() > MISFIRE_GRACE_SECONDS and schedule.catch_up:
+                print(f"[task_scheduler] {schedule.uuid} missed its run at {schedule.next_run_at} — catching up now.")
+                _fire_due_root(app, schedule)
+                continue
             if (now - schedule.next_run_at).total_seconds() > MISFIRE_GRACE_SECONDS:
                 print(f"[task_scheduler] {schedule.uuid} missed its run at {schedule.next_run_at} "
                       f"by more than {MISFIRE_GRACE_SECONDS}s — skipped, rescheduling.")
@@ -261,6 +267,117 @@ def tick(app, now=None):
         except Exception as e:
             db.session.rollback()
             print(f"[task_scheduler] failed to fire schedule {schedule.uuid}: {e}")
+
+
+def _fire_due_retries(app, now):
+    """A failed task with retries left (on_job_finished set retry_at): run it again, in the same
+    workflow launch as the failed run, attempt + 1."""
+    from app import db
+    from app.core.db_class.task_scheduler import AdminTaskSchedule
+    for schedule in AdminTaskSchedule.query.filter(AdminTaskSchedule.retry_at.isnot(None),
+                                                   AdminTaskSchedule.retry_at <= now).all():
+        try:
+            last = schedule.runs[0] if schedule.runs else None
+            schedule.retry_at = None
+            db.session.commit()
+            _fire_schedule(app, schedule.uuid, workflow_run_id=last.workflow_run_id if last else None,
+                           ignore_paused=True, attempt=(last.attempt if last else 1) + 1)
+        except Exception as e:
+            db.session.rollback()
+            print(f"[task_scheduler] retry of {schedule.uuid} failed to start: {e}")
+
+
+def _enforce_timeouts(now):
+    """A task with a time limit whose job runs longer: ask the job to stop (cooperative, like the
+    Stop button — the handler halts at its next cancellation check); it ends as a failure."""
+    from app.core.db_class.job import BackgroundJob
+    from app.core.db_class.task_scheduler import AdminTaskRun, AdminTaskSchedule
+    from app.features.jobs.jobs_core import cancel_job
+    runs = (AdminTaskRun.query.join(AdminTaskSchedule, AdminTaskSchedule.id == AdminTaskRun.schedule_id)
+            .filter(AdminTaskRun.status == 'pending', AdminTaskSchedule.timeout_minutes.isnot(None),
+                    AdminTaskSchedule.timeout_minutes > 0).all())
+    for run in runs:
+        limit = datetime.timedelta(minutes=run.schedule.timeout_minutes)
+        if not run.started_at or now - run.started_at < limit:
+            continue
+        job = BackgroundJob.query.filter_by(uuid=run.job_uuid).first() if run.job_uuid else None
+        if job and job.status in ('pending', 'running', 'paused'):
+            try:
+                cancel_job(job)
+                print(f"[task_scheduler] {run.schedule.uuid} ran longer than {run.schedule.timeout_minutes} min — stop requested.")
+            except Exception as e:
+                print(f"[task_scheduler] timeout stop failed for {run.schedule.uuid}: {e}")
+
+
+def _parents(task):
+    """Every parent of a task: [(parent_id, condition)] — the first one, then the extra ones."""
+    out = []
+    if task.trigger_mode == 'after_task' and task.depends_on_schedule_id:
+        out.append((task.depends_on_schedule_id, task.depends_on_condition or 'success'))
+    out += [(d.parent_id, d.condition or 'success') for d in task.extra_dependencies
+            if d.parent_id != task.depends_on_schedule_id]
+    return out
+
+
+def _condition_met(condition, status):
+    return condition == 'always' or (condition == 'success' and status == 'done') or \
+        (condition == 'failure' and status == 'failed')
+
+
+def _should_fire(candidate, finished_run):
+    """Whether a child fires now that one of its parents has finished (finished_run). 'any': this
+    parent's condition is enough. 'all': every parent must have finished, in the same workflow
+    launch (or, outside a launch, since the child last ran), each as its condition says.
+    Never twice for the same launch."""
+    from app.core.db_class.task_scheduler import AdminTaskRun
+    wf_run = finished_run.workflow_run_id
+    already = AdminTaskRun.query.filter_by(schedule_id=candidate.id)
+    already = already.filter_by(workflow_run_id=wf_run) if wf_run else \
+        already.filter(AdminTaskRun.started_at >= finished_run.started_at)
+    if already.first():
+        return False
+    parents = _parents(candidate)
+    mine = [c for pid, c in parents if pid == finished_run.schedule_id]
+    if (candidate.depends_on_mode or 'all') == 'any' or len(parents) <= 1:
+        return any(_condition_met(c, finished_run.status) for c in mine)
+    for pid, cond in parents:
+        q = AdminTaskRun.query.filter_by(schedule_id=pid)
+        q = q.filter_by(workflow_run_id=wf_run) if wf_run else \
+            q.filter(AdminTaskRun.started_at >= (candidate.last_run_at or datetime.datetime.min))
+        last = q.order_by(AdminTaskRun.started_at.desc()).first()
+        if not last or last.status not in ('done', 'failed') or not _condition_met(cond, last.status):
+            return False
+        if last.status == 'failed' and last.attempt and last.schedule.retry_at:
+            return False            # that parent is about to be retried
+    return True
+
+
+def _after_failure(schedule, run, job):
+    """A failed run: schedule a retry while some are left; else count it, and pause the task once
+    it failed max_consecutive_failures times in a row (admins are told). True when a retry is set."""
+    from app import db
+    if job.status != 'cancelled' and (run.attempt or 1) <= (schedule.max_retries or 0):
+        schedule.retry_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=max(1, schedule.retry_delay_minutes or 10))
+        db.session.commit()
+        return True
+    schedule.consecutive_failures = (schedule.consecutive_failures or 0) + 1
+    if schedule.max_consecutive_failures and schedule.consecutive_failures >= schedule.max_consecutive_failures \
+            and schedule.is_active:
+        schedule.is_active = False
+        schedule.auto_disabled_at = datetime.datetime.utcnow()
+        schedule.next_run_at = None
+        try:
+            from app.features.notification.notification_core import create_notification, _get_all_admin_ids
+            for uid in _get_all_admin_ids():
+                create_notification(uid, 'workflow_task_disabled',
+                                    f'Task paused after {schedule.consecutive_failures} failures in a row: {schedule.title}',
+                                    body='It will not run again until you switch it back on (Workflows → the task → Active).',
+                                    link=f'/admin/tasks/{schedule.workflow.uuid}' if schedule.workflow else '/admin/tasks/',
+                                    icon='fa-solid fa-circle-pause')
+        except Exception as e:
+            print(f"[task_scheduler] auto-pause notification failed: {e}")
+    db.session.commit()
+    return False
 
 
 def _ticker_loop(app):
@@ -317,7 +434,14 @@ def on_job_finished(job):
 
     run.status = 'done' if job.status == 'done' else 'failed'
     run.finished_at = datetime.datetime.utcnow()
+    schedule = run.schedule
+    if run.status == 'done':
+        schedule.consecutive_failures = 0
+        schedule.auto_disabled_at = None
     db.session.commit()
+
+    if run.status == 'failed' and _after_failure(schedule, run, job):
+        return   # a retry is coming: the chain and the launch go on after it
 
     try:
         # A task that's part of a "Run Workflow" launch gets exactly one
@@ -335,20 +459,18 @@ def on_job_finished(job):
     # "skip it when the admin explicitly launches the whole pipeline". A
     # lone scheduled/manual single-task run (no workflow_run_id) keeps the
     # old behavior: only an active child continues the chain.
-    candidates_query = AdminTaskSchedule.query.filter_by(
-        trigger_mode='after_task', depends_on_schedule_id=run.schedule_id,
+    from app.core.db_class.task_scheduler import AdminTaskDependency
+    from sqlalchemy import or_
+    extra_children = [d.schedule_id for d in AdminTaskDependency.query.filter_by(parent_id=run.schedule_id).all()]
+    candidates_query = AdminTaskSchedule.query.filter(
+        AdminTaskSchedule.trigger_mode == 'after_task',
+        or_(AdminTaskSchedule.depends_on_schedule_id == run.schedule_id, AdminTaskSchedule.id.in_(extra_children or [-1])),
     )
     if not run.workflow_run_id:
         candidates_query = candidates_query.filter_by(is_active=True)
     candidates = candidates_query.all()
     for candidate in candidates:
-        condition = candidate.depends_on_condition
-        condition_met = (
-            condition == 'always' or
-            (condition == 'success' and run.status == 'done') or
-            (condition == 'failure' and run.status == 'failed')
-        )
-        if condition_met:
+        if _should_fire(candidate, run):
             from flask import current_app
             _fire_schedule(current_app._get_current_object(), candidate.uuid,
                             workflow_run_id=run.workflow_run_id, ignore_paused=bool(run.workflow_run_id))

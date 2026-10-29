@@ -21,12 +21,15 @@ A task's "after" names the "ref" of an EARLIER task of the list (parents first).
 through task_scheduler_core.create_schedule, so every check of the task window applies (task type,
 options, trigger, no cycle).
 """
+import re
+
 from app import db
 from app.core.db_class.task_scheduler import AdminTaskSchedule, AdminWorkflow
 
 SPEC_VERSION = 1
 MAX_TASKS = 50
 
+_RELIABILITY_KEYS = ('max_retries', 'retry_delay_minutes', 'timeout_minutes', 'max_consecutive_failures', 'catch_up')
 _TRIGGER_KEYS = ('trigger_mode', 'run_once_at', 'days_of_week', 'day_of_month', 'hour', 'minute',
                  'cron_expr', 'timezone')
 
@@ -39,113 +42,49 @@ def _after(ref, condition='always'):
     return {'after': ref, 'condition': condition}
 
 
-# Ready-made workflows. Their first task is created paused: nothing runs before an admin has
-# looked at it and switched it on (Edit task → Active, or Run now).
-TEMPLATES = {
-    'weekly_maintenance': {
-        'label': 'Weekly maintenance',
-        'icon': 'fa-solid fa-screwdriver-wrench',
-        'description': 'Every Sunday night: pull the git clones, resync Git Sources, look again for links between '
-                       'rules, try the bad rules again, re-read references & metadata, recompute the leaderboard, '
-                       'clear the caches.',
-        'spec': {
-            'title': 'Weekly maintenance',
-            'description': 'Keeps rules, links, metadata and figures fresh — every Sunday at 02:00 UTC.',
-            'tasks': [
-                {'ref': 'pull', 'title': 'Pull the git clones', 'task_type': 'git_cache_pull', 'trigger': _weekly(6, 2)},
-                {'ref': 'resync', 'title': 'Resync Git Sources', 'task_type': 'github_repo_resync', 'trigger': _after('pull')},
-                {'ref': 'relink', 'title': 'Links between rules', 'task_type': 'relink_rules',
-                 'target_payload': {'formats': ['wazuh', 'kunai']}, 'trigger': _after('resync')},
-                {'ref': 'bad', 'title': 'Bad rules — retry & link', 'task_type': 'bad_rules_retry',
-                 'target_payload': {'formats': ['yara'], 'link_dependencies': True}, 'trigger': _after('relink')},
-                {'ref': 'meta', 'title': 'References & metadata', 'task_type': 'reparse_rule_metadata',
-                 'target_payload': {'formats': ''}, 'trigger': _after('bad')},
-                {'ref': 'points', 'title': 'Recompute the leaderboard', 'task_type': 'gamification_recompute',
-                 'trigger': _after('meta')},
-                {'ref': 'cache', 'title': 'Clear the caches', 'task_type': 'clear_caches', 'trigger': _after('points')},
-            ],
-        },
-    },
-    'bad_rules_cleanup': {
-        'label': 'Bad rules clean-up',
-        'icon': 'fa-solid fa-broom',
-        'description': 'Every day: try every bad rule again (YARA rules naming another rule are imported linked to '
-                       'it), look again for links, clear the caches.',
-        'spec': {
-            'title': 'Bad rules clean-up',
-            'description': 'Imports the bad rules that became valid — every day at 04:00 UTC.',
-            'tasks': [
-                {'ref': 'bad', 'title': 'Bad rules — retry & link', 'task_type': 'bad_rules_retry',
-                 'target_payload': {'formats': [], 'link_dependencies': True},
-                 'trigger': {'trigger_mode': 'daily', 'hour': 4, 'minute': 0, 'timezone': 'UTC'}},
-                {'ref': 'relink', 'title': 'Links between rules', 'task_type': 'relink_rules',
-                 'target_payload': {'formats': ['wazuh', 'kunai', 'yara']}, 'trigger': _after('bad', 'success')},
-                {'ref': 'cache', 'title': 'Clear the caches', 'task_type': 'clear_caches', 'trigger': _after('relink')},
-            ],
-        },
-    },
-    'threat_intel_refresh': {
-        'label': 'Threat intel refresh',
-        'icon': 'fa-solid fa-satellite-dish',
-        'description': 'Every Monday: update the MISP taxonomies & galaxies and the MITRE ATT&CK data, then clear '
-                       'the caches.',
-        'spec': {
-            'title': 'Threat intel refresh',
-            'description': 'MISP and MITRE ATT&CK data up to date — every Monday at 03:00 UTC.',
-            'tasks': [
-                {'ref': 'misp', 'title': 'Update MISP taxonomies & galaxies', 'task_type': 'misp_update_data',
-                 'trigger': _weekly(0, 3)},
-                {'ref': 'attack', 'title': 'Update MITRE ATT&CK data', 'task_type': 'attack_update_data',
-                 'trigger': _after('misp')},
-                {'ref': 'cache', 'title': 'Clear the caches', 'task_type': 'clear_caches', 'trigger': _after('attack')},
-            ],
-        },
-    },
-    'nightly_backup': {
-        'label': 'Nightly backup',
-        'icon': 'fa-solid fa-database',
-        'description': 'Every night at 01:00 UTC: a backup of the database.',
-        'spec': {
-            'title': 'Nightly backup',
-            'description': 'A database backup every night at 01:00 UTC.',
-            'tasks': [
-                {'ref': 'backup', 'title': 'Database backup', 'task_type': 'db_backup',
-                 'trigger': {'trigger_mode': 'daily', 'hour': 1, 'minute': 0, 'timezone': 'UTC'}},
-            ],
-        },
-    },
-}
+# Ready-made workflows: the setting workflows.templates (app/config/workflows.templates.json, editable
+# on Admin → Configuration; "Save as template" adds to it). Their first task is created paused: nothing
+# runs before an admin has looked at it and switched it on (Edit task → Active, or Run now).
+TEMPLATES_SETTING = 'workflows.templates'
+
+
+def templates():
+    from app.core.utils.app_settings import get_setting
+    value = get_setting(TEMPLATES_SETTING)
+    return value if isinstance(value, dict) else {}
 
 
 def serialize_templates():
     """Templates for the "New workflow" gallery: their card and the tasks they create."""
     from app.features.admin.task_scheduler.task_types import TASK_TYPES
     out = []
-    for key, t in TEMPLATES.items():
+    for key, t in templates().items():
+        if not isinstance(t, dict) or not isinstance(t.get('spec'), dict):
+            continue
         out.append({
-            'key': key, 'label': t['label'], 'icon': t['icon'], 'description': t['description'],
-            'tasks': [{'title': task['title'], 'icon': TASK_TYPES.get(task['task_type'], {}).get('icon', 'fa-solid fa-gear')}
-                      for task in t['spec']['tasks']],
+            'key': key, 'label': t.get('label') or key, 'icon': t.get('icon') or 'fa-solid fa-diagram-project',
+            'description': t.get('description') or '', 'custom': bool(t.get('custom')),
+            'tasks': [{'title': task.get('title') or '', 'icon': TASK_TYPES.get(task.get('task_type'), {}).get('icon', 'fa-solid fa-gear')}
+                      for task in t['spec'].get('tasks') or [] if isinstance(task, dict)],
         })
     return out
 
 
 def _ordered_tasks(workflow):
-    """The workflow's tasks, parents before their children (roots first, then down each chain)."""
+    """The workflow's tasks, every parent (first or extra) before its children — a topological order,
+    so an export / a template always names earlier tasks only."""
     tasks = AdminTaskSchedule.query.filter_by(workflow_id=workflow.id).order_by(AdminTaskSchedule.id).all()
-    by_parent = {}
-    for t in tasks:
-        by_parent.setdefault(t.depends_on_schedule_id, []).append(t)
-    ordered, seen = [], set()
-    stack = list(reversed(by_parent.get(None, [])))
-    while stack:
-        t = stack.pop()
-        if t.id in seen:
-            continue
-        seen.add(t.id)
-        ordered.append(t)
-        stack.extend(reversed(by_parent.get(t.id, [])))
-    ordered += [t for t in tasks if t.id not in seen]      # orphans (parent outside the workflow)
+    ids = {t.id for t in tasks}
+    parents = {t.id: {p for p in ([t.depends_on_schedule_id] if t.trigger_mode == 'after_task' else [])
+                      + [d.parent_id for d in t.extra_dependencies] if p in ids} for t in tasks}
+    ordered, placed = [], set()
+    while len(ordered) < len(tasks):
+        ready = [t for t in tasks if t.id not in placed and parents[t.id] <= placed]
+        if not ready:                                   # a cycle (refused on save, but never loop forever)
+            ready = [t for t in tasks if t.id not in placed]
+        for t in ready:
+            ordered.append(t)
+            placed.add(t.id)
     return ordered
 
 
@@ -157,6 +96,10 @@ def export_workflow(workflow) -> dict:
     for t in tasks:
         if t.trigger_mode == 'after_task' and t.depends_on_schedule_id in refs:
             trigger = {'after': refs[t.depends_on_schedule_id], 'condition': t.depends_on_condition or 'success'}
+            also = [{'ref': refs[d.parent_id], 'condition': d.condition} for d in t.extra_dependencies if d.parent_id in refs]
+            if also:
+                trigger['also_after'] = also
+                trigger['mode'] = t.depends_on_mode or 'all'
         else:
             trigger = {'trigger_mode': t.trigger_mode, 'hour': t.hour, 'minute': t.minute,
                        'timezone': t.timezone or 'UTC'}
@@ -169,7 +112,8 @@ def export_workflow(workflow) -> dict:
             if t.trigger_mode == 'cron':
                 trigger['cron_expr'] = t.cron_expr
         task = {'ref': refs[t.id], 'title': t.title, 'description': t.description, 'task_type': t.task_type,
-                'target_payload': t.target_payload or {}, 'is_active': bool(t.is_active), 'trigger': trigger}
+                'target_payload': t.target_payload or {}, 'is_active': bool(t.is_active), 'trigger': trigger,
+                'reliability': {k: getattr(t, k) for k in _RELIABILITY_KEYS}}
         if t.position_x is not None and t.position_y is not None:
             task['position'] = [t.position_x, t.position_y]
         out_tasks.append(task)
@@ -213,10 +157,19 @@ def create_from_spec(spec, editor, title=None, root_paused=False):
                     raise ValueError(f'Task "{data["title"]}" runs after "{trigger.get("after")}", which is not an earlier task.')
                 data.update(trigger_mode='after_task', depends_on_schedule_id=parent,
                             depends_on_condition=trigger.get('condition') or 'success')
+                also = trigger.get('also_after') or []
+                if also:
+                    if any(not isinstance(a, dict) or a.get('ref') not in ids for a in also):
+                        raise ValueError(f'Task "{data["title"]}" waits for a task that is not an earlier one.')
+                    data['extra_parents'] = [{'id': ids[a['ref']], 'condition': a.get('condition') or 'success'} for a in also]
+                    data['depends_on_mode'] = trigger.get('mode') or 'all'
             else:
                 data.update({k: trigger[k] for k in _TRIGGER_KEYS if k in trigger})
                 if root_paused:
                     data['is_active'] = False
+            rel = task.get('reliability') or {}
+            if isinstance(rel, dict):
+                data.update({k: rel[k] for k in _RELIABILITY_KEYS if k in rel})
             schedule, err = core.create_schedule(data, editor)
             if err:
                 raise ValueError(f'Task "{data["title"]}": {err}')
@@ -233,10 +186,43 @@ def create_from_spec(spec, editor, title=None, root_paused=False):
 
 
 def create_from_template(key, editor, title=None):
-    template = TEMPLATES.get(key)
-    if not template:
+    template = templates().get(key)
+    if not isinstance(template, dict) or not isinstance(template.get('spec'), dict):
         return None, 'Unknown template.'
     return create_from_spec(template['spec'], editor, title=title, root_paused=True)
+
+
+def save_as_template(workflow, editor, label=None, description=None):
+    """Add a workflow to the templates (setting workflows.templates, history kept on Admin →
+    Configuration). Returns (key, error)."""
+    from app.core.utils.app_settings import set_setting
+    label = (label or workflow.title or '').strip()[:80]
+    if not label:
+        return None, 'A template needs a name.'
+    current = dict(templates())
+    key = re.sub(r'[^a-z0-9]+', '_', label.lower()).strip('_')[:50] or 'template'
+    base, n = key, 2
+    while key in current:
+        key, n = f'{base}_{n}', n + 1
+    current[key] = {'label': label, 'icon': 'fa-solid fa-diagram-project', 'custom': True,
+                    'description': (description or workflow.description or f'Saved from the workflow "{workflow.title}".')[:300],
+                    'spec': export_workflow(workflow)}
+    set_setting(TEMPLATES_SETTING, current, user_id=editor.id, action='saved')
+    return key, None
+
+
+def delete_template(key, editor):
+    """Remove a template saved from a workflow (shipped templates are removed on Admin → Configuration)."""
+    from app.core.utils.app_settings import set_setting
+    current = dict(templates())
+    t = current.get(key)
+    if not t:
+        return 'Unknown template.'
+    if not t.get('custom'):
+        return 'Built-in templates are changed on Admin → Configuration (Workflow templates).'
+    del current[key]
+    set_setting(TEMPLATES_SETTING, current, user_id=editor.id, action='saved')
+    return None
 
 
 def duplicate_workflow(workflow, editor):
@@ -252,9 +238,12 @@ def duplicate_task(schedule, editor):
             'title': f'{schedule.title} (copy)'[:150], 'description': schedule.description,
             'task_type': schedule.task_type, 'target_payload': dict(schedule.target_payload or {}),
             'is_active': False, 'trigger_mode': schedule.trigger_mode}
+    data.update({k: getattr(schedule, k) for k in _RELIABILITY_KEYS})
     if schedule.trigger_mode == 'after_task':
         data.update(depends_on_schedule_id=schedule.depends_on_schedule_id,
-                    depends_on_condition=schedule.depends_on_condition or 'success')
+                    depends_on_condition=schedule.depends_on_condition or 'success',
+                    depends_on_mode=schedule.depends_on_mode or 'all',
+                    extra_parents=[{'id': d.parent_id, 'condition': d.condition} for d in schedule.extra_dependencies])
     else:
         data.update(hour=schedule.hour, minute=schedule.minute, timezone=schedule.timezone or 'UTC',
                     cron_expr=schedule.cron_expr, day_of_month=schedule.day_of_month,

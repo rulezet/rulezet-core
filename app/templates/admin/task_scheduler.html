@@ -154,6 +154,7 @@
                                         <button class="dt-action-btn" title="Edit" @click="openEditWorkflow(w)"><i class="fa-solid fa-pen"></i></button>
                                         <button class="dt-action-btn" title="Duplicate (tasks copied, first one paused)" @click="duplicateWorkflow(w)"><i class="fa-regular fa-clone"></i></button>
                                         <a class="dt-action-btn" title="Export as a .json file" :href="'/admin/tasks/workflows/' + w.uuid + '/export'"><i class="fa-solid fa-file-export"></i></a>
+                                        <button class="dt-action-btn" title="Save as a template (reusable from Templates)" @click="saveAsTemplate(w)"><i class="fa-solid fa-bookmark"></i></button>
                                         <button class="dt-action-btn dt-action-btn--danger" title="Delete" @click="deleteWorkflow(w)"><i class="fa-solid fa-trash"></i></button>
                                     </div>
                                 </td>
@@ -208,7 +209,7 @@
                                 title="Cancel every pending/running job in this workflow">
                             <i class="fa-solid fa-stop"></i><span>Stop Workflow</span>
                         </button>
-                        <button class="dt-toolbar-btn dt-toolbar-btn--primary" :disabled="!canRunWorkflow || workflowBusy" @click="runWorkflowNow()"
+                        <button class="dt-toolbar-btn dt-toolbar-btn--primary" :disabled="!canRunWorkflow || workflowBusy" @click="askRunWorkflow()"
                                 :title="workflowBusy ? 'Already running — wait for it to finish or stop it first' : (canRunWorkflow ? 'Run every independently-triggered task in this workflow now' : 'No active, independently-triggered task to start from')">
                             <span v-if="workflowBusy" class="spinner-border spinner-border-sm" role="status"></span>
                             <i v-else class="fa-solid fa-play"></i>
@@ -242,7 +243,7 @@
                             Every task here is either paused or waits on another task — activate at least one independently-scheduled task from the "Tasks" tab to launch this workflow.
                         </p>
                         <p class="dt-empty-text" v-else>This workflow hasn't been launched yet.</p>
-                        <button v-if="canRunWorkflow" class="btn btn-primary rounded-pill px-4 mt-2" :disabled="workflowBusy" @click="runWorkflowNow()">
+                        <button v-if="canRunWorkflow" class="btn btn-primary rounded-pill px-4 mt-2" :disabled="workflowBusy" @click="askRunWorkflow()">
                             <span v-if="workflowBusy" class="spinner-border spinner-border-sm me-1" role="status"></span>
                             <i v-else class="fa-solid fa-play me-1"></i>[[ workflowBusy ? 'Running…' : 'Run it for the first time' ]]
                         </button>
@@ -302,7 +303,7 @@
                                 <td class="dt-td text-center" @click.stop>
                                     <button class="dt-action-btn" :disabled="!canRunWorkflow || workflowBusy"
                                             :title="workflowBusy ? 'Already running — wait for it to finish or stop it first' : (canRunWorkflow ? 'Re-run this workflow' : 'No active, independently-triggered task to start from')"
-                                            @click="runWorkflowNow()">
+                                            @click="askRunWorkflow()">
                                         <span v-if="workflowBusy" class="spinner-border spinner-border-sm" role="status" style="width:.7rem;height:.7rem;"></span>
                                         <i v-else class="fa-solid fa-rotate-right"></i>
                                     </button>
@@ -378,7 +379,7 @@
                                     title="Cancel every pending/running job in this workflow">
                                 <i class="fa-solid fa-stop"></i><span>Stop Workflow</span>
                             </button>
-                            <button class="dt-toolbar-btn" :disabled="!canRunWorkflow || workflowBusy" @click="runWorkflowNow()"
+                            <button class="dt-toolbar-btn" :disabled="!canRunWorkflow || workflowBusy" @click="askRunWorkflow()"
                                     :title="workflowBusy ? 'Already running — wait for it to finish or stop it first' : (canRunWorkflow ? 'Run every independently-triggered task in this workflow now' : 'No active, independently-triggered task to start from')">
                                 <span v-if="workflowBusy" class="spinner-border spinner-border-sm" role="status"></span>
                                 <i v-else class="fa-solid fa-play"></i><span>[[ workflowBusy ? 'Running…' : 'Run Workflow' ]]</span>
@@ -678,6 +679,61 @@
         </div>
     </div>
 
+    <!-- Launch preview: tasks in order, items each goes through, usual durations (preview_workflow) -->
+    <div class="modal fade" id="runPreviewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg tf-modal">
+                <div class="tf-hero">
+                    <i class="tf-hero__watermark fa-solid fa-play"></i>
+                    <div class="tf-hero__icon"><i class="fa-solid fa-play"></i></div>
+                    <div class="tf-hero__text">
+                        <div class="tf-hero__kicker">Run workflow</div>
+                        <h5 class="tf-hero__title">[[ activeWorkflow ? activeWorkflow.title : '' ]]</h5>
+                        <div class="tf-hero__sub" v-if="runPreview">
+                            [[ runPreview.tasks.length ]] task[[ runPreview.tasks.length === 1 ? '' : 's' ]]
+                            <template v-if="runPreview.total_seconds"> · usually ~[[ formatDuration(runPreview.total_seconds) ]][[ runPreview.partial_estimate ? '+' : '' ]]</template>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close tf-hero__close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body tf-body">
+                    <div v-if="runPreviewLoading" class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-2"></span>Preparing the preview…</div>
+                    <template v-else-if="runPreview">
+                        <div v-for="w in runPreview.warnings" :key="w" class="tf-what tf-what--warn mb-2"><i class="fa-solid fa-triangle-exclamation"></i><div>[[ w ]]</div></div>
+                        <ol class="wf-preview">
+                            <li v-for="(t, i) in runPreview.tasks" :key="t.uuid" class="wf-preview__step">
+                                <span class="wf-preview__icon"><i :class="t.icon"></i></span>
+                                <div class="wf-preview__body">
+                                    <div class="wf-preview__title">[[ t.title ]]
+                                        <span v-if="!t.is_active" class="badge bg-secondary-subtle text-secondary-emphasis ms-1">paused — runs in a launch</span>
+                                    </div>
+                                    <div class="wf-preview__desc" v-if="t.description">[[ t.description ]]</div>
+                                    <div class="wf-preview__meta">
+                                        <span v-if="t.parents.length"><i class="fa-solid fa-link"></i>after [[ t.parents.map(p => p.title + ' ' + ({success: 'succeeds', failure: 'fails', always: 'ends'}[p.condition] || '')).join(t.mode === 'any' ? ' or ' : ' and ') ]]</span>
+                                        <span v-else><i class="fa-solid fa-flag-checkered"></i>starts the run</span>
+                                        <span v-if="t.estimate"><i class="fa-solid fa-list"></i>[[ t.estimate.count.toLocaleString() ]] [[ t.estimate.unit ]]</span>
+                                        <span v-if="t.avg_seconds !== null"><i class="fa-regular fa-clock"></i>~[[ formatDuration(t.avg_seconds) ]]</span>
+                                        <span v-if="t.success_rate !== null" :class="t.success_rate >= 80 ? 'is-good' : 'is-bad'"><i class="fa-solid fa-circle-check"></i>[[ t.success_rate ]]% ok</span>
+                                        <span v-if="t.max_retries"><i class="fa-solid fa-rotate-right"></i>[[ t.max_retries ]] retries</span>
+                                        <span v-if="t.timeout_minutes"><i class="fa-solid fa-hourglass-half"></i>stops after [[ t.timeout_minutes ]] min</span>
+                                    </div>
+                                </div>
+                            </li>
+                        </ol>
+                    </template>
+                    <p v-else class="text-muted mb-0">The preview could not be loaded — you can still run the workflow.</p>
+                </div>
+                <div class="modal-footer tf-footer">
+                    <span class="tf-footer__summary me-auto"><i class="fa-solid fa-circle-info"></i>Paused tasks still run in a manual launch.</span>
+                    <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary rounded-pill px-4 tf-submit" :disabled="workflowBusy || runPreviewLoading" @click="confirmRunWorkflow()">
+                        <i class="fa-solid fa-play me-1"></i>Run now
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Templates gallery: a ready-made workflow in one click (workflow_spec.py TEMPLATES) -->
     <div class="modal fade" id="templatesModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
@@ -695,6 +751,8 @@
                 <div class="modal-body tf-body">
                     <div class="wf-tpl-grid">
                         <button v-for="t in templates" :key="t.key" type="button" class="wf-tpl" :disabled="templateBusy" @click="useTemplate(t)">
+                            <span v-if="t.custom" class="wf-tpl__badge">Yours
+                                <i class="fa-solid fa-trash wf-tpl__del" title="Delete this template" @click.stop="deleteTemplate(t)"></i></span>
                             <span class="wf-tpl__icon"><i :class="t.icon"></i></span>
                             <span class="wf-tpl__name">[[ t.label ]]</span>
                             <span class="wf-tpl__desc">[[ t.description ]]</span>
@@ -712,6 +770,11 @@
                             <span class="wf-tpl__desc">Start empty and add your own tasks.</span>
                         </button>
                     </div>
+                    <p class="text-muted small mt-3 mb-0">
+                        <i class="fa-solid fa-bookmark me-1"></i>Save any workflow as a template from its row (bookmark button).
+                        Templates are a setting: edit or restore them on
+                        <a href="/admin/configuration?q=workflows.templates" target="_blank">Admin → Configuration</a>.
+                    </p>
                 </div>
             </div>
         </div>
@@ -893,6 +956,90 @@
                                         <option value="always">No matter what</option>
                                     </select>
                                 </div>
+                                <!-- more parents: wait for several tasks (all of them / any one) -->
+                                <div class="col-12">
+                                    <div v-for="(p, i) in form.extra_parents" :key="i" class="tf-parent">
+                                        <span class="tf-parent__and">[[ form.depends_on_mode === 'any' ? 'or' : 'and' ]]</span>
+                                        <select class="form-select tf-input" v-model="p.id">
+                                            <option :value="null" disabled>Choose a task…</option>
+                                            <option v-for="o in pickerSchedules" :key="o.id" :value="o.id"
+                                                    :disabled="o.id === form.depends_on_schedule_id">[[ o.title ]]</option>
+                                        </select>
+                                        <select class="form-select tf-input tf-parent__cond" v-model="p.condition">
+                                            <option value="success">succeeds</option>
+                                            <option value="failure">fails</option>
+                                            <option value="always">ends</option>
+                                        </select>
+                                        <button type="button" class="tf-icon-btn" title="Remove" @click="form.extra_parents.splice(i, 1)"><i class="fa-solid fa-xmark"></i></button>
+                                    </div>
+                                    <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
+                                        <button type="button" class="tf-link-btn" :disabled="!pickerSchedules.length"
+                                                @click="form.extra_parents.push({ id: null, condition: 'success' })">
+                                            <i class="fa-solid fa-plus"></i>Wait for another task too
+                                        </button>
+                                        <div v-if="form.extra_parents.length" class="tf-segment tf-segment--sm mb-0 ms-auto">
+                                            <button type="button" :class="{ 'is-on': form.depends_on_mode === 'all' }" @click="form.depends_on_mode = 'all'">
+                                                <i class="fa-solid fa-layer-group"></i>When all are done
+                                            </button>
+                                            <button type="button" :class="{ 'is-on': form.depends_on_mode === 'any' }" @click="form.depends_on_mode = 'any'">
+                                                <i class="fa-solid fa-bolt"></i>As soon as one is
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Reliability: retries, time limit, auto-pause, catch-up -->
+                    <section class="tf-step">
+                        <header class="tf-step__head">
+                            <span class="tf-step__num"><i class="fa-solid fa-shield-heart" style="font-size:.75rem;"></i></span>
+                            <div><div class="tf-step__title">Reliability</div>
+                                 <div class="tf-step__sub">What happens when it fails or hangs</div></div>
+                            <div v-if="form.stats && form.stats.runs" class="tf-stats ms-auto">
+                                <span><i class="fa-solid fa-play"></i>[[ form.stats.runs ]] runs</span>
+                                <span v-if="form.stats.success_rate !== null" :class="form.stats.success_rate >= 80 ? 'is-good' : 'is-bad'">
+                                    <i class="fa-solid fa-circle-check"></i>[[ form.stats.success_rate ]]% ok</span>
+                                <span v-if="form.stats.avg_seconds !== null"><i class="fa-regular fa-clock"></i>~[[ formatDuration(form.stats.avg_seconds) ]]</span>
+                            </div>
+                        </header>
+                        <div class="tf-rel-grid">
+                            <div class="tf-rel">
+                                <span class="tf-label"><i class="fa-solid fa-rotate-right"></i>Retries after a failure</span>
+                                <div class="d-flex gap-2 align-items-center">
+                                    <select class="form-select tf-input" v-model.number="form.max_retries">
+                                        <option v-for="n in 6" :key="n" :value="n - 1">[[ n - 1 === 0 ? 'No retry' : (n - 1) + ' × ' ]]</option>
+                                    </select>
+                                    <template v-if="form.max_retries > 0">
+                                        <span class="small text-muted text-nowrap">after</span>
+                                        <input type="number" min="1" max="1440" class="form-control tf-input" style="max-width:90px;" v-model.number="form.retry_delay_minutes">
+                                        <span class="small text-muted">min</span>
+                                    </template>
+                                </div>
+                            </div>
+                            <div class="tf-rel">
+                                <span class="tf-label"><i class="fa-solid fa-hourglass-half"></i>Stop it after</span>
+                                <div class="d-flex gap-2 align-items-center">
+                                    <input type="number" min="1" max="10080" class="form-control tf-input" placeholder="no limit" v-model="form.timeout_minutes">
+                                    <span class="small text-muted">min</span>
+                                </div>
+                            </div>
+                            <div class="tf-rel">
+                                <span class="tf-label"><i class="fa-solid fa-circle-pause"></i>Pause it after</span>
+                                <div class="d-flex gap-2 align-items-center">
+                                    <select class="form-select tf-input" v-model.number="form.max_consecutive_failures">
+                                        <option :value="0">never</option>
+                                        <option v-for="n in [2, 3, 5, 10]" :key="n" :value="n">[[ n ]] failures in a row</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="tf-rel tf-rel--switch">
+                                <label class="tf-switch">
+                                    <input type="checkbox" v-model="form.catch_up">
+                                    <span class="tf-switch__track"><span class="tf-switch__thumb"></span></span>
+                                    <span>Catch up a missed launch<small class="d-block text-muted">server down at launch time: run it when back</small></span>
+                                </label>
                             </div>
                         </div>
                     </section>
@@ -1117,6 +1264,20 @@
                 catch { create_message('This file is not JSON.', 'danger-subtle'); return; }
                 await postAndOpen('/admin/tasks/workflows/import', spec, 'Workflow imported.');
             }
+            async function saveAsTemplate(w) {
+                const res = await fetch(`/admin/tasks/workflows/${w.uuid}/save_as_template`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ label: w.title }) });
+                const data = await res.json().catch(() => ({}));
+                create_message(data.message || 'Failed.', res.ok ? 'success-subtle' : 'danger-subtle');
+                if (res.ok) loadTemplates();
+            }
+            async function deleteTemplate(t) {
+                const res = await fetch(`/admin/tasks/templates/${encodeURIComponent(t.key)}/delete`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                const data = await res.json().catch(() => ({}));
+                create_message(data.message || 'Failed.', res.ok ? 'success-subtle' : 'danger-subtle');
+                if (res.ok) loadTemplates();
+            }
             async function duplicateWorkflow(w) {
                 const res = await fetch(`/admin/tasks/workflows/${w.uuid}/duplicate`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
                 const data = await res.json().catch(() => ({}));
@@ -1152,6 +1313,24 @@
                 activeWorkflow.value = null;
                 pushWorkflowUrl(null);
                 fetchWorkflows(workflowsPage.value);
+            }
+
+            // ── Launch preview: what the run will do before it starts ──────────────
+            const runPreview = ref(null);
+            const runPreviewLoading = ref(false);
+            async function askRunWorkflow() {
+                if (!activeWorkflow.value || workflowBusy.value) return;
+                runPreview.value = null;
+                runPreviewLoading.value = true;
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('runPreviewModal')).show();
+                try {
+                    const res = await fetch(`/admin/tasks/workflows/${activeWorkflow.value.uuid}/preview`);
+                    if (res.ok) runPreview.value = await res.json();
+                } finally { runPreviewLoading.value = false; }
+            }
+            async function confirmRunWorkflow() {
+                bootstrap.Modal.getInstance(document.getElementById('runPreviewModal'))?.hide();
+                await runWorkflowNow();
             }
 
             async function runWorkflowNow() {
@@ -1831,6 +2010,7 @@
                 uuid: null, title: '', description: '', is_active: true,
                 task_type: '', recurrence: {}, depends_on_schedule_id: null, depends_on_condition: 'success',
                 extra_options: {},
+                extra_parents: [], depends_on_mode: 'all', max_retries: 0, retry_delay_minutes: 10, timeout_minutes: '', max_consecutive_failures: 0, catch_up: false, stats: null,
             });
             const formInstance = ref(0);
             const triggerKind = ref('time');
@@ -1848,6 +2028,13 @@
             const currentTargetSummary = ref('No target saved yet.');
 
             const selectedTaskDef = computed(() => taskTypes.value[form.task_type] || null);
+
+            function formatDuration(sec) {
+                if (sec == null) return '—';
+                if (sec < 60) return `${sec}s`;
+                if (sec < 3600) return `${Math.round(sec / 60)} min`;
+                return `${Math.floor(sec / 3600)} h ${Math.round((sec % 3600) / 60)} min`;
+            }
 
             // task type picker: "Category — what it does" labels split for the cards, searchable
             const typeSearch = ref('');
@@ -1939,6 +2126,7 @@
                     uuid: null, title: '', description: '', is_active: true,
                     task_type: '', recurrence: {}, depends_on_schedule_id: null, depends_on_condition: 'success',
                     extra_options: {},
+                    extra_parents: [], depends_on_mode: 'all', max_retries: 0, retry_delay_minutes: 10, timeout_minutes: '', max_consecutive_failures: 0, catch_up: false, stats: null,
                 });
                 triggerKind.value = 'time';
                 recurrenceMode.value = 'recurring';
@@ -1965,6 +2153,11 @@
                     depends_on_schedule_id: s.depends_on_schedule_id,
                     depends_on_condition: s.depends_on_condition || 'success',
                     extra_options: {},
+                    extra_parents: (s.extra_parents || []).map(p => ({ id: p.id, condition: p.condition })),
+                    depends_on_mode: s.depends_on_mode || 'all',
+                    max_retries: s.max_retries || 0, retry_delay_minutes: s.retry_delay_minutes || 10,
+                    timeout_minutes: s.timeout_minutes || '', max_consecutive_failures: s.max_consecutive_failures || 0,
+                    catch_up: !!s.catch_up, stats: s.stats || null,
                 });
                 triggerKind.value = s.trigger_mode === 'after_task' ? 'after_task' : 'time';
                 if (triggerKind.value === 'after_task') loadPickerSchedules();
@@ -2032,6 +2225,13 @@
                         title: form.title, description: form.description, is_active: form.is_active,
                         task_type: form.task_type, target_payload: targetPayload,
                         workflow_uuid: activeWorkflow.value.uuid,
+                        // robustness + several parents (task_scheduler_core._apply_extras)
+                        max_retries: Number(form.max_retries) || 0, retry_delay_minutes: Number(form.retry_delay_minutes) || 10,
+                        timeout_minutes: form.timeout_minutes === '' ? null : Number(form.timeout_minutes),
+                        max_consecutive_failures: Number(form.max_consecutive_failures) || 0, catch_up: !!form.catch_up,
+                        depends_on_mode: form.depends_on_mode,
+                        extra_parents: triggerKind.value === 'after_task'
+                            ? form.extra_parents.filter(p => p.id && p.id !== form.depends_on_schedule_id) : [],
                     };
                     if (triggerKind.value === 'after_task') {
                         if (!form.depends_on_schedule_id) { create_message('Choose a task to depend on.', 'danger-subtle'); saving.value = false; return; }
@@ -2174,10 +2374,12 @@
             return {
                 truncate,
                 route, activeWorkflow, openWorkflow, backToWorkflows, runWorkflowNow,
+                runPreview, runPreviewLoading, askRunWorkflow, confirmRunWorkflow,
                 workflows, workflowsLoading, workflowSearch, onWorkflowSearchInput,
                 workflowsPage, workflowsTotalPages, totalWorkflows,
                 fetchWorkflows, openCreateWorkflow, openEditWorkflow, deleteWorkflow,
                 templates, templateBusy, openTemplates, useTemplate, importWorkflowFile, duplicateWorkflow, duplicateTask,
+                saveAsTemplate, deleteTemplate,
                 workflowForm, savingWorkflow, submitWorkflowForm, mailConfigured, currentUserEmail,
                 workflowFormInstance, onWorkflowLaunchChange, formatLocalDate,
 
@@ -2202,7 +2404,7 @@
                 savedConfigs, isRequiredOption,
                 targetJustChanged, currentTargetSummary, selectedTaskDef,
                 onTaskTypeChange, loadPickerSchedules, onRecurrenceChange, onRuleTargetChange,
-                typeSearch, taskTypeParts, filteredTaskTypes, pickTaskType,
+                typeSearch, taskTypeParts, filteredTaskTypes, pickTaskType, formatDuration,
                 openCreate, openEdit, submitForm,
                 taskViewMode, pendingConnection, pendingConnectionIsEdit,
                 onNodeMove, onNodeConnect, onEdgeClick, confirmConnection, removeConnection, onAddNodeOnCanvas,
