@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% block title %}{{ workflow.title }} — shared workflow — Rulezet{% endblock %}
+{% block head %}
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/workflowRunTrace.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/workflowNotebook.css') }}">
+{% endblock %}
+{% block content %}
+<div id="main-container" class="container-fluid px-3 px-md-4 py-4" style="max-width:1200px;">
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-diagram-project banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Shared workflow</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-diagram-project"></i></div>
+            <div><h2 class="fw-bold mb-1">{% if workflow.title|length > 60 %}{{ workflow.title[:60] }}…{% else %}{{ workflow.title }}{% endif %}</h2><div class="banner-accent"></div></div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+            {% if workflow.description %}{{ workflow.description }}{% else %}A workflow of this Rulezet instance, shared read-only.{% endif %}
+            <span class="d-block small mt-1"><i class="fa-solid fa-eye me-1"></i>Read-only view: launch history, notes, files and activity.</span>
+        </p>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-3">
+        <div class="card-body p-3 p-md-4">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <div class="wnb-bar"></div>
+                <span class="wnb-title"><i class="fa-solid fa-clock-rotate-left me-1"></i>Launch history</span>
+            </div>
+            <div v-if="loading" class="text-muted small"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</div>
+            <div v-else-if="!runs.length" class="wnb-empty"><i class="fa-solid fa-rocket"></i><div>No launch yet.</div></div>
+            <div v-else class="dt-wrapper">
+                <table class="dt-table">
+                    <thead class="dt-thead"><tr>
+                        <th class="dt-th">Started</th><th class="dt-th text-center">Status</th>
+                        <th class="dt-th text-center">Tasks</th><th class="dt-th">Path</th><th class="dt-th text-center">Duration</th>
+                    </tr></thead>
+                    <tbody>
+                        <tr v-for="run in runs" :key="run.uuid" class="dt-row">
+                            <td class="dt-td">[[ run.started_at ]]</td>
+                            <td class="dt-td text-center"><span class="wnb-chip">[[ run.status ]]</span></td>
+                            <td class="dt-td text-center">[[ run.done_count ]]/[[ run.task_count ]] done<span v-if="run.failed_count" class="text-danger"> · [[ run.failed_count ]] failed</span></td>
+                            <td class="dt-td"><div class="wrt-mini-path">
+                                <template v-for="(t, i) in run.tasks" :key="i">
+                                    <span v-if="i > 0" class="wrt-mini-path-link"></span>
+                                    <span class="wrt-mini-path-step" :class="'wrt-mini-path-step--' + t.status" :title="t.task_title + ' — ' + t.status"></span>
+                                </template>
+                            </div></td>
+                            <td class="dt-td text-center text-muted" style="font-size:.8rem;">[[ duration(run.duration_seconds) ]]</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <workflow-notebook workflow-uuid="shared" :read-only="true" :api-base="apiBase" :runs="runs"></workflow-notebook>
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    import WorkflowNotebook from '/static/js/admin/workflowNotebook.js';
+    const apiBase = {{ url_for('workflow_share.shared_page', key=key) | tojson }};
+    Vue.createApp({
+        delimiters: ['[[', ']]'],
+        components: { 'workflow-notebook': WorkflowNotebook },
+        setup() {
+            const runs = Vue.ref([]);
+            const loading = Vue.ref(true);
+            function duration(s) {
+                if (s == null) return '—';
+                if (s < 60) return `${Math.round(s)}s`;
+                if (s < 3600) return `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
+                return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+            }
+            Vue.onMounted(async () => {
+                try {
+                    const res = await fetch(`${apiBase}/data`);
+                    if (res.ok) runs.value = (await res.json()).runs;
+                } finally {
+                    loading.value = false;
+                }
+            });
+            return { runs, loading, apiBase, duration };
+        },
+    }).mount('#main-container');
+</script>
+{% endblock %}

@@ -125,6 +125,8 @@ def delete_workflow(workflow_uuid):
         return False
     for task in workflow.tasks:
         unregister_schedule(task.uuid)
+    from app.features.admin.task_scheduler.workflow_notes import remove_all_files
+    remove_all_files(workflow)
     db.session.delete(workflow)  # cascades to its tasks (AdminWorkflow.tasks relationship)
     db.session.commit()
     return True
@@ -817,8 +819,10 @@ def serialize_workflow_run(run):
     else:
         overall = 'pending'
 
+    from app.core.db_class.task_scheduler import AdminWorkflowNote
     return {
         "uuid": run.uuid,
+        "notes_count": AdminWorkflowNote.query.filter_by(workflow_run_id=run.id).count(),
         "started_at": run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else None,
         "triggered_by": {
             "id": run.triggered_by.id,
