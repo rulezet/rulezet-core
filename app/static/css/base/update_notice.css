@@ -1,0 +1,29 @@
+/* "A new version of Rulezet is available" — admins only, base.html */
+.rz-update-notice {
+    display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+    margin: .5rem 0 1rem;
+    padding: .9rem 1rem;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid #0d6efd;
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(13, 110, 253, .08);
+    animation: rz-update-in .35s ease-out;
+}
+.rz-update-notice__icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 42px; height: 42px; flex-shrink: 0;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #0d6efd, #0a58ca);
+    color: #fff; font-size: 1.1rem;
+}
+.rz-update-notice__body { flex: 1 1 260px; min-width: 0; }
+.rz-update-notice__title { font-weight: 700; color: var(--text-color); }
+.rz-update-notice__versions { display: flex; align-items: center; gap: .45rem; margin: .25rem 0; font-size: .82rem; color: var(--subtle-text-color); }
+.rz-update-notice__v { font-family: var(--bs-font-monospace, monospace); font-weight: 700; padding: .05rem .45rem; border-radius: 999px; }
+.rz-update-notice__v--old { background: var(--light-bg-color); color: var(--subtle-text-color); border: 1px solid var(--border-color); }
+.rz-update-notice__v--new { background: rgba(25, 135, 84, .12); color: #198754; border: 1px solid rgba(25, 135, 84, .3); }
+.rz-update-notice__text { font-size: .82rem; color: var(--subtle-text-color); }
+.rz-update-notice__actions { display: flex; align-items: center; gap: .75rem; margin-left: auto; }
+@keyframes rz-update-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .rz-update-notice { animation: none; } }

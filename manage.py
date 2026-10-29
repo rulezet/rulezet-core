@@ -242,6 +242,12 @@ def _relay(proc, tag: str) -> None:
         if m:
             _event("31", "✗", tag, f"{job_types.pop(m.group(2), 'job')} failed: {m.group(3)}")
             continue
+        if "[update] NEW VERSION:" in line:
+            _event("33", "★", tag, re.sub(r"\x1b\[[0-9;]*m", "", line.split("[update] ", 1)[1]))
+            continue
+        if "[update] Run:" in line:
+            _event("32", "→", tag, re.sub(r"\x1b\[[0-9;]*m", "", line.split("[update] ", 1)[1]))
+            continue
         if "Recovered" in line and "interrupted job" in line:
             _event("33", "↻", tag, re.sub(r"^\[[^\]]+\] ", "", line))
             continue

@@ -322,6 +322,33 @@ def notify_admins_github_token_invalid(reason=None):
         print(f"[notification_core] notify_admins_github_token_invalid error: {e}")
 
 
+def notify_admins_new_version(latest_version, local_version, url):
+    """One bell notification per admin when a newer Rulezet release is out — once per version
+    (an admin who already got it for this version is not notified again)."""
+    try:
+        title = f'Rulezet v{latest_version} is available'
+        admin_ids = _get_all_admin_ids()
+        already = {n.user_id for n in Notification.query.filter(
+            Notification.notif_type == 'new_version', Notification.title == title).all()}
+        notifs = [Notification(
+            user_id    = uid,
+            notif_type = 'new_version',
+            title      = title,
+            body       = f'This instance runs v{local_version}. Read the release notes, then run '
+                         f'python3 manage.py update (or start-prod on a server).',
+            link       = url,
+            icon       = _TYPE_ICON.get('new_version'),
+            is_read    = False,
+            created_at = datetime.datetime.utcnow(),
+        ) for uid in admin_ids if uid not in already]
+        if notifs:
+            db.session.add_all(notifs)
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] notify_admins_new_version error: {e}")
+
+
 def notify_admins_session_started(user, session_type, session_uuid, label, link):
     """
     Notify all admins (and the triggering user) that a long-running session
