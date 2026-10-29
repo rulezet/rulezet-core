@@ -64,7 +64,7 @@ def test_sigma_keys():
     assert found["references"] == ["https://example.org/blog"]
     extra = found["extra"]
     assert extra["status"] == "test" and extra["level"] == "high" and extra["falsepositives"] == "Administrators"
-    assert extra["logsource"] == "product: windows"
+    assert extra["logsource_product"] == "windows"            # a simple object: one field per entry
     assert not {"title", "id", "tags", "detection", "author", "description"} & set(extra)
 
 
@@ -221,3 +221,146 @@ def test_connector_sync_keeps_references_added_by_hand(app, users):
                                "references_manual": ["https://by-hand.example/7", 5]})
     assert clean["references_manual"] == ["https://by-hand.example/7"]
     assert "references_manual" not in clean_remote_rule({"uuid": "6b3c5e2a-1f2d-4a9b-8c7d-0e1f2a3b4c5e", "to_string": YARA})
+
+
+def test_comma_lists_are_shown_one_item_per_line():
+    from app.features.rule.rule_metadata_core import display_metadata, split_list_value
+    assert split_list_value("mirai,gafgyt,tsunami") == ["mirai", "gafgyt", "tsunami"]
+    assert split_list_value("Cobalt Strike, Mimikatz") == ["Cobalt Strike", "Mimikatz"]
+    sentence = "Detects a loader, which then drops a payload. It runs quietly, in memory."
+    assert split_list_value(sentence) == [sentence]                     # a sentence stays whole
+    shown = display_metadata({"family": "mirai,gafgyt, mirai", "info": sentence})
+    assert shown[0]["values"] == ["mirai", "gafgyt"] and shown[1]["values"] == [sentence]
+
+
+def test_interesting_metadata_gets_colours():
+    from app.features.rule.rule_metadata_core import display_metadata
+    shown = {f["key"]: f for f in display_metadata({"family": "mirai,gafgyt", "confidence": "high",
+                                                     "severity": "critical", "score": "85", "remark": "plain"})}
+    assert [v["tone"] for v in shown["family"]["styled"]] == ["red", "red"]
+    assert shown["confidence"]["styled"][0]["tone"] == "green"
+    assert shown["severity"]["styled"][0]["tone"] == "red"
+    assert shown["score"]["styled"][0]["percent"] == 85
+    assert shown["remark"]["style"] is None and shown["remark"]["styled"][0]["tone"] is None   # unknown key: plain
+
+
+def test_coloured_values_stay_escaped(clients, users):
+    from tests_new.helpers.rules import make_rule
+    rule = make_rule(users.owner)
+    rule.extra_metadata = {"family": "<script>alert(1)</script>,mirai"}
+    from app import db
+    db.session.commit()
+    page = clients["anonymous"].get(f"/rule/detail_rule/{rule.id}").get_data(as_text=True)
+    assert "<script>alert(1)</script>" not in page and "rule-meta-badge--red" in page
+
+
+ELASTIC_WITH_NOTE = '''[metadata]
+maturity = "production"
+
+[rule]
+name = "Elastic rule with a guide"
+severity = "low"
+note = """## Triage and analysis
+
+- Check the **user**
+- <script>alert(1)</script>
+"""
+setup = "Enable the integration."
+'''
+
+
+def test_elastic_note_and_setup_are_kept_whole_as_markdown():
+    from app.features.rule.rule_metadata_core import display_metadata, extract_rule_metadata
+    extra = extract_rule_metadata("elastic", ELASTIC_WITH_NOTE)["extra"]
+    assert extra["note"].startswith("## Triage and analysis\n\n- Check the **user**")     # line breaks kept
+    shown = {f["key"]: f for f in display_metadata(extra)}
+    assert shown["note"]["long"] and shown["note"]["label"] == "Investigation guide"
+    assert shown["setup"]["long"] and not shown["severity"].get("long")
+
+
+def test_elastic_guide_on_the_rule_page_is_collapsed_and_never_raw_html(clients, users):
+    from app import db
+    from tests_new.helpers.rules import make_rule
+    rule = make_rule(users.owner, format="elastic", to_string=ELASTIC_WITH_NOTE)
+    from app.features.rule.rule_metadata_core import apply_rule_metadata
+    apply_rule_metadata(rule)
+    db.session.commit()
+    page = clients["anonymous"].get(f"/rule/detail_rule/{rule.id}").get_data(as_text=True)
+    assert '<details class="rule-meta-long"' in page and "Investigation guide" in page
+    assert "<script>alert(1)</script>" not in page          # the text reaches the page as JSON, rendered sanitized
+
+
+def test_tlp_and_pap_get_the_official_tlp_style():
+    from app.features.rule.rule_metadata_core import display_metadata
+    shown = {f["key"]: f for f in display_metadata({"tlp": "TLP:AMBER+STRICT", "pap": "green", "sharing": "TLP:CLEAR"})}
+    assert shown["tlp"]["style"] == "tlp" and shown["tlp"]["styled"][0]["tone"] == "amber"
+    assert shown["pap"]["style"] == "tlp" and shown["pap"]["styled"][0]["tone"] == "green"
+    assert shown["sharing"]["styled"][0]["tone"] == "clear"
+
+
+def test_platforms_get_their_logo_and_colour():
+    from app.features.rule.rule_metadata_core import display_metadata
+    shown = {f["key"]: f for f in display_metadata({"integration": "aws", "os": "Windows, Linux", "family": "mirai"})}
+    assert shown["integration"]["styled"][0]["platform"]["label"] == "AWS"
+    assert [v["platform"]["icon"] for v in shown["os"]["styled"]] == ["fa-brands fa-windows", "fa-brands fa-linux"]
+    assert shown["family"]["styled"][0]["platform"] is None                      # not a platform: its own red badge
+
+
+SPLUNK_RULE = '''name: Splunk detection
+how_to_implement: You need Sysmon logs.
+known_false_positives: Admins may run it.
+tests:
+- name: True Positive Test
+  attack_data:
+  - data: https://example.org/data.log
+search: '| tstats count'
+'''
+
+
+def test_more_long_and_structured_fields_are_kept():
+    from app.features.rule.rule_metadata_core import display_metadata, extract_rule_metadata
+    extra = extract_rule_metadata("splunk", SPLUNK_RULE)["extra"]
+    shown = {f["key"]: f for f in display_metadata(extra)}
+    assert shown["how_to_implement"]["kind"] == "markdown" and shown["known_false_positives"]["long"]
+    assert shown["tests"]["kind"] == "json" and '"True Positive Test"' in shown["tests"]["text"]
+    sigma = extract_rule_metadata("sigma", "title: x\nlogsource:\n  product: windows\n  definition: 'Requirements: enable auditing'\n")["extra"]
+    assert sigma["logsource_definition"] == "Requirements: enable auditing"
+    atr = extract_rule_metadata("atr", "title: x\ndetection:\n  false_positives:\n  - one long reason\n  - another one\n")["extra"]
+    assert atr["false_positives"] == "- one long reason\n- another one"        # a list becomes Markdown bullets
+
+
+def test_rules_list_filters_by_platform_and_detail(clients, users):
+    from app import db
+    from tests_new.helpers.rules import make_rule
+    win = make_rule(users.owner, format="sigma", to_string="title: a\nlogsource:\n  product: windows\n  service: sysmon\n")
+    aws = make_rule(users.owner, format="elastic", to_string='[metadata]\nintegration = "aws"\n[rule]\nname = "x"\n')
+    db.session.commit()
+    assert win.platforms == "|Windows|Windows:Sysmon|" and aws.platforms == "|AWS|"
+    ids = lambda q: {r["id"] for r in clients["anonymous"].get(f"/rule/data_table?{q}").json["items"]}   # noqa: E731
+    assert ids("platforms=Windows") == {win.id}
+    assert ids("platforms=Windows:Sysmon") == {win.id}
+    assert ids("platforms=AWS,Windows") == {win.id, aws.id}
+    item = clients["anonymous"].get("/rule/data_table?platforms=AWS").json["items"][0]
+    assert item["platforms"][0]["label"] == "AWS" and item["platforms"][0]["icon"] == "fa-brands fa-aws"
+    usage = {p["name"]: p for p in clients["anonymous"].get("/rule/get_rules_platforms_usage").json}
+    assert usage["Windows"]["count"] == 1 and usage["Windows"]["details"][0]["name"] == "Windows:Sysmon"
+    assert clients["anonymous"].get("/rule/data_table?platforms=%25").status_code == 200        # no wildcard injection
+
+
+def test_simple_objects_become_fields_and_deep_ones_json():
+    from app.features.rule.rule_metadata_core import display_metadata, extract_rule_metadata
+    extra = extract_rule_metadata("atr", "title: x\nresponse:\n  actions: [alert, snapshot]\n"
+                                         "deep:\n  a:\n    b: 1\n")["extra"]
+    assert extra["response_actions"] == ["alert", "snapshot"]   # a list of values, no "[…]" text
+    shown = {f["key"]: f for f in display_metadata(extra)}
+    assert shown["response_actions"]["values"] == ["alert", "snapshot"]
+    assert shown["deep"]["kind"] == "json"
+
+
+def test_tags_name_the_platforms_without_being_shown():
+    from app.features.rule.rule_metadata_core import detect_platforms, display_metadata, extract_rule_metadata
+    kunai = extract_rule_metadata("kunai", "name: x\nmeta:\n  tags:\n  - os:linux\n  comments:\n  - c\n")["extra"]
+    assert detect_platforms(kunai) == ["Linux"]
+    assert [f["key"] for f in display_metadata(kunai)] == ["comments"]             # tags never shown twice
+    elastic = extract_rule_metadata("elastic", '[rule]\nname = "x"\ntags = ["OS: Windows", "Data Source: AWS"]\n')["extra"]
+    assert detect_platforms(elastic) == ["Windows", "AWS"]
