@@ -161,6 +161,8 @@ def create_app(start_worker=True):
     app.register_blueprint(ai_blueprint, url_prefix='/ai')
     app.register_blueprint(roles_blueprint, url_prefix='/admin/roles')
     app.register_blueprint(task_scheduler_blueprint, url_prefix='/admin/tasks')
+    from app.features.admin.task_scheduler.workflow_share_routes import workflow_share_blueprint
+    app.register_blueprint(workflow_share_blueprint, url_prefix='/workflow/shared')
     app.register_blueprint(rule_mirror_blueprint)
     app.register_blueprint(media_blueprint)
     app.register_blueprint(media_static_blueprint)

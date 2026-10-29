@@ -1,0 +1,59 @@
+/* workflowNotebook.js — notes, files and activity under a workflow's launch history */
+.wnb-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.wnb-bar { width: 3px; height: 14px; background: #0d6efd; border-radius: 2px; }
+.wnb-title { font-weight: 700; font-size: .75rem; text-transform: uppercase; letter-spacing: .07em; color: var(--subtle-text-color); }
+.wnb-tabs { display: inline-flex; background: var(--light-bg-color); border: 1px solid var(--border-color); border-radius: 999px; padding: 3px; }
+.wnb-tabs button { border: 0; background: none; color: var(--subtle-text-color); font-size: .78rem; font-weight: 600; padding: .3rem .8rem; border-radius: 999px; display: inline-flex; align-items: center; gap: .4rem; }
+.wnb-tabs button span { font-size: .68rem; background: var(--border-color); border-radius: 999px; padding: 0 .4rem; }
+.wnb-tabs button.is-on { background: var(--card-bg-color); color: #0d6efd; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.wnb-toolbar { display: flex; align-items: center; gap: .5rem; margin-bottom: .75rem; }
+.wnb-select { width: auto; max-width: 320px; font-size: .8rem; }
+.wnb-editor { border: 1px solid rgba(13,110,253,.3); background: var(--light-bg-color); border-radius: 12px; padding: .9rem; margin-bottom: .9rem; }
+.wnb-input { font-weight: 600; margin-bottom: .5rem; }
+.wnb-editor-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: .5rem; }
+.wnb-check { font-size: .8rem; color: var(--subtle-text-color); display: inline-flex; align-items: center; gap: .35rem; cursor: pointer; }
+.wnb-textarea { font-family: var(--bs-font-monospace); font-size: .82rem; }
+.wnb-preview { background: var(--card-bg-color); border: 1px solid var(--border-color); border-radius: 8px; min-height: 8rem; }
+.wnb-empty { display: flex; align-items: center; gap: .75rem; color: var(--subtle-text-color); font-size: .85rem; padding: 1rem; border: 1px dashed var(--border-color); border-radius: 10px; }
+.wnb-empty > i { font-size: 1.3rem; opacity: .5; }
+.wnb-note { border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: .5rem; background: var(--card-bg-color); overflow: hidden; }
+.wnb-note.is-pinned { border-left: 3px solid #0d6efd; }
+.wnb-note-head { display: flex; align-items: center; gap: .5rem; padding: .6rem .8rem; cursor: pointer; flex-wrap: wrap; }
+.wnb-note-head:hover { background: var(--light-bg-color); }
+.wnb-caret { font-size: .7rem; color: var(--subtle-text-color); transition: transform .15s; }
+.wnb-caret.is-open { transform: rotate(90deg); }
+.wnb-pin { color: #0d6efd; font-size: .75rem; }
+.wnb-note-title { font-weight: 600; font-size: .9rem; color: var(--text-color); }
+.wnb-chip { font-size: .7rem; background: rgba(13,110,253,.1); color: #0d6efd; border-radius: 999px; padding: .1rem .5rem; display: inline-flex; gap: .3rem; align-items: center; }
+.wnb-meta { font-size: .74rem; color: var(--subtle-text-color); }
+.wnb-note-head .wnb-meta { margin-left: auto; }
+.wnb-actions { display: inline-flex; gap: .2rem; }
+.wnb-actions button, .wnb-actions a { border: 0; background: none; color: var(--subtle-text-color); padding: .2rem .4rem; border-radius: 6px; font-size: .8rem; }
+.wnb-actions button:hover, .wnb-actions a:hover { background: var(--light-bg-color); color: #0d6efd; }
+.wnb-actions .is-danger:hover { color: #dc3545; }
+.wnb-md { padding: .4rem 1rem .9rem 2.1rem; font-size: .88rem; color: var(--text-color); overflow-wrap: anywhere; }
+.wnb-preview.wnb-md { padding: .8rem 1rem; }
+.wnb-md pre { background: var(--light-bg-color); padding: .6rem; border-radius: 6px; }
+.wnb-md table { border-collapse: collapse; margin: .5rem 0; }
+.wnb-md td, .wnb-md th { border: 1px solid var(--border-color); padding: .25rem .5rem; }
+.wnb-md img { max-width: 100%; }
+.wnb-drop { display: flex; align-items: center; gap: .75rem; padding: 1rem 1.2rem; border: 2px dashed var(--border-color); border-radius: 12px; cursor: pointer; color: var(--subtle-text-color); font-size: .85rem; margin-bottom: .75rem; transition: border-color .15s, background .15s; }
+.wnb-drop > i { font-size: 1.5rem; color: #0d6efd; }
+.wnb-drop.is-over, .wnb-drop:hover { border-color: #0d6efd; background: rgba(13,110,253,.05); }
+.wnb-drop.is-busy { pointer-events: none; opacity: .7; }
+.wnb-file { display: flex; align-items: center; gap: .75rem; padding: .55rem .75rem; border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: .4rem; background: var(--card-bg-color); }
+.wnb-file-icon { font-size: 1.3rem; color: #0d6efd; width: 1.5rem; text-align: center; }
+.wnb-file-body { flex: 1; min-width: 0; }
+.wnb-file-name { font-weight: 600; font-size: .86rem; text-decoration: none; overflow-wrap: anywhere; }
+.wnb-feed { list-style: none; padding: 0; margin: 0; position: relative; }
+.wnb-feed::before { content: ''; position: absolute; left: 13px; top: 6px; bottom: 6px; width: 2px; background: var(--border-color); }
+.wnb-feed li { display: flex; gap: .75rem; padding: .35rem 0; position: relative; }
+.wnb-feed-dot { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; background: var(--card-bg-color); border: 2px solid var(--border-color); display: flex; align-items: center; justify-content: center; font-size: .7rem; color: #0d6efd; z-index: 1; }
+.wnb-feed-text { font-size: .85rem; color: var(--text-color); }
+.wfd-note-btn { position: relative; }
+.wfd-note-btn .wfd-note-count { position: absolute; top: -4px; right: -4px; font-size: .6rem; background: #0d6efd; color: #fff; border-radius: 999px; min-width: 15px; height: 15px; line-height: 15px; text-align: center; padding: 0 3px; }
+.wnb-share { border: 1px solid rgba(13,110,253,.3); background: rgba(13,110,253,.04); border-radius: 12px; padding: .8rem 1rem; margin: .75rem 0; }
+.wnb-share__head { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; margin-bottom: .5rem; color: var(--text-color); }
+.wnb-share__head > i { color: #0d6efd; }
+.wnb-share__row { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.wnb-share__row input { flex: 1; min-width: 220px; font-family: var(--bs-font-monospace); font-size: .78rem; }

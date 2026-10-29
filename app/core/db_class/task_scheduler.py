@@ -18,6 +18,7 @@ class AdminWorkflow(db.Model):
     description = db.Column(db.Text, nullable=True)
     editor_id   = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     is_active   = db.Column(db.Boolean, default=True, index=True)
+    share_key   = db.Column(db.String(64), nullable=True, unique=True)   # read-only link (workflow_notes.py)
 
     # Email alerts — configured per workflow (not per task): the admin who
     # created the workflow always receives it, plus any notify_emails.
@@ -278,4 +279,60 @@ class AdminTaskRun(db.Model):
             "status": self.status,
             "started_at": self.started_at.strftime('%Y-%m-%d %H:%M') if self.started_at else None,
             "finished_at": self.finished_at.strftime('%Y-%m-%d %H:%M') if self.finished_at else None,
+        }
+
+
+class AdminWorkflowNote(db.Model):
+    """A markdown note on a workflow (why it exists, how to fix it when it fails…),
+    optionally about one launch. Pinned notes show first."""
+    __tablename__ = "admin_workflow_note"
+
+    id              = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid            = db.Column(db.String(36), index=True, unique=True)
+    workflow_id     = db.Column(db.Integer, db.ForeignKey("admin_workflow.id", ondelete="CASCADE"), nullable=False, index=True)
+    workflow_run_id = db.Column(db.Integer, db.ForeignKey("admin_workflow_run.id", ondelete="SET NULL"), nullable=True)
+    author_id       = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    title           = db.Column(db.String(200), nullable=False)
+    content         = db.Column(db.Text, nullable=False, default='')
+    pinned          = db.Column(db.Boolean, nullable=False, default=False)
+    created_at      = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at      = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    workflow     = db.relationship("AdminWorkflow", backref=db.backref("notes", cascade="all, delete-orphan", lazy=True))
+    workflow_run = db.relationship("AdminWorkflowRun")
+    author       = db.relationship("User")
+
+    def to_json(self):
+        return {
+            'uuid': self.uuid, 'title': self.title, 'content': self.content, 'pinned': self.pinned,
+            'run_uuid': self.workflow_run.uuid if self.workflow_run else None,
+            'run_started_at': self.workflow_run.started_at.strftime('%Y-%m-%d %H:%M') if self.workflow_run and self.workflow_run.started_at else None,
+            'author': self.author.get_username() if self.author else None,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
+            'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M') if self.updated_at else None,
+        }
+
+
+class AdminWorkflowFile(db.Model):
+    """A file attached to a workflow (runbook, exported config, screenshot…). The bytes live in
+    data/workflow_files/<workflow uuid>/<stored_name>; the original name is only displayed."""
+    __tablename__ = "admin_workflow_file"
+
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid        = db.Column(db.String(36), index=True, unique=True)
+    workflow_id = db.Column(db.Integer, db.ForeignKey("admin_workflow.id", ondelete="CASCADE"), nullable=False, index=True)
+    uploader_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    filename    = db.Column(db.String(255), nullable=False)
+    stored_name = db.Column(db.String(64), nullable=False)
+    size        = db.Column(db.Integer, nullable=False, default=0)
+    created_at  = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    workflow = db.relationship("AdminWorkflow", backref=db.backref("files", cascade="all, delete-orphan", lazy=True))
+    uploader = db.relationship("User")
+
+    def to_json(self):
+        return {
+            'uuid': self.uuid, 'filename': self.filename, 'size': self.size,
+            'uploader': self.uploader.get_username() if self.uploader else None,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
         }

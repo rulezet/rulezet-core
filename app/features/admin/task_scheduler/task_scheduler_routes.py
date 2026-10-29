@@ -7,7 +7,7 @@ DB/business logic lives in task_scheduler_core.py; execution happens
 through the existing generic BackgroundJob pipeline (job_worker.py), exactly
 like every other admin bulk action. See docs/design/admin_task_scheduler.md.
 """
-from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, Response, abort, current_app, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user
 
 from app.core.db_class.connector import Connector
@@ -16,6 +16,7 @@ from app.core.utils.activity_log import log_activity
 from app.features.admin.task_scheduler import task_scheduler_core as TaskSchedulerModel
 from app.features.admin.task_scheduler.task_types import serialize_task_types
 from app.features.admin.task_scheduler import workflow_spec as WorkflowSpec
+from app.features.admin.task_scheduler import workflow_notes as WorkflowNotes
 from app.features.rule.rule_core import _active
 
 task_scheduler_blueprint = Blueprint(
@@ -629,3 +630,127 @@ def run_from_here(uuid):
                  target_type="admin_task_schedule", target_uuid=uuid, icon="fa-solid fa-play")
     return jsonify({"message": "Launched from this task.", "toast_class": "success-subtle",
                     "workflow_run_uuid": run.uuid}), 202
+
+
+# ─── Notes, files, activity and history export of a workflow ──────────────────
+
+def _wf_or_404(uuid):
+    workflow = _workflow_or_none(uuid)
+    if not workflow:
+        abort(404)
+    return workflow
+
+
+def _err(msg, code=400):
+    return jsonify({"message": msg, "toast_class": "danger-subtle"}), code
+
+
+@task_scheduler_blueprint.route('/workflows/<uuid>/notebook', methods=['GET'])
+def workflow_notebook(uuid):
+    workflow = _wf_or_404(uuid)
+    return jsonify({"notes": WorkflowNotes.list_notes(workflow), "files": WorkflowNotes.list_files(workflow),
+                    "activity": WorkflowNotes.activity(workflow),
+                    "max_file_mb": WorkflowNotes.MAX_FILE_BYTES // (1024 * 1024)}), 200
+
+
+@task_scheduler_blueprint.route('/workflows/<uuid>/notes', methods=['POST'])
+@task_scheduler_blueprint.route('/workflows/<uuid>/notes/<note_uuid>', methods=['POST'])
+def workflow_note_save(uuid, note_uuid=None):
+    workflow = _wf_or_404(uuid)
+    note, err = WorkflowNotes.save_note(workflow, request.get_json(silent=True) or {}, current_user, note_uuid)
+    if err:
+        return _err(err)
+    log_activity('admin.workflow_note_edit' if note_uuid else 'admin.workflow_note_add',
+                 f'Note "{note.title}" {"edited" if note_uuid else "added"} on workflow "{workflow.title}"',
+                 target_type='admin_workflow', target_uuid=workflow.uuid, icon='fa-solid fa-note-sticky', is_public=False)
+    return jsonify({"note": note.to_json(), "message": "Note saved.", "toast_class": "success-subtle"}), 200
+
+
+@task_scheduler_blueprint.route('/workflows/<uuid>/notes/<note_uuid>', methods=['DELETE'])
+def workflow_note_delete(uuid, note_uuid):
+    workflow = _wf_or_404(uuid)
+    title = WorkflowNotes.delete_note(workflow, note_uuid)
+    if title is None:
+        return _err('Note not found.', 404)
+    log_activity('admin.workflow_note_delete', f'Note "{title}" deleted from workflow "{workflow.title}"',
+                 target_type='admin_workflow', target_uuid=workflow.uuid, icon='fa-solid fa-note-sticky', is_public=False)
+    return jsonify({"message": "Note deleted.", "toast_class": "success-subtle"}), 200
+
+
+@task_scheduler_blueprint.route('/workflows/<uuid>/files', methods=['POST'])
+def workflow_file_upload(uuid):
+    workflow = _wf_or_404(uuid)
+    storage = request.files.get('file')
+    if not storage:
+        return _err('No file.')
+    f, err = WorkflowNotes.add_file(workflow, storage, current_user)
+    if err:
+        return _err(err)
+    log_activity('admin.workflow_file_add', f'File "{f.filename}" attached to workflow "{workflow.title}"',
+                 target_type='admin_workflow', target_uuid=workflow.uuid, icon='fa-solid fa-paperclip', is_public=False)
+    return jsonify({"file": f.to_json(), "message": "File attached.", "toast_class": "success-subtle"}), 200
+
+
+@task_scheduler_blueprint.route('/workflows/<uuid>/files/<file_uuid>', methods=['GET'])
+def workflow_file_download(uuid, file_uuid):
+    workflow = _wf_or_404(uuid)
+    f, path = WorkflowNotes.get_file(workflow, file_uuid)
+    if not path:
+        abort(404)
+    # Always a download, never rendered by the browser (an attached .html / .svg stays inert).
+    resp = send_file(path, as_attachment=True, download_name=f.filename, mimetype='application/octet-stream')
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    return resp
+
+
+@task_scheduler_blueprint.route('/workflows/<uuid>/files/<file_uuid>', methods=['DELETE'])
+def workflow_file_delete(uuid, file_uuid):
+    workflow = _wf_or_404(uuid)
+    name = WorkflowNotes.delete_file(workflow, file_uuid)
+    if name is None:
+        return _err('File not found.', 404)
+    log_activity('admin.workflow_file_delete', f'File "{name}" removed from workflow "{workflow.title}"',
+                 target_type='admin_workflow', target_uuid=workflow.uuid, icon='fa-solid fa-paperclip', is_public=False)
+    return jsonify({"message": "File removed.", "toast_class": "success-subtle"}), 200
+
+
+@task_scheduler_blueprint.route('/workflows/<uuid>/runs/export.csv', methods=['GET'])
+def workflow_runs_csv(uuid):
+    """The launch history as a CSV: one line per task of each launch (last 500 launches)."""
+    import csv
+    import io
+    workflow = _wf_or_404(uuid)
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(['launch', 'started_at', 'launch_status', 'triggered_by', 'task', 'task_type', 'task_status', 'duration_seconds', 'notes'])
+    for run in workflow.launch_runs[:500]:
+        r = TaskSchedulerModel.serialize_workflow_run(run)
+        by = (r.get('triggered_by') or {}).get('name') if isinstance(r.get('triggered_by'), dict) else r.get('triggered_by')
+        for t in r.get('tasks') or [{}]:
+            row = [r['uuid'], r.get('started_at'), r.get('status'), by or 'schedule', t.get('task_title'),
+                   t.get('task_type'), t.get('status'), t.get('duration_seconds'), r.get('notes_count')]
+            # Spreadsheet formula injection: a cell starting with = + - @ is read as a formula.
+            w.writerow(["'" + str(c) if isinstance(c, str) and c[:1] in '=+-@' else c for c in row])
+    name = ''.join(ch if ch.isalnum() else '_' for ch in workflow.title)[:60] or 'workflow'
+    return Response(out.getvalue(), mimetype='text/csv',
+                    headers={'Content-Disposition': f'attachment; filename="{name}_history.csv"'})
+
+
+@task_scheduler_blueprint.route('/workflows/<uuid>/share', methods=['GET'])
+def workflow_share_get(uuid):
+    return jsonify({"url": WorkflowNotes.share_url(_wf_or_404(uuid))}), 200
+
+
+@task_scheduler_blueprint.route('/workflows/<uuid>/share', methods=['POST'])
+def workflow_share_set(uuid):
+    workflow = _wf_or_404(uuid)
+    action = (request.get_json(silent=True) or {}).get('action')
+    if action not in ('regenerate', 'disable'):
+        return _err('Unknown action.')
+    WorkflowNotes.set_share(workflow, action)
+    log_activity('admin.workflow_share', f'Read-only link of workflow "{workflow.title}" '
+                 f'{"(re)generated" if action == "regenerate" else "disabled"}',
+                 target_type='admin_workflow', target_uuid=workflow.uuid, icon='fa-solid fa-share-nodes', is_public=False)
+    return jsonify({"url": WorkflowNotes.share_url(workflow),
+                    "message": "New link created — any old one stops working." if action == 'regenerate' else "Sharing stopped.",
+                    "toast_class": "success-subtle"}), 200

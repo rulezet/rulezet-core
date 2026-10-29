@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/taskWorkflowGraph.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/taskCanvas.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/taskForm.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/workflowNotebook.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/workflowRunTrace.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/jobs/jobs.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
@@ -196,6 +197,8 @@
                             :title="activeWorkflow.is_active ? 'Pause: no scheduled launch until resumed (Run still works)' : 'Resume its scheduled launches'">
                         <i class="fa-solid me-1" :class="activeWorkflow.is_active ? 'fa-pause' : 'fa-play'"></i>[[ activeWorkflow.is_active ? 'Pause' : 'Resume' ]]
                     </button>
+                    <button class="btn btn-sm btn-light rounded-pill px-3" @click="share.show ? (share.show = false) : openShare()"
+                            title="A read-only link to the history and notebook"><i class="fa-solid fa-share-nodes me-1"></i>Share</button>
                     <div class="dropdown">
                         <button class="btn btn-sm btn-light rounded-pill px-3" data-bs-toggle="dropdown" aria-expanded="false"
                                 data-bs-popper-config='{"strategy":"fixed"}' aria-label="More actions"><i class="fa-solid fa-ellipsis"></i></button>
@@ -208,6 +211,22 @@
                             <li><button class="dropdown-item text-danger" @click="deleteWorkflow(activeWorkflow)"><i class="fa-solid fa-trash me-2"></i>Delete</button></li>
                         </ul>
                     </div>
+                </div>
+            </div>
+            <div v-if="share.show" class="wnb-share">
+                <div class="wnb-share__head"><i class="fa-solid fa-share-nodes"></i><strong>Read-only link</strong>
+                    <span class="wnb-meta">Whoever has it sees the launch history, notes, files and activity of this workflow — no login, nothing they can change. Regenerate the key to cut every old link.</span>
+                </div>
+                <div v-if="share.url" class="wnb-share__row">
+                    <input class="form-control form-control-sm" :value="share.url" readonly @focus="$event.target.select()">
+                    <button class="btn btn-sm btn-primary rounded-pill px-3" @click="copyShare()"><i class="fa-regular fa-copy me-1"></i>Copy</button>
+                    <a class="btn btn-sm btn-light rounded-pill px-3" :href="share.url" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Open</a>
+                    <button class="btn btn-sm btn-light rounded-pill px-3" :disabled="share.busy" @click="shareAction('regenerate')"><i class="fa-solid fa-rotate me-1"></i>Regenerate key</button>
+                    <button class="btn btn-sm btn-outline-danger rounded-pill px-3" :disabled="share.busy" @click="shareAction('disable')"><i class="fa-solid fa-link-slash me-1"></i>Stop sharing</button>
+                </div>
+                <div v-else class="wnb-share__row">
+                    <span class="wnb-meta">Not shared.</span>
+                    <button class="btn btn-sm btn-primary rounded-pill px-3" :disabled="share.busy" @click="shareAction('regenerate')"><i class="fa-solid fa-link me-1"></i>Create the link</button>
                 </div>
             </div>
             <div class="wfd-kpis">
@@ -297,6 +316,10 @@
                         </div>
                     </div>
                     <div class="dt-toolbar-right">
+                        <a v-if="workflowRuns.length" class="dt-toolbar-btn" :href="'/admin/tasks/workflows/' + activeWorkflow.uuid + '/runs/export.csv'"
+                           title="Download the launch history as a CSV (one line per task of each launch)">
+                            <i class="fa-solid fa-file-csv"></i><span>Export CSV</span>
+                        </a>
                         <button v-if="isWorkflowRunning" class="dt-toolbar-btn" style="color:#dc3545;" @click="stopWorkflow()"
                                 title="Cancel every pending/running job in this workflow">
                             <i class="fa-solid fa-stop"></i><span>Stop Workflow</span>
@@ -393,6 +416,10 @@
                                 </td>
                                 <td class="dt-td text-center text-muted" style="font-size:.8rem;">[[ run.duration_seconds != null ? formatDuration(run.duration_seconds) : (run.status === 'running' ? '…' : '—') ]]</td>
                                 <td class="dt-td text-center" @click.stop>
+                                    <button class="dt-action-btn wfd-note-btn" :title="run.notes_count ? run.notes_count + ' note(s) on this launch — add one' : 'Write a note about this launch'"
+                                            @click="noteOnRun(run)">
+                                        <i class="fa-solid fa-note-sticky"></i><span v-if="run.notes_count" class="wfd-note-count">[[ run.notes_count ]]</span>
+                                    </button>
                                     <button class="dt-action-btn" :disabled="!canRunWorkflow || workflowBusy"
                                             :title="workflowBusy ? 'Already running — wait for it to finish or stop it first' : (canRunWorkflow ? 'Re-run this workflow' : 'No active, independently-triggered task to start from')"
                                             @click="askRunWorkflow()">
@@ -408,6 +435,11 @@
                 <pagination-component v-if="workflowRunsTotalPages > 1" :current-page="workflowRunsPage" :total-pages="workflowRunsTotalPages" @change-page="loadWorkflowRuns"></pagination-component>
             </div>
         </div>
+
+        <!-- Notes (markdown), attached files and activity of this workflow — js/admin/workflowNotebook.js -->
+        <workflow-notebook v-if="detailTab === 'history' && activeWorkflow" ref="notebook" :key="activeWorkflow.uuid"
+                           :workflow-uuid="activeWorkflow.uuid" :csrf-token="csrfToken" :runs="workflowRuns"
+                           @changed="loadWorkflowRuns(workflowRunsPage)"></workflow-notebook>
 
         <!-- ── Tasks tab: manage tasks, browse the pipeline graph ── -->
         <template v-if="detailTab === 'tasks'">
@@ -1311,6 +1343,7 @@
     import TaskCanvas from '/static/js/admin/taskCanvas.js';
     import WorkflowRunTrace, { formatDuration } from '/static/js/admin/workflowRunTrace.js';
     import JobTracker from '/static/js/jobs/JobTracker.js';
+    import WorkflowNotebook from '/static/js/admin/workflowNotebook.js';
     import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js';
     import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
 
@@ -1329,6 +1362,7 @@
             'task-canvas': TaskCanvas,
             'workflow-run-trace': WorkflowRunTrace,
             'job-tracker': JobTracker,
+            'workflow-notebook': WorkflowNotebook,
             'tags-displays-list': TagsDisplaysList,
             'vulnerability-displays-list': VulnerabilityDisplaysList,
         },
@@ -1442,6 +1476,40 @@
                 }
             }
             loadTemplates();
+
+            // Notebook under the history (js/admin/workflowNotebook.js): a note about one launch.
+            const notebook = ref(null);
+            function noteOnRun(run) {
+                if (!notebook.value) return;
+                notebook.value.newNote(run.uuid);
+                nextTick(() => notebook.value.$el.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+            }
+
+            // Read-only share link: whoever has it sees the history and the notebook, nothing else.
+            const share = reactive({ show: false, url: null, busy: false });
+            async function openShare() {
+                share.show = true;
+                const res = await fetch(`/admin/tasks/workflows/${activeWorkflow.value.uuid}/share`);
+                if (res.ok) share.url = (await res.json()).url;
+            }
+            async function shareAction(action) {
+                if (action === 'regenerate' && share.url && !window.confirm('Regenerate the key? The current link stops working.')) return;
+                share.busy = true;
+                try {
+                    const res = await fetch(`/admin/tasks/workflows/${activeWorkflow.value.uuid}/share`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({ action }),
+                    });
+                    const data = await res.json();
+                    create_message(data.message, data.toast_class);
+                    if (res.ok) share.url = data.url;
+                } finally {
+                    share.busy = false;
+                }
+            }
+            function copyShare() {
+                navigator.clipboard.writeText(share.url).then(() => create_message('Link copied.', 'success-subtle'));
+            }
 
             function openWorkflow(w) {
                 activeWorkflow.value = w;
@@ -2595,7 +2663,7 @@
             onUnmounted(() => stopLivePolling());
 
             return {
-                truncate,
+                truncate, notebook, noteOnRun, share, openShare, shareAction, copyShare,
                 route, activeWorkflow, openWorkflow, backToWorkflows, runWorkflowNow,
                 runPreview, runPreviewLoading, askRunWorkflow, confirmRunWorkflow,
                 dashboard, loadDashboard, barHeight, toggleWorkflowActive, runFromHere, setTaskActive,
