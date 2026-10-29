@@ -1198,3 +1198,15 @@ body.dark-mode .fsel-trigger--set { color: color-mix(in srgb, var(--fmt) 70%, #f
 button.rl-platform { cursor: pointer; font-family: inherit; line-height: 1.3; }
 button.rl-platform:hover { background: color-mix(in srgb, var(--brand) 17%, transparent); }
 .rl-platform__caret { font-size: .55rem !important; opacity: .6; }
+
+/* Owner / Admin / Code badges: the same pill as the format badge (.fmt-chip--brand), icon in a disc */
+.rz-role-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .16rem .6rem .16rem .2rem; border-radius: 999px;
+    font-size: .7rem; font-weight: 700; letter-spacing: .04em; line-height: 1.3; white-space: nowrap; text-transform: uppercase;
+    color: var(--role); background: color-mix(in srgb, var(--role) 10%, var(--card-bg-color));
+    border: 1px solid color-mix(in srgb, var(--role) 45%, transparent); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+.rz-role-chip__icon { width: 20px; height: 20px; flex: none; display: grid; place-items: center; border-radius: 50%;
+    background: var(--role); color: #fff; font-size: .6rem; }
+.rz-role-chip--owner { --role: #198754; }
+.rz-role-chip--admin { --role: #d4a106; }
+.rz-role-chip--code  { --role: #dc3545; }
+body.dark-mode .rz-role-chip { color: color-mix(in srgb, var(--role) 70%, #fff); }
