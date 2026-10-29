@@ -23,3 +23,6 @@
 }
 .rmx-result { background: var(--light-bg-color); min-height: 3rem; }
 .rmx-result .rule-refs li, .rmx-result .rule-meta-cell { background: var(--card-bg-color); }
+
+/* long Markdown field (Elastic note / setup) in the preview: its start, line breaks kept */
+.rmx-long { white-space: pre-wrap; max-height: 12em; overflow: auto; font-size: .8rem; }

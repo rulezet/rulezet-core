@@ -1,16 +1,106 @@
 {
   "label": "Rule metadata extraction",
   "category": "Rules",
-  "description": "What is read from a rule's own text into its References and Other metadata (kept in sync on every change of the rule; existing rules: Admin → Bulk parse fields → References & metadata). reference_keys = keys whose values are references (YARA meta, Sigma / YAML keys, Elastic, KQL header comments…). skip_keys = keys never shown as other metadata: Rulezet already has them as fields, or they are the rule's logic. Limits keep one rule's JSON small.",
+  "description": "What is read from a rule's own text into its References and Other metadata (kept in sync on every change of the rule; existing rules: Admin → Bulk parse fields → References & metadata). reference_keys = keys whose values are references (YARA meta, Sigma / YAML keys, Elastic, KQL header comments…). skip_keys = keys never shown as other metadata: Rulezet already has them as fields, or they are the rule's logic. Limits keep one rule's JSON small. long_text_keys = keys kept whole, line breaks included, up to long_text_max_length characters (a list becomes a Markdown bullet list): Elastic note (investigation guide) and setup, Splunk how_to_implement and known_false_positives, false positives written as sentences… — shown as collapsible Markdown blocks. structured_keys = keys whose value is structured data (osquery queries, investigation fields, test cases, drill-down searches, compliance mappings…), kept as indented JSON up to structured_max_length characters and shown as a collapsible code block. extract_paths = per format, nested values to read too: {\"dotted.path\": \"key\"} (e.g. Elastic transform.osquery → osquery, Sigma logsource.definition → logsource_definition). platform_hint_keys = keys read only to find the rule's platforms, never shown (they are Rulezet fields, e.g. tags: Kunai os:linux, Elastic \"OS: Windows\" / \"Data Source: AWS\").",
   "public": false,
   "value": {
-    "reference_keys": ["reference", "references", "ref", "refs", "url", "urls", "link", "links", "report", "reports", "blog", "source_url", "more_info", "see_also"],
-    "skip_keys": ["title", "name", "description", "desc", "summary", "author", "authors", "license", "licence", "version", "id", "uuid", "tags", "tag",
-                  "detection", "condition", "search", "query", "rule", "strings", "logic", "how_to_implement", "known_false_positives_query",
-                  "msg", "content", "pcre", "flow", "rule_id"],
+    "reference_keys": [
+      "reference",
+      "references",
+      "ref",
+      "refs",
+      "url",
+      "urls",
+      "link",
+      "links",
+      "report",
+      "reports",
+      "blog",
+      "source_url",
+      "more_info",
+      "see_also"
+    ],
+    "skip_keys": [
+      "title",
+      "name",
+      "description",
+      "desc",
+      "summary",
+      "author",
+      "authors",
+      "license",
+      "licence",
+      "version",
+      "id",
+      "uuid",
+      "tags",
+      "tag",
+      "detection",
+      "condition",
+      "search",
+      "query",
+      "rule",
+      "strings",
+      "logic",
+      "known_false_positives_query",
+      "msg",
+      "content",
+      "pcre",
+      "flow",
+      "rule_id"
+    ],
     "max_references": 50,
     "max_fields": 40,
     "max_values_per_field": 20,
-    "max_value_length": 300
+    "max_value_length": 300,
+    "long_text_keys": [
+      "note",
+      "setup",
+      "how_to_implement",
+      "known_false_positives",
+      "false_positives",
+      "logsource_definition",
+      "message_template",
+      "generalization_note"
+    ],
+    "long_text_max_length": 20000,
+    "structured_keys": [
+      "investigation_fields",
+      "osquery",
+      "investigate",
+      "new_terms",
+      "tests",
+      "drilldown_searches",
+      "threat_objects",
+      "intermediate_findings",
+      "test_cases",
+      "evasion_tests",
+      "compliance",
+      "semantic_detection"
+    ],
+    "structured_max_length": 20000,
+    "extract_paths": {
+      "elastic": {
+        "rule.false_positives": "false_positives",
+        "rule.investigation_fields": "investigation_fields",
+        "rule.new_terms": "new_terms",
+        "transform.osquery": "osquery",
+        "transform.investigate": "investigate",
+        "rule.tags": "tags"
+      },
+      "sigma": {
+        "logsource.definition": "logsource_definition"
+      },
+      "atr": {
+        "detection.false_positives": "false_positives",
+        "response.message_template": "message_template",
+        "_llm_authored.generalization_note": "generalization_note",
+        "detection.semantic": "semantic_detection"
+      }
+    },
+    "platform_hint_keys": [
+      "tags",
+      "tag"
+    ]
   }
 }

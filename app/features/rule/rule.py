@@ -5419,6 +5419,7 @@ def _data_table_filter_kwargs(args):
         author=author_filter,
         vulnerabilities=_csv_arg('vulnerabilities', args),
         licenses=_csv_arg('licenses', args),
+        platforms=_csv_arg('platforms', args),
         tags=_csv_arg('tags', args),
         editor_names=_csv_arg('editors', args),
         bundle_id=args.get('bundle_id', None, type=int),
@@ -5964,6 +5965,14 @@ def get_rules_licenses_usage():
     licenses = RuleModel.get_licenses_usage_with_filter(search_query, filters=filters)
 
     return jsonify([{"name": s.license, "count": s.count} for s in licenses])
+
+
+@rule_blueprint.route('/get_rules_platforms_usage')
+@memory_cache.cached(timeout=60, query_string=True)
+def get_rules_platforms_usage():
+    """Platforms (Windows, Linux, AWS…) and their details, scoped to rules matching every other active filter."""
+    filters = RuleModel.parse_facet_filters(request.args, exclude=['platforms'])
+    return jsonify(RuleModel.get_platforms_usage_with_filter(filters=filters))
 
 
 @rule_blueprint.route('/get_rules_branches_usage')

@@ -52,6 +52,8 @@ import MultiVulnerabilityFilter from '/static/js/vulnerability/multiVulnerabilit
 import MultiSourceFilter        from '/static/js/rule/multiSourceFilter.js'
 import MultiBranchFilter        from '/static/js/rule/multiBranchFilter.js'
 import MultiLicenseFilter       from '/static/js/rule/multiLicenseFilter.js'
+import MultiPlatformFilter      from '/static/js/rule/multiPlatformFilter.js'
+import FormatSelect             from '/static/js/rule/formatSelect.js'
 import MultiPersonFilter        from '/static/js/rule/multiPersonFilter.js'
 import MultiTagFilter           from '/static/js/tags/multiTagFIlter.js'
 import MultiRiskFilter          from '/static/js/tags/multiRiskFilter.js'
@@ -80,6 +82,8 @@ export default {
         MultiSourceFilter,
         MultiBranchFilter,
         MultiLicenseFilter,
+        MultiPlatformFilter,
+        FormatSelect,
         MultiTagFilter,
         MultiPersonFilter,
         MultiRiskFilter,
@@ -181,10 +185,10 @@ export default {
         // view: its own column) on any row whose rule.linked_rules_count is
         // > 0 — that field is always present on every /rule/data_table row
         // (see serialize_rules_for_data_table), this prop only controls
-        // whether it's rendered. On by default everywhere — purely
-        // informational (a link to that rule's Linked Rules page, no
-        // effect on selection/filtering), so a consumer only needs
-        // :show-related-count="false" if it specifically wants it hidden.
+        // whether it can be rendered: it shows only while the "Has linked
+        // rules" filter is on (linkedShown) — a link to that rule's Linked
+        // Rules page, no effect on selection/filtering. :show-related-count=
+        // "false" hides it for good on a page.
         showRelatedCount:   { type: Boolean,            default: true },
         // Turns on the native Risk-level + Binary rows inside this
         // component's OWN filter panel (right alongside Columns/Filters in
@@ -387,17 +391,8 @@ export default {
                 <!-- Row 1: quick options -->
                 <div data-tour="rl-fp-quick" class="rl-fp-row">
                     <div class="rl-fp-item rl-fp-fmt-wrap" v-if="!isFilterHidden('format')">
-                        <div class="rl-fmt-badge" :class="{ 'rl-fmt-badge--set': ruleType }">
-                            <span v-if="ruleType" class="rl-fmt-badge__label">{{ ruleType.toUpperCase() }}</span>
-                            <span v-else class="rl-fmt-badge__placeholder">
-                                <i class="fa-solid fa-file-code me-1" style="font-size:.7rem;opacity:.5;"></i>Format
-                            </span>
-                            <i class="fa-solid fa-chevron-down" style="font-size:.6rem;opacity:.5;flex-shrink:0;"></i>
-                        </div>
-                        <select class="rl-fmt-select-overlay" v-model="ruleType" @change="onFilterChange" aria-label="Format">
-                            <option value="">All formats</option>
-                            <option v-for="f in rulesFormats" :key="f.id" :value="f.name">{{ f.name.toUpperCase() }}</option>
-                        </select>
+                        <!-- the chosen format with its logo and colour, like the rows' format badge -->
+                        <format-select v-model="ruleType" :formats="rulesFormats" @change="onFilterChange"></format-select>
                     </div>
 
                     <div class="rl-fp-item" v-if="!isFilterHidden('search_field')">
@@ -537,6 +532,19 @@ export default {
                             :filter-context="facetContextParams"
                             @change="onFilterChange">
                         </multi-license-filter>
+                    </div>
+
+                    <div class="rl-fp-multi-item" v-if="!isFilterHidden('platforms')">
+                        <span class="rl-fp-multi-label">
+                            <i class="fa-solid fa-desktop text-primary"></i> Platforms
+                        </span>
+                        <multi-platform-filter data-tour="rl-fp-platforms" v-model="selectedPlatforms"
+                            api-endpoint="/rule/get_rules_platforms_usage"
+                            :user-id="numericUserId"
+                            :source-rules="source || ''"
+                            :filter-context="facetContextParams"
+                            @change="onFilterChange">
+                        </multi-platform-filter>
                     </div>
 
                     <div class="rl-fp-multi-item" v-if="!isFilterHidden('tags')">
@@ -753,7 +761,7 @@ export default {
                           style="background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25);">
                         <i class="fa-solid fa-diagram-project me-1"></i>{{ relationLabels[rule.id] }}
                     </span>
-                    <a v-if="showRelatedCount && rule.linked_rules_count > 0"
+                    <a v-if="linkedShown && rule.linked_rules_count > 0"
                        :href="'/rule/detail_rule/' + rule.id + '/linked_rules'" @click.stop
                        class="badge rounded-pill shadow-sm pt-1 text-decoration-none"
                        style="background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25);"
@@ -792,7 +800,7 @@ export default {
                     <!-- Title + editor + date -->
                     <div data-tour="rl-card-title" class="mb-3 pe-5">
                         <h5 class="fw-bold mb-1">
-                            <a :href="'/rule/detail_rule/' + rule.id"
+                            <a :href="ruleHref(rule)"
                                class="fw-bold h5 border-start border-primary border-4 ps-3 custom-rule-link text-decoration-none d-block"
                                v-html="highlight(rule.title)">
                             </a>
@@ -850,6 +858,36 @@ export default {
                     <!-- ATT&CK techniques -->
                     <div data-tour="rl-card-attack" v-if="colVisible.attacks && rule.attacks && rule.attacks.length" class="mb-2" @click.stop>
                         <attack-display-list :initial-attacks="rule.attacks" :max-visible="3"></attack-display-list>
+                    </div>
+
+                    <!-- Platforms (Windows, Linux, AWS…): logo, colour and details (Windows · Sysmon…) -->
+                    <div data-tour="rl-card-platforms" v-if="colVisible.platforms && rule.platforms && rule.platforms.length" class="rl-platforms mb-2" @click.stop>
+                        <div v-for="p in rule.platforms" :key="p.label" class="dropdown vdl-item d-inline-block">
+                            <button type="button" class="rl-platform" data-bs-toggle="dropdown" aria-expanded="false" :style="{ '--brand': p.color }"
+                                    :title="(p.details.length ? p.label + ': ' + p.details.join(', ') : p.label) + ' — click for options'">
+                                <i :class="p.icon"></i><span>{{ p.label }}</span>
+                                <small v-if="p.details.length" class="rl-platform__detail">{{ p.details.join(' · ') }}</small>
+                                <i class="fa-solid fa-caret-down rl-platform__caret"></i>
+                            </button>
+                            <ul class="dropdown-menu vdl-menu">
+                                <li>
+                                    <button type="button" class="vdl-menu-item w-100 border-0 bg-transparent text-start"
+                                            :disabled="selectedPlatforms.includes(p.label)" @click="filterByPlatform(p.label)">
+                                        <i class="fas fa-filter"></i>
+                                        <span v-if="selectedPlatforms.includes(p.label)">Already filtering on {{ p.label }}</span>
+                                        <span v-else>Add {{ p.label }} to filter</span>
+                                    </button>
+                                </li>
+                                <li v-for="d in p.details" :key="d">
+                                    <button type="button" class="vdl-menu-item w-100 border-0 bg-transparent text-start"
+                                            :disabled="selectedPlatforms.includes(p.label + ':' + d)" @click="filterByPlatform(p.label + ':' + d)">
+                                        <i class="fas fa-filter"></i>
+                                        <span v-if="selectedPlatforms.includes(p.label + ':' + d)">Already filtering on {{ p.label }} · {{ d }}</span>
+                                        <span v-else>Add {{ p.label }} · {{ d }} to filter</span>
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
                     </div>
 
                     <!-- Tags -->
@@ -948,7 +986,7 @@ export default {
                                 <ul class="dropdown-menu dropdown-menu-end shadow border-0 mb-2"
                                     style="border-radius:12px;">
                                     <li>
-                                        <a class="dropdown-item rounded-2" :href="'/rule/detail_rule/' + rule.id">
+                                        <a class="dropdown-item rounded-2" :href="ruleHref(rule)">
                                             <i class="fas fa-eye me-2 text-muted"></i>View Detail
                                         </a>
                                     </li>
@@ -1049,7 +1087,7 @@ export default {
                         :code="rule.to_string"
                         :language="rule.format || 'auto'"
                         :title="rule.title"
-                        :initial-search="searchField === 'content' ? search : ''"
+                        :initial-search="contentSearch"
                         :extra-highlights="showTestResults ? matchedHighlightTerms(rule) : []"
                         :word-wrap="true"
                         max-height="380px">
@@ -1084,7 +1122,7 @@ export default {
                         </th>
                         <th v-if="showTestResults" class="dt-th" style="width:150px;">Result</th>
                         <th v-if="showRelationType" class="dt-th" style="width:170px;">Relation</th>
-                        <th v-if="showRelatedCount" class="dt-th" style="width:90px;">Linked</th>
+                        <th v-if="linkedShown" class="dt-th" style="width:90px;">Linked</th>
                         <th v-if="showValidationRisk" class="dt-th" style="width:130px;">Risk</th>
                         <th v-if="showValidationRisk" class="dt-th" style="width:180px;">Fired on</th>
                         <th v-show="colVisible.id" class="dt-th" style="width:90px;">ID</th>
@@ -1103,6 +1141,7 @@ export default {
                         <th v-show="colVisible.tags" class="dt-th" style="width:160px;">Tags</th>
                         <th v-show="colVisible.cves" class="dt-th" style="width:130px;">CVEs</th>
                         <th v-show="colVisible.attacks" class="dt-th" style="width:160px;">ATT&amp;CK</th>
+                        <th v-show="colVisible.platforms" class="dt-th" style="width:150px;">Platforms</th>
                         <th v-show="colVisible.created"
                             class="dt-th dt-th--sortable" style="width:110px;"
                             :class="{ 'dt-th--sorted': sortKey === 'creation_date' }"
@@ -1171,7 +1210,7 @@ export default {
                             </td>
 
                             <td class="dt-td" style="max-width:200px;word-break:break-word;">
-                                <a :href="'/rule/detail_rule/' + rule.id" class="dt-rule-title"
+                                <a :href="ruleHref(rule)" class="dt-rule-title"
                                    v-html="highlight(rule.title)">
                                 </a>
                             </td>
@@ -1200,7 +1239,7 @@ export default {
                                 </span>
                             </td>
 
-                            <td v-if="showRelatedCount" class="dt-td">
+                            <td v-if="linkedShown" class="dt-td">
                                 <a v-if="rule.linked_rules_count > 0"
                                    :href="'/rule/detail_rule/' + rule.id + '/linked_rules'" @click.stop
                                    class="badge rounded-pill text-decoration-none"
@@ -1300,6 +1339,38 @@ export default {
                                 </attack-display-list>
                             </td>
 
+                            <td v-show="colVisible.platforms" class="dt-td">
+                                <div class="rl-platforms rl-platforms--table">
+                                    <div v-for="p in (rule.platforms || [])" :key="p.label" class="dropdown vdl-item d-inline-block" @click.stop>
+                                        <button type="button" class="rl-platform rl-platform--logo" data-bs-toggle="dropdown" aria-expanded="false"
+                                                data-bs-popper-config='{"strategy":"fixed"}' :style="{ '--brand': p.color }"
+                                                :title="(p.details.length ? p.label + ': ' + p.details.join(', ') : p.label) + ' — click for options'">
+                                            <i :class="p.icon"></i>
+                                            <small v-if="p.details.length">{{ p.details[0] }}<template v-if="p.details.length > 1"> +{{ p.details.length - 1 }}</template></small>
+                                        </button>
+                                        <ul class="dropdown-menu vdl-menu">
+                                <li>
+                                    <button type="button" class="vdl-menu-item w-100 border-0 bg-transparent text-start"
+                                            :disabled="selectedPlatforms.includes(p.label)" @click="filterByPlatform(p.label)">
+                                        <i class="fas fa-filter"></i>
+                                        <span v-if="selectedPlatforms.includes(p.label)">Already filtering on {{ p.label }}</span>
+                                        <span v-else>Add {{ p.label }} to filter</span>
+                                    </button>
+                                </li>
+                                <li v-for="d in p.details" :key="d">
+                                    <button type="button" class="vdl-menu-item w-100 border-0 bg-transparent text-start"
+                                            :disabled="selectedPlatforms.includes(p.label + ':' + d)" @click="filterByPlatform(p.label + ':' + d)">
+                                        <i class="fas fa-filter"></i>
+                                        <span v-if="selectedPlatforms.includes(p.label + ':' + d)">Already filtering on {{ p.label }} · {{ d }}</span>
+                                        <span v-else>Add {{ p.label }} · {{ d }} to filter</span>
+                                    </button>
+                                </li>
+                            </ul>
+                                    </div>
+                                    <span v-if="!rule.platforms || !rule.platforms.length" class="text-muted small">—</span>
+                                </div>
+                            </td>
+
                             <td v-show="colVisible.created" class="dt-td"
                                 style="white-space:nowrap;font-size:.78rem;">
                                 {{ formatDate(rule.creation_date) }}
@@ -1357,7 +1428,7 @@ export default {
                                             <i class="fas fa-ellipsis-v" style="font-size:.7rem;"></i>
                                         </button>
                                         <div class="rl-action-menu">
-                                            <a :href="'/rule/detail_rule/' + rule.id"
+                                            <a :href="ruleHref(rule)"
                                                class="rl-action-item">
                                                 <i class="fas fa-eye"></i> View
                                             </a>
@@ -1581,7 +1652,7 @@ export default {
                                                 :code="rule.to_string"
                                                 :language="rule.format || 'auto'"
                                                 :title="rule.title"
-                                                :initial-search="searchField === 'content' ? search : ''"
+                                                :initial-search="contentSearch"
                                                 :extra-highlights="showTestResults ? matchedHighlightTerms(rule) : []"
                                                 :word-wrap="true"
                                                 max-height="300px">
@@ -1704,12 +1775,17 @@ export default {
         // ── Filter state ─────────────────────────────────────────────────
         const search           = ref(_p('search', init.search || ''))
         const searchField      = ref(_p('search_field', init.search_field || 'all'))
+        // the typed search, when it looks in the rules' content: highlighted in each rule shown below
+        // (content preview) and carried to the rule's page (?q=), whose viewer highlights it too
+        const contentSearch    = computed(() => (['all', 'content'].includes(searchField.value) ? (search.value || '').trim() : ''))
+        const ruleHref         = (rule) => '/rule/detail_rule/' + rule.id + (contentSearch.value ? '?q=' + encodeURIComponent(contentSearch.value) : '')
         const exactMatch       = ref(_p('exact_match') === 'true' || init.exact_match === 'true' || false)
         const ruleType         = ref(_p('rule_type', init.format || ''))
         const selectedTags     = ref(_arr('tags',            init.tags || ''))
         const selectedSources  = ref(_arr('sources',         init.sources || ''))
         const selectedBranches = ref(_arr('branches',        init.branches || ''))
         const selectedLicenses = ref(_arr('licenses',        init.licenses || ''))
+        const selectedPlatforms = ref(_arr('platforms',      init.platforms || ''))
         const selectedVulns    = ref(_arr('vulnerabilities', init.vulnerabilities || ''))
         const selectedAttacks  = ref(_arr('attacks',         init.attacks         || ''))
         const personFilter     = ref({
@@ -1720,6 +1796,8 @@ export default {
         const cveOnly           = ref(props.hasCveOnly || _p('has_cve') === 'true')
         const aiAnalysisOnly    = ref(_p('has_ai_analysis') === 'true')
         const hasRelationsOnly  = ref(_p('has_relations') === 'true')
+        // the "N linked" badge / Linked column: only while "Has linked rules" is on (and the page allows it)
+        const linkedShown       = computed(() => props.showRelatedCount && hasRelationsOnly.value)
         const hasTagsOnly       = ref(_p('has_tags') === 'true')
         const hasLicenseOnly    = ref(_p('has_license') === 'true')
         const hasAttackOnly     = ref(_p('has_attack') === 'true')
@@ -1797,7 +1875,7 @@ export default {
             ? props.defaultView
             : (localStorage.getItem('rz-list-view') || 'card')
         const viewMode    = ref(_isPhone ? 'card' : _p('view', _defaultView))
-        const _hasUrlFilters = ['tags','sources','branches','licenses','vulnerabilities','attacks','authors','editors',
+        const _hasUrlFilters = ['tags','sources','branches','licenses','platforms','vulnerabilities','attacks','authors','editors',
                                 'rule_type','search_field','exact_match','person_mode','scope']
                                .some(k => _url.has(k))
         const filtersOpen = ref(_hasUrlFilters)
@@ -1812,6 +1890,7 @@ export default {
             { key: 'tags',        label: 'Tags' },
             { key: 'cves',        label: 'CVEs' },
             { key: 'attacks',     label: 'ATT&CK' },
+            { key: 'platforms',   label: 'Platforms' },
             { key: 'created',     label: 'Created' },
             { key: 'votes',       label: 'Votes' },
             { key: 'quality',     label: 'Quality' },
@@ -1938,6 +2017,7 @@ export default {
             (isFilterHidden('sources') ? 0 : selectedSources.value.length) +
             (isFilterHidden('branches') ? 0 : selectedBranches.value.length) +
             (isFilterHidden('licenses') ? 0 : selectedLicenses.value.length) +
+            (isFilterHidden('platforms') ? 0 : selectedPlatforms.value.length) +
             (isFilterHidden('vulnerabilities') ? 0 : selectedVulns.value.length) +
             (isFilterHidden('attacks') ? 0 : selectedAttacks.value.length) +
             (isFilterHidden('person') ? 0 : personFilter.value.values.length) +
@@ -1970,6 +2050,7 @@ export default {
             _upd('sources',         selectedSources.value.join(',') || null)
             _upd('branches',        selectedBranches.value.join(',')|| null)
             _upd('licenses',        selectedLicenses.value.join(',')|| null)
+            _upd('platforms',       selectedPlatforms.value.join(',')|| null)
             _upd('vulnerabilities', selectedVulns.value.join(',')   || null)
             _upd('attacks',         selectedAttacks.value.join(',') || null)
             if (personFilter.value.values.length) {
@@ -2038,6 +2119,7 @@ export default {
             if (selectedSources.value.length)    params.set('sources', selectedSources.value.join(','))
             if (selectedBranches.value.length)   params.set('branches', selectedBranches.value.join(','))
             if (selectedLicenses.value.length)   params.set('licenses', selectedLicenses.value.join(','))
+            if (selectedPlatforms.value.length)  params.set('platforms', selectedPlatforms.value.join(','))
             if (selectedVulns.value.length)      params.set('vulnerabilities', selectedVulns.value.join(','))
             if (selectedAttacks.value.length)    params.set('attacks', selectedAttacks.value.join(','))
             if (cveOnly.value)                    params.set('has_cve', 'true')
@@ -2111,6 +2193,14 @@ export default {
 
         // ── Filter change handlers ────────────────────────────────────────
         // Format chip "Add to filter" (formatChip.js): filter this list on it.
+        // Platform chip "Add to filter": the platform ("Windows") or one detail ("Windows:Sysmon")
+        function filterByPlatform(value) {
+            if (!value || selectedPlatforms.value.includes(value)) return
+            selectedPlatforms.value = [...selectedPlatforms.value, value]
+            filtersOpen.value = true
+            onFilterChange()
+        }
+
         function filterByFormat(fmt) {
             if (!fmt || ruleType.value === fmt) return
             ruleType.value = fmt
@@ -2139,6 +2229,7 @@ export default {
             if (!isFilterHidden('sources'))         selectedSources.value = []
             if (!isFilterHidden('branches'))        selectedBranches.value = []
             if (!isFilterHidden('licenses'))        selectedLicenses.value = []
+            if (!isFilterHidden('platforms'))       selectedPlatforms.value = []
             if (!isFilterHidden('vulnerabilities')) selectedVulns.value   = []
             if (!isFilterHidden('attacks'))         selectedAttacks.value = []
             if (!isFilterHidden('person'))          personFilter.value    = { mode: 'author', values: [] }
@@ -2435,7 +2526,7 @@ export default {
             if (props.showStatus) n++
             if (props.showTestResults) n++
             if (props.showRelationType) n++
-            if (props.showRelatedCount) n++
+            if (linkedShown.value) n++
             for (const col of TOGGLEABLE_COLS) if (colVisible[col.key]) n++
             return n
         })
@@ -2574,6 +2665,7 @@ export default {
             if (selectedBranches.value.length) p.set('branches', selectedBranches.value.join(','))
             else if (props.branch)             p.set('branches', props.branch)
             if (selectedLicenses.value.length) p.set('licenses', selectedLicenses.value.join(','))
+            if (selectedPlatforms.value.length) p.set('platforms', selectedPlatforms.value.join(','))
             if (selectedVulns.value.length)    p.set('vulnerabilities', selectedVulns.value.join(','))
             if (selectedAttacks.value.length)  p.set('attacks', selectedAttacks.value.join(','))
             if (personFilter.value.values.length) {
@@ -2593,6 +2685,7 @@ export default {
             selectedSources.value.length > 0 ||
             selectedBranches.value.length > 0 ||
             selectedLicenses.value.length > 0 ||
+            selectedPlatforms.value.length > 0 ||
             selectedVulns.value.length > 0 ||
             selectedAttacks.value.length > 0 ||
             personFilter.value.values.length > 0 ||
@@ -2679,12 +2772,13 @@ export default {
         })
 
         return {
+            contentSearch, ruleHref, filterByPlatform, linkedShown,
             // Data
             items, total, totalPages, loading, page, perPage, perPageModel,
             sortKey, sortDir, search,
             // Filters
             filtersOpen, ruleType, searchField, exactMatch, cardSort, qualityMin, qualityMax, onQualityRangeChange,
-            selectedTags, selectedSources, selectedBranches, selectedLicenses, selectedVulns, selectedAttacks,
+            selectedTags, selectedSources, selectedBranches, selectedLicenses, selectedPlatforms, selectedVulns, selectedAttacks,
             personFilter, onPersonFilterChange,
             scopeMine, aiAnalysisOnly, hasRelationsOnly, cveOnly, hasTagsOnly, hasLicenseOnly, hasAttackOnly, MASCOT_ENABLED,
             rulesFormats, activeFilterCount,
