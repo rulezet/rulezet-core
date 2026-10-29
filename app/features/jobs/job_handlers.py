@@ -5652,7 +5652,7 @@ def handle_reparse_rule_metadata(job, app):
         rule_ids : 'ALL' | list[int] — optional restriction to some rules
     """
     from sqlalchemy import func
-    from app.features.rule.rule_metadata_core import extract_rule_metadata
+    from app.features.rule.rule_metadata_core import detect_platforms, encode_platforms, extract_rule_metadata
 
     payload  = job.payload or {}
     formats  = payload.get('formats', 'ALL')
@@ -5684,19 +5684,20 @@ def handle_reparse_rule_metadata(job, app):
         while _should_pause(job):
             import time; time.sleep(2)
 
-        rows = (q.with_entities(Rule.id, Rule.format, Rule.to_string, Rule.rule_references, Rule.extra_metadata)
+        rows = (q.with_entities(Rule.id, Rule.format, Rule.to_string, Rule.rule_references, Rule.extra_metadata, Rule.platforms)
                 .offset(offset).limit(FIELD_PARSE_BATCH).all())
         if not rows:
             break
-        for rule_id, fmt, content, old_refs, old_extra in rows:
+        for rule_id, fmt, content, old_refs, old_extra, old_platforms in rows:
             found = extract_rule_metadata(fmt, content)
             refs, extra = found['references'] or None, found['extra'] or None
+            platforms = encode_platforms(detect_platforms(extra))
             with_refs += bool(refs)
             with_extra += bool(extra)
-            if refs != old_refs or extra != old_extra:
-                # a plain UPDATE of these two columns: no ORM events, last_modif untouched
+            if refs != old_refs or extra != old_extra or platforms != old_platforms:
+                # a plain UPDATE of these columns: no ORM events, last_modif untouched
                 Rule.query.filter(Rule.id == rule_id).update(
-                    {'rule_references': refs, 'extra_metadata': extra}, synchronize_session=False)
+                    {'rule_references': refs, 'extra_metadata': extra, 'platforms': platforms}, synchronize_session=False)
                 changed += 1
         db.session.commit()
         offset += len(rows)

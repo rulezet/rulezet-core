@@ -84,6 +84,9 @@ class Rule(db.Model):
     # NULL when the text has none. Never edited by hand: change the rule's text instead.
     rule_references = db.Column(db.JSON, nullable=True)
     extra_metadata  = db.Column(db.JSON, nullable=True)
+    # platforms named in the metadata, "|Windows|Windows:Sysmon|AWS|" (rule_metadata_core.detect_platforms):
+    # the rules list's Platform filter / column
+    platforms       = db.Column(db.String(500), nullable=True, index=True)
     # References added by hand (create / edit form), on top of the ones in the text — never
     # overwritten by the events below. all_references = both, the rule's own first.
     manual_references = db.Column(db.JSON, nullable=True)
@@ -365,18 +368,18 @@ def compute_rule_corpus_identifier(rule_format, content):
 
 
 def compute_rule_metadata(rule_format, content):
-    """(references, extra_metadata) read from the rule's text — None for each when empty, so a
-    rule with nothing keeps NULL columns. Lazy import, same reason as above."""
-    from app.features.rule.rule_metadata_core import extract_rule_metadata
+    """(references, extra_metadata, platforms) read from the rule's text — None for each when empty,
+    so a rule with nothing keeps NULL columns. Lazy import, same reason as above."""
+    from app.features.rule.rule_metadata_core import detect_platforms, encode_platforms, extract_rule_metadata
     found = extract_rule_metadata(rule_format, content)
-    return found['references'] or None, found['extra'] or None
+    return found['references'] or None, found['extra'] or None, encode_platforms(detect_platforms(found['extra']))
 
 
 @event.listens_for(Rule.to_string, 'set')
 def _rule_to_string_set(target, value, oldvalue, initiator):
     target.content_hash = compute_rule_content_hash(value)
     target.corpus_identifier = compute_rule_corpus_identifier(target.format, value)
-    target.rule_references, target.extra_metadata = compute_rule_metadata(target.format, value)
+    target.rule_references, target.extra_metadata, target.platforms = compute_rule_metadata(target.format, value)
 
 
 @event.listens_for(Rule.format, 'set')
@@ -385,7 +388,7 @@ def _rule_format_set(target, value, oldvalue, initiator):
     # format (add_rule_core sets format first today, but nothing enforces that).
     if target.to_string:
         target.corpus_identifier = compute_rule_corpus_identifier(value, target.to_string)
-        target.rule_references, target.extra_metadata = compute_rule_metadata(value, target.to_string)
+        target.rule_references, target.extra_metadata, target.platforms = compute_rule_metadata(value, target.to_string)
 
 
 class FormatRule(db.Model):

@@ -53,3 +53,90 @@
 .rf-from-rule__chip { padding: .15rem .55rem; border-radius: 999px; font-size: .74rem; background: var(--card-bg-color); border: 1px solid var(--border-color); color: var(--text-color); overflow-wrap: anywhere; }
 .rf-from-rule__chip b { font-weight: 600; color: var(--subtle-text-color); margin-right: .2rem; }
 .rule-ref-manual { margin-left: auto; flex-shrink: 0; font-size: .7rem; font-style: normal; color: var(--subtle-text-color); }
+
+/* Coloured metadata values (setting rule.metadata_display: style badge / scale / meter) */
+.rule-meta-cell__chips { display: flex; flex-wrap: wrap; gap: .3rem; }
+.rule-meta-badge { display: inline-flex; align-items: center; padding: .12rem .6rem; border-radius: 999px; font-size: .78rem; font-weight: 600;
+    line-height: 1.4; border: 1px solid transparent; overflow-wrap: anywhere; }
+.rule-meta-badge--red    { background: rgba(220, 53, 69, .12);  color: #c4283a; border-color: rgba(220, 53, 69, .35); }
+.rule-meta-badge--orange { background: rgba(253, 126, 20, .13); color: #c2570c; border-color: rgba(253, 126, 20, .38); }
+.rule-meta-badge--gold   { background: rgba(255, 193, 7, .16);  color: #9a6b00; border-color: rgba(255, 193, 7, .45); }
+.rule-meta-badge--green  { background: rgba(25, 135, 84, .12);  color: #157347; border-color: rgba(25, 135, 84, .35); }
+.rule-meta-badge--teal   { background: rgba(32, 201, 151, .13); color: #128567; border-color: rgba(32, 201, 151, .38); }
+.rule-meta-badge--blue   { background: rgba(13, 110, 253, .1);  color: #0b5ed7; border-color: rgba(13, 110, 253, .3); }
+.rule-meta-badge--purple { background: rgba(111, 66, 193, .12); color: #5f37a8; border-color: rgba(111, 66, 193, .35); }
+.rule-meta-badge--gray   { background: var(--light-bg-color);   color: var(--subtle-text-color); border-color: var(--border-color); }
+body.dark-mode .rule-meta-badge--red    { color: #f1828d; }
+body.dark-mode .rule-meta-badge--orange { color: #fdac6c; }
+body.dark-mode .rule-meta-badge--gold   { color: #ffd866; }
+body.dark-mode .rule-meta-badge--green  { color: #6fd3a0; }
+body.dark-mode .rule-meta-badge--teal   { color: #6fe0c0; }
+body.dark-mode .rule-meta-badge--blue   { color: #79aaff; }
+body.dark-mode .rule-meta-badge--purple { color: #b197fc; }
+
+.rule-meta-meter { display: inline-flex; align-items: center; gap: .45rem; font-size: .82rem; }
+.rule-meta-meter__bar { width: 90px; height: 7px; border-radius: 999px; background: var(--light-bg-color); border: 1px solid var(--border-color); overflow: hidden; }
+.rule-meta-meter__bar > span { display: block; height: 100%; border-radius: 999px; }
+.rule-meta-meter--green  .rule-meta-meter__bar > span { background: #198754; }
+.rule-meta-meter--gold   .rule-meta-meter__bar > span { background: #ffc107; }
+.rule-meta-meter--orange .rule-meta-meter__bar > span { background: #fd7e14; }
+.rule-meta-meter--red    .rule-meta-meter__bar > span { background: #dc3545; }
+.rule-meta-meter--blue   .rule-meta-meter__bar > span { background: #0d6efd; }
+.rule-meta-meter--gray   .rule-meta-meter__bar > span { background: #adb5bd; }
+
+/* Long Markdown metadata (Elastic investigation guide, setup): collapsible blocks under the grid */
+.rule-meta-long { margin-top: .6rem; border: 1px solid var(--border-color); border-radius: 10px; background: var(--card-bg-color); }
+.rule-meta-long > summary { display: flex; align-items: center; gap: .5rem; padding: .55rem .8rem; cursor: pointer; list-style: none;
+    font-size: .85rem; font-weight: 600; color: var(--text-color); }
+.rule-meta-long > summary::-webkit-details-marker { display: none; }
+.rule-meta-long > summary > i:first-child { color: #0d6efd; }
+.rule-meta-long > summary small { font-weight: 400; color: var(--subtle-text-color); }
+.rule-meta-long__chevron { margin-left: auto; font-size: .7rem; color: var(--subtle-text-color); transition: transform .2s; }
+.rule-meta-long[open] .rule-meta-long__chevron { transform: rotate(180deg); }
+.rule-meta-long > summary:hover { background: var(--light-bg-color); border-radius: 10px; }
+.rule-meta-markdown { padding: .4rem 1rem 1rem; font-size: .88rem; line-height: 1.6; color: var(--text-color);
+    max-height: 70vh; overflow: auto; border-top: 1px solid var(--border-color); }
+.rule-meta-markdown h1, .rule-meta-markdown h2 { font-size: 1.05rem; font-weight: 700; margin: 1rem 0 .4rem; }
+.rule-meta-markdown h3, .rule-meta-markdown h4 { font-size: .95rem; font-weight: 700; margin: .8rem 0 .35rem; }
+.rule-meta-markdown code { font-size: .82em; padding: .05rem .3rem; border-radius: 4px; background: var(--light-bg-color); }
+.rule-meta-markdown pre { padding: .7rem .9rem; border-radius: 8px; background: var(--light-bg-color); overflow: auto; }
+.rule-meta-markdown pre code { padding: 0; background: none; }
+.rule-meta-markdown ul, .rule-meta-markdown ol { padding-left: 1.3rem; margin-bottom: .6rem; }
+.rule-meta-markdown table { width: 100%; font-size: .82rem; margin-bottom: .6rem; }
+.rule-meta-markdown th, .rule-meta-markdown td { border: 1px solid var(--border-color); padding: .3rem .5rem; }
+
+/* TLP / PAP values (style "tlp"): the official TLP 2.0 labels — coloured text on black (FIRST) */
+.rule-meta-tlp { display: inline-flex; align-items: center; padding: .14rem .6rem; border-radius: 4px; background: #000;
+    font-family: var(--bs-font-monospace, monospace); font-size: .76rem; font-weight: 700; letter-spacing: .04em; }
+.rule-meta-tlp--red   { color: #FF2B2B; }
+.rule-meta-tlp--amber { color: #FFC000; }
+.rule-meta-tlp--green { color: #33FF00; }
+.rule-meta-tlp--clear { color: #FFFFFF; }
+.rule-meta-long__actions { margin-left: auto; display: inline-flex; gap: .3rem; }
+.rule-meta-long__actions + .rule-meta-long__chevron { margin-left: .4rem; }
+.rule-meta-long__btn { display: inline-flex; align-items: center; gap: .3rem; padding: .1rem .5rem; border-radius: 6px; font-size: .74rem;
+    font-weight: 500; border: 1px solid var(--border-color); background: var(--card-bg-color); color: var(--subtle-text-color); }
+.rule-meta-long__btn:hover { color: #0d6efd; border-color: rgba(13, 110, 253, .45); }
+.rule-meta-long__json { padding: .5rem .7rem .8rem; border-top: 1px solid var(--border-color); }
+
+/* Platform values (Windows, Linux, AWS…): the brand's logo and colour (setting rule.metadata_display: platforms) */
+.rule-meta-platform { display: inline-flex; align-items: center; gap: .35rem; padding: .12rem .6rem; border-radius: 999px;
+    font-size: .78rem; font-weight: 600; color: var(--brand); border: 1px solid color-mix(in srgb, var(--brand) 40%, transparent);
+    background: color-mix(in srgb, var(--brand) 10%, transparent); }
+.rule-meta-platform i { font-size: .9rem; }
+body.dark-mode .rule-meta-platform { color: color-mix(in srgb, var(--brand) 70%, #fff); }
+
+/* Hashes: type pill (MD5 / SHA-1 / SHA-256…), value in a tinted monospace box */
+.rule-meta-hash-type { flex: none; padding: .05rem .45rem; border-radius: 4px; font-size: .66rem; font-weight: 700; letter-spacing: .03em;
+    background: rgba(111, 66, 193, .12); color: #5f37a8; border: 1px solid rgba(111, 66, 193, .3); }
+body.dark-mode .rule-meta-hash-type { color: #b197fc; }
+.rule-meta-hash { padding: .1rem .45rem; border-radius: 5px; font-size: .76rem; color: var(--text-color); word-break: break-all;
+    background: var(--light-bg-color); border: 1px solid var(--border-color); }
+/* dates: "· a year ago" next to them */
+.rule-meta-ago { color: var(--subtle-text-color); font-size: .74rem; white-space: nowrap; }
+
+/* a cell never spills over: long one-word values (Windows_XP_Vista_7_8_10_…) wrap inside it */
+.rule-meta-cell { min-width: 0; }
+.rule-meta-cell__chips { min-width: 0; }
+.rule-meta-badge, .rule-meta-platform, .rule-meta-tlp { max-width: 100%; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+.rule-meta-platform > span { min-width: 0; }

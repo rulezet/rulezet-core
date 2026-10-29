@@ -1,42 +1,748 @@
 {
   "label": "Rule metadata display",
   "category": "Rules",
-  "description": "How the Other metadata of a rule page shows known keys: label and Font Awesome icon per key (keys not listed get their own name and a generic icon). Keys starting with one of hash_prefixes are shown as hashes (monospace, copy button).",
+  "description": "How the Other metadata of a rule page shows known keys: label and Font Awesome icon per key (keys not listed get their own name and a generic icon). Keys starting with one of hash_prefixes are shown as hashes (monospace, copy button). A value that is a comma-separated list of short items (\"mirai,gafgyt,tsunami\", \"Cobalt Strike, Mimikatz\") is shown one item per line when split_comma_lists is true; sentences with commas are left whole. Each field may have a style: \"badge\" (each value a coloured chip, tone: red / orange / gold / green / teal / blue / purple / gray), \"scale\" (the colour depends on the value, from scales.<name>, e.g. high / medium / low; a number from 0 to 100 shows a gauge) or \"meter\" (a number from 0 to 100, or 0 to 10, as a gauge). Style \"tlp\" (TLP, PAP, sharing): the value shown as an official TLP 2.0 label — coloured text on black: RED, AMBER (AMBER+STRICT), GREEN, CLEAR; \"TLP:\" / \"PAP:\" prefixes and case are ignored. platforms = keywords recognised in any metadata value (Windows, Linux, AWS, GitHub…; whole words, case ignored, first match wins): the value is shown with the platform's logo (Font Awesome brand icon) and colour. A platform's details = {keyword: name}: the part shown under it (Windows → Sysmon, PowerShell…; the rules list filters on the platform or on one detail).",
   "public": false,
   "value": {
     "fields": {
-      "date":            {"label": "Date",             "icon": "fa-calendar"},
-      "modified":        {"label": "Modified",         "icon": "fa-calendar-check"},
-      "last_modified":   {"label": "Modified",         "icon": "fa-calendar-check"},
-      "creation_date":   {"label": "Created",          "icon": "fa-calendar"},
-      "updated_date":    {"label": "Updated",          "icon": "fa-calendar-check"},
-      "status":          {"label": "Status",           "icon": "fa-signal"},
-      "level":           {"label": "Level",            "icon": "fa-gauge-high"},
-      "severity":        {"label": "Severity",         "icon": "fa-gauge-high"},
-      "risk_score":      {"label": "Risk score",       "icon": "fa-gauge-high"},
-      "score":           {"label": "Score",            "icon": "fa-star-half-stroke"},
-      "tlp":             {"label": "TLP",              "icon": "fa-traffic-light"},
-      "falsepositives":  {"label": "False positives",  "icon": "fa-circle-exclamation"},
-      "logsource":       {"label": "Log source",       "icon": "fa-database"},
-      "classtype":       {"label": "Class type",       "icon": "fa-layer-group"},
-      "sid":             {"label": "SID",              "icon": "fa-hashtag"},
-      "rev":             {"label": "Revision",         "icon": "fa-code-branch"},
-      "gid":             {"label": "GID",              "icon": "fa-hashtag"},
-      "priority":        {"label": "Priority",         "icon": "fa-arrow-up-wide-short"},
-      "maturity":        {"label": "Maturity",         "icon": "fa-seedling"},
-      "type":            {"label": "Type",             "icon": "fa-shapes"},
-      "malware":         {"label": "Malware",          "icon": "fa-virus"},
-      "malware_family":  {"label": "Malware family",   "icon": "fa-virus"},
-      "family":          {"label": "Family",           "icon": "fa-virus"},
-      "actor":           {"label": "Actor",            "icon": "fa-user-secret"},
-      "threat_actor":    {"label": "Threat actor",     "icon": "fa-user-secret"},
-      "category":        {"label": "Category",         "icon": "fa-folder"},
-      "platform":        {"label": "Platform",         "icon": "fa-desktop"},
-      "os":              {"label": "OS",               "icon": "fa-desktop"},
-      "filetype":        {"label": "File type",        "icon": "fa-file"},
-      "related":         {"label": "Related",          "icon": "fa-diagram-project"},
-      "source":          {"label": "Source",           "icon": "fa-link"}
+      "date": {
+        "label": "Date",
+        "icon": "fa-calendar"
+      },
+      "modified": {
+        "label": "Modified",
+        "icon": "fa-calendar-check"
+      },
+      "last_modified": {
+        "label": "Modified",
+        "icon": "fa-calendar-check"
+      },
+      "creation_date": {
+        "label": "Created",
+        "icon": "fa-calendar"
+      },
+      "updated_date": {
+        "label": "Updated",
+        "icon": "fa-calendar-check"
+      },
+      "status": {
+        "label": "Status",
+        "icon": "fa-signal",
+        "style": "scale",
+        "scale": "status"
+      },
+      "level": {
+        "label": "Level",
+        "icon": "fa-gauge-high",
+        "style": "scale",
+        "scale": "severity"
+      },
+      "severity": {
+        "label": "Severity",
+        "icon": "fa-gauge-high",
+        "style": "scale",
+        "scale": "severity"
+      },
+      "risk_score": {
+        "label": "Risk score",
+        "icon": "fa-gauge-high",
+        "style": "meter"
+      },
+      "score": {
+        "label": "Score",
+        "icon": "fa-star-half-stroke",
+        "style": "meter"
+      },
+      "tlp": {
+        "label": "TLP",
+        "icon": "fa-traffic-light",
+        "style": "tlp",
+        "scale": "tlp"
+      },
+      "falsepositives": {
+        "label": "False positives",
+        "icon": "fa-circle-exclamation"
+      },
+      "logsource": {
+        "label": "Log source",
+        "icon": "fa-database"
+      },
+      "classtype": {
+        "label": "Class type",
+        "icon": "fa-layer-group",
+        "style": "badge",
+        "tone": "blue"
+      },
+      "sid": {
+        "label": "SID",
+        "icon": "fa-hashtag"
+      },
+      "rev": {
+        "label": "Revision",
+        "icon": "fa-code-branch"
+      },
+      "gid": {
+        "label": "GID",
+        "icon": "fa-hashtag"
+      },
+      "priority": {
+        "label": "Priority",
+        "icon": "fa-arrow-up-wide-short",
+        "style": "scale",
+        "scale": "severity"
+      },
+      "maturity": {
+        "label": "Maturity",
+        "icon": "fa-seedling",
+        "style": "scale",
+        "scale": "status"
+      },
+      "type": {
+        "label": "Type",
+        "icon": "fa-shapes",
+        "style": "badge",
+        "tone": "blue"
+      },
+      "malware": {
+        "label": "Malware",
+        "icon": "fa-virus",
+        "style": "badge",
+        "tone": "red"
+      },
+      "malware_family": {
+        "label": "Malware family",
+        "icon": "fa-virus",
+        "style": "badge",
+        "tone": "red"
+      },
+      "family": {
+        "label": "Family",
+        "icon": "fa-virus",
+        "style": "badge",
+        "tone": "red"
+      },
+      "actor": {
+        "label": "Actor",
+        "icon": "fa-user-secret",
+        "style": "badge",
+        "tone": "purple"
+      },
+      "threat_actor": {
+        "label": "Threat actor",
+        "icon": "fa-user-secret",
+        "style": "badge",
+        "tone": "purple"
+      },
+      "category": {
+        "label": "Category",
+        "icon": "fa-folder",
+        "style": "badge",
+        "tone": "blue"
+      },
+      "platform": {
+        "label": "Platform",
+        "icon": "fa-desktop",
+        "style": "badge",
+        "tone": "teal"
+      },
+      "os": {
+        "label": "OS",
+        "icon": "fa-desktop",
+        "style": "badge",
+        "tone": "teal"
+      },
+      "filetype": {
+        "label": "File type",
+        "icon": "fa-file",
+        "style": "badge",
+        "tone": "blue"
+      },
+      "related": {
+        "label": "Related",
+        "icon": "fa-diagram-project"
+      },
+      "source": {
+        "label": "Source",
+        "icon": "fa-link"
+      },
+      "confidence": {
+        "label": "Confidence",
+        "icon": "fa-bullseye",
+        "style": "scale",
+        "scale": "confidence"
+      },
+      "threat_level": {
+        "label": "Threat level",
+        "icon": "fa-skull-crossbones",
+        "style": "scale",
+        "scale": "severity"
+      },
+      "malware_type": {
+        "label": "Malware type",
+        "icon": "fa-bug",
+        "style": "badge",
+        "tone": "orange"
+      },
+      "mitre_att": {
+        "label": "ATT&CK",
+        "icon": "fa-crosshairs",
+        "style": "badge",
+        "tone": "orange"
+      },
+      "technique": {
+        "label": "Technique",
+        "icon": "fa-crosshairs",
+        "style": "badge",
+        "tone": "orange"
+      },
+      "sharing": {
+        "label": "Sharing",
+        "icon": "fa-traffic-light",
+        "style": "tlp",
+        "scale": "tlp"
+      },
+      "reliability": {
+        "label": "Reliability",
+        "icon": "fa-shield-halved",
+        "style": "scale",
+        "scale": "confidence"
+      },
+      "note": {
+        "label": "Investigation guide",
+        "icon": "fa-book-open"
+      },
+      "setup": {
+        "label": "Setup",
+        "icon": "fa-screwdriver-wrench"
+      },
+      "pap": {
+        "label": "PAP",
+        "icon": "fa-hand",
+        "style": "tlp",
+        "scale": "tlp"
+      },
+      "how_to_implement": {
+        "label": "How to implement",
+        "icon": "fa-screwdriver-wrench"
+      },
+      "known_false_positives": {
+        "label": "Known false positives",
+        "icon": "fa-circle-exclamation"
+      },
+      "false_positives": {
+        "label": "False positives",
+        "icon": "fa-circle-exclamation"
+      },
+      "logsource_definition": {
+        "label": "Log source requirements",
+        "icon": "fa-database"
+      },
+      "message_template": {
+        "label": "Response message",
+        "icon": "fa-message"
+      },
+      "generalization_note": {
+        "label": "Generalization note",
+        "icon": "fa-note-sticky"
+      },
+      "investigation_fields": {
+        "label": "Investigation fields",
+        "icon": "fa-magnifying-glass"
+      },
+      "osquery": {
+        "label": "Osquery queries",
+        "icon": "fa-terminal"
+      },
+      "investigate": {
+        "label": "Investigation queries",
+        "icon": "fa-magnifying-glass-chart"
+      },
+      "new_terms": {
+        "label": "New terms",
+        "icon": "fa-wand-magic-sparkles"
+      },
+      "tests": {
+        "label": "Tests",
+        "icon": "fa-vial"
+      },
+      "drilldown_searches": {
+        "label": "Drill-down searches",
+        "icon": "fa-magnifying-glass-plus"
+      },
+      "threat_objects": {
+        "label": "Threat objects",
+        "icon": "fa-crosshairs"
+      },
+      "intermediate_findings": {
+        "label": "Intermediate findings",
+        "icon": "fa-list-check"
+      },
+      "test_cases": {
+        "label": "Test cases",
+        "icon": "fa-vial"
+      },
+      "evasion_tests": {
+        "label": "Evasion tests",
+        "icon": "fa-user-ninja"
+      },
+      "compliance": {
+        "label": "Compliance mappings",
+        "icon": "fa-scale-balanced"
+      },
+      "semantic_detection": {
+        "label": "Semantic detection",
+        "icon": "fa-brain"
+      },
+      "analytic_story": {
+        "label": "Analytic story",
+        "icon": "fa-book"
+      },
+      "data_source": {
+        "label": "Data sources",
+        "icon": "fa-database"
+      },
+      "logsource_product": {
+        "label": "Log source · product",
+        "icon": "fa-database",
+        "style": "badge",
+        "tone": "teal"
+      },
+      "logsource_category": {
+        "label": "Log source · category",
+        "icon": "fa-database"
+      },
+      "logsource_service": {
+        "label": "Log source · service",
+        "icon": "fa-database"
+      },
+      "response_actions": {
+        "label": "Response actions",
+        "icon": "fa-bolt",
+        "style": "badge",
+        "tone": "orange"
+      }
     },
-    "hash_prefixes": ["hash", "md5", "sha1", "sha256", "sha512", "imphash", "ssdeep", "tlsh", "sample"]
+    "hash_prefixes": [
+      "hash",
+      "md5",
+      "sha1",
+      "sha256",
+      "sha512",
+      "imphash",
+      "ssdeep",
+      "tlsh",
+      "sample"
+    ],
+    "split_comma_lists": true,
+    "scales": {
+      "severity": {
+        "critical": "red",
+        "very high": "red",
+        "high": "orange",
+        "medium": "gold",
+        "moderate": "gold",
+        "low": "blue",
+        "informational": "gray",
+        "info": "gray",
+        "1": "red",
+        "2": "orange",
+        "3": "gold",
+        "4": "blue",
+        "5": "gray"
+      },
+      "confidence": {
+        "high": "green",
+        "very high": "green",
+        "certain": "green",
+        "medium": "gold",
+        "moderate": "gold",
+        "low": "gray",
+        "very low": "gray"
+      },
+      "tlp": {
+        "clear": "clear",
+        "white": "clear",
+        "green": "green",
+        "amber": "amber",
+        "amber+strict": "amber",
+        "red": "red"
+      },
+      "status": {
+        "stable": "green",
+        "released": "green",
+        "production": "green",
+        "test": "gold",
+        "testing": "gold",
+        "experimental": "gold",
+        "development": "gold",
+        "deprecated": "gray",
+        "unsupported": "gray"
+      }
+    },
+    "platforms": [
+      {
+        "match": [
+          "windows",
+          "win32",
+          "win64",
+          "sysmon",
+          "powershell",
+          "active directory"
+        ],
+        "label": "Windows",
+        "icon": "fa-brands fa-windows",
+        "color": "#0078D4",
+        "details": {
+          "sysmon": "Sysmon",
+          "powershell": "PowerShell",
+          "active directory": "Active Directory",
+          "win32": "Win32",
+          "win64": "Win64"
+        }
+      },
+      {
+        "match": [
+          "linux",
+          "unix",
+          "auditd"
+        ],
+        "label": "Linux",
+        "icon": "fa-brands fa-linux",
+        "color": "#E8A100",
+        "details": {
+          "auditd": "auditd",
+          "unix": "Unix"
+        }
+      },
+      {
+        "match": [
+          "ubuntu"
+        ],
+        "label": "Ubuntu",
+        "icon": "fa-brands fa-ubuntu",
+        "color": "#E95420"
+      },
+      {
+        "match": [
+          "red hat",
+          "redhat",
+          "rhel"
+        ],
+        "label": "Red Hat",
+        "icon": "fa-brands fa-redhat",
+        "color": "#EE0000"
+      },
+      {
+        "match": [
+          "centos"
+        ],
+        "label": "CentOS",
+        "icon": "fa-brands fa-centos",
+        "color": "#262577"
+      },
+      {
+        "match": [
+          "fedora"
+        ],
+        "label": "Fedora",
+        "icon": "fa-brands fa-fedora",
+        "color": "#51A2DA"
+      },
+      {
+        "match": [
+          "suse",
+          "opensuse"
+        ],
+        "label": "SUSE",
+        "icon": "fa-brands fa-suse",
+        "color": "#30BA78"
+      },
+      {
+        "match": [
+          "freebsd"
+        ],
+        "label": "FreeBSD",
+        "icon": "fa-brands fa-freebsd",
+        "color": "#AB2B28"
+      },
+      {
+        "match": [
+          "macos",
+          "mac os",
+          "osx",
+          "darwin",
+          "apple",
+          "ios",
+          "ipados"
+        ],
+        "label": "Apple",
+        "icon": "fa-brands fa-apple",
+        "color": "#555555",
+        "details": {
+          "macos": "macOS",
+          "mac os": "macOS",
+          "osx": "macOS",
+          "darwin": "macOS",
+          "ios": "iOS",
+          "ipados": "iPadOS"
+        }
+      },
+      {
+        "match": [
+          "android"
+        ],
+        "label": "Android",
+        "icon": "fa-brands fa-android",
+        "color": "#3DDC84"
+      },
+      {
+        "match": [
+          "aws",
+          "amazon web services",
+          "cloudtrail",
+          "amazon"
+        ],
+        "label": "AWS",
+        "icon": "fa-brands fa-aws",
+        "color": "#FF9900",
+        "details": {
+          "cloudtrail": "CloudTrail"
+        }
+      },
+      {
+        "match": [
+          "azure",
+          "entra",
+          "microsoft 365",
+          "m365",
+          "o365",
+          "office 365",
+          "office365",
+          "microsoft",
+          "defender",
+          "sharepoint",
+          "exchange"
+        ],
+        "label": "Microsoft",
+        "icon": "fa-brands fa-microsoft",
+        "color": "#0078D4",
+        "details": {
+          "azure": "Azure",
+          "entra": "Entra ID",
+          "microsoft 365": "Microsoft 365",
+          "m365": "Microsoft 365",
+          "o365": "Microsoft 365",
+          "office 365": "Microsoft 365",
+          "office365": "Microsoft 365",
+          "defender": "Defender",
+          "sharepoint": "SharePoint",
+          "exchange": "Exchange"
+        }
+      },
+      {
+        "match": [
+          "gcp",
+          "google cloud",
+          "google workspace",
+          "google"
+        ],
+        "label": "Google",
+        "icon": "fa-brands fa-google",
+        "color": "#4285F4",
+        "details": {
+          "gcp": "Google Cloud",
+          "google cloud": "Google Cloud",
+          "google workspace": "Google Workspace"
+        }
+      },
+      {
+        "match": [
+          "github"
+        ],
+        "label": "GitHub",
+        "icon": "fa-brands fa-github",
+        "color": "#24292F"
+      },
+      {
+        "match": [
+          "gitlab"
+        ],
+        "label": "GitLab",
+        "icon": "fa-brands fa-gitlab",
+        "color": "#FC6D26"
+      },
+      {
+        "match": [
+          "bitbucket"
+        ],
+        "label": "Bitbucket",
+        "icon": "fa-brands fa-bitbucket",
+        "color": "#0052CC"
+      },
+      {
+        "match": [
+          "docker",
+          "container"
+        ],
+        "label": "Docker",
+        "icon": "fa-brands fa-docker",
+        "color": "#2496ED",
+        "details": {
+          "container": "Containers"
+        }
+      },
+      {
+        "match": [
+          "slack"
+        ],
+        "label": "Slack",
+        "icon": "fa-brands fa-slack",
+        "color": "#4A154B"
+      },
+      {
+        "match": [
+          "salesforce"
+        ],
+        "label": "Salesforce",
+        "icon": "fa-brands fa-salesforce",
+        "color": "#00A1E0"
+      },
+      {
+        "match": [
+          "cloudflare"
+        ],
+        "label": "Cloudflare",
+        "icon": "fa-brands fa-cloudflare",
+        "color": "#F38020"
+      },
+      {
+        "match": [
+          "jira",
+          "atlassian",
+          "confluence"
+        ],
+        "label": "Atlassian",
+        "icon": "fa-brands fa-atlassian",
+        "color": "#0052CC",
+        "details": {
+          "jira": "Jira",
+          "confluence": "Confluence"
+        }
+      },
+      {
+        "match": [
+          "dropbox"
+        ],
+        "label": "Dropbox",
+        "icon": "fa-brands fa-dropbox",
+        "color": "#0061FF"
+      },
+      {
+        "match": [
+          "digitalocean",
+          "digital ocean"
+        ],
+        "label": "DigitalOcean",
+        "icon": "fa-brands fa-digital-ocean",
+        "color": "#0080FF"
+      },
+      {
+        "match": [
+          "python",
+          "pypi"
+        ],
+        "label": "Python",
+        "icon": "fa-brands fa-python",
+        "color": "#3776AB",
+        "details": {
+          "pypi": "PyPI"
+        }
+      },
+      {
+        "match": [
+          "java"
+        ],
+        "label": "Java",
+        "icon": "fa-brands fa-java",
+        "color": "#E76F00"
+      },
+      {
+        "match": [
+          "node.js",
+          "nodejs",
+          "npm"
+        ],
+        "label": "Node.js",
+        "icon": "fa-brands fa-node-js",
+        "color": "#339933",
+        "details": {
+          "npm": "npm"
+        }
+      },
+      {
+        "match": [
+          "php"
+        ],
+        "label": "PHP",
+        "icon": "fa-brands fa-php",
+        "color": "#777BB4"
+      },
+      {
+        "match": [
+          "wordpress"
+        ],
+        "label": "WordPress",
+        "icon": "fa-brands fa-wordpress",
+        "color": "#21759B"
+      },
+      {
+        "match": [
+          "chrome"
+        ],
+        "label": "Chrome",
+        "icon": "fa-brands fa-chrome",
+        "color": "#4285F4"
+      },
+      {
+        "match": [
+          "firefox"
+        ],
+        "label": "Firefox",
+        "icon": "fa-brands fa-firefox-browser",
+        "color": "#FF7139"
+      },
+      {
+        "match": [
+          "safari"
+        ],
+        "label": "Safari",
+        "icon": "fa-brands fa-safari",
+        "color": "#006CFF"
+      },
+      {
+        "match": [
+          "telegram"
+        ],
+        "label": "Telegram",
+        "icon": "fa-brands fa-telegram",
+        "color": "#26A5E4"
+      },
+      {
+        "match": [
+          "discord"
+        ],
+        "label": "Discord",
+        "icon": "fa-brands fa-discord",
+        "color": "#5865F2"
+      },
+      {
+        "match": [
+          "whatsapp"
+        ],
+        "label": "WhatsApp",
+        "icon": "fa-brands fa-whatsapp",
+        "color": "#25D366"
+      }
+    ]
   }
 }

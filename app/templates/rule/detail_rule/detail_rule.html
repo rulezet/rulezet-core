@@ -285,20 +285,73 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                             <div class="rule-meta-block">
                                 <div class="rule-meta-head"><i class="fa-solid fa-circle-info"></i>Other metadata <span>{{ rule_metadata | length }}</span></div>
                                 <div class="rule-meta-grid">
-                                    {% for field in rule_metadata %}
-                                    <div class="rule-meta-cell {{ 'rule-meta-cell--wide' if field.is_hash or (field['values'] | join(' ') | length) > 90 }}">
+                                    {% for field in rule_metadata if not field.long %}
+                                    <div class="rule-meta-cell {{ 'rule-meta-cell--wide' if field.is_hash or (field['values'] | join(' ') | length) > 90 or (field['values'] | map('length') | max or 0) > 40 }}">
                                         <div class="rule-meta-cell__label" v-pre><i class="fa-solid {{ field.icon }}"></i>{{ field.label }}</div>
-                                        {% for value in field['values'] %}
+                                        {% if (field['style'] and field['styled'] | selectattr('tone') | list) or field['styled'] | selectattr('platform') | list %}
+                                        {# coloured values (setting rule.metadata_display: style badge / scale / meter) #}
+                                        <div class="rule-meta-cell__chips">
+                                            {% for v in field['styled'] %}
+                                            {% if v.percent is not none %}
+                                            <span class="rule-meta-meter rule-meta-meter--{{ v.tone or 'gray' }}" title="{{ v.text }}">
+                                                <span class="rule-meta-meter__bar"><span style="width:{{ v.percent }}%"></span></span>
+                                                <b v-pre>{{ v.text }}</b>
+                                            </span>
+                                            {% else %}
+                                            {% if v.platform and field['style'] != 'tlp' %}
+                                            {# a platform (Windows, AWS…): its logo and colour (setting rule.metadata_display: platforms) #}
+                                            <span class="rule-meta-platform" style="--brand: {{ v.platform.color }}" title="{{ v.platform.label }}">
+                                                <i class="{{ v.platform.icon }}"></i><span v-pre>{{ v.text }}</span>
+                                            </span>
+                                            {% elif field['style'] == 'tlp' %}
+                                            <span class="rule-meta-tlp rule-meta-tlp--{{ v.tone }}" v-pre>{{ v.text | upper }}</span>
+                                            {% else %}
+                                            <span class="rule-meta-badge rule-meta-badge--{{ v.tone or 'gray' }}" v-pre>{{ v.text }}</span>
+                                            {% endif %}
+                                            {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                        {% else %}
+                                        {% for v in field['styled'] %}
                                         <div class="rule-meta-cell__value {{ 'is-hash' if field.is_hash }}">
-                                            <span v-pre>{{ value }}</span>
                                             {% if field.is_hash %}
-                                            <button type="button" class="rule-meta-copy" title="Copy" data-value="{{ value }}" @click="copyMetaValue"><i class="fa-regular fa-copy"></i></button>
+                                            {# a hash: its type (from its shape), the value highlighted, copy #}
+                                            {% if v.hash_type %}<span class="rule-meta-hash-type">{{ v.hash_type }}</span>{% endif %}
+                                            <code class="rule-meta-hash" v-pre>{{ v.text }}</code>
+                                            <button type="button" class="rule-meta-copy" title="Copy" data-value="{{ v.text }}" @click="copyMetaValue"><i class="fa-regular fa-copy"></i></button>
+                                            {% else %}
+                                            <span v-pre>{{ v.text }}</span>
+                                            {% if v.date %}<small class="rule-meta-ago" title="{{ v.date }}">[[ metaAgo('{{ v.date }}') ]]</small>{% endif %}
                                             {% endif %}
                                         </div>
                                         {% endfor %}
+                                        {% endif %}
                                     </div>
                                     {% endfor %}
                                 </div>
+                                {# long fields, collapsed: Markdown (Elastic note = investigation guide, setup, Splunk
+                                   how_to_implement…) rendered with marked + DOMPurify (static/js/sanitize.js), JSON
+                                   (osquery queries, test cases, drill-down searches…) in the code viewer. Copy / download. #}
+                                {% for field in rule_metadata if field.long %}
+                                <details class="rule-meta-long" @toggle="toggleMetaLong($event, '{{ field.key }}', '{{ field.kind }}')">
+                                    <summary>
+                                        <i class="fa-solid {{ field.icon }}"></i><span v-pre>{{ field.label }}</span>
+                                        <small>{{ 'JSON · ' if field.kind == 'json' }}{{ field.text | length }} characters</small>
+                                        <span class="rule-meta-long__actions" @click.prevent>
+                                            <button type="button" class="rule-meta-long__btn" title="Copy" @click.stop.prevent="copyMetaLong('{{ field.key }}')"><i class="fa-regular fa-copy"></i>Copy</button>
+                                            <button type="button" class="rule-meta-long__btn" title="Download" @click.stop.prevent="downloadMetaLong('{{ field.key }}', '{{ field.kind }}')"><i class="fa-solid fa-download"></i>{{ '.json' if field.kind == 'json' else '.md' }}</button>
+                                        </span>
+                                        <i class="fa-solid fa-chevron-down rule-meta-long__chevron"></i>
+                                    </summary>
+                                    {% if field.kind == 'json' %}
+                                    <div class="rule-meta-long__json">
+                                        <code-viewer v-if="metaLongOpen['{{ field.key }}']" :code="metaLongText['{{ field.key }}'] || ''" language="json" max-height="500px"></code-viewer>
+                                    </div>
+                                    {% else %}
+                                    <div class="rule-meta-markdown" data-meta-key="{{ field.key }}"><em>Loading…</em></div>
+                                    {% endif %}
+                                </details>
+                                {% endfor %}
                             </div>
                             {% endif %}
                         </div>
@@ -489,6 +542,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                         <code-viewer
                                             :code="currentRule.to_string || ''"
                                             :language="currentRule.format || 'auto'"
+                                            :initial-search="highlightQuery"
                                             max-height="600px">
                                         </code-viewer>
                                     </div>
@@ -2023,6 +2077,43 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                 });
             }
 
+            // Long metadata (Markdown guides, JSON data): rendered the first time a block is opened
+            const metaLongText = Object.fromEntries(({{ (rule_metadata or []) | selectattr('long') | list | tojson }}).map(f => [f.key, f.text]))
+            const metaLongOpen = reactive({})
+            async function toggleMetaLong(event, key, kind) {
+                metaLongOpen[key] = event.target.open
+                const box = event.target.querySelector('.rule-meta-markdown')
+                if (kind !== 'markdown' || !event.target.open || !box || box.dataset.rendered) return
+                const purifyMod = await import('/static/js/purify.min.js')
+                const DOMPurify = purifyMod.default || window.DOMPurify
+                const markedMod = await import('/static/js/marked.min.js')
+                const marked = markedMod.marked || markedMod.default || window.marked
+                const { SANITIZE_CONFIG } = await import('/static/js/sanitize.js')
+                box.innerHTML = DOMPurify.sanitize(marked.parse(metaLongText[key] || ''), SANITIZE_CONFIG)
+                box.querySelectorAll('a').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer' })
+                box.dataset.rendered = '1'
+            }
+            // "2024-12-02" → "a year ago" (dayjs, loaded by base.html, like the rest of the page)
+            function metaAgo(isoDate) {
+                try { return window.dayjs ? '· ' + window.dayjs(isoDate).fromNow() : '' } catch { return '' }
+            }
+            function copyMetaLong(key) {
+                navigator.clipboard.writeText(metaLongText[key] || '').then(
+                    () => create_message('Copied.', 'success-subtle'),
+                    () => create_message('Could not copy.', 'danger-subtle'))
+            }
+            function downloadMetaLong(key, kind) {
+                const ext = kind === 'json' ? 'json' : 'md'
+                const blob = new Blob([metaLongText[key] || ''], { type: kind === 'json' ? 'application/json' : 'text/markdown' })
+                const slug = ({{ rule.title | tojson }} || 'rule').replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '').slice(0, 60)
+                const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `${slug}_${key}.${ext}` })
+                document.body.appendChild(a); a.click(); a.remove()
+                setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+            }
+
+            // ?q=… (a search made on the rules list): highlighted in the rule's content on arrival
+            const highlightQuery = (new URLSearchParams(window.location.search).get('q') || '').slice(0, 200)
+
             function copyMetaValue(event) {
                 navigator.clipboard.writeText(event.currentTarget.dataset.value || '').then(
                     () => create_message('Copied.', 'success-subtle'),
@@ -2030,7 +2121,7 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
             }
 
             return {
-                copyMetaValue,
+                copyMetaValue, highlightQuery, metaAgo, toggleMetaLong, copyMetaLong, downloadMetaLong, metaLongText, metaLongOpen,
                 getRandomColor,
                 bundleListRule, bundleListLoaded,
                 relatedMatchField,

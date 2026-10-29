@@ -1127,3 +1127,74 @@
     .rl-card-meta:not(:has(.rl-meta-item--author)) { display: none; }
     .rl-rule-card .border-top.mt-auto { padding-top: .6rem !important; }
 }
+
+/* ── Platforms (Windows, Linux, AWS…): card chips, table logos, filter (js/rule/multiPlatformFilter.js) ── */
+.rl-platforms { display: flex; flex-wrap: wrap; gap: .3rem; }
+.rl-platform { display: inline-flex; align-items: center; gap: .35rem; max-width: 100%; padding: .12rem .55rem; border-radius: 999px;
+    font-size: .74rem; font-weight: 600; color: var(--brand); border: 1px solid color-mix(in srgb, var(--brand) 40%, transparent);
+    background: color-mix(in srgb, var(--brand) 9%, transparent); white-space: nowrap; }
+.rl-platform i { font-size: .85rem; }
+.rl-platform__detail { font-weight: 500; opacity: .85; overflow: hidden; text-overflow: ellipsis; }
+.rl-platform__detail::before { content: '· '; }
+.rl-platform--logo { padding: .15rem .45rem; }
+.rl-platform--logo small { font-weight: 500; }
+body.dark-mode .rl-platform { color: color-mix(in srgb, var(--brand) 70%, #fff); }
+
+.mpf-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .2rem .55rem; border-radius: 8px; font-size: .75rem; font-weight: 700;
+    color: #fff; background: var(--brand); }
+.mpf-chip__x { opacity: .8; cursor: pointer; }
+.mpf-row { display: flex; align-items: center; gap: .6rem; padding: .45rem .6rem; border-radius: 10px; border: 1px solid var(--border-color);
+    cursor: pointer; color: var(--text-color); }
+.mpf-row--big { min-height: 50px; padding: .5rem .8rem; }
+.mpf-row--on { border-color: var(--brand, #0d6efd); background: color-mix(in srgb, var(--brand, #0d6efd) 10%, transparent); }
+.mpf-row--detail { margin-left: 1.2rem; margin-top: .35rem; }
+.mpf-logo { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 8px; color: var(--brand);
+    background: color-mix(in srgb, var(--brand) 13%, transparent); }
+.mpf-logo--big { width: 34px; height: 34px; font-size: 1.1rem; border-radius: 50%; }
+.mpf-name { flex: 1; min-width: 0; font-weight: 700; font-size: .86rem; overflow: hidden; text-overflow: ellipsis; }
+.mpf-name small { display: block; font-weight: 500; font-size: .7rem; color: var(--subtle-text-color); }
+.mpf-count { padding: .05rem .5rem; border-radius: 999px; font-size: .68rem; border: 1px solid var(--border-color); color: var(--text-color); }
+.mpf-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--brand); margin: 0 .6rem 0 .3rem; }
+.mpf-head { display: flex; align-items: center; gap: .6rem; padding: 0 .2rem .6rem; margin-bottom: .4rem; border-bottom: 1px solid var(--border-color);
+    color: var(--text-color); }
+.mpf-head small { color: var(--subtle-text-color); }
+
+/* Format badge (js/rule/formatChip.js): the format's logo and colour (setting formats.catalog: logo, color) */
+.fmt-chip--brand { display: inline-flex; align-items: center; gap: .35rem; padding: .16rem .55rem .16rem .2rem; border-radius: 999px;
+    font-size: .72rem; font-weight: 700; letter-spacing: .02em; line-height: 1.3; cursor: pointer; white-space: nowrap;
+    color: var(--fmt); background: color-mix(in srgb, var(--fmt) 10%, var(--card-bg-color));
+    border: 1px solid color-mix(in srgb, var(--fmt) 45%, transparent); box-shadow: 0 1px 2px rgba(0, 0, 0, .06);
+    transition: background .15s, box-shadow .15s; }
+.fmt-chip--brand:hover { background: color-mix(in srgb, var(--fmt) 18%, var(--card-bg-color)); box-shadow: 0 2px 6px rgba(0, 0, 0, .1); }
+.fmt-chip--brand:not(:has(.fmt-chip__logo)) { padding-left: .55rem; }
+.fmt-chip__logo { width: 20px; height: 20px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #fff;
+    border: 1px solid color-mix(in srgb, var(--fmt) 30%, transparent); overflow: hidden; }
+.fmt-chip__logo img { width: 15px; height: 15px; object-fit: contain; }
+.fmt-chip__caret { font-size: .58rem; opacity: .65; }
+body.dark-mode .fmt-chip--brand { color: color-mix(in srgb, var(--fmt) 70%, #fff); }
+
+/* Format filter (js/rule/formatSelect.js): the chosen format like its row badge, a menu with every logo */
+.fsel-trigger { display: inline-flex; align-items: center; gap: .4rem; min-height: 34px; padding: .2rem .7rem .2rem .3rem; border-radius: 999px;
+    font-size: .8rem; font-weight: 700; cursor: pointer; color: var(--text-color); background: var(--card-bg-color);
+    border: 1px solid var(--border-color); }
+.fsel-trigger:not(.fsel-trigger--set) { padding-left: .75rem; }
+.fsel-trigger--set { color: var(--fmt); background: color-mix(in srgb, var(--fmt) 10%, var(--card-bg-color));
+    border-color: color-mix(in srgb, var(--fmt) 45%, transparent); }
+body.dark-mode .fsel-trigger--set { color: color-mix(in srgb, var(--fmt) 70%, #fff); }
+.fsel-placeholder { display: inline-flex; align-items: center; gap: .35rem; color: var(--subtle-text-color); font-weight: 600; }
+.fsel-caret { font-size: .6rem; opacity: .55; margin-left: .15rem; }
+.fsel-menu { min-width: 230px; max-height: 380px; overflow-y: auto; padding: .35rem; border-radius: 12px; }
+.fsel-item { display: flex; align-items: center; gap: .6rem; width: 100%; padding: .4rem .55rem; border: 0; border-radius: 8px;
+    background: none; text-align: left; color: var(--text-color); font-size: .85rem; font-weight: 600; }
+.fsel-item:hover { background: color-mix(in srgb, var(--fmt, #0d6efd) 9%, transparent); }
+.fsel-item--on { background: color-mix(in srgb, var(--fmt, #0d6efd) 13%, transparent); color: var(--fmt, #0d6efd); }
+.fsel-item__logo { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #fff;
+    border: 1px solid color-mix(in srgb, var(--fmt, #6c757d) 35%, transparent); color: var(--fmt, #6c757d); overflow: hidden; }
+.fsel-item__logo img { width: 18px; height: 18px; object-fit: contain; }
+.fsel-item__logo--all { background: var(--light-bg-color); }
+.fsel-item__name { flex: 1; }
+.fsel-check { font-size: .75rem; }
+/* platform chips are buttons: a menu with "Add to filter" (like the CVE and format chips) */
+button.rl-platform { cursor: pointer; font-family: inherit; line-height: 1.3; }
+button.rl-platform:hover { background: color-mix(in srgb, var(--brand) 17%, transparent); }
+.rl-platform__caret { font-size: .55rem !important; opacity: .6; }

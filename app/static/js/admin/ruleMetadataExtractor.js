@@ -206,9 +206,12 @@ export default {
             <div v-if="preview.extra.length" class="rule-meta-block">
               <div class="rule-meta-head"><i class="fa-solid fa-circle-info"></i>Other metadata <span>[[ preview.extra.length ]]</span></div>
               <div class="rule-meta-grid">
-                <div v-for="f in preview.extra" :key="f.key" class="rule-meta-cell">
+                <div v-for="f in preview.extra" :key="f.key" class="rule-meta-cell" :class="{ 'rule-meta-cell--wide': f.long }">
                   <div class="rule-meta-cell__label"><i class="fa-solid" :class="f.icon"></i>[[ f.label ]]</div>
                   <div v-for="v in f.values" :key="v" class="rule-meta-cell__value" :class="{ 'is-hash': f.is_hash }">[[ v ]]</div>
+                  <!-- long Markdown field (Elastic note / setup): its start, as text — the rule page renders it, collapsed -->
+                  <div v-if="f.long" class="rule-meta-cell__value rmx-long">[[ f.text.length > 400 ? f.text.slice(0, 400) + '…' : f.text ]]
+                    <small class="text-muted d-block">[[ f.text.length ]] characters · shown collapsed as Markdown on the rule page</small></div>
                 </div>
               </div>
             </div>

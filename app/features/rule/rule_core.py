@@ -2361,6 +2361,7 @@ def parse_facet_filters(args, exclude=()) -> dict:
         'source':          _csv('sources'),
         'branch':          _csv('branches'),
         'license':         _csv('licenses'),
+        'platforms':       _csv('platforms'),
         'tags':            _csv('tags'),
         'vulnerabilities': _csv('vulnerabilities'),
         'attacks':         _csv('attacks'),
@@ -2374,9 +2375,15 @@ def parse_facet_filters(args, exclude=()) -> dict:
     return filters
 
 
-def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False, editor_names: list[str] | None = None, bundle_id=None, attacks: list[str] | None = None, status=None, workspace_uuid=None, exclude_workspace_uuid=None, ids: list[int] | None = None, branch: str | None = None) -> Rule:
+def filter_rules(search=None, search_field="all", author=None, sort_by=None, rule_type=None, vulnerabilities: list[str] | None = None, source=None, user_id=None, license=None, tags: list[str] | None = None, exact_match=False, editor_names: list[str] | None = None, bundle_id=None, attacks: list[str] | None = None, status=None, workspace_uuid=None, exclude_workspace_uuid=None, ids: list[int] | None = None, branch: str | None = None, platforms: list[str] | None = None) -> Rule:
     """Filter the rules with specific field targeting"""
     query = _active()
+
+    # Platform ("Windows") or one of its details ("Windows:Sysmon"), from Rule.platforms "|Windows|Windows:Sysmon|"
+    if platforms:
+        tokens = [str(p).replace('|', ' ').replace('%', '').replace('_', '\\_').strip() for p in platforms if str(p).strip()]
+        if tokens:
+            query = query.filter(or_(*[Rule.platforms.like(f'%|{t}|%', escape='\\') for t in tokens]))
 
     if ids:
         query = query.filter(Rule.id.in_(ids))
@@ -3893,7 +3900,7 @@ def build_rules_data_table_query(search=None, sort=None,
                          status=None, workspace_uuid=None, exclude_workspace_uuid=None,
                          ids=None, has_cve=False, quality_score_min=None, quality_score_max=None,
                          has_ai_analysis=False, has_relations=False, branch=None,
-                         has_tags=False, has_license=False, has_attack=False):
+                         has_tags=False, has_license=False, has_attack=False, platforms=None):
     """Unpaginated query behind get_rules_data_table — also used wherever the
     exact RuleList filter set must be applied server-side (e.g. bundle from
     filters), so both always agree on which rules "match"."""
@@ -3917,6 +3924,7 @@ def build_rules_data_table_query(search=None, sort=None,
         exclude_workspace_uuid=exclude_workspace_uuid,
         branch=branch,
         ids=ids,
+        platforms=platforms,
     )
 
     if ids:
@@ -3954,6 +3962,8 @@ def build_rules_data_table_query(search=None, sort=None,
         )
     return query
 
+
+from app.features.rule.rule_metadata_core import platform_badges  # noqa: E402
 
 def serialize_rules_for_data_table(rules: list, current_user_obj=None) -> list:
     """Build the exact per-rule dict shape /rule/data_table returns
@@ -4007,6 +4017,7 @@ def serialize_rules_for_data_table(rules: list, current_user_obj=None) -> list:
         except (ValueError, TypeError):
             d['cves'] = []
         d['attacks'] = attacks_by_rule.get(r.id, [])
+        d['platforms'] = platform_badges(r.platforms)
         d['user_vote'] = votes_map.get(r.id)
         d['linked_rules_count'] = relations_count_by_rule.get(r.id, 0)
         items.append(d)
@@ -5443,6 +5454,26 @@ def get_sources_usage_with_filter(search_term, filters: dict = None):
         query = query.filter(Rule.source.ilike(f'%{search_term}%'))
 
     return query.group_by(Rule.source).order_by(func.count(Rule.id).desc()).all()
+
+def get_platforms_usage_with_filter(filters: dict = None) -> list[dict]:
+    """Platforms and their details with the number of rules, scoped to rules matching every OTHER
+    active filter ('platforms' already excluded): [{name, label, icon, color, count, details: [{name, count}]}]."""
+    base_ids = filter_rules(**(filters or {})).order_by(None).with_entities(Rule.id).subquery()
+    rows = (db.session.query(Rule.platforms, func.count(Rule.id))
+            .filter(Rule.id.in_(db.session.query(base_ids)), Rule.platforms.isnot(None))
+            .group_by(Rule.platforms).all())
+    counts = {}
+    for column, n in rows:
+        for token in {t for t in (column or '').split('|') if t}:
+            counts[token] = counts.get(token, 0) + n
+    out = []
+    for badge in platform_badges('|' + '|'.join(t for t in counts if ':' not in t) + '|'):
+        label = badge['label']
+        details = sorted(((t.split(':', 1)[1], c) for t, c in counts.items() if t.startswith(label + ':')), key=lambda x: -x[1])
+        out.append({**badge, 'name': label, 'count': counts[label],
+                    'details': [{'name': f'{label}:{d}', 'label': d, 'count': c} for d, c in details]})
+    return sorted(out, key=lambda b: -b['count'])
+
 
 def get_licenses_usage_with_filter(search_query, filters: dict = None):
     """
