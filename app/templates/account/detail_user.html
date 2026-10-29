@@ -86,7 +86,7 @@
                         <!-- Identity -->
                         <div class="ud-profile-identity">
                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <h2 class="ud-profile-name mb-0">[[ user.first_name ]] [[ user.last_name ]]</h2>
+                                <h2 class="ud-profile-name mb-0">[[ user.first_name ]] [[ user.last_name ]]{% if user.identity_verified %}<i class="fas fa-circle-check ud-identity-check" title="Identity verified by an admin"></i>{% endif %}</h2>
                                 {% if user.is_admin %}
                                 <span class="ud-profile-badge ud-profile-badge--admin">
                                     <i class="fas fa-crown me-1"></i>Admin

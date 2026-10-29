@@ -210,10 +210,20 @@
             <!-- Identity -->
             <div class="ud-profile-identity">
                 <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <h2 class="ud-profile-name mb-0">[[ user.username ]]</h2>
+                    <h2 class="ud-profile-name mb-0">[[ user.username ]]{% if current_user.identity_verified %}<i class="fas fa-circle-check ud-identity-check" title="Identity verified by an admin"></i>{% endif %}</h2>
                     {% if current_user.is_admin() %}
                     <span class="ud-profile-badge ud-profile-badge--admin">
                         <i class="fas fa-crown me-1"></i>Admin
+                    </span>
+                    {% endif %}
+                    {% for org in current_user.organisations %}{% set o = org.to_json() %}
+                    <span class="ud-profile-badge ud-profile-badge--org" title="Organisation: {{ o.name }}" style="background: {{ o.color }};">
+                        <i class="fas {{ o.icon }} me-1"></i>{% if o.website %}<a href="{{ o.website }}" target="_blank" rel="noopener noreferrer" class="text-reset text-decoration-none">{{ o.text }}</a>{% else %}{{ o.text }}{% endif %}
+                    </span>
+                    {% endfor %}
+                    {% if current_user.identity_verified %}
+                    <span class="ud-profile-badge ud-profile-badge--identity" title="An admin checked you are who you claim to be">
+                        <i class="fas fa-user-check me-1"></i>Verified by an admin
                     </span>
                     {% endif %}
                     {% if current_user.is_verified %}

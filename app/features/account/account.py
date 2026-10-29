@@ -228,6 +228,7 @@ def user_mini(user_id):
         "roles":     get_user_roles(user.id),
         "is_admin":  user.is_admin() if viewer_may_see_admin else False,
         "organisations": [o.to_json() for o in user.organisations],
+        "identity_verified": bool(user.identity_verified),
     })
 
 
