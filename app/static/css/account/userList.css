@@ -416,3 +416,14 @@
 .ul-idv-entry--off { border-left-color: #dc3545; }
 .ul-idv-entry__head { font-size: .78rem; color: var(--subtle-text-color); }
 .ul-idv-entry__text { font-size: .85rem; white-space: pre-wrap; word-break: break-word; }
+
+/* Organisation (admin-assigned, informative) */
+.ul-org-chip {
+    display: inline-flex; align-items: center; max-width: 180px;
+    padding: .1rem .45rem; border-radius: 999px;
+    font-size: .66rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    color: #6f42c1; background: rgba(111, 66, 193, .1); border: 1px solid rgba(111, 66, 193, .28);
+}
+.ul-org-list { max-height: 240px; overflow-y: auto; }
+.ul-org-row { display: flex; align-items: center; gap: .5rem; padding: .35rem 0; border-bottom: 1px solid var(--border-color); font-size: .85rem; }
+.ul-org-row:last-child { border-bottom: 0; }

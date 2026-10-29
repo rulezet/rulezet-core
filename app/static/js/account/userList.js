@@ -11,6 +11,7 @@
  * Events:
  *   toggle-admin(user)
  *   delete-user(user)
+ *   organisation(user) — assign an organisation (admin, informative)
  *   identity(user)   — identity verification by an admin (justification + history)
  *
  * Verified toggle is handled internally (calls /account/toggle_user_verified
@@ -41,7 +42,7 @@ export default {
         syncUrl:        { type: Boolean,          default: true },
     },
 
-    emits: ['toggle-admin', 'delete-user', 'identity'],
+    emits: ['toggle-admin', 'delete-user', 'identity', 'organisation'],
     expose: ['fetchData'],
 
     template: `
@@ -212,6 +213,7 @@ export default {
                         <span v-if="isSelf(user)" class="badge bg-info text-dark">
                             <i class="fas fa-user-check me-1"></i>You
                         </span>
+                        <span v-if="user.organisation" class="ul-org-chip"><i class="fas fa-building me-1"></i>{{ user.organisation.name }}</span>
                         <span v-if="user.identity_verified" class="ul-identity-badge" title="Identity verified by an admin">
                             <i class="fas fa-user-check me-1"></i>Verified by an admin
                         </span>
@@ -307,6 +309,11 @@ export default {
                         <i :class="user.admin ? 'fas fa-user-minus' : 'fas fa-user-shield'"></i>
                     </button>
                     <button class="ul-action-secondary"
+                            :class="{ 'ul-action-secondary--identity': user.organisation }"
+                            @click="$emit('organisation', user)" title="Organisation">
+                        <i class="fas fa-building"></i>
+                    </button>
+                    <button class="ul-action-secondary"
                             :class="{ 'ul-action-secondary--identity': user.identity_verified }"
                             @click="$emit('identity', user)"
                             :title="user.identity_verified ? 'Identity verified by an admin — history' : 'Verify identity'">
@@ -396,6 +403,9 @@ export default {
                                            title="Identity verified by an admin"></i>
                                     </a>
                                     <span class="ul-table-username">@{{ user.username || user.first_name }}</span>
+                                    <span v-if="user.organisation" class="ul-org-chip" :title="'Organisation: ' + user.organisation.name">
+                                        <i class="fas fa-building me-1"></i>{{ user.organisation.name }}
+                                    </span>
                                 </div>
                                 <span v-if="isSelf(user)" class="badge bg-info text-dark ms-1" style="font-size:.6rem;">YOU</span>
                             </div>
@@ -491,6 +501,12 @@ export default {
                                         :title="user.admin ? 'Remove admin' : 'Promote to admin'"
                                         @click="$emit('toggle-admin', user)">
                                     <i :class="user.admin ? 'fas fa-user-minus' : 'fas fa-user-shield'"></i>
+                                </button>
+                                <button class="dt-action-btn"
+                                        :class="{ 'ul-action-identity-on': user.organisation }"
+                                        :title="user.organisation ? 'Organisation: ' + user.organisation.name : 'Set an organisation'"
+                                        @click="$emit('organisation', user)">
+                                    <i class="fas fa-building"></i>
                                 </button>
                                 <button class="dt-action-btn"
                                         :class="{ 'ul-action-identity-on': user.identity_verified }"
