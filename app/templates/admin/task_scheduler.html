@@ -285,6 +285,34 @@
                     <span class="wfd-kpi__value" v-else>—</span></div>
                 <div class="wfd-kpi"><span class="wfd-kpi__label">Next launch</span>
                     <span class="wfd-kpi__value wfd-kpi__value--sm">[[ nextRunSummary ]]</span></div>
+                <!-- Who / what around the workflow -->
+                <div class="wfd-kpi"><span class="wfd-kpi__label">Editor</span>
+                    <span class="wfd-kpi__value wfd-kpi__value--sm">
+                        <user-chip v-if="activeWorkflow.editor" :user-id="activeWorkflow.editor.id" :username="activeWorkflow.editor.name" :avatar="activeWorkflow.editor.avatar" size="xs"></user-chip>
+                        <template v-else>—</template></span></div>
+                <div class="wfd-kpi"><span class="wfd-kpi__label">Created</span>
+                    <span class="wfd-kpi__value wfd-kpi__value--sm">[[ activeWorkflow.created_at || '—' ]]</span></div>
+                <div class="wfd-kpi"><span class="wfd-kpi__label">Email alerts</span>
+                    <span class="wfd-kpi__value wfd-kpi__value--sm">
+                        <template v-if="activeWorkflow.notify_on_failure || activeWorkflow.notify_on_success">
+                            <span :data-rz-pop-title="'Sent to'" :data-rz-pop-text="[activeWorkflow.editor && activeWorkflow.editor.name + ' (editor)'].concat(activeWorkflow.notify_emails || []).filter(Boolean).join(', ')">
+                                <i class="fa-solid fa-envelope me-1 text-primary"></i>[[ [activeWorkflow.notify_on_failure && 'failure', activeWorkflow.notify_on_success && 'success'].filter(Boolean).join(' + ') ]]
+                                <small>· [[ 1 + (activeWorkflow.notify_emails || []).length ]] recipient(s)</small></span>
+                        </template>
+                        <template v-else><i class="fa-solid fa-bell-slash me-1 text-muted"></i>Off</template>
+                        <small v-if="alertTaskCount" class="d-block"><i class="fa-solid fa-bell me-1"></i>[[ alertTaskCount ]] task alert(s)</small></span></div>
+                <div class="wfd-kpi"><span class="wfd-kpi__label">Reliability</span>
+                    <span class="wfd-kpi__value wfd-kpi__value--sm">
+                        <span><i class="fa-solid fa-rotate-right me-1"></i>[[ retryTaskCount ]] with retries</span>
+                        <small class="d-block" :class="{ 'text-danger': autoPausedCount }"><i class="fa-solid fa-plug-circle-xmark me-1"></i>[[ autoPausedCount ]] auto-paused</small></span></div>
+                <div class="wfd-kpi"><span class="wfd-kpi__label">Notebook</span>
+                    <span class="wfd-kpi__value wfd-kpi__value--sm">
+                        <a href="#" class="text-decoration-none" @click.prevent="switchDetailTab('history'); $nextTick(() => notebook && notebook.$el.scrollIntoView({ behavior: 'smooth' }))">
+                            <i class="fa-solid fa-note-sticky me-1"></i>[[ activeWorkflow.notes_count || 0 ]] notes · <i class="fa-solid fa-paperclip mx-1"></i>[[ activeWorkflow.files_count || 0 ]] files</a></span></div>
+                <div class="wfd-kpi"><span class="wfd-kpi__label">Sharing</span>
+                    <span class="wfd-kpi__value wfd-kpi__value--sm">
+                        <a href="#" class="text-decoration-none" @click.prevent="openShare()">
+                            <i class="fa-solid me-1" :class="activeWorkflow.shared ? 'fa-share-nodes text-primary' : 'fa-lock text-muted'"></i>[[ activeWorkflow.shared ? 'Read-only link on' : 'Private' ]]</a></span></div>
             </div>
             <!-- Pinned notes of the notebook, rendered (long ones folded) — js/admin/workflowNotebook.js -->
             <pinned-notes v-if="pinnedNotes.length" :notes="pinnedNotes" @open="showPinned"></pinned-notes>
@@ -480,7 +508,7 @@
         <!-- Notes (markdown), attached files and activity of this workflow — js/admin/workflowNotebook.js -->
         <workflow-notebook v-if="detailTab === 'history' && activeWorkflow" ref="notebook" :key="activeWorkflow.uuid"
                            :workflow-uuid="activeWorkflow.uuid" :csrf-token="csrfToken" :runs="workflowRuns"
-                           @changed="loadWorkflowRuns(workflowRunsPage)" @pinned="pinnedNotes = $event"></workflow-notebook>
+                           @changed="loadWorkflowRuns(workflowRunsPage)" @pinned="pinnedNotes = $event" @counts="c => Object.assign(activeWorkflow, c)"></workflow-notebook>
 
         <!-- ── Tasks tab: manage tasks, browse the pipeline graph ── -->
         <template v-if="detailTab === 'tasks'">
@@ -1381,11 +1409,11 @@
                         <i class="fa-solid fa-circle-notch me-2"></i>…no matter what
                     </button>
                     <div v-if="pendingConnectionIsEdit" class="tf-alert mt-1">
-                        <label class="tf-switch">
-                            <input type="checkbox" v-model="linkAlert.on">
-                            <span class="tf-switch__track"><span class="tf-switch__thumb"></span></span>
-                            <span><i class="fa-solid fa-bell me-1"></i>Email me when the workflow takes this link</span>
-                        </label>
+                        <div class="small fw-semibold mb-2"><i class="fa-solid fa-bell me-1 text-primary"></i>Email when the workflow takes this link</div>
+                        <div class="tf-segment mb-1">
+                            <button type="button" :class="{ 'is-on': linkAlert.on }" @click="linkAlert.on = true"><i class="fa-solid fa-bell"></i>On</button>
+                            <button type="button" :class="{ 'is-on': !linkAlert.on }" @click="linkAlert.on = false"><i class="fa-solid fa-bell-slash"></i>Off</button>
+                        </div>
                         <template v-if="linkAlert.on">
                             <input class="form-control form-control-sm mt-2" v-model="linkAlert.to" placeholder="Addresses (comma separated) — empty: the workflow's alert recipients">
                             <textarea class="form-control form-control-sm mt-2" rows="2" v-model="linkAlert.message" maxlength="1000"
@@ -1562,6 +1590,9 @@
             // Notebook under the history (js/admin/workflowNotebook.js): a note about one launch.
             const notebook = ref(null);
             const pinnedNotes = ref([]);
+            const alertTaskCount = computed(() => graphSchedules.value.filter(t => (t.target_payload || {})._alert).length);
+            const retryTaskCount = computed(() => graphSchedules.value.filter(t => t.max_retries).length);
+            const autoPausedCount = computed(() => graphSchedules.value.filter(t => t.auto_disabled_at && !t.is_active).length);
             function showPinned(n) {
                 if (detailTab.value !== 'history') switchDetailTab('history');
                 nextTick(() => {
@@ -1593,7 +1624,7 @@
                     });
                     const data = await res.json();
                     create_message(data.message, data.toast_class);
-                    if (res.ok) share.url = data.url;
+                    if (res.ok) { share.url = data.url; activeWorkflow.value.shared = !!data.url; }
                 } finally {
                     share.busy = false;
                 }
@@ -2701,15 +2732,19 @@
             async function saveLinkAlert() {
                 const child = pendingConnection.value && pendingConnection.value.to;
                 if (!child) return;
-                const cur = (child.target_payload || {})._alert || {};
-                const on = (cur.on || []).filter(p => p !== 'reached').concat(linkAlert.on ? ['reached'] : []);
+                // Only the "reached" point changes; the server keeps the task's other alert points.
                 const res = await fetch(`/admin/tasks/${child.uuid}/alert`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                    body: JSON.stringify({ alert: { on, to: linkAlert.to, message: linkAlert.message } }),
+                    body: JSON.stringify({ link: { reached: !!linkAlert.on, to: linkAlert.to, message: linkAlert.message } }),
                 });
                 const data = await res.json();
                 create_message(data.message, data.toast_class);
-                if (res.ok) loadGraphSchedules();
+                if (res.ok) {
+                    const i = graphSchedules.value.findIndex(x => x.uuid === child.uuid);
+                    if (i >= 0) graphSchedules.value[i] = data.schedule;
+                    pendingConnection.value.to = data.schedule;
+                    loadGraphSchedules();
+                }
             }
 
             function onEdgeClick(childSchedule) {
@@ -2717,7 +2752,8 @@
                 if (!parent) return;
                 pendingConnection.value = { from: parent, to: childSchedule };
                 pendingConnectionIsEdit.value = true;
-                const a = (childSchedule.target_payload || {})._alert || {};
+                const fresh = graphSchedules.value.find(x => x.uuid === childSchedule.uuid) || childSchedule;
+                const a = (fresh.target_payload || {})._alert || {};
                 Object.assign(linkAlert, { on: (a.on || []).includes('reached'), to: a.to || '', message: a.message || '' });
                 bootstrap.Modal.getOrCreateInstance(document.getElementById('connectConditionModal')).show();
             }
@@ -2782,7 +2818,7 @@
             onUnmounted(() => stopLivePolling());
 
             return {
-                truncate, health, linkAlert, saveLinkAlert, taskAlert, ALERT_POINTS, notebook, noteOnRun, pinnedNotes, showPinned, share, openShare, shareAction, copyShare,
+                truncate, health, alertTaskCount, retryTaskCount, autoPausedCount, linkAlert, saveLinkAlert, taskAlert, ALERT_POINTS, notebook, noteOnRun, pinnedNotes, showPinned, share, openShare, shareAction, copyShare,
                 route, activeWorkflow, openWorkflow, backToWorkflows, runWorkflowNow,
                 runPreview, runPreviewLoading, askRunWorkflow, confirmRunWorkflow,
                 dashboard, loadDashboard, barHeight, toggleWorkflowActive, runFromHere, setTaskActive,

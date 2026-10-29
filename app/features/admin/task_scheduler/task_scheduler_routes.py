@@ -772,7 +772,14 @@ def set_task_alert(uuid):
     schedule = AdminTaskSchedule.query.filter_by(uuid=uuid).first()
     if not schedule:
         return _err('Task not found.', 404)
-    alert = (request.get_json(silent=True) or {}).get('alert') or {}
+    data = request.get_json(silent=True) or {}
+    current = (schedule.target_payload or {}).get('_alert') or {}
+    if 'link' in data:   # a graph link: only its "reached" point, the rest of the alert kept
+        link = data.get('link') or {}
+        on = [p for p in (current.get('on') or []) if p != 'reached'] + (['reached'] if link.get('reached') else [])
+        alert = {'on': on, 'to': link.get('to', current.get('to', '')), 'message': link.get('message', current.get('message', ''))}
+    else:
+        alert = data.get('alert') or {}
     err = validate_alert(alert)
     if err:
         return _err(err)
@@ -786,5 +793,9 @@ def set_task_alert(uuid):
     log_activity('admin.task_alert', f"Email alert of task '{schedule.title}' "
                  f"{'set: ' + ', '.join(alert['on']) if alert.get('on') else 'removed'}",
                  target_type='admin_workflow', target_uuid=schedule.workflow.uuid, icon='fa-solid fa-bell', is_public=False)
-    return jsonify({"message": "Alert saved." if alert.get('on') else "Alert removed.", "toast_class": "success-subtle",
+    if 'link' in data:
+        message = 'Alert on this link: on.' if 'reached' in alert['on'] else 'Alert on this link: off.'
+    else:
+        message = 'Alert saved.' if alert.get('on') else 'Alert removed.'
+    return jsonify({"message": message, "toast_class": "success-subtle",
                     "schedule": schedule.to_json()}), 200
