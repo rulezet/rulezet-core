@@ -56,14 +56,6 @@
                            data-typing='["CVE-2024-3400", "Cobalt Strike beacon", "T1059.001 PowerShell", "Emotet", "log4j JNDI lookup", "ransomware note", "Mimikatz", "suspicious scheduled task"]'>
                     <button type="submit" class="hv2-btn hv2-btn--primary">Search<i class="fa-solid fa-arrow-right hv2-btn__arrow"></i></button>
                 </form>
-                {% if rule_formats %}
-                <div class="hv2-quick">
-                    <span class="hv2-quick__lbl">Browse</span>
-                    {% for fmt in rule_formats %}
-                    <a href="/rule/rules_list?rule_type={{ fmt.name | urlencode }}" class="hv2-chip">{{ fmt.name }}</a>
-                    {% endfor %}
-                </div>
-                {% endif %}
 
                 <div class="hv2-cta">
                     <a href="/rule/create_rule" class="hv2-btn hv2-btn--primary hv2-btn--lg"><i class="fa-solid fa-plus"></i>Add a rule</a>
@@ -104,22 +96,37 @@
             </div>
         </div>
 
+
         <!-- every format, scrolling slowly, never empty -->
-        {% if rule_formats %}
-        <div class="hv2-marquee" aria-label="Supported formats">
-            <div class="hv2-marquee__track">
-                {# two identical halves, each at least as wide as the screen: sliding by one half loops with no gap #}
-                {% for half in range(2) %}
-                <div class="hv2-marquee__group" {% if half %}aria-hidden="true"{% endif %}>
-                    {% for _ in range(3) %}{% for fmt in rule_formats %}
-                    <a href="/rule/rules_list?rule_type={{ fmt.name | urlencode }}" class="hv2-marquee__item" {% if half or _ %}tabindex="-1"{% endif %}>{{ fmt.name | upper }}</a>
-                    {% endfor %}{% endfor %}
-                </div>
+    </section>
+
+        {% if rule_formats or rule_platforms %}
+        <!-- ══ COVERAGE: formats and platforms ═════════════════════════════ -->
+        <section class="hv2-wrap hv2-section hv2-section--coverage">
+            <header class="hv2-head" data-reveal>
+                <span class="hv2-head__kicker">Coverage</span>
+                <h2 class="hv2-head__title">Every format, every platform</h2>
+            </header>
+            {% if rule_formats %}
+            <div class="hv2-platforms" data-reveal data-reveal-stagger aria-label="Rules by format">
+                <span class="hv2-platforms__lbl">Browse</span>
+                {% for fmt in rule_formats %}<a href="/rule/rules_list?rule_type={{ fmt.name | urlencode }}" class="hv2-chip hv2-chip--fmt" style="--fmt: {{ fmt.color }}">{% if fmt.logo %}<img src="{{ url_for('static', filename='images/formats/' ~ fmt.logo) }}" alt="" loading="lazy">{% endif %}{{ fmt.title }}</a>{% endfor %}
+            </div>
+            {% endif %}
+            {% if rule_platforms %}
+            <!-- platforms the rules cover (Windows, Linux, AWS…): one click → the rules of that platform -->
+            <div class="hv2-platforms" data-reveal data-reveal-stagger aria-label="Rules by platform">
+                <span class="hv2-platforms__lbl">Platforms</span>
+                {% for p in rule_platforms %}
+                <a href="/rule/rules_list?platforms={{ p.label | urlencode }}" class="hv2-platform" style="--brand: {{ p.color }}"
+                   title="{{ '{:,}'.format(p.count) }} {{ p.label }} rules">
+                    <i class="{{ p.icon }}"></i><span>{{ p.label }}</span><b>{{ '{:,}'.format(p.count) }}</b>
+                </a>
                 {% endfor %}
             </div>
-        </div>
+            {% endif %}
+        </section>
         {% endif %}
-    </section>
 
         {% if latest_blog_posts %}
         <!-- ══ FROM THE BLOG ════════════════════════════════════════════════ -->
@@ -155,6 +162,7 @@
             </div>
         </section>
         {% endif %}
+
 
     <template v-if="is_loading">
 
