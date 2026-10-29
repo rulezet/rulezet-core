@@ -207,6 +207,7 @@ const TaskCanvas = {
             const st = s.stats || {};
             if (st.runs) parts.push(`${st.runs} runs${st.success_rate != null ? `, ${st.success_rate}% ok` : ''}${st.avg_seconds != null ? `, ~${st.avg_seconds < 60 ? st.avg_seconds + 's' : Math.round(st.avg_seconds / 60) + ' min'}` : ''}.`);
             if (s.max_retries) parts.push(`Retried ${s.max_retries}× on failure.`);
+            if ((s.target_payload || {})._alert) parts.push(`Email alert: ${s.target_payload._alert.on.join(', ')}.`);
             if (s.auto_disabled_at) parts.push(`Paused automatically on ${s.auto_disabled_at} after repeated failures.`);
             return parts.join(' ');
         },
@@ -424,6 +425,7 @@ const TaskCanvas = {
                             <span class="twg-node-sub">[[ typeLabel(s.task_type) ]]</span>
                             <span v-if="s.auto_disabled_at" class="twg-status-badge twg-status-badge--paused" style="background:rgba(220,53,69,.12);color:#dc3545;">Auto-paused</span>
                             <span v-else class="twg-status-badge" :class="s.is_active ? 'twg-status-badge--active' : 'twg-status-badge--paused'">[[ s.is_active ? 'Active' : 'Paused' ]]</span>
+                            <span v-if="(s.target_payload || {})._alert" class="twg-status-badge" :title="'Email alert: ' + s.target_payload._alert.on.join(', ')"><i class="fa-solid fa-bell"></i></span>
                             <span v-if="s.max_retries" class="twg-status-badge" title="Retries after a failure"><i class="fa-solid fa-rotate-right"></i> [[ s.max_retries ]]</span>
                         </div>
                     </div>

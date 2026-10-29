@@ -134,3 +134,81 @@ def maybe_send_workflow_run_alert(workflow, kind, summary=None):
         mail.send(msg)
     except Exception as e:
         print(f"[task_scheduler] failed to send workflow run alert email: {e}")
+
+
+# ─── Alert set on one task (or on the link leading to it) ─────────────────────
+# Stored in the task's target_payload as "_alert": {"on": ["reached", "success", "failure"],
+# "to": "a@x.org, b@y.org", "message": "text with {variables}"}. "reached" = the workflow got to
+# this task (the link to it was taken). Recipients: the given addresses, else the workflow's.
+
+ALERT_POINTS = {'reached': 'reached', 'success': 'succeeded', 'failure': 'failed'}
+_EMAIL = r'[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+'
+
+
+def alert_addresses(text):
+    import re
+    return [e for e in re.split(r'[,;\s]+', text or '') if e][:10]
+
+
+def validate_alert(alert):
+    """Error string or None (task save)."""
+    import re
+    if not alert:
+        return None
+    if not isinstance(alert, dict):
+        return 'Alert: bad format.'
+    on = alert.get('on') or []
+    if not isinstance(on, list) or any(p not in ALERT_POINTS for p in on):
+        return 'Alert: choose when (reached, succeeded, failed).'
+    for e in alert_addresses(alert.get('to')):
+        if not re.fullmatch(_EMAIL, e):
+            return f'Alert: "{e}" is not an email address.'
+    if len(alert.get('message') or '') > 1000:
+        return 'Alert: the message is at most 1000 characters.'
+    return None
+
+
+def send_point_alert(task, point, job):
+    alert = (task.target_payload or {}).get('_alert') or {}
+    if point not in (alert.get('on') or []):
+        return
+    try:
+        from flask import current_app
+        from app.core.utils.mail_status import is_email_available
+        from app.features.admin.task_scheduler import actions
+        if not is_email_available():
+            print(f"[task_scheduler] alert on '{task.title}' not sent: email is not configured")
+            return
+        wf = task.workflow
+        recipients = alert_addresses(alert.get('to'))
+        if not recipients and wf:
+            if wf.editor and wf.editor.email:
+                recipients.append(wf.editor.email)
+            recipients += list(wf.notify_emails or [])
+        recipients = list(dict.fromkeys(recipients))[:10]
+        if not recipients:
+            return
+        ctx = actions.run_context(job)
+        ctx['task'], ctx['workflow'] = ctx.get('task') or task, ctx.get('workflow') or wf
+        values = actions.variables(ctx, current_app.config.get('INSTANCE_PUBLIC_URL') or '')
+        label = ALERT_POINTS[point]
+        color = {'reached': '#0d6efd', 'success': '#198754', 'failure': '#dc3545'}[point]
+        text = actions.render(alert.get('message') or '', values)
+        error = job.error if point == 'failure' and job.error else ''
+        msg = Message(f"[Rulezet] {wf.title if wf else 'Workflow'} — '{task.title}' {label}", recipients=recipients)
+        msg.html = f"""
+        <div style="font-family:'Segoe UI',Tahoma,sans-serif;max-width:600px;margin:0 auto;border:1px solid #eee;border-radius:12px;overflow:hidden;">
+            <div style="background:#2c3e50;padding:20px;text-align:center;"><h1 style="color:#fff;margin:0;font-size:19px;">Task {label}</h1></div>
+            <div style="padding:26px;line-height:1.6;color:#333;background:#fff;">
+                <p style="font-size:15px;">Workflow <strong>"{escape(wf.title if wf else '')}"</strong> — task <strong>{escape(task.title)}</strong>
+                   <span style="color:{color};font-weight:bold;">{label}</span>.</p>
+                {f'<p style="font-size:15px;white-space:pre-wrap;">{escape(text)}</p>' if text else ''}
+                {f'<p style="font-size:13px;font-family:monospace;color:#721c24;background:#fdf2f2;padding:10px;border-radius:6px;white-space:pre-wrap;">{escape(error)}</p>' if error else ''}
+                <p style="font-size:13px;color:#7f8c8d;">{escape(values['date'])} {escape(values['time'])} · {escape(values['status'])}</p>
+                <p style="text-align:center;margin-top:20px;"><a href="{escape(values['link'])}" style="display:inline-block;padding:10px 22px;background:#0d6efd;color:#fff;text-decoration:none;border-radius:6px;">View workflow</a></p>
+            </div>
+            <div style="background:#f8f9fa;padding:14px;text-align:center;font-size:12px;color:#95a5a6;">An alert set on this task in the workflow editor.</div>
+        </div>"""
+        mail.send(msg)
+    except Exception as e:
+        print(f"[task_scheduler] alert on '{task.title}' failed: {e}")

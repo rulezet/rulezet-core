@@ -200,6 +200,9 @@ def _fire_schedule(app, schedule_uuid, workflow_run_id=None, ignore_paused=False
             run.job_uuid = job.uuid
             schedule.last_run_at = datetime.datetime.utcnow()
             db.session.commit()
+            if attempt == 1:
+                from app.features.admin.task_scheduler.notifications import send_point_alert
+                send_point_alert(schedule, 'reached', job)
         except Exception as e:
             db.session.rollback()
             print(f"[task_scheduler] _fire_schedule error for {schedule_uuid}: {e}")
@@ -450,6 +453,9 @@ def on_job_finished(job):
         from app.features.admin.task_scheduler.notifications import maybe_send_task_alert
         if run.schedule.workflow and not run.workflow_run_id:
             maybe_send_task_alert(run.schedule.workflow, run.schedule, job)
+        # The task's own alert ("email me when it gets here / succeeds / fails"), launch or not.
+        from app.features.admin.task_scheduler.notifications import send_point_alert
+        send_point_alert(run.schedule, 'success' if job.status == 'done' else 'failure', job)
     except Exception as e:
         print(f"[task_scheduler] failed to send task alert: {e}")
 

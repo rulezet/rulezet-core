@@ -754,3 +754,37 @@ def workflow_share_set(uuid):
     return jsonify({"url": WorkflowNotes.share_url(workflow),
                     "message": "New link created — any old one stops working." if action == 'regenerate' else "Sharing stopped.",
                     "toast_class": "success-subtle"}), 200
+
+
+@task_scheduler_blueprint.route('/workflows/health', methods=['GET'])
+def workflows_health():
+    """Health board of the workflows list — see workflow_notes.health_board."""
+    return jsonify(WorkflowNotes.health_board()), 200
+
+
+@task_scheduler_blueprint.route('/<uuid>/alert', methods=['POST'])
+def set_task_alert(uuid):
+    """The email alert of one task — or of the link leading to it ("reached") — from the canvas,
+    leaving the rest of the task untouched. Body: {"alert": {"on": [...], "to": "...", "message": "..."}}."""
+    from app.core.db_class.task_scheduler import AdminTaskSchedule
+    from app.features.admin.task_scheduler.notifications import validate_alert
+    from app import db
+    schedule = AdminTaskSchedule.query.filter_by(uuid=uuid).first()
+    if not schedule:
+        return _err('Task not found.', 404)
+    alert = (request.get_json(silent=True) or {}).get('alert') or {}
+    err = validate_alert(alert)
+    if err:
+        return _err(err)
+    payload = dict(schedule.target_payload or {})
+    if alert.get('on'):
+        payload['_alert'] = {'on': alert['on'], 'to': (alert.get('to') or '').strip(), 'message': (alert.get('message') or '').strip()}
+    else:
+        payload.pop('_alert', None)
+    schedule.target_payload = payload
+    db.session.commit()
+    log_activity('admin.task_alert', f"Email alert of task '{schedule.title}' "
+                 f"{'set: ' + ', '.join(alert['on']) if alert.get('on') else 'removed'}",
+                 target_type='admin_workflow', target_uuid=schedule.workflow.uuid, icon='fa-solid fa-bell', is_public=False)
+    return jsonify({"message": "Alert saved." if alert.get('on') else "Alert removed.", "toast_class": "success-subtle",
+                    "schedule": schedule.to_json()}), 200

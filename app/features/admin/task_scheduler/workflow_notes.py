@@ -41,7 +41,7 @@ def _run(workflow, run_uuid):
 def save_note(workflow, data, user, note_uuid=None):
     title = (data.get('title') or '').strip()[:200]
     content = data.get('content') or ''
-    if not title:
+    if not title.lstrip('#').strip():   # markdown title: "# Runbook" — a bare "#" is empty
         return None, 'Give the note a title.'
     if len(content) > MAX_NOTE_CHARS:
         return None, f'A note is at most {MAX_NOTE_CHARS} characters.'
@@ -155,3 +155,46 @@ def workflow_by_share_key(key):
 def share_url(workflow):
     from flask import url_for
     return url_for('workflow_share.shared_page', key=workflow.share_key, _external=True) if workflow.share_key else None
+
+
+# ─── Health board of every workflow (workflows list) ──────────────────────────
+
+def _launch_status(run):
+    from app.core.db_class.job import BackgroundJob
+    from app.core.db_class.task_scheduler import AdminTaskRun
+    statuses = []
+    for tr in AdminTaskRun.query.filter_by(workflow_run_id=run.id).all():
+        job = BackgroundJob.query.filter_by(uuid=tr.job_uuid).first() if tr.job_uuid else None
+        statuses.append(job.status if job else tr.status)
+    if any(s in ('pending', 'running') for s in statuses):
+        return 'running'
+    if 'failed' in statuses:
+        return 'failed'
+    if 'cancelled' in statuses:
+        return 'cancelled'
+    return 'done' if statuses else 'pending'
+
+
+def health_board(recent=10):
+    """Per workflow: its last launches (oldest → newest) and success rate; plus what needs a look
+    across the instance — workflows whose last launch failed, running ones, auto-paused tasks."""
+    from app.core.db_class.task_scheduler import AdminTaskSchedule, AdminWorkflow
+    per, failing, running = {}, [], []
+    for wf in AdminWorkflow.query.all():
+        runs = AdminWorkflowRun.query.filter_by(workflow_id=wf.id).order_by(AdminWorkflowRun.started_at.desc()).limit(recent).all()
+        dots = [{'status': _launch_status(r), 'at': r.started_at.strftime('%Y-%m-%d %H:%M') if r.started_at else None} for r in runs][::-1]
+        finished = [d for d in dots if d['status'] in ('done', 'failed', 'cancelled')]
+        rate = round(100 * sum(d['status'] == 'done' for d in finished) / len(finished)) if finished else None
+        per[wf.uuid] = {'dots': dots, 'rate': rate, 'notes': len(wf.notes), 'files': len(wf.files)}
+        if dots and dots[-1]['status'] == 'failed':
+            failing.append({'uuid': wf.uuid, 'title': wf.title, 'at': dots[-1]['at']})
+        if dots and dots[-1]['status'] == 'running':
+            running.append({'uuid': wf.uuid, 'title': wf.title})
+    auto_paused = [{'workflow_uuid': t.workflow.uuid, 'workflow': t.workflow.title, 'task': t.title}
+                   for t in AdminTaskSchedule.query.filter(AdminTaskSchedule.auto_disabled_at.isnot(None),
+                                                           AdminTaskSchedule.is_active == False).all() if t.workflow]
+    return {
+        'per_workflow': per,
+        'failing': failing, 'running': running, 'auto_paused': auto_paused,
+        'total': len(per), 'paused': AdminWorkflow.query.filter_by(is_active=False).count(),
+    }

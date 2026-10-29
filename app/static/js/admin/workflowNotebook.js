@@ -7,9 +7,11 @@
  *         readOnly + apiBase — the shared read-only page (/workflow/shared/<key>): no edit, no upload, no delete
  * Exposed: newNote(runUuid?) — the history table opens the editor on a launch with it.
  * Emits:  'changed' — a note was saved / deleted (the history refreshes its note counts).
+ *         'pinned'  — the pinned notes after each load (shown in the workflow header).
  */
 import { create_message } from '/static/js/toaster.js';
 import { renderMarkdown } from '/static/js/sanitize.js';
+import SmartEditor from '/static/js/components/smart-editor.js';   // needs css/components/smart-editor.css
 
 const { ref, reactive, computed, onMounted, watch } = Vue;
 
@@ -23,7 +25,8 @@ export default {
         apiBase: { type: String, default: '' },
         runs: { type: Array, default: () => [] },
     },
-    emits: ['changed'],
+    components: { 'smart-editor': SmartEditor },
+    emits: ['changed', 'pinned'],
     setup(props, { emit, expose }) {
         const tab = ref('notes');
         const notes = ref([]);
@@ -32,8 +35,9 @@ export default {
         const maxMb = ref(10);
         const loading = ref(true);
         const rendered = reactive({});          // note uuid → sanitized HTML
+        const renderedTitle = reactive({});     // note uuid → title, markdown too (h1 by default)
         const open = reactive({});              // note uuid → expanded
-        const editor = reactive({ show: false, uuid: null, title: '', content: '', pinned: false, run_uuid: '', preview: false, html: '' });
+        const editor = reactive({ show: false, uuid: null, title: '', content: '', pinned: false, run_uuid: '', });
         const saving = ref(false);
         const uploading = ref(false);
         const dragOver = ref(false);
@@ -50,8 +54,10 @@ export default {
                 if (!res.ok) return;
                 const data = await res.json();
                 notes.value = data.notes; files.value = data.files; activity.value = data.activity; maxMb.value = data.max_file_mb;
+                emit('pinned', notes.value.filter(n => n.pinned));
                 for (const n of notes.value) {
                     rendered[n.uuid] = await renderMarkdown(n.content);
+                    renderedTitle[n.uuid] = await renderMarkdown(n.title);
                     if (n.pinned && open[n.uuid] === undefined) open[n.uuid] = true;
                 }
             } finally {
@@ -60,19 +66,15 @@ export default {
         }
 
         function newNote(runUuid) {
-            Object.assign(editor, { show: true, uuid: null, title: '', content: '', pinned: false, run_uuid: runUuid || '', preview: false, html: '' });
+            Object.assign(editor, { show: true, uuid: null, title: '# ', content: '', pinned: false, run_uuid: runUuid || '', });
             if (runUuid) {
                 const r = props.runs.find(x => x.uuid === runUuid);
-                editor.title = r ? `Launch of ${r.started_at} (${r.status})` : 'About a launch';
+                editor.title = r ? `# Launch of ${r.started_at} (${r.status})` : '# About a launch';
             }
             tab.value = 'notes';
         }
         function editNote(n) {
-            Object.assign(editor, { show: true, uuid: n.uuid, title: n.title, content: n.content, pinned: n.pinned, run_uuid: n.run_uuid || '', preview: false, html: '' });
-        }
-        async function togglePreview() {
-            editor.preview = !editor.preview;
-            if (editor.preview) editor.html = await renderMarkdown(editor.content);
+            Object.assign(editor, { show: true, uuid: n.uuid, title: n.title, content: n.content, pinned: n.pinned, run_uuid: n.run_uuid || '', });
         }
 
         async function saveNote() {
@@ -97,7 +99,7 @@ export default {
         }
 
         async function remove(kind, item) {
-            const label = kind === 'notes' ? `the note "${item.title}"` : `the file "${item.filename}"`;
+            const label = kind === 'notes' ? `the note "${item.title.replace(/^#+\s*/, '')}"` : `the file "${item.filename}"`;
             if (!window.confirm(`Delete ${label}?`)) return;
             const res = await fetch(`${base.value}/${kind}/${item.uuid}`, { method: 'DELETE', headers: { 'X-CSRFToken': props.csrfToken } });
             const data = await res.json();
@@ -110,7 +112,12 @@ export default {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': props.csrfToken },
                 body: JSON.stringify({ title: n.title, content: n.content, pinned: !n.pinned, run_uuid: n.run_uuid }),
             });
-            if (res.ok) await load();
+            const data = await res.json();
+            create_message(res.ok ? (n.pinned ? 'Unpinned.' : 'Pinned on top of the workflow.') : data.message, data.toast_class);
+            if (res.ok) { open[n.uuid] = !n.pinned; await load(); }
+        }
+        function show(uuid) {   // from the header: open this note and bring it into view
+            tab.value = 'notes'; runFilter.value = ''; open[uuid] = true;
         }
 
         async function upload(fileList) {
@@ -150,12 +157,12 @@ export default {
             return 'fa-file';
         }
 
-        expose({ newNote, reload: load });
+        expose({ newNote, show, reload: load });
         onMounted(load);
         watch(() => props.workflowUuid, load);
 
-        return { tab, notes, files, activity, maxMb, loading, rendered, open, editor, saving, uploading, dragOver, fileInput,
-                 runFilter, shownNotes, base, newNote, editNote, togglePreview, saveNote, remove, togglePin, upload, onDrop, size, fileIcon };
+        return { tab, notes, files, activity, maxMb, loading, rendered, renderedTitle, open, editor, saving, uploading, dragOver, fileInput,
+                 runFilter, shownNotes, base, newNote, editNote, saveNote, remove, togglePin, upload, onDrop, size, fileIcon };
     },
     template: `
     <div class="card border-0 shadow-sm rounded-3 mt-4 wnb">
@@ -187,23 +194,19 @@ export default {
                 </div>
 
                 <div v-if="editor.show && !readOnly" class="wnb-editor">
-                    <input class="form-control wnb-input" v-model="editor.title" maxlength="200" placeholder="Title — e.g. Why this workflow exists, What to do when it fails">
+                    <input class="form-control wnb-input" v-model="editor.title" maxlength="200" placeholder="# Title (markdown) — e.g. # What to do when it fails">
                     <div class="wnb-editor-row">
                         <select class="form-select form-select-sm wnb-select" v-model="editor.run_uuid">
                             <option value="">About the whole workflow</option>
                             <option v-for="r in runs" :key="r.uuid" :value="r.uuid">About the launch of [[ r.started_at ]] ([[ r.status ]])</option>
                         </select>
                         <label class="wnb-check"><input type="checkbox" v-model="editor.pinned"> <i class="fa-solid fa-thumbtack"></i> Pinned on top</label>
-                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill ms-auto" @click="togglePreview()">
-                            <i :class="editor.preview ? 'fa-solid fa-pen' : 'fa-solid fa-eye'" class="me-1"></i>[[ editor.preview ? 'Write' : 'Preview' ]]
-                        </button>
                     </div>
-                    <textarea v-if="!editor.preview" class="form-control wnb-textarea" v-model="editor.content" rows="9"
-                              placeholder="Markdown: **bold**, lists, links, \`code\`, tables…"></textarea>
-                    <div v-else class="wnb-md wnb-preview" v-html="editor.html || '<em>Nothing to preview.</em>'"></div>
+                    <smart-editor v-model="editor.content" mode="markdown" min-height="220px" max-height="560px"
+                                  placeholder="Markdown: **bold**, lists, links, code, tables…"></smart-editor>
                     <div class="d-flex gap-2 justify-content-end mt-2">
                         <button type="button" class="btn btn-sm btn-light rounded-pill" @click="editor.show = false">Cancel</button>
-                        <button type="button" class="btn btn-sm btn-primary rounded-pill" :disabled="saving || !editor.title.trim()" @click="saveNote()">
+                        <button type="button" class="btn btn-sm btn-primary rounded-pill" :disabled="saving || !editor.title.replace(/^#+/, '').trim()" @click="saveNote()">
                             <span v-if="saving" class="spinner-border spinner-border-sm me-1"></span>Save
                         </button>
                     </div>
@@ -217,7 +220,7 @@ export default {
                     <div class="wnb-note-head" @click="open[n.uuid] = !open[n.uuid]">
                         <i class="fa-solid fa-chevron-right wnb-caret" :class="{ 'is-open': open[n.uuid] }"></i>
                         <i v-if="n.pinned" class="fa-solid fa-thumbtack wnb-pin"></i>
-                        <span class="wnb-note-title">[[ n.title ]]</span>
+                        <span class="wnb-note-title wnb-md-title" v-html="renderedTitle[n.uuid] || ''"></span>
                         <span v-if="n.run_uuid" class="wnb-chip"><i class="fa-solid fa-rocket"></i>Launch [[ n.run_started_at ]]</span>
                         <span class="wnb-meta">[[ n.author || '—' ]] · [[ n.updated_at ]]</span>
                         <span v-if="!readOnly" class="wnb-actions" @click.stop>
@@ -267,4 +270,46 @@ export default {
             </template>
         </div>
     </div>`,
+};
+
+
+/**
+ * PinnedNotes — the pinned notes in the workflow header, rendered as markdown (title and text).
+ * A note longer than FOLD_CHARS opens folded, with Show more / Show less.
+ * Props: notes ([{uuid, title, content}]). Emits: 'open'(note) — show it in the notebook.
+ */
+const FOLD_CHARS = 500;
+export const PinnedNotes = {
+    name: 'PinnedNotes',
+    delimiters: ['[[', ']]'],
+    props: { notes: { type: Array, default: () => [] } },
+    emits: ['open'],
+    setup(props) {
+        const html = reactive({});
+        const titles = reactive({});
+        const expanded = reactive({});
+        async function render() {
+            for (const n of props.notes) {
+                html[n.uuid] = await renderMarkdown(n.content);
+                titles[n.uuid] = await renderMarkdown(n.title);
+            }
+        }
+        watch(() => props.notes, render, { immediate: true, deep: true });
+        const long = n => (n.content || '').length > FOLD_CHARS;
+        return { html, titles, expanded, long };
+    },
+    template: `
+    <section class="wpn">
+        <article v-for="n in notes" :key="n.uuid" class="wpn-note">
+            <header class="wpn-head">
+                <i class="fa-solid fa-thumbtack wpn-pin"></i>
+                <div class="wpn-title wnb-md-title" v-html="titles[n.uuid] || ''"></div>
+                <button type="button" class="wpn-open" @click="$emit('open', n)" title="Open in the notebook"><i class="fa-solid fa-arrow-down"></i></button>
+            </header>
+            <div class="wnb-md wpn-body" :class="{ 'is-folded': long(n) && !expanded[n.uuid] }" v-html="html[n.uuid] || ''"></div>
+            <button v-if="long(n)" type="button" class="wpn-more" @click="expanded[n.uuid] = !expanded[n.uuid]">
+                <i class="fa-solid" :class="expanded[n.uuid] ? 'fa-chevron-up' : 'fa-chevron-down'"></i>[[ expanded[n.uuid] ? 'Show less' : 'Show more' ]]
+            </button>
+        </article>
+    </section>`,
 };
