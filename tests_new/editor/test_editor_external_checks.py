@@ -56,6 +56,13 @@ def test_yarax_never_reads_a_server_file(clients):
     assert res["ok"] is False and "root:" not in str(res)
 
 
+def test_cccs_never_runs_on_a_document_with_an_include(clients):
+    # cccs-yara compiles with includes on: it must not see such a document at all
+    for text in ('include "/etc/passwd"\nrule x { condition: true }', '/* c */ include "/etc/passwd"'):
+        res = _post(clients["user"], text, ["cccs"]).json["results"]["cccs"]
+        assert res["available"] is False and "include" in res["reason"] and "root:" not in str(res)
+
+
 def test_switched_off_tools_do_not_run(clients, monkeypatch):
     monkeypatch.setattr(ExternalChecks, "enabled_tools", lambda: ["yaraqa"])
     assert set(_post(clients["user"], RULE).json["results"]) == {"yaraqa"}

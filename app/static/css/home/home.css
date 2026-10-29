@@ -53,7 +53,7 @@ body:has(.hv2) { overflow-x: hidden; }
 /* ── hero ────────────────────────────────────────────────────────────────── */
 
 /* ── hero ────────────────────────────────────────────────────────────────── */
-.hv2-hero { position: relative; overflow: hidden; padding: clamp(3rem, 6vw, 5.5rem) 0 0; }
+.hv2-hero { position: relative; overflow: hidden; padding: clamp(3rem, 6vw, 5.5rem) 0 3.5rem; }   /* bottom room: the key figures box and its shadow are never cut by overflow:hidden */
 .hv2-hero__bg { position: absolute; inset: 0; pointer-events: none; }
 .hv2-orb { position: absolute; border-radius: 50%; filter: blur(90px); }
 .hv2-orb--a { width: 620px; height: 620px; top: -260px; left: -200px; background: radial-gradient(circle, rgba(13, 110, 253, .16), transparent 65%); animation: hv2-drift 20s ease-in-out infinite alternate; }
@@ -107,6 +107,9 @@ body:has(.hv2) { overflow-x: hidden; }
 .hv2-chip--fmt img { width: 16px; height: 16px; object-fit: contain; }
 .hv2-chip--fmt:hover { color: var(--fmt); border-color: var(--fmt); box-shadow: 0 6px 14px color-mix(in srgb, var(--fmt) 25%, transparent); }
 body.dark-mode .hv2-chip--fmt { color: color-mix(in srgb, var(--fmt) 65%, #fff); }
+.hv2-chip--more { display: inline-flex; align-items: center; gap: .4rem; color: var(--hv2-blue); border-style: dashed; }
+.hv2-chip--more i { font-size: .7rem; transition: transform .2s; }
+.hv2-chip--more:hover i { transform: translateX(3px); }
 .hv2-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 1.25rem; margin-top: 2rem; }
 .hv2-btn--bundle { color: #198754; background: var(--card-bg-color); border-color: rgba(25, 135, 84, .45); }
 .hv2-btn--bundle:hover { color: #fff; background: #198754; border-color: #198754; }
@@ -126,7 +129,7 @@ body.dark-mode .hv2-chip--fmt { color: color-mix(in srgb, var(--fmt) 65%, #fff);
 .hv2-stage__logo img { width: 100%; height: auto; display: block; }
 
 /* key figures strip */
-.hv2-stats { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: clamp(2.5rem, 5vw, 4rem); border-radius: 22px; overflow: hidden;
+.hv2-stats { display: grid; grid-template-columns: repeat(5, 1fr); margin-top: clamp(2.5rem, 5vw, 4rem); border-radius: 22px; overflow: hidden;
     background: var(--card-bg-color); border: 1px solid var(--border-color); box-shadow: 0 18px 50px rgba(13, 40, 90, .07);
     opacity: 0; transform: translateY(20px); animation: hv2-rise .9s cubic-bezier(.22, 1, .36, 1) .8s forwards; }
 .hv2-stat { position: relative; display: flex; align-items: center; gap: 1rem; padding: 1.5rem 1.75rem; text-decoration: none; transition: background .25s; }
@@ -151,7 +154,7 @@ body.dark-mode .hv2-chip--fmt { color: color-mix(in srgb, var(--fmt) 65%, #fff);
 
 /* ── sections ────────────────────────────────────────────────────────────── */
 .hv2-section { padding-top: clamp(4.5rem, 9vw, 8rem); }
-.hv2-coverage-zone { margin-top: clamp(1.5rem, 3vw, 2.5rem); }
+.hv2-coverage-zone { margin-top: 0; }
 /* arrival, as soon as the page loads (no scroll needed): the blue band rises, then its pills */
 .hv2-coverage-zone { animation: hv2-cov-in .8s cubic-bezier(.22, 1, .36, 1) .3s backwards; }
 .hv2-coverage-zone .hv2-head, .hv2-coverage-zone .hv2-platforms > * { animation: hv2-cov-in .6s cubic-bezier(.22, 1, .36, 1) backwards; animation-delay: .5s; }
@@ -321,8 +324,9 @@ body.dark-mode .hv2-post:hover { box-shadow: 0 18px 40px rgba(0, 0, 0, .35); }
 /* ── responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
     .hv2-stats { grid-template-columns: repeat(2, 1fr); }
-    .hv2-stat:nth-child(3) { border-left: 0; }
+    .hv2-stat:nth-child(odd) { border-left: 0; }
     .hv2-stat:nth-child(n+3) { border-top: 1px solid var(--border-color); }
+    .hv2-stat:last-child:nth-child(odd) { grid-column: 1 / -1; }     /* 5 figures: the last one takes the row */
     .hv2-insights { grid-template-columns: 1fr; }
     .hv2-insights__tabs { flex-direction: row; flex-wrap: wrap; }
     .hv2-insights__tabs button small { display: none; }
@@ -369,6 +373,7 @@ body.dark-mode .hv2-post:hover { box-shadow: 0 18px 40px rgba(0, 0, 0, .35); }
     .hv2-stat + .hv2-stat { border-top: 0; border-left: 0; }
     .hv2-stat:nth-child(even) { border-left: 1px solid var(--border-color); }
     .hv2-stat:nth-child(n+3) { border-top: 1px solid var(--border-color); }
+    .hv2-stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
     .hv2-stat__icon { width: 34px; height: 34px; border-radius: 10px; font-size: .85rem; }
     .hv2-stat__num { font-size: 1.45rem; }
     .hv2-stat__lbl { font-size: .74rem; }

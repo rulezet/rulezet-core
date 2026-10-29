@@ -49,6 +49,10 @@ async function register_extra_languages(hljs) {
         const { default: tomlLanguage } = await import('/static/js/components/hljs-toml.js')
         hljs.registerLanguage('toml', tomlLanguage)
     }
+    if (!hljs.getLanguage('seclang')) {
+        const { default: seclangLanguage } = await import('/static/js/components/hljs-seclang.js')
+        hljs.registerLanguage('seclang', seclangLanguage)
+    }
 }
 
 function load_hljs() {
@@ -184,6 +188,7 @@ const KNOWN_HLJS_LANGS = new Set([
     'yara',     // registered at runtime — see register_extra_languages() above
     'suricata', // registered at runtime — see register_extra_languages() above
     'toml',     // registered at runtime — see register_extra_languages() above
+    'seclang',  // registered at runtime — see register_extra_languages() above (OWASP CRS / ModSecurity)
 ])
 
 const LANG_ALIASES = {
@@ -195,7 +200,7 @@ const LANG_ALIASES = {
     splunk: 'yaml',   // Splunk Security Content detections are YAML (SPL lives in the 'search' field)
     wazuh: 'xml',     // Wazuh rules are XML
     zeek: 'text',
-    crs: 'text',
+    crs: 'seclang',   // OWASP CRS rules are ModSecurity SecLang
     nova: 'yara',     // NOVA rules use a YARA-like syntax (no dedicated grammar yet)
     kql: 'sql',       // KQL syntax is SQL-like
     elastic: 'toml',  // Elastic Security rules are TOML — see hljs-toml.js

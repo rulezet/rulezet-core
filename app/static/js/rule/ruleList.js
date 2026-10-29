@@ -474,7 +474,7 @@ export default {
                         </span>
                         <multi-source-filter data-tour="rl-fp-sources" v-model="selectedSources"
                             api-endpoint="/rule/get_rules_sources_usage"
-                            placeholder="Filter sources…"
+                            placeholder="Sources"
                             :userId="numericUserId"
                             :filter-context="facetContextParams"
                             @change="onFilterChange">
@@ -487,7 +487,7 @@ export default {
                         </span>
                         <multi-branch-filter v-model="selectedBranches"
                             api-endpoint="/rule/get_rules_branches_usage"
-                            placeholder="Filter branches…"
+                            placeholder="main, dev…"
                             :userId="numericUserId"
                             :source-rules="source || ''"
                             :filter-context="facetContextParams"
@@ -526,7 +526,7 @@ export default {
                         </span>
                         <multi-license-filter data-tour="rl-fp-licenses" v-model="selectedLicenses"
                             api-endpoint="/rule/get_rules_licenses_usage"
-                            placeholder="Filter licenses…"
+                            placeholder="MIT, GPL…"
                             :user-id="numericUserId"
                             :source-rules="source || ''"
                             :filter-context="facetContextParams"
@@ -553,7 +553,7 @@ export default {
                         </span>
                         <multi-tag-filter data-tour="rl-fp-tags" v-model="selectedTags"
                             api-endpoint="/rule/get_all_tags_usage"
-                            placeholder="Filter tags…"
+                            placeholder="tlp:clear, malware…"
                             :user-id="numericUserId"
                             target-type="rule"
                             :filter-context="facetContextParams"
@@ -582,7 +582,7 @@ export default {
                         </span>
                         <multi-risk-filter data-tour="rl-fp-risk" v-model="riskFilter"
                             :levels="validationRiskLevels"
-                            placeholder="Filter by risk…"
+                            placeholder="Risk"
                             @change="onFilterChange">
                         </multi-risk-filter>
                     </div>
@@ -593,7 +593,7 @@ export default {
                         </span>
                         <multi-binary-filter v-model="selectedBinaries"
                             :options="validationBinaryOptions"
-                            placeholder="Filter by binary…"
+                            placeholder="Binary"
                             @change="onBinaryFilterChange">
                         </multi-binary-filter>
                     </div>

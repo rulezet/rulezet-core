@@ -1,6 +1,8 @@
 """References and other metadata read from a rule's text (app/features/rule/rule_metadata_core.py):
 extraction per format, kept in sync when the rule changes, the re-parse job for existing rules,
 the rule page and the admin preview."""
+import uuid
+
 from app import db
 from app.core.db_class.rule import Rule
 from app.features.rule.rule_metadata_core import display_metadata, extract_rule_metadata
@@ -233,6 +235,16 @@ def test_comma_lists_are_shown_one_item_per_line():
     assert shown[0]["values"] == ["mirai", "gafgyt"] and shown[1]["values"] == [sentence]
 
 
+def test_lists_written_as_strings_and_hash_lists_are_one_value_per_line():
+    from app.features.rule.rule_metadata_core import display_metadata
+    sha1 = ["823ca2c8e8066f079491fa51deee9c5a7e88d3d3", "1bbf3a59fd25d0a491cae81b952ac53282511530"]
+    shown = {f["key"]: f for f in display_metadata({
+        "md5_hashes": "['%s','%s']" % tuple(sha1), "hash": "%s, %s" % tuple(sha1),
+        "family": "['mirai', 'gafgyt']", "info": "[not a list"})}
+    assert shown["md5_hashes"]["values"] == sha1 and shown["hash"]["values"] == sha1
+    assert shown["family"]["values"] == ["mirai", "gafgyt"] and shown["info"]["values"] == ["[not a list"]
+
+
 def test_interesting_metadata_gets_colours():
     from app.features.rule.rule_metadata_core import display_metadata
     shown = {f["key"]: f for f in display_metadata({"family": "mirai,gafgyt", "confidence": "high",
@@ -364,3 +376,30 @@ def test_tags_name_the_platforms_without_being_shown():
     assert [f["key"] for f in display_metadata(kunai)] == ["comments"]             # tags never shown twice
     elastic = extract_rule_metadata("elastic", '[rule]\nname = "x"\ntags = ["OS: Windows", "Data Source: AWS"]\n')["extra"]
     assert detect_platforms(elastic) == ["Windows", "AWS"]
+
+
+def test_tlp_and_pap_written_in_the_rule_replace_the_default_tags(app, users):
+    from app.core.db_class.tag import RuleTagAssociation, Tag
+    from app.features.rule.rule_core import sync_marking_tags
+    for name in ("tlp:clear", "tlp:amber", "tlp:red", "PAP:CLEAR", "PAP:RED"):
+        if not Tag.query.filter(Tag.name.ilike(name)).first():
+            db.session.add(Tag(name=name, uuid=str(uuid.uuid4()), visibility="public", is_active=True, created_by=users.admin.id))
+    db.session.commit()
+
+    def tags(rule):
+        return sorted(t.name for t in Tag.query.join(RuleTagAssociation, Tag.id == RuleTagAssociation.tag_id)
+                      .filter(RuleTagAssociation.rule_id == rule.id))
+
+    rule = make_rule(users.user, to_string='rule marked { meta: tlp = "TLP:AMBER" pap = "red" condition: true }')
+    clear = Tag.query.filter(Tag.name.ilike("tlp:clear")).first()
+    db.session.add(RuleTagAssociation(uuid=str(uuid.uuid4()), rule_id=rule.id, tag_id=clear.id, user_id=rule.user_id))
+    db.session.commit()
+    assert sync_marking_tags(rule) and tags(rule) == ["PAP:RED", "tlp:amber"]
+    assert not sync_marking_tags(rule)                                  # already right: nothing changes
+
+    rule.to_string = 'rule marked { meta: tlp = "red" condition: true }'   # an edit of the text follows
+    db.session.commit()
+    assert tags(rule) == ["PAP:RED", "tlp:red"]
+
+    plain = make_rule(users.user)                                       # no marking written: left alone
+    assert not sync_marking_tags(plain)

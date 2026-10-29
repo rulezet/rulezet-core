@@ -297,6 +297,12 @@
         "label": "Analytic story",
         "icon": "fa-book"
       },
+      "copyright": {
+        "label": "Copyright",
+        "icon": "fa-copyright",
+        "style": "badge",
+        "tone": "gold"
+      },
       "data_source": {
         "label": "Data sources",
         "icon": "fa-database"

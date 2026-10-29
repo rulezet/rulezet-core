@@ -124,7 +124,7 @@ export default {
                                 <i class="fa-solid fa-code-branch me-1 text-primary"></i> Sources
                             </label>
                             <multi-source-filter v-model="selectedSourceNames"
-                                api-endpoint="/rule/get_rules_sources_usage" placeholder="Filter sources..." :userId="numericUserId">
+                                api-endpoint="/rule/get_rules_sources_usage" placeholder="Sources" :userId="numericUserId">
                             </multi-source-filter>
                         </div>
                         <div class="col-md-6">
@@ -141,7 +141,7 @@ export default {
                                 <i class="fa-solid fa-scale-balanced me-1 text-info"></i> Licenses
                             </label>
                             <multi-license-filter v-model="selectedLicenseNames"
-                                api-endpoint="/rule/get_rules_licenses_usage" placeholder="Filter licenses..."
+                                api-endpoint="/rule/get_rules_licenses_usage" placeholder="MIT, GPL…"
                                 :user-id="numericUserId" :source-rules="source || ''">
                             </multi-license-filter>
                         </div>
@@ -150,7 +150,7 @@ export default {
                                 <i class="fa-solid fa-tags me-1 text-primary"></i> Tags
                             </label>
                             <multi-tag-filter v-model="selectedTagNames"
-                                api-endpoint="/rule/get_all_tags_usage" placeholder="Filter tags..."
+                                api-endpoint="/rule/get_all_tags_usage" placeholder="tlp:clear, malware…"
                                 :user-id="numericUserId" target-type="rule">
                             </multi-tag-filter>
                         </div>

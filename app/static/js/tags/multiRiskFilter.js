@@ -7,7 +7,7 @@ const MultiRiskFilter = {
     props: {
         modelValue: { type: String, default: '' },      // '' | <level> | 'mismatch'
         levels: { type: Array, default: () => [] },      // [{ level, label, color }]
-        placeholder: { type: String, default: 'Filter by risk…' },
+        placeholder: { type: String, default: 'Risk' },
     },
     emits: ['update:modelValue', 'change'],
     delimiters: ['[[', ']]'],

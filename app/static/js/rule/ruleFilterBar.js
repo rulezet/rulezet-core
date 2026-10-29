@@ -247,7 +247,7 @@ const RuleFilterBar = {
                                 <i class="fa-solid fa-code-branch me-1 text-primary"></i> Sources
                             </label>
                             <multi-source-filter v-model="selectedSourceNames" @change="fetchRules(1)"
-                                api-endpoint="/rule/get_rules_sources_usage" placeholder="Filter sources..." :userId="userId">
+                                api-endpoint="/rule/get_rules_sources_usage" placeholder="Sources" :userId="userId">
                             </multi-source-filter>
                         </div>
 
@@ -273,7 +273,7 @@ const RuleFilterBar = {
                                 v-model="selectedLicenseNames" 
                                 @change="fetchRules(1)"
                                 api-endpoint="/rule/get_rules_licenses_usage" 
-                                placeholder="Filter licenses..." 
+                                placeholder="MIT, GPL…" 
                                 :user-id="userId"
                                 :source-rules="sourceRules">
                             </multi-license-filter>
@@ -287,7 +287,7 @@ const RuleFilterBar = {
                                 v-model="selectedTagNames" 
                                 @change="fetchRules(1)"
                                 api-endpoint="/rule/get_all_tags_usage" 
-                                placeholder="Filter tags..." 
+                                placeholder="tlp:clear, malware…" 
                                 :user-id="userId"
                                 target-type="rule">
                             </multi-tag-filter>

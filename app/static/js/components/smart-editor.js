@@ -39,8 +39,9 @@ const _KNOWN_HLJS = new Set([
     'yara',     // registered at runtime — see _register_extra_languages() below
     'suricata', // registered at runtime — see _register_extra_languages() below
     'toml',     // registered at runtime — see _register_extra_languages() below
+    'seclang',  // registered at runtime — see _register_extra_languages() below (OWASP CRS / ModSecurity)
 ])
-const _LANG_ALIASES = { nse:'lua', sigma:'yaml', kunai:'yaml', plum:'yaml', wazuh:'xml', zeek:'text', crs:'text', nova:'yara', kql:'sql', splunk:'yaml', elastic:'toml', sagan:'suricata' }
+const _LANG_ALIASES = { nse:'lua', sigma:'yaml', kunai:'yaml', plum:'yaml', wazuh:'xml', zeek:'text', crs:'seclang', nova:'yara', kql:'sql', splunk:'yaml', elastic:'toml', sagan:'suricata' }
 function _resolve_lang(lang) {
     const mapped = _LANG_ALIASES[lang] || lang
     return _KNOWN_HLJS.has(mapped) ? mapped : 'text'
@@ -64,6 +65,10 @@ async function _register_extra_languages(hljs) {
     if (!hljs.getLanguage('toml')) {
         const { default: tomlLanguage } = await import('/static/js/components/hljs-toml.js')
         hljs.registerLanguage('toml', tomlLanguage)
+    }
+    if (!hljs.getLanguage('seclang')) {
+        const { default: seclangLanguage } = await import('/static/js/components/hljs-seclang.js')
+        hljs.registerLanguage('seclang', seclangLanguage)
     }
 }
 

@@ -1,7 +1,7 @@
 const MultiLicenseFilter = {
     props: {
         modelValue: { type: Array, default: () => [] },
-        placeholder: { type: String, default: 'Filter by licenses...' },
+        placeholder: { type: String, default: 'MIT, GPL…' },
         apiEndpoint: { type: String, default: '/rule/get_rules_licenses_usage' },
         userId: { type: Number, default: null },
         sourceRules: { type: String, default: '' },

@@ -3,7 +3,7 @@ import { getTextColor, mapIcon } from './utils/galaxie.js';
 const MultiTagFilter = {
     props: {
         modelValue: { type: Array, default: () => [] },
-        placeholder: { type: String, default: 'Filter by tags…' },
+        placeholder: { type: String, default: 'tlp:clear, malware…' },
         apiEndpoint: { type: String, default: '/bundle/get_all_tags_usage' },
         showNamespace: { type: Boolean, default: true },
         // Query string of every OTHER currently active RuleList filter — keeps
