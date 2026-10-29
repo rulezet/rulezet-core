@@ -102,29 +102,31 @@
 
         {% if rule_formats or rule_platforms %}
         <!-- ══ COVERAGE: formats and platforms ═════════════════════════════ -->
-        <section class="hv2-wrap hv2-section hv2-section--coverage">
-            <header class="hv2-head" data-reveal>
+        <section class="hv2-live-zone hv2-coverage-zone">
+          <div class="hv2-wrap">
+            <header class="hv2-head">
                 <span class="hv2-head__kicker">Coverage</span>
-                <h2 class="hv2-head__title">Every format, every platform</h2>
+                <h2 class="hv2-head__title">Every <span class="hv2-title__accent">format</span>, every <span class="hv2-title__accent">platform</span></h2>
             </header>
             {% if rule_formats %}
-            <div class="hv2-platforms" data-reveal data-reveal-stagger aria-label="Rules by format">
+            <div class="hv2-platforms" aria-label="Rules by format">
                 <span class="hv2-platforms__lbl">Browse</span>
-                {% for fmt in rule_formats %}<a href="/rule/rules_list?rule_type={{ fmt.name | urlencode }}" class="hv2-chip hv2-chip--fmt" style="--fmt: {{ fmt.color }}">{% if fmt.logo %}<img src="{{ url_for('static', filename='images/formats/' ~ fmt.logo) }}" alt="" loading="lazy">{% endif %}{{ fmt.title }}</a>{% endfor %}
+                {% for fmt in rule_formats %}<a href="/rule/rules_list?rule_type={{ fmt.name | urlencode }}" class="hv2-chip hv2-chip--fmt" style="--fmt: {{ fmt.color }}; --i: {{ loop.index }}">{% if fmt.logo %}<img src="{{ url_for('static', filename='images/formats/' ~ fmt.logo) }}" alt="" loading="lazy">{% endif %}{{ fmt.title }}</a>{% endfor %}
             </div>
             {% endif %}
             {% if rule_platforms %}
             <!-- platforms the rules cover (Windows, Linux, AWS…): one click → the rules of that platform -->
-            <div class="hv2-platforms" data-reveal data-reveal-stagger aria-label="Rules by platform">
+            <div class="hv2-platforms" aria-label="Rules by platform">
                 <span class="hv2-platforms__lbl">Platforms</span>
                 {% for p in rule_platforms %}
-                <a href="/rule/rules_list?platforms={{ p.label | urlencode }}" class="hv2-platform" style="--brand: {{ p.color }}"
+                <a href="/rule/rules_list?platforms={{ p.label | urlencode }}" class="hv2-platform" style="--brand: {{ p.color }}; --i: {{ loop.index }}"
                    title="{{ '{:,}'.format(p.count) }} {{ p.label }} rules">
                     <i class="{{ p.icon }}"></i><span>{{ p.label }}</span><b>{{ '{:,}'.format(p.count) }}</b>
                 </a>
                 {% endfor %}
             </div>
             {% endif %}
+          </div>
         </section>
         {% endif %}
 
