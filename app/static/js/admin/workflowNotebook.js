@@ -26,7 +26,7 @@ export default {
         runs: { type: Array, default: () => [] },
     },
     components: { 'smart-editor': SmartEditor },
-    emits: ['changed', 'pinned'],
+    emits: ['changed', 'pinned', 'counts'],
     setup(props, { emit, expose }) {
         const tab = ref('notes');
         const notes = ref([]);
@@ -55,6 +55,7 @@ export default {
                 const data = await res.json();
                 notes.value = data.notes; files.value = data.files; activity.value = data.activity; maxMb.value = data.max_file_mb;
                 emit('pinned', notes.value.filter(n => n.pinned));
+                emit('counts', { notes_count: notes.value.length, files_count: files.value.length });
                 for (const n of notes.value) {
                     rendered[n.uuid] = await renderMarkdown(n.content);
                     renderedTitle[n.uuid] = await renderMarkdown(n.title);
