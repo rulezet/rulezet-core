@@ -182,6 +182,7 @@ TITLES: dict[str, str] = {
     "admin.submodule_update":   "Submodules Updated",
     "admin.cache_clear":        "Caches Cleared",
     "admin.identity_verification": "Identity Verification",
+    "admin.organisation":       "Organisation Changed",
     "admin.settings_changed":   "Admin Settings Changed",
     "admin.test_email_sent":    "Test Email Sent",
     "admin.instance_init":      "Instance Config Refreshed",

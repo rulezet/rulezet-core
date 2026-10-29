@@ -50,6 +50,9 @@ class User(UserMixin, db.Model):
     # an admin checked that the person really is who they claim to be ("Verified by an admin" badge);
     # each decision, with its justification, in UserIdentityVerification
     identity_verified = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    # the organisation an admin assigned (informative: shown on the profile and the UserChip)
+    organisation_id = db.Column(db.Integer, db.ForeignKey('organisation.id', ondelete='SET NULL'), nullable=True, index=True)
+    organisation = db.relationship('Organisation', foreign_keys=[organisation_id])
     # the first admin of a new instance (app.py -i) gets a generated password: changed before anything else
     must_change_password = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
     verification_code = db.Column(db.String(6), nullable=True)
@@ -156,6 +159,7 @@ class User(UserMixin, db.Model):
             "is_connected": self.is_connected,
             "is_verified": self.is_verified,
             "identity_verified": bool(self.identity_verified),
+            "organisation": self.organisation.to_json() if self.organisation else None,
             "is_admin": self.is_admin() if include_private else False,
             # new
             "bio": self.bio,
@@ -168,6 +172,21 @@ class User(UserMixin, db.Model):
             "last_seen": self.last_seen.strftime('%Y-%m-%d %H:%M') if self.last_seen else None,
             "auth_provider": self.auth_provider,
         }
+
+
+class Organisation(db.Model):
+    """An organisation created by an admin; admins assign users to it (one per user).
+    Informative only: shown on the profile and the UserChip, gives no right."""
+    __tablename__ = 'organisation'
+
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name        = db.Column(db.String(100), unique=True, nullable=False)
+    website     = db.Column(db.String(256), nullable=True)
+    created_at  = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+    created_by  = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+
+    def to_json(self):
+        return {'id': self.id, 'name': self.name, 'website': self.website}
 
 
 class UserIdentityVerification(db.Model):

@@ -227,6 +227,7 @@ def user_mini(user_id):
         "followers": followers_count,
         "roles":     get_user_roles(user.id),
         "is_admin":  user.is_admin() if viewer_may_see_admin else False,
+        "organisation": user.organisation.to_json() if user.organisation else None,
     })
 
 
@@ -360,6 +361,97 @@ def set_identity_verification():
                  f"{'Verified' if verified else 'Withdrew'} the identity of user id={user.id}: {justification[:200]}",
                  target_type="user", target_id=user.id)
     return jsonify({"success": True, "identity_verified": verified})
+
+
+# ── Organisations (admin) — informative: shown on the profile and the UserChip ──
+
+def _clean_website(value):
+    value = (value or '').strip()
+    if not value:
+        return None
+    if not value.lower().startswith(('http://', 'https://')) or len(value) > 256 or any(c in value for c in ' "<>'):
+        raise ValueError('The website must be an http(s) URL')
+    return value
+
+
+@account_blueprint.route("/organisations", methods=['GET'])
+@login_required
+def list_organisations():
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+    from sqlalchemy import func
+    from app.core.db_class.user import Organisation
+    counts = dict(db.session.query(User.organisation_id, func.count(User.id))
+                  .filter(User.organisation_id.isnot(None)).group_by(User.organisation_id).all())
+    return jsonify({"success": True, "organisations": [
+        {**o.to_json(), "members": counts.get(o.id, 0)}
+        for o in Organisation.query.order_by(func.lower(Organisation.name)).all()
+    ]})
+
+
+@account_blueprint.route("/organisations", methods=['POST'])
+@login_required
+def create_organisation():
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+    from sqlalchemy import func
+    from app.core.db_class.user import Organisation
+    data = json_object()
+    name = (data.get('name') or '').strip()
+    if not 2 <= len(name) <= 100:
+        return jsonify({"success": False, "message": "A name of 2 to 100 characters is required"}), 400
+    try:
+        website = _clean_website(data.get('website'))
+    except ValueError as e:
+        return jsonify({"success": False, "message": str(e)}), 400
+    if Organisation.query.filter(func.lower(Organisation.name) == name.lower()).first():
+        return jsonify({"success": False, "message": "This organisation already exists"}), 409
+    org = Organisation(name=name, website=website, created_by=current_user.id)
+    db.session.add(org)
+    db.session.commit()
+    log_activity("admin.organisation", f"Created the organisation {name}", target_type="organisation", target_id=org.id)
+    return jsonify({"success": True, "organisation": org.to_json()}), 201
+
+
+@account_blueprint.route("/organisations/<int:org_id>/delete", methods=['POST'])
+@login_required
+def delete_organisation(org_id):
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+    from app.core.db_class.user import Organisation
+    org = Organisation.query.get(org_id)
+    if not org:
+        return jsonify({"success": False, "message": "Organisation not found"}), 404
+    User.query.filter_by(organisation_id=org.id).update({User.organisation_id: None})
+    name = org.name
+    db.session.delete(org)
+    db.session.commit()
+    log_activity("admin.organisation", f"Deleted the organisation {name}", target_type="organisation", target_id=org_id)
+    return jsonify({"success": True})
+
+
+@account_blueprint.route("/organisation_assign", methods=['POST'])
+@login_required
+def assign_organisation():
+    """Admin: put a user in an organisation (or none)."""
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+    from app.core.db_class.user import Organisation
+    data = json_object()
+    user = AccountModel.get_user(as_db_id(data.get('userId')))
+    if not user:
+        return jsonify({"success": False, "message": "User not found"}), 404
+    org = None
+    if data.get('organisationId') not in (None, ''):
+        org = Organisation.query.get(as_db_id(data.get('organisationId')))
+        if not org:
+            return jsonify({"success": False, "message": "Organisation not found"}), 404
+    user.organisation_id = org.id if org else None
+    db.session.commit()
+    log_activity("admin.organisation",
+                 f"{'Assigned user id=%s to %s' % (user.id, org.name) if org else 'Removed user id=%s from their organisation' % user.id}",
+                 target_type="user", target_id=user.id)
+    return jsonify({"success": True, "organisation": org.to_json() if org else None})
 
 
 @account_blueprint.route("/delete_user", methods=['POST'])
