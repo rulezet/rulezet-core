@@ -379,8 +379,14 @@ def create_app(start_worker=True):
         from flask_login import current_user as _cu
         if not (_cu.is_authenticated and _cu.is_admin()):
             return None
-        info = app.config.get('LATEST_RELEASE')
-        if not info or not info.get('update_available'):
+        try:
+            info = cache.get(UPDATE_CACHE_KEY) or app.config.get('LATEST_RELEASE')
+            if not info or not info.get('update_available'):
+                return None
+            # closed by this admin since the instance started: hidden until the next restart
+            if cache.get(update_dismiss_key(_cu.id, info.get('version'))):
+                return None
+        except Exception:
             return None
         return info
 
@@ -557,16 +563,31 @@ def _read_local_version():
         return 'unknown'
 
 
+UPDATE_CACHE_KEY = 'rulezet_latest_release'
+BOOT_CACHE_KEY = 'rulezet_instance_boot'
+
+
+def update_dismiss_key(user_id, version):
+    """Cache key of "this admin closed the new-version banner" — tied to the instance's start
+    (BOOT_CACHE_KEY), so the banner shows again after a restart."""
+    return f"update_dismissed:{cache.get(BOOT_CACHE_KEY) or '-'}:{version}:{user_id}"
+
+
+def _version_tuple(v):
+    import re as _re
+    return tuple(int(x) for x in _re.findall(r'\d+', v or '')[:4])
+
+
 def _start_update_checker(app):
-    """Daemon thread: check GitHub for a release newer than this instance's
-    local `version` file, so admins see an in-app notice instead of finding
-    out by accident. Read-only (GitHub releases API, no auth needed) and
-    entirely best-effort — any failure just means no banner shows, never a
-    crash or a blocked request (the result is cached in app.config and read
-    from there by every request, this thread is the only thing that hits
-    the network)."""
+    """Daemon thread (worker.py process): on start, then every 24 h, compare this instance's
+    `version` file with the latest Rulezet release on GitHub. A newer one is shared with the web
+    process through the cache (UPDATE_CACHE_KEY: the admins' banner, see pending_update_info),
+    announced once in the terminal and once in every admin's notifications. Best-effort: any
+    failure just means no notice. Also stamps this start (BOOT_CACHE_KEY): a banner an admin
+    closed comes back after the instance restarts."""
     import threading
     import time
+    import uuid as _uuid
     import requests as _req
 
     CHECK_URL     = os.environ.get('UPDATE_CHECK_URL', 'https://api.github.com/repos/rulezet/rulezet-core/releases/latest')
@@ -575,8 +596,15 @@ def _start_update_checker(app):
 
     YELLOW, GREEN, RESET = "\033[93m", "\033[92m", "\033[0m"
 
+    try:
+        cache.set(BOOT_CACHE_KEY, _uuid.uuid4().hex, timeout=0)
+        cache.delete(UPDATE_CACHE_KEY)
+    except Exception:
+        pass
+
     def _loop():
         time.sleep(STARTUP_DELAY)
+        announced = None
         while True:
             try:
                 local_version = (app.config.get('APP_VERSION') or _read_local_version()).lstrip('v')
@@ -584,19 +612,27 @@ def _start_update_checker(app):
                 if resp.ok:
                     data = resp.json()
                     latest_version = (data.get('tag_name') or '').lstrip('v')
-                    update_available = bool(latest_version) and latest_version != local_version
-                    already_flagged = (app.config.get('LATEST_RELEASE') or {}).get('update_available')
-                    app.config['LATEST_RELEASE'] = {
+                    # only a NEWER release: a development checkout ahead of the last release is not told to "update"
+                    update_available = (bool(latest_version)
+                                        and _version_tuple(latest_version) > _version_tuple(local_version))
+                    info = {
                         'version': latest_version,
+                        'local_version': local_version,
                         'url': data.get('html_url') or 'https://github.com/rulezet/rulezet-core/releases/latest',
                         'update_available': update_available,
                     }
-                    # Quiet when there's nothing to do — only announce a newly
-                    # detected update, once, not on every subsequent 24h check.
-                    if update_available and not already_flagged:
-                        print(f"\n{YELLOW}A new Rulezet version is available: v{latest_version} "
-                              f"(you're on v{local_version}){RESET}")
-                        print(f"{GREEN}  → Run: python3 manage.py update{RESET}\n")
+                    app.config['LATEST_RELEASE'] = info
+                    cache.set(UPDATE_CACHE_KEY, info, timeout=INTERVAL * 2)
+                    # announced once per version (not on every 24 h check)
+                    if update_available and announced != latest_version:
+                        announced = latest_version
+                        print(f"{YELLOW}[update] NEW VERSION: Rulezet v{latest_version} is available "
+                              f"(this instance runs v{local_version}) — {info['url']}{RESET}", flush=True)
+                        print(f"{GREEN}[update] Run: python3 manage.py update  (or start-prod on a server){RESET}",
+                              flush=True)
+                        with app.app_context():
+                            from app.features.notification.notification_core import notify_admins_new_version
+                            notify_admins_new_version(latest_version, local_version, info['url'])
             except Exception:
                 pass
             time.sleep(INTERVAL)

@@ -1361,6 +1361,18 @@ def admin_settings_system():
     return jsonify(AdminModel.get_system_info())
 
 
+@home_blueprint.route('/admin/update_notice/dismiss', methods=['POST'])
+@login_required
+def dismiss_update_notice():
+    """Admin closed the "new version" banner: hidden for them until the instance restarts."""
+    if not current_user.is_admin():
+        return jsonify({'success': False}), 403
+    from app import update_dismiss_key
+    version = str((request.get_json(silent=True) or {}).get('version') or '')[:32]
+    cache.set(update_dismiss_key(current_user.id, version), 1, timeout=0)
+    return jsonify({'success': True})
+
+
 @home_blueprint.route('/admin/settings/cache/clear', methods=['POST'])
 @login_required
 def admin_settings_cache_clear():

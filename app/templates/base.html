@@ -44,6 +44,7 @@
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/components/global-search.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/base/toaster.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/components/badge-popover.css') }}">
+    {% if current_user.is_authenticated and current_user.is_admin() %}<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/base/update_notice.css') }}">{% endif %}
     {% if tour_ctx %}<link rel="stylesheet" href="{{ url_for('static', filename='css/components/tour.css') }}">{% endif %}
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/jobWidget.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/chatbot/chatbot.css') }}">
@@ -193,29 +194,38 @@
             <main class="col ps-md-4 pt-2">
                 {% set _update = pending_update_info() %}
                 {% if _update %}
-                <div class="alert alert-primary d-flex align-items-center gap-2 rounded-3 shadow-sm mb-3"
-                     id="update-available-banner" data-update-version="{{ _update.version }}"
-                     style="border:1px solid #0d6efd44;">
-                    <i class="fa-solid fa-arrow-up-right-dots"></i>
-                    <div class="flex-grow-1">
-                        A new Rulezet version is available:
-                        <strong>v{{ _update.version }}</strong>.
-                        Run <code>python3 manage.py update</code> to upgrade, see the
-                        <a href="{{ _update.url }}" target="_blank" rel="noreferrer" class="alert-link" style="text-decoration:underline;">release notes <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:.7em;"></i></a>,
-                        or browse all
-                        <a href="https://github.com/rulezet/rulezet-core/releases" target="_blank" rel="noreferrer" class="alert-link" style="text-decoration:underline;">Rulezet releases <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:.7em;"></i></a>.
+                {# admins only: a newer Rulezet release (app/__init__.py _start_update_checker); closing it hides it until the instance restarts #}
+                <div class="rz-update-notice" id="update-available-banner" role="status">
+                    <div class="rz-update-notice__icon"><i class="fa-solid fa-arrow-up-right-dots"></i></div>
+                    <div class="rz-update-notice__body">
+                        <div class="rz-update-notice__title">A new version of Rulezet is available</div>
+                        <div class="rz-update-notice__versions">
+                            <span class="rz-update-notice__v rz-update-notice__v--old">v{{ _update.local_version or app_version }}</span>
+                            <i class="fa-solid fa-arrow-right"></i>
+                            <span class="rz-update-notice__v rz-update-notice__v--new">v{{ _update.version }}</span>
+                        </div>
+                        <div class="rz-update-notice__text">
+                            Read what changed, then update with <code>python3 manage.py update</code>
+                            (<code>start-prod</code> on a server).
+                        </div>
                     </div>
-                    <button type="button" class="btn-close" aria-label="Dismiss"
-                            onclick="var b=document.getElementById('update-available-banner'); try{localStorage.setItem('rz-update-dismissed', b.dataset.updateVersion)}catch(e){} b.remove()"></button>
+                    <div class="rz-update-notice__actions">
+                        <a href="{{ _update.url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary rounded-pill px-3">
+                            <i class="fa-brands fa-github me-1"></i>Release notes
+                        </a>
+                        <button type="button" class="btn-close" aria-label="Dismiss" data-version="{{ _update.version }}"
+                                onclick="rzDismissUpdate(this)"></button>
+                    </div>
                 </div>
                 <script>
-                (function() {
-                    var b = document.getElementById('update-available-banner');
-                    if (!b) return;
-                    try {
-                        if (localStorage.getItem('rz-update-dismissed') === b.dataset.updateVersion) b.remove();
-                    } catch (e) {}
-                })();
+                function rzDismissUpdate(btn) {
+                    document.getElementById('update-available-banner')?.remove()
+                    fetch('/admin/update_notice/dismiss', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.getElementById('csrf_token')?.value || '' },
+                        body: JSON.stringify({ version: btn.dataset.version }),
+                    }).catch(() => {})
+                }
                 </script>
                 {% endif %}
                 {% include 'macros/_flashes.html' %}
