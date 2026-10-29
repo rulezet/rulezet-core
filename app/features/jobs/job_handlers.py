@@ -902,6 +902,28 @@ def handle_action_log(job, app):
     log_job(job, f'Written to the activity log: {text[:200]}', level='success', event='done')
 
 
+@register_handler('action_check')
+def handle_action_check(job, app):
+    """A gate: counts one of the instance's figures and succeeds only if the condition holds —
+    tasks chained "If it succeeds" go on, "If it fails" ones take the other road."""
+    actions, ctx, values, p = _action_setup(job)
+    metric, op = p.get('metric'), p.get('operator') or 'gt'
+    if metric not in actions.FIGURES or op not in actions.OPERATORS:
+        return _action_fail(job, 'Unknown figure or comparison.')
+    try:
+        threshold = int(str(p.get('value', '0')).strip())
+    except ValueError:
+        return _action_fail(job, 'The value to compare with must be a whole number.')
+    count = actions.figure(metric)
+    sign, compare = actions.OPERATORS[op]
+    label = actions.FIGURES[metric][0]
+    job.total = job.done = 1
+    if not compare(count, threshold):
+        return _action_fail(job, f'{label}: {count} — condition {sign} {threshold} not met.')
+    db.session.commit()
+    log_job(job, f'{label}: {count} {sign} {threshold} — condition met.', level='success', event='done')
+
+
 @register_handler('action_webhook')
 def handle_action_webhook(job, app):
     """POST a JSON message to a public https URL (Slack / Mattermost / Teams incoming webhook,

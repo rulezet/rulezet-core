@@ -34,6 +34,7 @@ Every option is merged into target_payload, whatever the target_picker.
 checked by task_scheduler_core on save and on an ad-hoc run.
 """
 from app.features.tags.imported_tags_core import FORMAT_TAG_SOURCES
+from app.features.admin.task_scheduler.actions import FIGURES as _FIGURES, OPERATORS as _OPERATORS
 
 _NATIVE_TAG_FORMAT_OPTIONS = [{'value': f, 'label': f'{f} — {where}'} for f, where in FORMAT_TAG_SOURCES.items()]
 
@@ -241,6 +242,20 @@ TASK_TYPES = {
         ],
         'required_options': ['url'],
     },
+    'action_check': {
+        'label': 'Check — a figure (go on only if…)',
+        'icon': 'fa-solid fa-code-branch',
+        'job_type': 'action_check',
+        'target_picker': 'none',
+        'extra_options': [
+            {'key': 'metric', 'type': 'select', 'label': 'Figure', 'default': 'bad_rules',
+             'options': [{'value': k, 'label': v[0]} for k, v in _FIGURES.items()]},
+            {'key': 'operator', 'type': 'select', 'label': 'Condition', 'default': 'gt',
+             'options': [{'value': k, 'label': v[0]} for k, v in _OPERATORS.items()]},
+            {'key': 'value', 'type': 'text', 'label': 'Value (a whole number)', 'default': '0'},
+        ],
+        'required_options': ['metric', 'operator', 'value'],
+    },
     'clear_caches': {
         'label': 'Caches — clear them (home figures, stats, pages)',
         'icon': 'fa-solid fa-broom',
@@ -430,6 +445,7 @@ _DESCRIPTIONS = {
     'action_notify': 'Puts a notification in the bell of every admin (or of the workflow\'s editor); title and message take {variables}.',
     'action_log': 'Writes a line in the activity log (Admin → Logs) — e.g. "went well" after the last task; the text takes {variables}.',
     'action_webhook': 'POSTs a JSON message ({"text": …}) to a public https URL: a Slack / Mattermost / Teams incoming webhook or any service. Private and local addresses are refused.',
+    'action_check': 'A gate: counts a figure of the instance (bad rules, rules created today, failed jobs…) and succeeds only if the condition holds. Chain "If it succeeds" for one road and "If it fails" for the other — e.g. bad rules > 50 → Bad rules retry, else nothing.',
     'clear_caches': 'Empties the caches (home figures, ATT&CK / CVE stats, cached pages, leaderboard) so what the workflow changed shows right away. Put it last.',
     'ai_rule_analysis': 'Asks the AI agent to write an analysis report for rules that have none (a batch per run), published or kept private.',
 }

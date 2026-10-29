@@ -33,6 +33,7 @@
  *   'edge-click' (childSchedule)     — an existing connection line was
  *                                     clicked — the page offers to change
  *                                     its condition or remove it.
+ *   'add-node' (x, y, taskType?, parent?) — parent: handle dropped on empty space
  *   'add-node' (x, y)                — the "+" button was clicked at this
  *                                     canvas-space position — the page opens
  *                                     the task creation modal.
@@ -293,6 +294,9 @@ const TaskCanvas = {
                     if (target && target.uuid !== this.connectingFrom.uuid) {
                         this.$emit('connect', this.connectingFrom, target);
                     }
+                } else if (el && el.closest('.tc-wrap') && this.connectPoint) {
+                    // Dropped on empty space: a new task there, chained after this one.
+                    this.$emit('add-node', this.connectPoint.x - 85, this.connectPoint.y - 28, null, this.connectingFrom);
                 }
                 this.connectingFrom = null;
                 this.connectPoint = null;
@@ -435,7 +439,7 @@ const TaskCanvas = {
                 </div>
             </div>
         </div>
-        <p class="text-muted small mt-2 mb-0"><i class="fa-solid fa-circle-info me-1"></i>Drag a task to move it, drag from the arrow handle onto another task to connect them, drag the background to pan, scroll to zoom, right-click to duplicate.</p>
+        <p class="text-muted small mt-2 mb-0"><i class="fa-solid fa-circle-info me-1"></i>Drag a task to move it, drag from the arrow handle onto another task to connect them (or onto empty space to add the next task), drag the background to pan, scroll to zoom, right-click to duplicate.</p>
 
         <!-- Right-click menu — kept OUTSIDE .tc-inner (which is CSS-transformed
              for pan/zoom) so this can safely use position:fixed in viewport
