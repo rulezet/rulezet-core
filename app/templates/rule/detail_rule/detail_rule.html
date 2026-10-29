@@ -119,10 +119,11 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                     <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2 z-index-2">
                         {% set _org = rule_org_badge(rule) %}
                         {% if _org %}
-                        <span class="rz-org-rule-badge" data-rz-pop-title="{{ _org.label }}"
-                              data-rz-pop-text="From a {{ _org.label }} repository or written by a {{ _org.label }} member.">
+                        <a href="{{ url_for('rule.rules_list', org_badge='true') }}" class="rz-org-rule-badge rz-org-rule-badge--click"
+                           data-rz-pop-title="{{ _org.label }}"
+                           data-rz-pop-text="From a {{ _org.label }} repository or written by a {{ _org.label }} member. Click: every {{ _org.label }} rule.">
                             {% if _org.logo %}<img src="{{ _org.logo }}" alt="">{% endif %}{{ _org.label }}
-                        </span>
+                        </a>
                         {% endif %}
                         {% if current_user.id == rule.user_id %}
                         <span class="rz-role-chip rz-role-chip--owner"
