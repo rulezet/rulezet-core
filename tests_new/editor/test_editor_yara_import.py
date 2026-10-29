@@ -125,8 +125,10 @@ def _run_job(app, client, payload):
 def test_job_checks_then_creates(app, clients):
     state = _run_job(app, clients["user"], body(BASE, USES_BASE))
     assert state["status"] == "done" and state["ok"] is True
-    assert [s["status"] for s in state["steps"][:2] + state["steps"][3:]] == ["ok", "ok", "ok"]
-    assert state["steps"][2]["status"] in ("skipped", "ok", "warning")    # samples: depends on the server
+    by_id = {s["id"]: s["status"] for s in state["steps"]}
+    assert [by_id[k] for k in ("existing", "syntax", "create")] == ["ok", "ok", "ok"]
+    assert by_id["samples"] in ("skipped", "ok", "warning")              # samples: depends on the server
+    assert by_id["external"] in ("ok", "warning")                         # external checks: advice only
     assert {r["name"] for r in state["rules"] if r["status"] == "created"} == {"ed_base", "ed_uses_base"}
     assert state["result_url"].startswith("/editor/import-result?")
     assert "text" not in state["rules"][0]
@@ -136,7 +138,7 @@ def test_job_with_an_error_creates_nothing(app, clients):
     bad_before = InvalidRuleModel.query.count()
     state = _run_job(app, clients["user"], body(BASE, BROKEN))
     assert state["status"] == "done" and state["ok"] is False
-    assert [s["status"] for s in state["steps"]] == ["ok", "error", "skipped", "skipped"]
+    assert [s["status"] for s in state["steps"]] == ["ok", "error", "skipped", "skipped", "skipped"]
     assert Rule.query.filter(Rule.title.like("ed_%")).count() == 0
     assert InvalidRuleModel.query.count() == bad_before
 

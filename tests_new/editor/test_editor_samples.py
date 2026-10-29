@@ -15,6 +15,10 @@ GNU = 'rule ed_gnu\n{\n    strings:\n        $g = "GNU"\n    condition:\n       
 QUIET = 'rule ed_quiet\n{\n    strings:\n        $q = "zz_never_in_any_sample_zz"\n    condition:\n        $q\n}'
 
 
+def _step(state, key):
+    return next(s for s in state["steps"] if s["id"] == key)
+
+
 @pytest.fixture
 def tester():
     """Runs synchronously, sandboxed by resource limits only (CI has no bubblewrap)."""
@@ -43,7 +47,7 @@ def test_editor_runs_are_kept_in_the_database(clients, tester):
 def test_create_tests_the_document_and_keeps_the_result(app, clients, tester, monkeypatch):
     settings(monkeypatch)
     state = _run_job(app, clients["user"], body(GNU, QUIET))
-    samples = state["steps"][2]
+    samples = _step(state, "samples")
     assert state["ok"] is True and samples["status"] == "warning"       # GNU fires on benign files
     assert "false positive" in samples["detail"]
 
@@ -70,14 +74,14 @@ def test_false_positives_can_block_the_creation(app, clients, tester, monkeypatc
     settings(monkeypatch, block_on_false_positives=True)
     state = _run_job(app, clients["user"], body(GNU))
     assert state["ok"] is False
-    assert [s["status"] for s in state["steps"][2:]] == ["error", "skipped"]
+    assert [_step(state, k)["status"] for k in ("samples", "create")] == ["error", "skipped"]
     assert Rule.query.filter_by(title="ed_gnu").count() == 0
 
 
 def test_switched_off(app, clients, tester, monkeypatch):
     settings(monkeypatch, enabled=False)
     state = _run_job(app, clients["user"], body(QUIET))
-    assert state["ok"] is True and state["steps"][2]["status"] == "skipped"
+    assert state["ok"] is True and _step(state, "samples")["status"] == "skipped"
     assert SampleTestRun.query.filter_by(origin="create").count() == 0
 
 
@@ -96,7 +100,7 @@ def test_nothing_new_nothing_tested(app, clients, tester, monkeypatch):
     settings(monkeypatch)
     _run_job(app, clients["user"], body(QUIET))
     again = _run_job(app, clients["user"], body(QUIET))
-    assert again["steps"][2]["status"] == "skipped"
+    assert _step(again, "samples")["status"] == "skipped"
     assert Rule.query.filter_by(title="ed_quiet").count() == 1
     assert SampleTestRun.query.filter_by(origin="create").count() == 1
 
