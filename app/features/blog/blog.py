@@ -70,6 +70,36 @@ def list_posts():
     return render_template('blog/list_blog.html')
 
 
+def _share_card(post):
+    """What a link to the post shows on social networks / chat apps (Open Graph, Twitter card):
+    they read the HTML as the server sends it, without running the page's Vue, so it is filled here."""
+    import re as _re
+    base = (current_app.config.get('INSTANCE_PUBLIC_URL') or request.url_root).rstrip('/')
+    text = post.excerpt or ''
+    if not text:
+        # the post's first words, Markdown / HTML stripped
+        raw = _re.sub(r'```.*?```', ' ', post.content or '', flags=_re.S)
+        raw = _re.sub(r'<[^>]+>|!\[[^\]]*\]\([^)]*\)', ' ', raw)
+        raw = _re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', raw)
+        raw = _re.sub(r'[#>*_`|~-]+', ' ', raw)
+        text = ' '.join(raw.split())
+    if len(text) > 200:
+        text = text[:197].rsplit(' ', 1)[0] + '…'
+    image = post.cover_image_url or url_for('static', filename='image/logo.png')
+    if image.startswith('/'):
+        image = base + image
+    elif not image.lower().startswith(('http://', 'https://')):
+        image = None
+    return {
+        'title': post.title,
+        'description': text or 'Security blog post from the Rulezet team.',
+        'url': base + url_for('blog.detail', post_uuid=post.uuid),
+        'image': image,
+        'published': post.published_at.strftime('%Y-%m-%dT%H:%M:%SZ') if post.published_at else None,
+        'author': ((post.author.first_name or '') + ' ' + (post.author.last_name or '')).strip() if post.author else None,
+    }
+
+
 @blog_blueprint.route('/post/<string:post_uuid>')
 def detail(post_uuid):
     post = BlogModel.get_post_by_uuid(post_uuid)
@@ -81,7 +111,7 @@ def detail(post_uuid):
                 current_user.id == post.user_id or current_user.is_admin())):
             abort(403)
     BlogModel.add_view(post)
-    return render_template('blog/detail_blog.html', post=post, shared=False)
+    return render_template('blog/detail_blog.html', post=post, shared=False, card=_share_card(post))
 
 
 @blog_blueprint.route('/share/<string:post_uuid>/<string:key>')

@@ -2,6 +2,25 @@
 {% block title %}{{ post.title if post else 'Post' }} — Rulezet{% endblock %}
 
 {% block head %}
+{% if card %}
+{# link previews (LinkedIn, Mastodon, Slack, X…): read from the HTML the server sends, without running Vue #}
+<meta name="description" content="{{ card.description }}">
+<link rel="canonical" href="{{ card.url }}">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Rulezet">
+<meta property="og:title" content="{{ card.title }}">
+<meta property="og:description" content="{{ card.description }}">
+<meta property="og:url" content="{{ card.url }}">
+{% if card.image %}<meta property="og:image" content="{{ card.image }}">
+<meta property="og:image:alt" content="{{ card.title }}">{% endif %}
+{% if card.published %}<meta property="article:published_time" content="{{ card.published }}">{% endif %}
+{% if card.author %}<meta property="article:author" content="{{ card.author }}">
+<meta name="author" content="{{ card.author }}">{% endif %}
+<meta name="twitter:card" content="{{ 'summary_large_image' if card.image else 'summary' }}">
+<meta name="twitter:title" content="{{ card.title }}">
+<meta name="twitter:description" content="{{ card.description }}">
+{% if card.image %}<meta name="twitter:image" content="{{ card.image }}">{% endif %}
+{% endif %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/comment-thread.css') }}">
@@ -67,9 +86,7 @@
             <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
                 <li class="breadcrumb-item"><a href="/blog/" class="text-decoration-none text-muted">Blog</a></li>
-                <li class="breadcrumb-item active text-muted" aria-current="page">
-                    [[ post.title && post.title.length > 40 ? post.title.slice(0, 40) + '…' : post.title ]]
-                </li>
+                <li class="breadcrumb-item active text-muted" aria-current="page" v-pre>{% if post.title|length > 40 %}{{ post.title[:40] }}…{% else %}{{ post.title }}{% endif %}</li>
             </ol>
         </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
@@ -78,15 +95,11 @@
                 <div v-if="isRelease" class="blog-release-pill">
                     <i class="fa-solid fa-tag"></i>Release[[ releaseVersion ? ' ' + releaseVersion : '' ]]
                 </div>
-                <h2 class="fw-bold mb-1" style="word-break:break-word;">
-                    [[ post.title ]]
-                </h2>
+                <h2 class="fw-bold mb-1" style="word-break:break-word;" v-pre>{% if post.title|length > 60 %}{{ post.title[:60] }}…{% else %}{{ post.title }}{% endif %}</h2>
                 <div class="banner-accent"></div>
             </div>
         </div>
-        <p class="text-muted mb-0" style="font-size:1.05rem;line-height:1.75;">
-            [[ post.excerpt || 'Security blog post from the Rulezet team.' ]]
-        </p>
+        <p class="text-muted mb-0" style="font-size:1.05rem;line-height:1.75;" v-pre>{{ post.excerpt or 'Security blog post from the Rulezet team.' }}</p>
         <!-- release posts: what this page is, and where the code is -->
         <div v-if="isRelease" class="blog-release-strip">
             <span><i class="fa-solid fa-rocket"></i>Release notes of <strong>Rulezet [[ releaseVersion || '' ]]</strong></span>
