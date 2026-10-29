@@ -261,7 +261,8 @@ def _relay(proc, tag: str) -> None:
             ip = "" if ip in ("127.0.0.1", "::1", "-") else f" \033[0;90m{ip}\033[0m"   # the client, kept in prod
             # API calls (/api/…, or the dedicated API process) tagged "api ", the site's pages "web "
             kind = "api " if line.startswith("[api]") or path.startswith("/api/") else tag
-            _say(f"\033[0;90m  {kind} │\033[0m \033[{color}m{code}\033[0m {method:<6} {path}"
+            badge = "\033[1;35m" if kind == "api " else "\033[1;34m"     # api magenta, web blue
+            _say(f"  {badge}{kind}\033[0;90m │\033[0m \033[{color}m{code}\033[0m {method:<6} {path}"
                  f" \033[0;90m{secs * 1000:.0f} ms\033[0m{ip}")
         else:
             _say(f"\033[0;90m  {tag} │\033[0m {clean}")
