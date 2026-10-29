@@ -8,7 +8,9 @@ Usage:
 Commands:
     init        First-time setup: install deps + init DB
     start       Start the dev server
-    start-prod  Start with Gunicorn (production)
+    start-dev   Start the dev server (auto-reload)
+    start-prod  Update + start with Gunicorn (production)
+    restart-prod  Start with Gunicorn, no update
     test        Run the test suite
     update      sync with origin + install deps + ensure ollama + DB migrations
     backup      Backup the PostgreSQL database
@@ -153,7 +155,7 @@ def banner(mode: str) -> None:
   ╰──────────────────────────────────────────────────╯{r}""")
 
 
-def _announce_when_up(url: str, port: str, mode: str) -> None:
+def _announce_when_up(url: str, port: str, mode: str, note: str = "debug mode · reloads on code changes · CTRL+C to stop") -> None:
     """Background: spinner while gunicorn and the app boot, then a clear "ready" box once the
     site really answers an HTTP request (the port opens before the app is loaded)."""
     import urllib.error
@@ -181,7 +183,7 @@ def _announce_when_up(url: str, port: str, mode: str) -> None:
   │  ✓  Rulezet is up{r}{d}  ({mode}, {time.monotonic() - t0:.1f}s){r}{" " * max(0, 25 - len(mode) - len(f"{time.monotonic() - t0:.1f}"))}{g}│
   ╰──────────────────────────────────────────────────╯{r}
      \033[1;36m→ {url}{r}
-     {d}debug mode · reloads on code changes · CTRL+C to stop{r}
+     {d}{note}{r}
      {d}── logs ─────────────────────────────────────────────{r}""")
     threading.Thread(target=wait, daemon=True).start()
 
@@ -255,8 +257,10 @@ def _relay(proc, tag: str) -> None:
                 continue
             method, path, code, secs = m.group(1), m.group(2), int(m.group(3)), float(m.group(4))
             color = "32" if code < 300 else "36" if code < 400 else "33" if code < 500 else "31"
+            ip = line.split()[1] if len(line.split()) > 1 else ""
+            ip = "" if ip in ("127.0.0.1", "::1", "-") else f" \033[0;90m{ip}\033[0m"   # the client, kept in prod
             _say(f"\033[0;90m  {tag} │\033[0m \033[{color}m{code}\033[0m {method:<6} {path}"
-                 f" \033[0;90m{secs * 1000:.0f} ms\033[0m")
+                 f" \033[0;90m{secs * 1000:.0f} ms\033[0m{ip}")
         else:
             _say(f"\033[0;90m  {tag} │\033[0m {clean}")
     code = proc.wait()
@@ -292,18 +296,41 @@ def _venv_env() -> dict:
     return env
 
 
-def run(cmd: list[str], cwd: Path = ROOT, check: bool = True, extra_env: dict | None = None) -> subprocess.CompletedProcess:
+def run(cmd: list[str], cwd: Path = ROOT, check: bool = True, extra_env: dict | None = None,
+        label: str | None = None, live: bool = False) -> subprocess.CompletedProcess:
+    """Run a command. In a terminal its output is captured while the spinner turns ("label…"), and
+    shown (last lines) only when it fails; `live=True` for a command that talks to the user (prompts,
+    sudo, test output). Not a terminal (logs, systemd): the full output, as before."""
     env = _venv_env()
     if extra_env:
         env.update(extra_env)
-    info(f"$ {' '.join(cmd)}")
-    with _SPIN.pause():                     # the command writes to the terminal itself
-        result = subprocess.run(cmd, cwd=cwd, env=env)
+    text = " ".join(cmd)
+    if live or not sys.stdout.isatty():
+        info(f"$ {text}")
+        with _SPIN.pause():                 # the command writes to the terminal itself
+            result = subprocess.run(cmd, cwd=cwd, env=env)
+    else:
+        own = _SPIN.label is None
+        previous = _SPIN.label
+        if own:
+            _SPIN.start(f"{label or text}…")
+        else:
+            _SPIN.label = f"{label or text}…"
+        try:
+            result = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True)
+        finally:
+            if own:
+                _SPIN.stop()
+            else:
+                _SPIN.label = previous
+        if result.returncode != 0 and result.returncode not in (130, -2):
+            tail = (result.stdout + result.stderr).strip().splitlines()[-25:]
+            _say("\033[0;90m  $ " + text + "\033[0m\n" + "\n".join(f"    {l}" for l in tail))
     # returncode 130 = Ctrl+C sent to child process
     if result.returncode in (130, -2):
         raise KeyboardInterrupt
     if check and result.returncode != 0:
-        error(f"Command failed: {' '.join(cmd)}")
+        error(f"Command failed: {text}")
         sys.exit(result.returncode)
     return result
 
@@ -331,7 +358,7 @@ def _sync_with_origin() -> None:
 def _sync_submodules() -> None:
     """Bring tracked-branch submodules up to their remote tip.
 
-    Mirrors update.sh's submodule step: rulezet-cast, misp-taxonomies,
+    Mirrors update.sh's submodule step: misp-taxonomies,
     misp-galaxy, rulezet-validation, rulezet-editor and rulezet-tester float to their remote branch on every
     update (--remote) since we want their latest content automatically —
     rulezet-validation in particular used to require a separate manual pull
@@ -343,12 +370,12 @@ def _sync_submodules() -> None:
     run(["git", "submodule", "update", "--init", "--recursive",
          "app/modules/rulezet-validation", "app/modules/rulezet-editor", "app/modules/rulezet-tester"])
     # yaraQA (YARA editor external checks): a third-party tool, kept on its committed commit
-    subprocess.run(["git", "submodule", "update", "--init", "app/modules/yaraQA"], cwd=ROOT)
-    result = subprocess.run(
-        ["git", "submodule", "update", "--remote", "app/modules/rulezet-cast",
+    run(["git", "submodule", "update", "--init", "app/modules/yaraQA"], check=False, label="Fetching yaraQA")
+    result = run(
+        ["git", "submodule", "update", "--remote",
          "app/modules/misp-taxonomies", "app/modules/misp-galaxy",
          "app/modules/rulezet-validation", "app/modules/rulezet-editor", "app/modules/rulezet-tester"],
-        cwd=ROOT,
+        check=False, label="Updating the submodules",
     )
     if result.returncode != 0:
         run(["git", "submodule", "update", "--remote"])
@@ -604,10 +631,11 @@ OLLAMA_VERSION = "0.5.7"
 
 def _install_ollama() -> bool:
     info(f"Installing Ollama {OLLAMA_VERSION} (this may prompt for your sudo password)…")
-    result = subprocess.run(
-        f"curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION={OLLAMA_VERSION} sh",
-        shell=True,
-    )
+    with _SPIN.pause():                     # may ask for the sudo password
+        result = subprocess.run(
+            f"curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION={OLLAMA_VERSION} sh",
+            shell=True,
+        )
     if result.returncode != 0:
         error("Ollama installation failed or was skipped — the chat assistant will "
               "report a connection error until it's installed manually "
@@ -655,7 +683,8 @@ def _ensure_ollama() -> None:
         ):
             if model_name not in already_listed:
                 info(f"Pulling the {model_name} model (used by {used_by})…")
-                pulled = subprocess.run([ollama_bin, "pull", model_name])
+                with _SPIN.pause():         # its own progress bar
+                    pulled = subprocess.run([ollama_bin, "pull", model_name])
                 if pulled.returncode == 0:
                     ok(f"{model_name} pulled")
                 else:
@@ -766,25 +795,22 @@ def cmd_help() -> None:
 
 def cmd_init() -> None:
     _check_venv()
-    header("Initialising Rulezet (first-time setup)")
-
-    info("Initialising Git submodules…")
-    run(["git", "submodule", "update", "--init", "--recursive", "--depth", "1",
-         "app/modules/rulezet-validation"])
-    run(["git", "submodule", "update", "--init", "--recursive", "app/modules/rulezet-editor"])
-    run(["git", "submodule", "update", "--init", "--recursive", "app/modules/rulezet-tester"])
-    ok("Submodules initialised")
-
-    info("Installing Python dependencies…")
-    run([PIP, "install", "-r", "requirements.txt"])
-    ok("Dependencies installed")
-
-    info("Initialising database (tables + admin user)…")
-    run([PYTHON, "app.py", "-i"], extra_env={"FLASKENV": "development"})
-    ok("Database initialised")
-
-    header("Init complete")
-    ok("Ready. Run:  python3 manage.py start-dev")
+    banner("first-time setup")
+    with step(1, 3, "Git submodules"):
+        run(["git", "submodule", "update", "--init", "--recursive", "--depth", "1",
+             "app/modules/rulezet-validation"], label="Fetching rulezet-validation")
+        run(["git", "submodule", "update", "--init", "--recursive", "app/modules/rulezet-editor"],
+            label="Fetching rulezet-editor")
+        run(["git", "submodule", "update", "--init", "--recursive", "app/modules/rulezet-tester"],
+            label="Fetching rulezet-tester")
+        ok("Submodules initialised")
+    with step(2, 3, "Python dependencies"):
+        run([PIP, "install", "-r", "requirements.txt"], label="Installing the Python dependencies")
+        ok("Dependencies installed")
+    with step(3, 3, "Database (tables + admin user)"):
+        run([PYTHON, "app.py", "-i"], extra_env={"FLASKENV": "development"}, label="Creating the tables")
+        ok("Database initialised")
+    _done("Ready. Run:  python3 manage.py start-dev")
 
 
 # Launch settings manage.py itself reads — taken from .env too (the shell
@@ -863,8 +889,9 @@ def _run_gunicorn_with_worker(flaskenv: str, port: str, reload: bool = False) ->
       LOG_DIR             write access/error logs to files there
                           (site-*.log, api-*.log) instead of stdout.
     """
-    # dev in a terminal: tidied, coloured output (see _relay); prod / logs to a file: raw output
-    pretty = reload and sys.stdout.isatty()
+    # in a terminal (dev and prod): tidied, coloured output (see _relay); not a terminal
+    # (systemd, output to a file): raw output, every line as gunicorn writes it
+    pretty = sys.stdout.isatty()
     worker_proc = _spawn([PYTHON, "worker.py"], flaskenv, pretty, "jobs")
     _load_launch_env()
     host = os.environ.get("GUNICORN_BIND_HOST", "0.0.0.0").strip() or "0.0.0.0"
@@ -1025,6 +1052,47 @@ def _first_login(flaskenv: str) -> None:
         _say("\n" + box)
 
 
+def _done(text: str) -> None:
+    _say(f"\n\033[1;32m  ✓ {text}\033[0m")
+
+
+_SYNCED = "RULEZET_MANAGE_SYNCED"       # set when manage.py restarted itself after the git sync
+
+
+def _update_code() -> None:
+    """Code + submodules. When the sync brought a new manage.py, carry on with that one (an old
+    manage.py does not know the new submodules / steps): it restarts itself and skips what is done."""
+    if os.environ.get(_SYNCED):
+        ok("Code updated (manage.py restarted with the new version)")
+    else:
+        before = (ROOT / "manage.py").read_bytes()
+        _sync_with_origin()
+        ok(f"Code updated ({_git_out(['rev-parse', '--short', 'HEAD'], ROOT)})")
+        if (ROOT / "manage.py").read_bytes() != before:
+            info("manage.py changed with the update: going on with the new version…")
+            _SPIN.stop()
+            sys.stdout.flush()
+            os.execve(sys.executable, [sys.executable, str(ROOT / "manage.py"), *sys.argv[1:]],
+                      {**os.environ, _SYNCED: "1"})
+    _sync_submodules()
+    ok("Submodules up to date")
+    _ensure_pivotick_assets()
+
+
+def _update_deps() -> None:
+    run([PIP, "install", "-r", "requirements.txt"], label="Installing the Python dependencies")
+    ok("Dependencies up to date")
+    _ensure_ollama()
+
+
+def _update_db(flaskenv: str) -> None:
+    run([FLASK, "db", "upgrade"], extra_env={"FLASKENV": flaskenv}, label="Applying the database migrations")
+    ok("Database schema up to date")
+    run([PYTHON, "app.py", "--seed-defaults"], extra_env={"FLASKENV": flaskenv},
+        label="Seeding default data (formats, platform-tag configs, AI agent configs)")
+    ok("Default data up to date")
+
+
 def cmd_start_dev() -> None:
     banner("development")
     with step(1, 4, "Environment, dependencies & database"):
@@ -1042,91 +1110,73 @@ def cmd_start_dev() -> None:
     _run_gunicorn_with_worker("development", port, reload=True)
 
 
-def cmd_start_prod() -> None:
-    _check_venv()
-    _ensure_editor()
-
-    # 1. Backup
-    cmd_backup()
-
-    # 2. Pull + deps + migrations
-    header("Updating Rulezet")
-    info("Syncing with origin…")
-    _sync_with_origin()
-    ok("Code updated")
-
-    info("Syncing Git submodules…")
-    _sync_submodules()
-    ok("Submodules up to date")
-    _ensure_pivotick_assets()
-
-    info("Syncing Python dependencies…")
-    run([PIP, "install", "-r", "requirements.txt"])
-    ok("Dependencies up to date")
-
-    _ensure_ollama()
-
-    info("Running database migrations…")
-    run([FLASK, "db", "upgrade"], extra_env={"FLASKENV": "production"})
-    ok("Database schema up to date")
-
-    info("Seeding default data (formats, platform-tag configs, AI agent configs)…")
-    run([PYTHON, "app.py", "--seed-defaults"], extra_env={"FLASKENV": "production"})
-    ok("Default data up to date")
-
-    # after the code and the dependencies are up to date: checks the rulezet-tester just installed
-    _ensure_editor()
-    _ensure_sandbox()
-    _first_login("production")
-
-    # 3. Start — same gunicorn+worker.py launch as `start-dev`, see
-    # _run_gunicorn_with_worker's docstring for why this isn't `flask run`
-    # or an in-process worker.
+def _start_production(n: int, total: int, mode: str) -> None:
     _load_launch_env()
     port = os.environ.get("PORT", "80")
     public_url = os.environ.get("INSTANCE_PUBLIC_URL") or f"http://0.0.0.0:{port}"
-    header(f"Starting Rulezet v{app_version()} (production)")
-    info(f"Serving at {public_url}")
-    info("Press CTRL+C to stop")
+    _first_login("production")
+    _say(f"\n\033[1;34m  [{n}/{total}]\033[0m \033[1mStarting the server\033[0m \033[0;90m(gunicorn: web · worker.py: jobs)\033[0m")
+    if sys.stdout.isatty():
+        _announce_when_up(public_url, port, mode, "production · CTRL+C to stop")
+    else:
+        info(f"Serving at {public_url}")
     _run_gunicorn_with_worker("production", port)
+
+
+def cmd_start_prod() -> None:
+    """Backup, update (code, submodules, dependencies, database), checks, then start —
+    the same gunicorn + worker.py launch as start-dev (see _run_gunicorn_with_worker)."""
+    _check_venv()
+    banner("production")
+    with step(1, 6, "Database backup"):
+        if os.environ.get(_SYNCED):
+            ok("Backup done before manage.py restarted")
+        else:
+            cmd_backup(inner=True)
+    with step(2, 6, "Code & submodules"):
+        _update_code()
+    with step(3, 6, "Python dependencies & Ollama"):
+        _update_deps()
+    with step(4, 6, "Database migrations & default data"):
+        _update_db("production")
+    with step(5, 6, "Rule editor, rule tester & sandbox"):
+        _ensure_editor()
+        ok("rulezet-editor and rulezet-tester installed")
+        _ensure_sandbox()
+    _start_production(6, 6, "production")
 
 
 def cmd_restart_prod() -> None:
-    """Just step 3 of start-prod: (re)start gunicorn+worker.py in
-    production mode — no backup, no git sync, no deps/migrations/seed.
-    For when the code is already up to date (or a bad worker.py just needs
-    killing and relaunching) and a full start-prod's backup+update pass
-    would be redundant/slow."""
+    """Just the start of start-prod: (re)start gunicorn + worker.py in production — no backup,
+    no git sync, no deps/migrations/seed. For when the code is already up to date (or a bad
+    worker.py just needs killing and relaunching)."""
     _check_venv()
-    _load_launch_env()
-    port = os.environ.get("PORT", "80")
-    public_url = os.environ.get("INSTANCE_PUBLIC_URL") or f"http://0.0.0.0:{port}"
-    header(f"Starting Rulezet v{app_version()} (production, no update)")
-    info(f"Serving at {public_url}")
-    info("Press CTRL+C to stop")
-    _run_gunicorn_with_worker("production", port)
+    banner("production · restart")
+    _start_production(1, 1, "production")
 
 
 def cmd_test() -> None:
     _check_venv()
-    header("Running tests")
-    run([PYTEST, "tests"], extra_env={"FLASKENV": "testing"})
-    ok("Tests done")
+    banner("tests")
+    run([PYTEST, "tests"], extra_env={"FLASKENV": "testing"}, live=True)
+    _done("Tests done")
 
 
-def cmd_backup() -> None:
-    header("Backing up database")
+def cmd_backup(inner: bool = False) -> None:
+    if not inner:
+        banner("backup")
     script = ROOT / "backup" / "scripts" / "backup_rulezet.sh"
     if not script.exists():
         error(f"Backup script not found: {script}")
         sys.exit(1)
-    run(["bash", str(script)])
-    ok("Backup complete")
+    res = run(["bash", str(script)], label="Dumping the PostgreSQL database")
+    saved = [l for l in (res.stdout or "").splitlines() if "saved to" in l.lower()]
+    ok(saved[-1].strip() if saved else "Backup complete")
 
 
 def cmd_restore() -> None:
-    header("Restoring database")
-    print("\033[1;31m  WARNING: This will DROP the current database.\033[0m")
+    banner("restore")
+    _say("\033[1;31m  WARNING: This will DROP the current database.\033[0m")
     if not _confirm("Are you sure you want to restore?"):
         info("Cancelled.")
         return
@@ -1134,68 +1184,57 @@ def cmd_restore() -> None:
     if not script.exists():
         error(f"Restore script not found: {script}")
         sys.exit(1)
-    # Forward extra args (e.g. a specific dump filename)
-    extra = sys.argv[2:]
-    run(["bash", str(script)] + extra)
+    # Forward extra args (e.g. a specific dump filename); live: the script may ask which dump
+    run(["bash", str(script)] + sys.argv[2:], live=True)
+    _done("Database restored")
 
 
 def cmd_update() -> None:
     _check_venv()
-    header("Updating Rulezet")
-
-    # update is also run on development checkouts: the hard reset below would silently drop
-    # uncommitted work (deploy keeps discarding it — production has none on purpose)
-    dirty = _git_out(["status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all"], ROOT)
-    if dirty:
-        error("Local changes not committed — update resets to origin and would delete them:")
-        print(dirty)
-        info("Commit or stash them first (or run 'git stash', update, then 'git stash pop').")
-        sys.exit(1)
-
-    info("Syncing with origin…")
-    _sync_with_origin()
-    ok("Code updated")
-
-    info("Syncing Git submodules…")
-    _sync_submodules()
-    ok("Submodules up to date")
-    _ensure_pivotick_assets()
-    _check_pivograph_assets()
-
-    info("Syncing Python dependencies…")
-    run([PIP, "install", "-r", "requirements.txt"])
-    ok("Dependencies up to date")
-
-    _ensure_ollama()
-
-    info("Running database migrations…")
-    run([FLASK, "db", "upgrade"], extra_env={"FLASKENV": "development"})
-    ok("Database schema up to date")
-
-    info("Seeding default data (formats, platform-tag configs)…")
-    run([PYTHON, "app.py", "--seed-defaults"], extra_env={"FLASKENV": "development"})
-    ok("Default data up to date")
-
-    _ensure_sandbox()
+    banner("update")
+    with step(1, 5, "Local changes"):
+        # update is also run on development checkouts: the hard reset below would silently drop
+        # uncommitted work (deploy keeps discarding it — production has none on purpose)
+        dirty = _git_out(["status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all"], ROOT)
+        if dirty and not os.environ.get(_SYNCED):
+            error("Local changes not committed — update resets to origin and would delete them:")
+            _say(dirty)
+            info("Commit or stash them first (or run 'git stash', update, then 'git stash pop').")
+            sys.exit(1)
+        ok("Nothing local to lose")
+    with step(2, 5, "Code & submodules"):
+        _update_code()
+        _check_pivograph_assets()
+    with step(3, 5, "Python dependencies & Ollama"):
+        _update_deps()
+    with step(4, 5, "Database migrations & default data"):
+        _update_db("development")
+    with step(5, 5, "Rule editor, rule tester & sandbox"):
+        _ensure_editor()
+        ok("rulezet-editor and rulezet-tester installed")
+        _ensure_sandbox()
+    _done("Rulezet is up to date")
 
 
 def cmd_pivotick() -> None:
     """Rebuild the Pivotick graph assets from the pinned submodules (no npm)."""
-    header("Building Pivotick graph assets")
-    _ensure_pivotick_assets(force=True)
-    ok("Done — commit app/static/js/pivotick.iife.js, app/static/css/components/pivotick.css "
-       "and app/static/js/pivotick/ together with the submodule bump")
+    banner("pivotick assets")
+    with step(1, 1, "Building Pivotick graph assets"):
+        _ensure_pivotick_assets(force=True)
+    _done("Done — commit app/static/js/pivotick.iife.js, app/static/css/components/pivotick.css "
+          "and app/static/js/pivotick/ together with the submodule bump")
 
 
 def cmd_pivograph() -> None:
     """Rebuild the Pivograph app (graph view of /rule/formats) from the pinned submodule."""
-    header("Building Pivograph")
-    try:
-        _build_pivograph_assets()
-    except Exception as exc:
-        error(f"Pivograph build failed: {exc}")
-        sys.exit(1)
-    ok("Done — commit app/static/pivograph/ together with the submodule bump")
+    banner("pivograph build")
+    with step(1, 1, "Building Pivograph"):
+        try:
+            _build_pivograph_assets()
+        except Exception as exc:
+            error(f"Pivograph build failed: {exc}")
+            sys.exit(1)
+    _done("Done — commit app/static/pivograph/ together with the submodule bump")
 
 
 def cmd_deploy() -> None:
@@ -1206,26 +1245,29 @@ def cmd_db() -> None:
     """flask db [upgrade|downgrade|migrate …]  — defaults to upgrade."""
     _check_venv()
     sub = sys.argv[2:] if len(sys.argv) > 2 else ["upgrade"]
-    run([FLASK, "db"] + sub, extra_env={"FLASKENV": "development"})
-    ok(f"flask db {' '.join(sub)} done")
+    banner(f"flask db {' '.join(sub)}"[:26])
+    run([FLASK, "db"] + sub, extra_env={"FLASKENV": "development"}, live=True)   # its output is the answer (current, history…)
+    _done(f"flask db {' '.join(sub)} done")
 
 
 def cmd_db_init() -> None:
     _check_venv()
-    header("Initialising database (tables + admin user)")
-    run([PYTHON, "app.py", "-i"], extra_env={"FLASKENV": "development"})
-    ok("Done")
+    banner("database init")
+    run([PYTHON, "app.py", "-i"], extra_env={"FLASKENV": "development"}, label="Creating the tables and the admin user",
+        live=True)
+    _done("Database initialised")
 
 
 def cmd_db_reload() -> None:
     _check_venv()
-    header("Reloading database (DROP + recreate)")
-    print("\033[1;31m  WARNING: This will wipe ALL data.\033[0m")
+    banner("database reload")
+    _say("\033[1;31m  WARNING: This will wipe ALL data.\033[0m")
     if not _confirm("Are you sure you want to wipe and recreate the database?"):
         info("Cancelled.")
         return
-    run([PYTHON, "app.py", "-r"], extra_env={"FLASKENV": "development"})
-    ok("Database reloaded")
+    run([PYTHON, "app.py", "-r"], extra_env={"FLASKENV": "development"}, label="Dropping and recreating the database",
+        live=True)
+    _done("Database reloaded")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
