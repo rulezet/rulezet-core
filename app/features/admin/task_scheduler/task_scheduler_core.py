@@ -1155,3 +1155,97 @@ def preview_workflow(workflow_uuid):
         warnings.append('This workflow has no task.')
     return {'tasks': out, 'total_seconds': None if unknown and not total else total,
             'partial_estimate': unknown, 'warnings': warnings}
+
+
+# ── Workflow dashboard: figures, insights, upcoming launches ────────────────────
+
+def workflow_dashboard(workflow_uuid):
+    """Everything the workflow page's header and History insights show, in one call:
+    launches (count, success rate, average duration, the last one, one bar per recent launch),
+    the tasks failing or slow the most, and the next launches."""
+    from app.core.db_class.job import BackgroundJob
+    from app.core.db_class.task_scheduler import AdminTaskRun, AdminWorkflowRun
+    from app.features.admin.task_scheduler.scheduler_engine import (
+        build_trigger, workflow_launch_status, workflow_root_tasks,
+    )
+    workflow = AdminWorkflow.query.filter_by(uuid=workflow_uuid).first()
+    if not workflow:
+        return None
+
+    recent = (AdminWorkflowRun.query.filter_by(workflow_id=workflow.id)
+              .order_by(AdminWorkflowRun.started_at.desc()).limit(30).all())
+    bars = [serialize_workflow_run(r) for r in recent]
+    finished = [b for b in bars if b['status'] in ('done', 'failed', 'cancelled')]
+    ok = [b for b in finished if b['status'] == 'done']
+    durations = [b['duration_seconds'] for b in finished if b['duration_seconds'] is not None]
+
+    # per task, over its last 50 runs
+    since = datetime.datetime.utcnow() - datetime.timedelta(days=60)
+    per_task = []
+    for t in workflow.tasks:
+        runs = (AdminTaskRun.query.filter(AdminTaskRun.schedule_id == t.id, AdminTaskRun.started_at >= since)
+                .order_by(AdminTaskRun.started_at.desc()).limit(50).all())
+        done_runs = [r for r in runs if r.finished_at and r.started_at]
+        if not done_runs:
+            continue
+        fails = sum(1 for r in done_runs if r.status == 'failed')
+        avg = sum((r.finished_at - r.started_at).total_seconds() for r in done_runs) / len(done_runs)
+        per_task.append({'uuid': t.uuid, 'title': t.title, 'task_type': t.task_type, 'runs': len(done_runs),
+                         'failures': fails, 'fail_rate': round(100 * fails / len(done_runs)), 'avg_seconds': round(avg)})
+
+    # next launches of its first tasks
+    upcoming = []
+    now = datetime.datetime.now(datetime.timezone.utc)
+    for root in workflow_root_tasks(workflow):
+        if not root.is_active or root.trigger_mode in ('after_task',):
+            continue
+        if root.trigger_mode == 'once':
+            if root.next_run_at:
+                upcoming.append({'at': root.next_run_at.strftime('%Y-%m-%dT%H:%M:%SZ'), 'task': root.title})
+            continue
+        try:
+            trig, cur = build_trigger(root), now
+            for _ in range(5):
+                nxt = trig.get_next_fire_time(None, cur)
+                if not nxt:
+                    break
+                upcoming.append({'at': nxt.astimezone(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'), 'task': root.title})
+                cur = nxt + datetime.timedelta(seconds=1)
+        except Exception:
+            continue
+    upcoming.sort(key=lambda u: u['at'])
+
+    return {
+        'workflow': workflow.to_json(),
+        'launch_status': workflow_launch_status(workflow),
+        'launches': AdminWorkflowRun.query.filter_by(workflow_id=workflow.id).count(),
+        'success_rate': round(100 * len(ok) / len(finished)) if finished else None,
+        'avg_seconds': round(sum(durations) / len(durations)) if durations else None,
+        'last': bars[0] if bars else None,
+        'bars': [{'uuid': b['uuid'], 'status': b['status'], 'started_at': b['started_at'],
+                  'duration_seconds': b['duration_seconds'], 'done': b['done_count'], 'failed': b['failed_count'],
+                  'tasks': b['task_count']} for b in reversed(bars)],
+        'failing': sorted([p for p in per_task if p['failures']], key=lambda p: (-p['fail_rate'], -p['failures']))[:5],
+        'slowest': sorted(per_task, key=lambda p: -p['avg_seconds'])[:5],
+        'upcoming': upcoming[:6],
+        'task_count': len(workflow.tasks),
+        'active_task_count': sum(1 for t in workflow.tasks if t.is_active),
+        'auto_paused': [t.title for t in workflow.tasks if t.auto_disabled_at],
+    }
+
+
+def run_from_task(schedule_uuid, triggered_by):
+    """Launch the workflow from one task: it and everything after it (a new launch in the history),
+    e.g. to finish a chain after fixing what made a task fail. Returns (workflow_run, error)."""
+    schedule = AdminTaskSchedule.query.filter_by(uuid=schedule_uuid).first()
+    if not schedule or not schedule.workflow:
+        return None, "Task not found."
+    from app.core.db_class.job import BackgroundJob
+    from app.core.db_class.task_scheduler import AdminTaskRun
+    busy = (AdminTaskRun.query.join(AdminTaskSchedule, AdminTaskSchedule.id == AdminTaskRun.schedule_id)
+            .filter(AdminTaskSchedule.workflow_id == schedule.workflow_id, AdminTaskRun.status == 'pending').all())
+    for r in busy:
+        job = BackgroundJob.query.filter_by(uuid=r.job_uuid).first() if r.job_uuid else None
+        if job and job.status in ('pending', 'running', 'paused'):
+            return None, "This workflow is already running — wait for it or stop it first."
+    return launch_workflow(schedule.workflow, [schedule], triggered_by=triggered_by), None

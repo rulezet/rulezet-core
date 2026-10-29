@@ -595,3 +595,37 @@ def delete_workflow_template(key):
         return jsonify({"message": err, "toast_class": "danger-subtle"}), 400
     log_activity("admin.settings_changed", f"Deleted the workflow template '{key}'", icon="fa-solid fa-diagram-project")
     return jsonify({"message": "Template deleted.", "toast_class": "success-subtle"}), 200
+
+
+@task_scheduler_blueprint.route('/workflows/<uuid>/dashboard', methods=['GET'])
+def workflow_dashboard(uuid):
+    data = TaskSchedulerModel.workflow_dashboard(uuid)
+    if data is None:
+        return jsonify({"message": "Workflow not found."}), 404
+    return jsonify(data), 200
+
+
+@task_scheduler_blueprint.route('/workflows/<uuid>/set_active', methods=['POST'])
+def set_workflow_active(uuid):
+    """Pause / resume a whole workflow (its tasks keep their own Active switch)."""
+    workflow = _workflow_or_none(uuid)
+    if not workflow:
+        return jsonify({"message": "Workflow not found.", "toast_class": "danger-subtle"}), 404
+    from app import db
+    workflow.is_active = bool((request.get_json(silent=True) or {}).get('is_active'))
+    db.session.commit()
+    verb = 'resumed' if workflow.is_active else 'paused'
+    log_activity("admin.workflow_updated", f"Workflow '{workflow.title}' {verb}", target_type="admin_workflow",
+                 target_uuid=workflow.uuid, icon="fa-solid fa-diagram-project")
+    return jsonify({"message": f"Workflow {verb}.", "toast_class": "success-subtle", "is_active": workflow.is_active}), 200
+
+
+@task_scheduler_blueprint.route('/<uuid>/run_from_here', methods=['POST'])
+def run_from_here(uuid):
+    run, err = TaskSchedulerModel.run_from_task(uuid, current_user)
+    if err:
+        return jsonify({"message": err, "toast_class": "danger-subtle"}), 400
+    log_activity("admin.workflow_run_now", "Launched a workflow from one of its tasks",
+                 target_type="admin_task_schedule", target_uuid=uuid, icon="fa-solid fa-play")
+    return jsonify({"message": "Launched from this task.", "toast_class": "success-subtle",
+                    "workflow_run_uuid": run.uuid}), 202
