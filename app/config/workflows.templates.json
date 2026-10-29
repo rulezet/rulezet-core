@@ -1,0 +1,342 @@
+{
+  "label": "Workflow templates",
+  "category": "Workflows",
+  "description": "Ready-made workflows of Admin → Workflows → Templates. One entry per template: label, icon (Font Awesome), description, spec (the workflow: title, description, tasks — the same JSON as a workflow exported from the Workflows page). \"Save as template\" on a workflow adds one here. A template's first task is created paused.",
+  "public": false,
+  "value": {
+    "weekly_maintenance": {
+      "label": "Weekly maintenance",
+      "icon": "fa-solid fa-screwdriver-wrench",
+      "description": "Every Sunday night: pull the git clones, resync Git Sources, look again for links between rules, try the bad rules again, re-read references & metadata, recompute the leaderboard, clear the caches.",
+      "spec": {
+        "title": "Weekly maintenance",
+        "description": "Keeps rules, links, metadata and figures fresh — every Sunday at 02:00 UTC.",
+        "tasks": [
+          {
+            "ref": "pull",
+            "title": "Pull the git clones",
+            "task_type": "git_cache_pull",
+            "trigger": {
+              "trigger_mode": "weekly",
+              "days_of_week": [
+                6
+              ],
+              "hour": 2,
+              "minute": 0,
+              "timezone": "UTC"
+            }
+          },
+          {
+            "ref": "resync",
+            "title": "Resync Git Sources",
+            "task_type": "github_repo_resync",
+            "trigger": {
+              "after": "pull",
+              "condition": "always"
+            }
+          },
+          {
+            "ref": "relink",
+            "title": "Links between rules",
+            "task_type": "relink_rules",
+            "target_payload": {
+              "formats": [
+                "wazuh",
+                "kunai"
+              ]
+            },
+            "trigger": {
+              "after": "resync",
+              "condition": "always"
+            }
+          },
+          {
+            "ref": "bad",
+            "title": "Bad rules — retry & link",
+            "task_type": "bad_rules_retry",
+            "target_payload": {
+              "formats": [
+                "yara"
+              ],
+              "link_dependencies": true
+            },
+            "trigger": {
+              "after": "relink",
+              "condition": "always"
+            }
+          },
+          {
+            "ref": "meta",
+            "title": "References & metadata",
+            "task_type": "reparse_rule_metadata",
+            "target_payload": {
+              "formats": ""
+            },
+            "trigger": {
+              "after": "bad",
+              "condition": "always"
+            }
+          },
+          {
+            "ref": "points",
+            "title": "Recompute the leaderboard",
+            "task_type": "gamification_recompute",
+            "trigger": {
+              "after": "meta",
+              "condition": "always"
+            }
+          },
+          {
+            "ref": "cache",
+            "title": "Clear the caches",
+            "task_type": "clear_caches",
+            "trigger": {
+              "after": "points",
+              "condition": "always"
+            }
+          }
+        ]
+      }
+    },
+    "bad_rules_cleanup": {
+      "label": "Bad rules clean-up",
+      "icon": "fa-solid fa-broom",
+      "description": "Every day: try every bad rule again (YARA rules naming another rule are imported linked to it), look again for links, clear the caches.",
+      "spec": {
+        "title": "Bad rules clean-up",
+        "description": "Imports the bad rules that became valid — every day at 04:00 UTC.",
+        "tasks": [
+          {
+            "ref": "bad",
+            "title": "Bad rules — retry & link",
+            "task_type": "bad_rules_retry",
+            "target_payload": {
+              "formats": [],
+              "link_dependencies": true
+            },
+            "trigger": {
+              "trigger_mode": "daily",
+              "hour": 4,
+              "minute": 0,
+              "timezone": "UTC"
+            }
+          },
+          {
+            "ref": "relink",
+            "title": "Links between rules",
+            "task_type": "relink_rules",
+            "target_payload": {
+              "formats": [
+                "wazuh",
+                "kunai",
+                "yara"
+              ]
+            },
+            "trigger": {
+              "after": "bad",
+              "condition": "success"
+            }
+          },
+          {
+            "ref": "cache",
+            "title": "Clear the caches",
+            "task_type": "clear_caches",
+            "trigger": {
+              "after": "relink",
+              "condition": "always"
+            }
+          }
+        ]
+      }
+    },
+    "threat_intel_refresh": {
+      "label": "Threat intel refresh",
+      "icon": "fa-solid fa-satellite-dish",
+      "description": "Every Monday: update the MISP taxonomies & galaxies and the MITRE ATT&CK data, then clear the caches.",
+      "spec": {
+        "title": "Threat intel refresh",
+        "description": "MISP and MITRE ATT&CK data up to date — every Monday at 03:00 UTC.",
+        "tasks": [
+          {
+            "ref": "misp",
+            "title": "Update MISP taxonomies & galaxies",
+            "task_type": "misp_update_data",
+            "trigger": {
+              "trigger_mode": "weekly",
+              "days_of_week": [
+                0
+              ],
+              "hour": 3,
+              "minute": 0,
+              "timezone": "UTC"
+            }
+          },
+          {
+            "ref": "attack",
+            "title": "Update MITRE ATT&CK data",
+            "task_type": "attack_update_data",
+            "trigger": {
+              "after": "misp",
+              "condition": "always"
+            }
+          },
+          {
+            "ref": "cache",
+            "title": "Clear the caches",
+            "task_type": "clear_caches",
+            "trigger": {
+              "after": "attack",
+              "condition": "always"
+            }
+          }
+        ]
+      }
+    },
+    "nightly_backup": {
+      "label": "Nightly backup",
+      "icon": "fa-solid fa-database",
+      "description": "Every night at 01:00 UTC: a backup of the database.",
+      "spec": {
+        "title": "Nightly backup",
+        "description": "A database backup every night at 01:00 UTC.",
+        "tasks": [
+          {
+            "ref": "backup",
+            "title": "Database backup",
+            "task_type": "db_backup",
+            "trigger": {
+              "trigger_mode": "daily",
+              "hour": 1,
+              "minute": 0,
+              "timezone": "UTC"
+            }
+          }
+        ]
+      }
+    },
+    "data_sources_refresh": {
+      "label": "Data sources refresh",
+      "icon": "fa-solid fa-code-branch",
+      "description": "Every 1st of the month: pull the latest MISP taxonomies & galaxies, load them, update MITRE ATT&CK, clear the caches.",
+      "spec": {
+        "title": "Data sources refresh",
+        "description": "MISP and ATT&CK sources pulled and loaded — the 1st of every month at 03:00 UTC.",
+        "tasks": [
+          {
+            "ref": "pull",
+            "title": "Pull MISP taxonomies & galaxies",
+            "task_type": "submodules_update",
+            "target_payload": {
+              "names": [
+                "misp-taxonomies",
+                "misp-galaxy"
+              ]
+            },
+            "trigger": {
+              "trigger_mode": "monthly",
+              "day_of_month": 1,
+              "hour": 3,
+              "minute": 0,
+              "timezone": "UTC"
+            }
+          },
+          {
+            "ref": "misp",
+            "title": "Load MISP taxonomies & galaxies",
+            "task_type": "misp_update_data",
+            "trigger": {
+              "after": "pull",
+              "condition": "success"
+            }
+          },
+          {
+            "ref": "attack",
+            "title": "Update MITRE ATT&CK data",
+            "task_type": "attack_update_data",
+            "trigger": {
+              "after": "misp",
+              "condition": "always"
+            }
+          },
+          {
+            "ref": "cache",
+            "title": "Clear the caches",
+            "task_type": "clear_caches",
+            "trigger": {
+              "after": "attack",
+              "condition": "always"
+            }
+          }
+        ]
+      }
+    },
+    "rules_enrichment": {
+      "label": "Rules enrichment",
+      "icon": "fa-solid fa-wand-magic-sparkles",
+      "description": "Every Wednesday: re-read the native tags of every rule, then references & metadata (platforms, TLP / PAP), look again for links, clear the caches.",
+      "spec": {
+        "title": "Rules enrichment",
+        "description": "Tags, metadata and links read again from the rules — every Wednesday at 02:00 UTC.",
+        "tasks": [
+          {
+            "ref": "tags",
+            "title": "Native tags",
+            "task_type": "native_tags_import",
+            "target_payload": {
+              "formats": [
+                "yara",
+                "sigma",
+                "suricata"
+              ]
+            },
+            "trigger": {
+              "trigger_mode": "weekly",
+              "days_of_week": [
+                2
+              ],
+              "hour": 2,
+              "minute": 0,
+              "timezone": "UTC"
+            }
+          },
+          {
+            "ref": "meta",
+            "title": "References & metadata",
+            "task_type": "reparse_rule_metadata",
+            "target_payload": {
+              "formats": ""
+            },
+            "trigger": {
+              "after": "tags",
+              "condition": "always"
+            }
+          },
+          {
+            "ref": "relink",
+            "title": "Links between rules",
+            "task_type": "relink_rules",
+            "target_payload": {
+              "formats": [
+                "wazuh",
+                "kunai"
+              ]
+            },
+            "trigger": {
+              "after": "meta",
+              "condition": "always"
+            }
+          },
+          {
+            "ref": "cache",
+            "title": "Clear the caches",
+            "task_type": "clear_caches",
+            "trigger": {
+              "after": "relink",
+              "condition": "always"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

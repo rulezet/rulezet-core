@@ -201,10 +201,16 @@ const TaskWorkflowGraph = {
 
             const byId = new Map(this.schedules.map(s => [s.id, s]));
             const edges = [];
+            // every parent link: the first one, then the extra ones (a task waiting for several, dashed)
+            const links = [];
             for (const s of this.schedules) {
-                if (s.trigger_mode !== 'after_task' || s.depends_on_schedule_id == null) continue;
-                const parent = byId.get(s.depends_on_schedule_id);
-                const parentEl = this.nodeRefs.get(s.depends_on_schedule_id);
+                if (s.trigger_mode === 'after_task' && s.depends_on_schedule_id != null)
+                    links.push({ s, parentId: s.depends_on_schedule_id, condition: s.depends_on_condition, extra: false });
+                for (const ep of (s.extra_parents || [])) links.push({ s, parentId: ep.id, condition: ep.condition, extra: true });
+            }
+            for (const { s, parentId, condition, extra } of links) {
+                const parent = byId.get(parentId);
+                const parentEl = this.nodeRefs.get(parentId);
                 const childEl = this.nodeRefs.get(s.id);
                 if (!parentEl || !childEl) continue;
 
@@ -216,7 +222,7 @@ const TaskWorkflowGraph = {
                 const y2 = cr.top - wrapRect.top + wrap.scrollTop + cr.height / 2;
                 const midX = (x1 + x2) / 2;
 
-                const color = { success: '#198754', failure: '#dc3545', always: '#6c757d' }[s.depends_on_condition] || '#0d6efd';
+                const color = { success: '#198754', failure: '#dc3545', always: '#6c757d' }[condition] || '#0d6efd';
                 const dimmed = this.focusedUuids.length > 0 && !this.focusedUuids.includes(s.uuid) && !(parent && this.focusedUuids.includes(parent.uuid));
                 // With a launch selected: 'taken' (the child fired), 'live'
                 // (taken and still running) or 'not-taken' (branch skipped).
@@ -226,7 +232,7 @@ const TaskWorkflowGraph = {
                     path = !childStep ? 'not-taken' : (['pending', 'running'].includes(childStep.status) ? 'live' : 'taken');
                 }
                 edges.push({
-                    id: `${s.depends_on_schedule_id}-${s.id}`,
+                    id: `${parentId}-${s.id}${extra ? '-x' : ''}`, dashed: extra,
                     d: `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`,
                     color: path === 'not-taken' ? '#adb5bd' : color, dimmed, path,
                     x2, y2,
@@ -252,6 +258,7 @@ const TaskWorkflowGraph = {
                     <path :d="e.d" :stroke="e.color" fill="none"
                           :class="e.path ? 'twg-edge twg-edge--' + e.path : 'twg-edge'"
                           :stroke-width="e.path === 'taken' || e.path === 'live' ? 3.5 : 2"
+                          :stroke-dasharray="e.dashed ? '6,5' : null"
                           :opacity="e.dimmed ? 0.15 : (e.path === 'not-taken' ? 0.55 : 0.85)"></path>
                     <circle v-if="e.path === 'taken' || e.path === 'live'" :cx="e.x2 - 2" :cy="e.y2" r="4" :fill="e.color"
                             :opacity="e.dimmed ? 0.15 : 1"></circle>

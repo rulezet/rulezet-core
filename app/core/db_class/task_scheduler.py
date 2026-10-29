@@ -111,6 +111,20 @@ class AdminTaskSchedule(db.Model):
     # Free-form position on the workflow's Canvas view — null until the admin
     # drags the node for the first time, at which point the canvas switches
     # from its auto-layout fallback to this saved position.
+    # Several parents (AdminTaskDependency rows, on top of depends_on_schedule_id above, the first
+    # parent): 'all' = runs once every parent has finished as its condition says, 'any' = as soon as one has
+    depends_on_mode = db.Column(db.String(10), nullable=False, default='all', server_default='all')
+
+    # Robustness (scheduler_engine.on_job_finished / tick):
+    max_retries              = db.Column(db.Integer, nullable=False, default=0, server_default='0')    # retries after a failure
+    retry_delay_minutes      = db.Column(db.Integer, nullable=False, default=10, server_default='10')
+    timeout_minutes          = db.Column(db.Integer, nullable=True)       # job cancelled when it runs longer
+    max_consecutive_failures = db.Column(db.Integer, nullable=False, default=0, server_default='0')    # 0 = never auto-pause
+    consecutive_failures     = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    auto_disabled_at         = db.Column(db.DateTime, nullable=True)      # paused by the circuit breaker
+    catch_up                 = db.Column(db.Boolean, nullable=False, default=False, server_default='false')  # run a missed launch late
+    retry_at                 = db.Column(db.DateTime, nullable=True)      # next retry of a failed run
+
     position_x = db.Column(db.Float, nullable=True)
     position_y = db.Column(db.Float, nullable=True)
     # 'success' | 'failure' | 'always'
@@ -130,6 +144,17 @@ class AdminTaskSchedule(db.Model):
         from app.features.admin.task_scheduler.scheduler_engine import _once_run_at_utc
         utc = _once_run_at_utc(self)
         return utc.strftime('%Y-%m-%dT%H:%M:%SZ') if utc else None
+
+    def run_stats(self):
+        """Its last runs: how many, success rate, average / last duration (seconds) — the task window
+        and the graph show it, the launch preview uses it to estimate how long a run takes."""
+        finished = [r for r in self.runs[:20] if r.finished_at and r.started_at]
+        if not finished:
+            return {"runs": len(self.runs), "success_rate": None, "avg_seconds": None, "last_seconds": None}
+        durations = [(r.finished_at - r.started_at).total_seconds() for r in finished]
+        ok = sum(1 for r in finished if r.status == 'done')
+        return {"runs": len(self.runs), "success_rate": round(100 * ok / len(finished)),
+                "avg_seconds": round(sum(durations) / len(durations)), "last_seconds": round(durations[0])}
 
     def days_of_week_list(self):
         if not self.days_of_week:
@@ -165,6 +190,19 @@ class AdminTaskSchedule(db.Model):
             "depends_on_schedule_uuid": self.depends_on.uuid if self.depends_on else None,
             "depends_on_schedule_title": self.depends_on.title if self.depends_on else None,
             "depends_on_condition": self.depends_on_condition,
+            "depends_on_mode": self.depends_on_mode or 'all',
+            "extra_parents": [{"id": d.parent_id, "uuid": d.parent.uuid if d.parent else None,
+                               "title": d.parent.title if d.parent else None, "condition": d.condition}
+                              for d in self.extra_dependencies],
+            "max_retries": self.max_retries or 0,
+            "retry_delay_minutes": self.retry_delay_minutes or 10,
+            "timeout_minutes": self.timeout_minutes,
+            "max_consecutive_failures": self.max_consecutive_failures or 0,
+            "consecutive_failures": self.consecutive_failures or 0,
+            "auto_disabled_at": self.auto_disabled_at.strftime('%Y-%m-%d %H:%M') if self.auto_disabled_at else None,
+            "catch_up": bool(self.catch_up),
+            "retry_at": self.retry_at.strftime('%Y-%m-%d %H:%M') if self.retry_at else None,
+            "stats": self.run_stats(),
             "position_x": self.position_x,
             "position_y": self.position_y,
             "next_run_at": self.next_run_at.strftime('%Y-%m-%d %H:%M') if self.next_run_at else None,
@@ -173,6 +211,23 @@ class AdminTaskSchedule(db.Model):
             "last_run_job_uuid": self.runs[0].job_uuid if self.runs else None,
             "created_at": self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
         }
+
+
+class AdminTaskDependency(db.Model):
+    """One more parent of a task (the first one stays in AdminTaskSchedule.depends_on_schedule_id):
+    a task waiting for several tasks — all of them or any one, its depends_on_mode."""
+    __tablename__ = "admin_task_dependency"
+
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    schedule_id = db.Column(db.Integer, db.ForeignKey("admin_task_schedule.id", ondelete="CASCADE"), nullable=False, index=True)
+    parent_id   = db.Column(db.Integer, db.ForeignKey("admin_task_schedule.id", ondelete="CASCADE"), nullable=False, index=True)
+    condition   = db.Column(db.String(20), nullable=False, default='success')   # success | failure | always
+
+    schedule = db.relationship("AdminTaskSchedule", foreign_keys=[schedule_id], backref=db.backref(
+        "extra_dependencies", cascade="all, delete-orphan", lazy=True))
+    parent   = db.relationship("AdminTaskSchedule", foreign_keys=[parent_id])
+
+    __table_args__ = (db.UniqueConstraint('schedule_id', 'parent_id', name='uq_admin_task_dependency'),)
 
 
 class AdminWorkflowRun(db.Model):
@@ -210,6 +265,7 @@ class AdminTaskRun(db.Model):
     workflow_run_id = db.Column(db.Integer, db.ForeignKey("admin_workflow_run.id", ondelete="SET NULL"), nullable=True)
 
     status      = db.Column(db.String(20), default="pending")  # pending | done | failed
+    attempt     = db.Column(db.Integer, nullable=False, default=1, server_default='1')  # 2+ = an automatic retry
     started_at  = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     finished_at = db.Column(db.DateTime, nullable=True)
 

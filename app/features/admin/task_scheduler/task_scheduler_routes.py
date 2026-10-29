@@ -563,3 +563,35 @@ def duplicate_task(uuid):
                  target_type="admin_task_schedule", target_uuid=copy.uuid, icon="fa-solid fa-list-check")
     return jsonify({"message": "Task duplicated (paused).", "toast_class": "success-subtle",
                     "schedule": copy.to_json()}), 201
+
+
+@task_scheduler_blueprint.route('/workflows/<uuid>/preview', methods=['GET'])
+def preview_workflow(uuid):
+    """What "Run workflow" will do: tasks in order, items to go through, usual durations."""
+    data = TaskSchedulerModel.preview_workflow(uuid)
+    if data is None:
+        return jsonify({"message": "Workflow not found."}), 404
+    return jsonify(data), 200
+
+
+@task_scheduler_blueprint.route('/workflows/<uuid>/save_as_template', methods=['POST'])
+def save_workflow_as_template(uuid):
+    workflow = _workflow_or_none(uuid)
+    if not workflow:
+        return jsonify({"message": "Workflow not found.", "toast_class": "danger-subtle"}), 404
+    data = request.get_json(silent=True) or {}
+    key, err = WorkflowSpec.save_as_template(workflow, current_user, label=data.get('label'), description=data.get('description'))
+    if err:
+        return jsonify({"message": err, "toast_class": "danger-subtle"}), 400
+    log_activity("admin.settings_changed", f"Saved the workflow '{workflow.title}' as a template",
+                 target_type="admin_workflow", target_uuid=workflow.uuid, icon="fa-solid fa-diagram-project")
+    return jsonify({"message": "Saved as a template.", "toast_class": "success-subtle", "key": key}), 201
+
+
+@task_scheduler_blueprint.route('/templates/<key>/delete', methods=['POST'])
+def delete_workflow_template(key):
+    err = WorkflowSpec.delete_template(key, current_user)
+    if err:
+        return jsonify({"message": err, "toast_class": "danger-subtle"}), 400
+    log_activity("admin.settings_changed", f"Deleted the workflow template '{key}'", icon="fa-solid fa-diagram-project")
+    return jsonify({"message": "Template deleted.", "toast_class": "success-subtle"}), 200

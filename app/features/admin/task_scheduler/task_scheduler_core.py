@@ -157,7 +157,7 @@ def _validate_trigger(data, schedule_id=None, workflow_id=None):
             return False, "A task can only depend on another task within the same workflow."
         if depends_on_id == schedule_id:
             return False, "A task cannot depend on itself."
-        if _creates_cycle(schedule_id, depends_on_id):
+        if _creates_cycle(schedule_id, depends_on_id) or (schedule_id and _reaches(depends_on_id, schedule_id)):
             return False, "This dependency would create a cycle between tasks."
         if data.get('depends_on_condition') not in ('success', 'failure', 'always'):
             return False, "depends_on_condition must be 'success', 'failure', or 'always'."
@@ -230,6 +230,91 @@ def _apply_trigger_fields(schedule, data):
     schedule.hour = data.get('hour', 3)
     schedule.minute = data.get('minute', 0)
     schedule.timezone = data.get('timezone') or 'UTC'
+
+
+def _apply_extras(schedule, data):
+    """The task window's extra settings: more parents (all / any), retries, time limit, auto-pause,
+    catch-up. Only keys present in data are changed. Returns an error string or None."""
+    from app.core.db_class.task_scheduler import AdminTaskDependency
+
+    def _int(key, lo, hi, allow_none=False):
+        if key not in data:
+            return getattr(schedule, key), None
+        v = data.get(key)
+        if v in (None, '') and allow_none:
+            return None, None
+        try:
+            v = int(v)
+        except (TypeError, ValueError):
+            return None, f"{key} must be a number."
+        if not lo <= v <= hi:
+            return None, f"{key} must be between {lo} and {hi}."
+        return v, None
+
+    for key, lo, hi, none_ok in (('max_retries', 0, 5, False), ('retry_delay_minutes', 1, 1440, False),
+                                 ('timeout_minutes', 1, 10080, True), ('max_consecutive_failures', 0, 50, False)):
+        v, err = _int(key, lo, hi, none_ok)
+        if err:
+            return err
+        setattr(schedule, key, v)
+    if 'catch_up' in data:
+        schedule.catch_up = bool(data.get('catch_up'))
+    if 'depends_on_mode' in data:
+        if data['depends_on_mode'] not in ('all', 'any'):
+            return "depends_on_mode must be 'all' or 'any'."
+        schedule.depends_on_mode = data['depends_on_mode']
+    if schedule.is_active and schedule.auto_disabled_at:      # switched back on by an admin
+        schedule.auto_disabled_at = None
+        schedule.consecutive_failures = 0
+
+    if 'extra_parents' in data:
+        extra = data.get('extra_parents') or []
+        if not isinstance(extra, list) or len(extra) > 20:
+            return "extra_parents must be a list (20 at most)."
+        wanted = {}
+        for item in extra:
+            pid, cond = (item or {}).get('id'), (item or {}).get('condition', 'success')
+            if cond not in ('success', 'failure', 'always'):
+                return "A parent's condition must be success, failure or always."
+            parent = AdminTaskSchedule.query.get(pid) if isinstance(pid, int) else None
+            if not parent or parent.workflow_id != schedule.workflow_id:
+                return "A task can only wait for tasks of the same workflow."
+            if parent.id == schedule.id or (schedule.id and _reaches(parent.id, schedule.id)):
+                return f'Waiting for "{parent.title}" would create a cycle between tasks.'
+            if parent.id != schedule.depends_on_schedule_id:
+                wanted[parent.id] = cond
+        if wanted and schedule.trigger_mode != 'after_task':
+            return "Extra parents need the trigger \"After another task\"."
+        for dep in list(schedule.extra_dependencies):
+            if dep.parent_id not in wanted:
+                db.session.delete(dep)
+            else:
+                dep.condition = wanted.pop(dep.parent_id)
+        for pid, cond in wanted.items():
+            schedule.extra_dependencies.append(AdminTaskDependency(parent_id=pid, condition=cond))
+    elif schedule.trigger_mode != 'after_task':
+        for dep in list(schedule.extra_dependencies):
+            db.session.delete(dep)
+    return None
+
+
+def _reaches(start_id, target_id):
+    """Whether target_id is upstream of start_id through any parent (first or extra) — a link from
+    target to start would then be a cycle."""
+    from app.core.db_class.task_scheduler import AdminTaskDependency
+    seen, stack = set(), [start_id]
+    while stack:
+        cur = stack.pop()
+        if cur == target_id:
+            return True
+        if cur in seen:
+            continue
+        seen.add(cur)
+        task = AdminTaskSchedule.query.get(cur)
+        if task and task.depends_on_schedule_id:
+            stack.append(task.depends_on_schedule_id)
+        stack += [d.parent_id for d in AdminTaskDependency.query.filter_by(schedule_id=cur).all()]
+    return False
 
 
 def _build_target_payload(task_type, target_payload):
@@ -372,6 +457,10 @@ def create_schedule(data, editor):
     _apply_trigger_fields(schedule, data)
     db.session.add(schedule)
     db.session.flush()
+    err = _apply_extras(schedule, data)
+    if err:
+        db.session.rollback()
+        return None, err
     db.session.commit()
 
     _register_live(schedule)
@@ -411,6 +500,10 @@ def update_schedule(schedule_uuid, data):
     if 'target_payload' in data:
         schedule.target_payload = target_payload
     _apply_trigger_fields(schedule, data)
+    err = _apply_extras(schedule, data)
+    if err:
+        db.session.rollback()
+        return None, err
 
     db.session.commit()
     _register_live(schedule)
@@ -429,6 +522,9 @@ def delete_schedule(schedule_uuid):
     AdminTaskSchedule.query.filter_by(depends_on_schedule_id=schedule.id).update(
         {"depends_on_schedule_id": None, "is_active": False}
     )
+    # it is no longer an extra parent of anything either (all / any waits)
+    from app.core.db_class.task_scheduler import AdminTaskDependency
+    AdminTaskDependency.query.filter_by(parent_id=schedule.id).delete()
     db.session.delete(schedule)
     db.session.commit()
     return True
@@ -986,3 +1082,76 @@ def clear_task_dependency(schedule_uuid):
     db.session.commit()
     _register_live(schedule)
     return schedule, None
+
+
+# ── Launch preview: what a run of the workflow will do, before it runs ──────────
+
+def _estimate(task):
+    """How many items the task will go through, when it can be counted cheaply: (count, unit) or None."""
+    from sqlalchemy import func
+    from app.core.db_class.rule import Rule, InvalidRuleModel
+    from app.features.rule.rule_core import _active
+    p = task.target_payload or {}
+    try:
+        if task.task_type == 'bad_rules_retry':
+            q = InvalidRuleModel.query
+            if p.get('formats'):
+                q = q.filter(func.lower(InvalidRuleModel.rule_type).in_([f.lower() for f in p['formats']]))
+            return q.count(), 'bad rules'
+        if task.task_type in ('relink_rules',):
+            return _active().filter(Rule.format.in_(p.get('formats') or [])).count(), 'rules'
+        if task.task_type == 'reparse_rule_metadata':
+            f = p.get('formats')
+            q = Rule.query
+            if isinstance(f, str) and f.strip() and f != 'ALL':
+                q = q.filter(func.lower(Rule.format) == f.lower())
+            elif isinstance(f, list) and f:
+                q = q.filter(func.lower(Rule.format).in_([x.lower() for x in f]))
+            return q.count(), 'rules'
+        if task.task_type == 'github_sync_schedule_launch':
+            from app.core.db_class.git import GithubSyncSchedule
+            sched = GithubSyncSchedule.query.filter_by(uuid=p.get('schedule_uuid')).first()
+            return (len(sched.repos), 'repositories') if sched else None
+        if task.task_type in ('quality_score', 'attack_parser') and p.get('rule_ids'):
+            return len(p['rule_ids']), 'rules'
+    except Exception:
+        return None
+    return None
+
+
+def preview_workflow(workflow_uuid):
+    """The launch preview: tasks in run order, what each does, how many items, how long it usually
+    takes, what it waits for. {"tasks": [...], "total_seconds": n|None, "warnings": [...]}"""
+    from app.features.admin.task_scheduler.workflow_spec import _ordered_tasks
+    from app.features.admin.task_scheduler.scheduler_engine import _parents
+    workflow = AdminWorkflow.query.filter_by(uuid=workflow_uuid).first()
+    if not workflow:
+        return None
+    tasks = _ordered_tasks(workflow)
+    titles = {t.id: t.title for t in tasks}
+    out, total, unknown, warnings = [], 0, False, []
+    for t in tasks:
+        tdef = TASK_TYPES.get(t.task_type, {})
+        stats = t.run_stats()
+        est = _estimate(t)
+        if stats['avg_seconds'] is None:
+            unknown = True
+        else:
+            total += stats['avg_seconds']
+        parents = [{'title': titles.get(pid, '?'), 'condition': cond} for pid, cond in _parents(t)]
+        if t.auto_disabled_at:
+            warnings.append(f'"{t.title}" was paused after repeated failures.')
+        if not tdef:
+            warnings.append(f'"{t.title}" has an unknown task type and will be skipped.')
+        out.append({
+            'uuid': t.uuid, 'title': t.title, 'icon': tdef.get('icon', 'fa-solid fa-gear'),
+            'description': tdef.get('description', ''), 'is_active': bool(t.is_active),
+            'parents': parents, 'mode': t.depends_on_mode or 'all',
+            'estimate': {'count': est[0], 'unit': est[1]} if est else None,
+            'avg_seconds': stats['avg_seconds'], 'success_rate': stats['success_rate'],
+            'max_retries': t.max_retries or 0, 'timeout_minutes': t.timeout_minutes,
+        })
+    if not tasks:
+        warnings.append('This workflow has no task.')
+    return {'tasks': out, 'total_seconds': None if unknown and not total else total,
+            'partial_estimate': unknown, 'warnings': warnings}

@@ -199,3 +199,48 @@
 .wf-tpl:hover .wf-tpl__cta i { transform: translateX(3px); }
 .wf-tpl--blank { border-style: dashed; justify-content: center; }
 .wf-tpl--blank .wf-tpl__icon { background: var(--light-bg-color); color: #0d6efd; box-shadow: none; border: 1px dashed rgba(13, 110, 253, .45); }
+
+/* several parents, reliability settings */
+.tf-parent { display: flex; align-items: center; gap: .5rem; margin-top: .5rem; }
+.tf-parent__and { font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: #0d6efd; width: 2.2rem; text-align: right; }
+.tf-parent__cond { max-width: 130px; }
+.tf-icon-btn { border: 0; background: none; color: var(--subtle-text-color); width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0; }
+.tf-icon-btn:hover { background: rgba(220, 53, 69, .1); color: #dc3545; }
+.tf-link-btn { border: 1px dashed rgba(13, 110, 253, .45); background: none; color: #0d6efd; border-radius: 999px;
+    padding: .3rem .8rem; font-size: .8rem; font-weight: 600; display: inline-flex; align-items: center; gap: .4rem; }
+.tf-link-btn:hover:not(:disabled) { background: rgba(13, 110, 253, .06); }
+.tf-link-btn:disabled { opacity: .5; }
+.tf-segment--sm button { padding: .28rem .7rem; font-size: .75rem; }
+.tf-rel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .9rem 1.1rem; }
+.tf-rel .tf-label i { color: #0d6efd; margin-right: .35rem; }
+.tf-rel--switch { display: flex; align-items: flex-end; }
+.tf-switch small { font-size: .72rem; font-weight: 400; }
+.tf-stats { display: flex; flex-wrap: wrap; gap: .4rem; }
+.tf-stats span { display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .6rem; border-radius: 999px; font-size: .72rem;
+    font-weight: 600; background: var(--light-bg-color); border: 1px solid var(--border-color); color: var(--subtle-text-color); }
+.tf-stats .is-good { color: #198754; border-color: rgba(25, 135, 84, .3); background: rgba(25, 135, 84, .08); }
+.tf-stats .is-bad { color: #dc3545; border-color: rgba(220, 53, 69, .3); background: rgba(220, 53, 69, .08); }
+
+/* launch preview */
+.tf-what--warn { background: rgba(255, 193, 7, .1); border-color: rgba(255, 193, 7, .45); }
+.tf-what--warn i { color: #b38600; }
+.wf-preview { list-style: none; margin: 0; padding: 0; position: relative; }
+.wf-preview::before { content: ""; position: absolute; left: 19px; top: 20px; bottom: 20px; width: 2px; background: rgba(13, 110, 253, .18); }
+.wf-preview__step { position: relative; display: flex; gap: .9rem; padding: .6rem 0; }
+.wf-preview__icon { position: relative; z-index: 1; width: 40px; height: 40px; flex-shrink: 0; display: grid; place-items: center;
+    border-radius: 12px; background: var(--card-bg-color); border: 2px solid rgba(13, 110, 253, .35); color: #0d6efd; }
+.wf-preview__body { flex: 1; min-width: 0; background: var(--card-bg-color); border: 1px solid var(--border-color); border-radius: 12px; padding: .65rem .85rem; }
+.wf-preview__title { font-weight: 700; }
+.wf-preview__desc { font-size: .8rem; color: var(--subtle-text-color); margin-top: .15rem; line-height: 1.4; }
+.wf-preview__meta { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .45rem; }
+.wf-preview__meta span { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .55rem; border-radius: 999px; font-size: .72rem;
+    font-weight: 600; background: var(--light-bg-color); border: 1px solid var(--border-color); color: var(--subtle-text-color); }
+.wf-preview__meta i { color: #0d6efd; }
+.wf-preview__meta .is-good { color: #198754; } .wf-preview__meta .is-good i { color: #198754; }
+.wf-preview__meta .is-bad { color: #dc3545; } .wf-preview__meta .is-bad i { color: #dc3545; }
+.wf-tpl { position: relative; }
+.wf-tpl__badge { position: absolute; top: .7rem; right: .7rem; display: inline-flex; align-items: center; gap: .45rem; padding: .1rem .55rem;
+    border-radius: 999px; font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    background: rgba(111, 66, 193, .12); color: #6f42c1; }
+.wf-tpl__del { cursor: pointer; opacity: .6; }
+.wf-tpl__del:hover { opacity: 1; color: #dc3545; }
