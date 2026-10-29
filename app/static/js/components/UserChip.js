@@ -196,7 +196,9 @@ const UserChip = defineComponent({
           <!-- Admin / Roles — top-right of the header row -->
           <div v-if="tooltipData && ((tooltipData.roles && tooltipData.roles.length) || tooltipData.is_admin)"
                class="d-flex flex-wrap justify-content-end gap-1 ms-auto" style="max-width:100px;">
-            <span v-if="tooltipData.is_admin" class="badge bg-warning text-dark" style="font-size:.65rem;">
+            <!-- same look as the Admin badge of the users list / profile (.ud-profile-badge--admin) -->
+            <span v-if="tooltipData.is_admin"
+                  style="display:inline-flex;align-items:center;padding:.15rem .5rem;border-radius:20px;font-size:.65rem;font-weight:600;white-space:nowrap;background:rgba(220,53,69,.12);color:#dc3545;">
               <i class="fa-solid fa-crown me-1"></i>Admin
             </span>
             <span v-for="r in tooltipData.roles" :key="r.id"
