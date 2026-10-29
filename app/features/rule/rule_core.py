@@ -4024,7 +4024,8 @@ def build_rules_data_table_query(search=None, sort=None,
                          status=None, workspace_uuid=None, exclude_workspace_uuid=None,
                          ids=None, has_cve=False, quality_score_min=None, quality_score_max=None,
                          has_ai_analysis=False, has_relations=False, branch=None,
-                         has_tags=False, has_license=False, has_attack=False, platforms=None):
+                         has_tags=False, has_license=False, has_attack=False, platforms=None,
+                         org_badge=False):
     """Unpaginated query behind get_rules_data_table — also used wherever the
     exact RuleList filter set must be applied server-side (e.g. bundle from
     filters), so both always agree on which rules "match"."""
@@ -4062,6 +4063,17 @@ def build_rules_data_table_query(search=None, sort=None,
         query = query.filter(Rule.quality_score.isnot(None), Rule.quality_score >= quality_score_min)
     if quality_score_max is not None:
         query = query.filter(Rule.quality_score.isnot(None), Rule.quality_score <= quality_score_max)
+
+    if org_badge:
+        # the organisation badge's rules (CIRCL by default): from its repositories or owned by its members
+        owners = org_badge_owners()
+        conds = []
+        if owners["urls"]:
+            conds.append(Rule.source.in_(owners["urls"]))
+        if owners["user_ids"]:
+            conds.append(Rule.user_id.in_(owners["user_ids"]))
+        from sqlalchemy import false as _false
+        query = query.filter(or_(*conds)) if conds else query.filter(_false())
 
     if has_ai_analysis:
         from app.core.db_class.ai import AIGeneration

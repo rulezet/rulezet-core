@@ -5437,6 +5437,7 @@ def _data_table_filter_kwargs(args):
         has_tags=args.get('has_tags', 'false', type=str) == 'true',
         has_license=args.get('has_license', 'false', type=str) == 'true',
         has_attack=args.get('has_attack', 'false', type=str) == 'true',
+        org_badge=args.get('org_badge', 'false', type=str) == 'true',
     )
 
 

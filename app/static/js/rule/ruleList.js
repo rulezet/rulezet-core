@@ -422,6 +422,14 @@ export default {
                         <span>Exact</span>
                     </label>
 
+                    <label v-if="!isFilterHidden('org_badge') && orgOwners" class="rl-fp-switch"
+                           :title="'Only rules from a ' + orgOwners.label + ' repository or written by a ' + orgOwners.label + ' member'">
+                        <input type="checkbox" v-model="orgBadgeOnly" @change="onFilterChange" />
+                        <span class="d-inline-flex align-items-center gap-1">
+                            <img v-if="orgOwners.logo" :src="orgOwners.logo" alt="" style="width:14px;height:14px;object-fit:contain;">{{ orgOwners.label }}
+                        </span>
+                    </label>
+
                     <label v-if="!isFilterHidden('has_relations')"
                            class="rl-fp-switch" title="Only rules linked to at least one other rule">
                         <input type="checkbox" v-model="hasRelationsOnly" @change="onFilterChange" />
@@ -1819,6 +1827,7 @@ export default {
         const cveOnly           = ref(props.hasCveOnly || _p('has_cve') === 'true')
         const aiAnalysisOnly    = ref(_p('has_ai_analysis') === 'true')
         const hasRelationsOnly  = ref(_p('has_relations') === 'true')
+        const orgBadgeOnly      = ref(_p('org_badge') === 'true')
         // the "N linked" badge / Linked column: only while "Has linked rules" is on (and the page allows it)
         const linkedShown       = computed(() => props.showRelatedCount && hasRelationsOnly.value)
         const hasTagsOnly       = ref(_p('has_tags') === 'true')
@@ -1899,7 +1908,7 @@ export default {
             : (localStorage.getItem('rz-list-view') || 'card')
         const viewMode    = ref(_isPhone ? 'card' : _p('view', _defaultView))
         const _hasUrlFilters = ['tags','sources','branches','licenses','platforms','vulnerabilities','attacks','authors','editors',
-                                'rule_type','search_field','exact_match','person_mode','scope']
+                                'rule_type','search_field','exact_match','person_mode','scope','org_badge']
                                .some(k => _url.has(k))
         const filtersOpen = ref(_hasUrlFilters)
         const expandedIds = reactive(new Set())
@@ -2030,6 +2039,7 @@ export default {
             (!isFilterHidden('format') && ruleType.value ? 1 : 0) +
             (!isFilterHidden('exact_match') && exactMatch.value ? 1 : 0) +
             (!isFilterHidden('has_relations') && hasRelationsOnly.value ? 1 : 0) +
+            (!isFilterHidden('org_badge') && orgBadgeOnly.value ? 1 : 0) +
             (!isFilterHidden('presence') && !props.hasCveOnly && cveOnly.value ? 1 : 0) +
             (!isFilterHidden('presence') && hasTagsOnly.value ? 1 : 0) +
             (!isFilterHidden('presence') && hasLicenseOnly.value ? 1 : 0) +
@@ -2086,6 +2096,7 @@ export default {
             _upd('scope', scopeMine.value ? 'mine' : null)
             _upd('has_ai_analysis', aiAnalysisOnly.value ? 'true' : null)
             _upd('has_relations', hasRelationsOnly.value ? 'true' : null)
+            _upd('org_badge', orgBadgeOnly.value ? 'true' : null)
             // A parent-pinned CVE listing (hasCveOnly) never writes it — it's not a user choice.
             _upd('has_cve',     !props.hasCveOnly && cveOnly.value ? 'true' : null)
             _upd('has_tags',    hasTagsOnly.value ? 'true' : null)
@@ -2148,6 +2159,7 @@ export default {
             if (cveOnly.value)                    params.set('has_cve', 'true')
             if (aiAnalysisOnly.value)             params.set('has_ai_analysis', 'true')
             if (hasRelationsOnly.value)            params.set('has_relations', 'true')
+            if (orgBadgeOnly.value)                params.set('org_badge', 'true')
             if (hasTagsOnly.value)                 params.set('has_tags', 'true')
             if (hasLicenseOnly.value)              params.set('has_license', 'true')
             if (hasAttackOnly.value)               params.set('has_attack', 'true')
@@ -2243,6 +2255,7 @@ export default {
             if (!isFilterHidden('search_field'))    searchField.value    = 'all'
             if (!isFilterHidden('exact_match'))     exactMatch.value     = false
             if (!isFilterHidden('has_relations'))   hasRelationsOnly.value = false
+            if (!isFilterHidden('org_badge'))       orgBadgeOnly.value = false
             if (!isFilterHidden('presence')) {
                 if (!props.hasCveOnly) cveOnly.value = false
                 hasTagsOnly.value = false; hasLicenseOnly.value = false; hasAttackOnly.value = false
@@ -2712,7 +2725,7 @@ export default {
             selectedVulns.value.length > 0 ||
             selectedAttacks.value.length > 0 ||
             personFilter.value.values.length > 0 ||
-            cveOnly.value || aiAnalysisOnly.value || hasRelationsOnly.value ||
+            cveOnly.value || aiAnalysisOnly.value || hasRelationsOnly.value || orgBadgeOnly.value ||
             qualityMin.value !== null || qualityMax.value !== null
         )
 
@@ -2804,7 +2817,7 @@ export default {
             filtersOpen, ruleType, searchField, exactMatch, cardSort, qualityMin, qualityMax, onQualityRangeChange,
             selectedTags, selectedSources, selectedBranches, selectedLicenses, selectedPlatforms, selectedVulns, selectedAttacks,
             personFilter, onPersonFilterChange,
-            scopeMine, aiAnalysisOnly, hasRelationsOnly, cveOnly, hasTagsOnly, hasLicenseOnly, hasAttackOnly, MASCOT_ENABLED,
+            scopeMine, aiAnalysisOnly, hasRelationsOnly, orgBadgeOnly, cveOnly, hasTagsOnly, hasLicenseOnly, hasAttackOnly, MASCOT_ENABLED,
             rulesFormats, activeFilterCount,
             // UI
             viewMode, expandedIds,
