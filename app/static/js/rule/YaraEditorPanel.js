@@ -6,7 +6,7 @@
  * Paste or write any number of YARA rules, then:
  *   Fields  (panel, open by default) the rule's Rulezet fields: title, CVE, ATT&CK, tags...; with
  *           an empty document, filling them builds the rule.
- *   Check   (Check & preview, editor toolbar, Ctrl+S) POST /editor-api/yara/plan — nothing written:
+ *   Check   (Check & preview in the action bar, Ctrl+S) POST /editor-api/yara/plan — nothing written:
  *           a modal lists every rule, what will happen to it, and every field Rulezet will store
  *           for it (and where each value comes from); the result also shows in the editor.
  *   Create  (action bar) opens a modal listing the rules to import. Once confirmed, a
@@ -258,12 +258,6 @@ export default {
                     tests: props.tests ? 'auto' : false,      // tests on samples: Rulezet setting editor.test_access
                     lockPasted: true,          // a pasted rule keeps its text; unlock it to edit
                     toast: (message, tone) => create_message(message, TOAST_CLASS[tone] || 'info'),   // Rulezet's own toasts
-                    buttons: [{
-                        id: 'check', label: 'Check', icon: 'ok',
-                        title: 'Check every rule with Rulezet, nothing is created (Ctrl+S)',
-                        disabled: (ed) => !!modal.value || !ed.getRules().length,
-                        run: () => openCreate(true),
-                    }],
                 })
                 editor.on('save', () => openCreate(true))
                 editor.on('change', refresh)

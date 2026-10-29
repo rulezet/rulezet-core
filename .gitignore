@@ -39,6 +39,7 @@ app/modules/*
 !app/modules/rulezet-validation
 !app/modules/pivotick
 !app/modules/pivotick-converters
+!app/modules/yaraQA
 
 # rulezet-validation mirror (regenerable build output, see job_handlers.py:rule_validation_run)
 data/rulezet_validation/

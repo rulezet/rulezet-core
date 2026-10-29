@@ -8,6 +8,7 @@ from app.features.rule_tester import sample_test_core as SampleTests
 
 from . import editor_core as EditorModel
 from . import editor_jobs as EditorJobs
+from . import external_checks as ExternalChecks
 
 def _test_owner():
     return current_user.id if current_user.is_authenticated else None
@@ -33,6 +34,21 @@ def _login_required():
             return jsonify({'available': False, 'sets': []})
         return jsonify({'error': 'Tests on samples are not available.'}), 403
     return None
+
+
+@editor_blueprint.post('/external-checks')
+def external_checks():
+    """YARA-X / CCCS / yaraQA on the document, for the editor's Checks panel — advice next to
+    Rulezet's own validation, never a verdict on saving (external_checks.py). Other formats: none."""
+    payload = request.get_json(silent=True) or {}
+    text = payload.get('text')
+    if not isinstance(text, str) or not text.strip():
+        return jsonify({'error': 'No rule text.'}), 400
+    if str(payload.get('format') or 'yara').lower() != 'yara':
+        return jsonify({'results': {}})
+    tools = payload.get('tools')
+    tools = [t for t in tools if isinstance(t, str)] if isinstance(tools, list) else None
+    return jsonify({'results': ExternalChecks.run_checks(text, tools)})
 
 
 @editor_blueprint.post('/yara/plan')
