@@ -420,11 +420,14 @@
 /* Organisation (admin-assigned, informative) */
 .ul-org-chip {
     display: inline-flex; align-items: center; max-width: 180px;
+    width: fit-content; align-self: flex-start;   /* under the name (flex column): only the room it needs */
     padding: .1rem .45rem; border-radius: 999px;
     font-size: .66rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     color: #fff; background: #6f42c1;   /* background: the organisation's colour, set inline */
 }
-.ul-org-list { max-height: 240px; overflow-y: auto; }
+.ul-org-list { max-height: 45vh; overflow-y: auto; }
 .ul-org-row { display: flex; align-items: center; gap: .5rem; padding: .35rem 0; border-bottom: 1px solid var(--border-color); font-size: .85rem; }
 .ul-org-row:last-child { border-bottom: 0; }
 .ul-org-edit { border: 1px solid var(--border-color); border-radius: 10px; padding: .75rem; margin: .5rem 0; background: var(--light-bg-color); }
+.ul-org-chips { display: flex; flex-wrap: wrap; gap: .2rem; margin-top: .1rem; }
+.ul-org-pick { display: flex; align-items: center; gap: .5rem; padding: .25rem 0; font-size: .85rem; cursor: pointer; }

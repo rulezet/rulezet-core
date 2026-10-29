@@ -92,11 +92,11 @@
                                     <i class="fas fa-crown me-1"></i>Admin
                                 </span>
                                 {% endif %}
-                                {% if user.organisation %}
-                                <span class="ud-profile-badge ud-profile-badge--org" title="Organisation: {{ user.organisation.name }}" style="background: {{ user.organisation.color }};">
-                                    <i class="fas {{ user.organisation.icon }} me-1"></i>{% if user.organisation.website %}<a href="{{ user.organisation.website }}" target="_blank" rel="noopener noreferrer" class="text-reset text-decoration-none">{{ user.organisation.text }}</a>{% else %}{{ user.organisation.text }}{% endif %}
+                                {% for org in user.organisations %}
+                                <span class="ud-profile-badge ud-profile-badge--org" title="Organisation: {{ org.name }}" style="background: {{ org.color }};">
+                                    <i class="fas {{ org.icon }} me-1"></i>{% if org.website %}<a href="{{ org.website }}" target="_blank" rel="noopener noreferrer" class="text-reset text-decoration-none">{{ org.text }}</a>{% else %}{{ org.text }}{% endif %}
                                 </span>
-                                {% endif %}
+                                {% endfor %}
                                 {% if user.identity_verified %}
                                 <span class="ud-profile-badge ud-profile-badge--identity" title="An admin checked this person is who they claim to be">
                                     <i class="fas fa-user-check me-1"></i>Verified by an admin

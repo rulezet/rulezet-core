@@ -36,11 +36,7 @@
     </div>
 
     {{ anav.admin_nav('users') }}
-    <div class="d-flex justify-content-end mb-2">
-        <button class="btn btn-sm btn-outline-primary rounded-pill px-3" @click="openOrganisations">
-            <i class="fas fa-building me-1"></i>Organisations
-        </button>
-    </div>
+
 
     <!-- UserList component -->
     <user-list
@@ -53,7 +49,8 @@
         @toggle-admin="onToggleAdmin"
         @delete-user="onDeleteUser"
         @identity="onIdentity"
-        @organisation="onOrganisation">
+        @organisation="onOrganisation"
+        @manage-organisations="openOrganisations">
     </user-list>
 
     <!-- Toggle admin modal -->
@@ -151,12 +148,12 @@
     <!-- Organisations modal: create / delete them; or, opened from a row, assign the user to one -->
     <teleport to="body">
         <div class="modal fade" id="orgModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
                 <div class="modal-content border-0 shadow-lg" style="border-radius:16px;">
                     <div class="modal-header border-0 pb-0">
                         <h6 class="modal-title fw-bold" style="color:#6f42c1;">
                             <i class="fas fa-building me-2"></i>
-                            <template v-if="orgUser">Organisation of [[ orgUser.first_name ]] [[ orgUser.last_name ]]</template>
+                            <template v-if="orgUser">Organisations of [[ orgUser.first_name ]] [[ orgUser.last_name ]]</template>
                             <template v-else>Organisations</template>
                         </h6>
                         <button class="btn-close" data-bs-dismiss="modal"></button>
@@ -165,11 +162,15 @@
                         <p class="text-muted small mb-3">Informative only: shown on the profile and on the user's chip. It gives no right.</p>
 
                         <template v-if="orgUser">
-                            <label class="form-label small fw-semibold mb-1">Organisation</label>
-                            <select v-model="orgSelected" class="form-select form-select-sm mb-3">
-                                <option :value="null">— None —</option>
-                                <option v-for="o in organisations" :key="o.id" :value="o.id">[[ o.name ]]</option>
-                            </select>
+                            <div class="fw-semibold small mb-1">Organisations <span class="text-muted fw-normal">(several allowed)</span></div>
+                            <div v-if="!organisations.length" class="text-muted small mb-3">None yet: create one below.</div>
+                            <div v-else class="ul-org-list mb-3">
+                                <label v-for="o in organisations" :key="o.id" class="ul-org-pick">
+                                    <input type="checkbox" class="form-check-input m-0" :value="o.id" v-model="orgSelected">
+                                    <span class="ul-org-chip" :style="{ background: o.color }"><i class="fas me-1" :class="o.icon"></i>[[ o.text ]]</span>
+                                    <span v-if="o.label" class="text-muted small">[[ o.name ]]</span>
+                                </label>
+                            </div>
                         </template>
 
                         <div class="fw-semibold small mb-2">Create an organisation</div>
@@ -397,7 +398,7 @@
             // ── Organisations ─────────────────────────────────────────────
             const organisations = ref([])
             const orgUser       = ref(null)
-            const orgSelected   = ref(null)
+            const orgSelected   = ref([])
             const orgName       = ref('')
             const orgWebsite    = ref('')
             const orgWorking    = ref(false)
@@ -417,7 +418,7 @@
             function openOrganisations() { orgUser.value = null; showOrgModal() }
             function onOrganisation(user) {
                 orgUser.value = user
-                orgSelected.value = user.organisation ? user.organisation.id : null
+                orgSelected.value = (user.organisations || []).map(o => o.id)
                 showOrgModal()
             }
             async function createOrganisation() {
@@ -430,7 +431,7 @@
                         create_message(`Organisation "${data.organisation.name}" created`, 'success-subtle')
                         orgName.value = ''; orgWebsite.value = ''
                         await loadOrganisations()
-                        if (orgUser.value) orgSelected.value = data.organisation.id
+                        if (orgUser.value) orgSelected.value = [...orgSelected.value, data.organisation.id]
                     } else {
                         create_message(data.message || 'Failed.', 'danger-subtle')
                     }
@@ -478,11 +479,12 @@
                 orgWorking.value = true
                 try {
                     const data = await fetch('/account/organisation_assign', { method: 'POST', headers: csrfHeaders(),
-                        body: JSON.stringify({ userId: orgUser.value.id, organisationId: orgSelected.value }) }).then(r => r.json())
+                        body: JSON.stringify({ userId: orgUser.value.id, organisationIds: orgSelected.value }) }).then(r => r.json())
                     if (data.success) {
-                        orgUser.value.organisation = data.organisation
-                        create_message(data.organisation ? `${orgUser.value.first_name} is in ${data.organisation.name}`
-                                                         : `${orgUser.value.first_name} has no organisation`, 'success-subtle')
+                        orgUser.value.organisations = data.organisations
+                        create_message(data.organisations.length
+                            ? `${orgUser.value.first_name}: ${data.organisations.map(o => o.name).join(', ')}`
+                            : `${orgUser.value.first_name} has no organisation`, 'success-subtle')
                         _orgModal?.hide()
                     } else {
                         create_message(data.message || 'Failed.', 'danger-subtle')

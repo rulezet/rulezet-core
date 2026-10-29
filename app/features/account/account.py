@@ -227,7 +227,7 @@ def user_mini(user_id):
         "followers": followers_count,
         "roles":     get_user_roles(user.id),
         "is_admin":  user.is_admin() if viewer_may_see_admin else False,
-        "organisation": user.organisation.to_json() if user.organisation else None,
+        "organisations": [o.to_json() for o in user.organisations],
     })
 
 
@@ -435,9 +435,9 @@ def list_organisations():
     if not current_user.is_admin():
         return jsonify({"success": False, "message": "Forbidden"}), 403
     from sqlalchemy import func
-    from app.core.db_class.user import Organisation
-    counts = dict(db.session.query(User.organisation_id, func.count(User.id))
-                  .filter(User.organisation_id.isnot(None)).group_by(User.organisation_id).all())
+    from app.core.db_class.user import Organisation, user_organisation
+    counts = dict(db.session.query(user_organisation.c.organisation_id, func.count(user_organisation.c.user_id))
+                  .group_by(user_organisation.c.organisation_id).all())
     return jsonify({"success": True, "organisations": [
         {**o.to_json(), "members": counts.get(o.id, 0)}
         for o in Organisation.query.order_by(func.lower(Organisation.name)).all()
@@ -467,11 +467,11 @@ def create_organisation():
 def delete_organisation(org_id):
     if not current_user.is_admin():
         return jsonify({"success": False, "message": "Forbidden"}), 403
-    from app.core.db_class.user import Organisation
+    from app.core.db_class.user import Organisation, user_organisation
     org = Organisation.query.get(org_id)
     if not org:
         return jsonify({"success": False, "message": "Organisation not found"}), 404
-    User.query.filter_by(organisation_id=org.id).update({User.organisation_id: None})
+    db.session.execute(user_organisation.delete().where(user_organisation.c.organisation_id == org.id))
     name = org.name
     db.session.delete(org)
     db.session.commit()
@@ -482,7 +482,7 @@ def delete_organisation(org_id):
 @account_blueprint.route("/organisation_assign", methods=['POST'])
 @login_required
 def assign_organisation():
-    """Admin: put a user in an organisation (or none)."""
+    """Admin: the organisations of a user (organisationIds: a list, empty for none)."""
     if not current_user.is_admin():
         return jsonify({"success": False, "message": "Forbidden"}), 403
     from app.core.db_class.user import Organisation
@@ -490,17 +490,21 @@ def assign_organisation():
     user = AccountModel.get_user(as_db_id(data.get('userId')))
     if not user:
         return jsonify({"success": False, "message": "User not found"}), 404
-    org = None
-    if data.get('organisationId') not in (None, ''):
-        org = Organisation.query.get(as_db_id(data.get('organisationId')))
-        if not org:
-            return jsonify({"success": False, "message": "Organisation not found"}), 404
-    user.organisation_id = org.id if org else None
+    raw = data.get('organisationIds')
+    if not isinstance(raw, list) or len(raw) > 50:
+        return jsonify({"success": False, "message": "organisationIds (a list) required"}), 400
+    ids = {as_db_id(x) for x in raw}
+    if None in ids:
+        return jsonify({"success": False, "message": "Invalid organisation id"}), 400
+    orgs = Organisation.query.filter(Organisation.id.in_(ids)).all() if ids else []
+    if len(orgs) != len(ids):
+        return jsonify({"success": False, "message": "Organisation not found"}), 404
+    user.organisations = orgs
     db.session.commit()
-    log_activity("admin.organisation",
-                 f"{'Assigned user id=%s to %s' % (user.id, org.name) if org else 'Removed user id=%s from their organisation' % user.id}",
+    names = ', '.join(o.name for o in user.organisations) or 'none'
+    log_activity("admin.organisation", f"Organisations of user id={user.id}: {names}",
                  target_type="user", target_id=user.id)
-    return jsonify({"success": True, "organisation": org.to_json() if org else None})
+    return jsonify({"success": True, "organisations": [o.to_json() for o in user.organisations]})
 
 
 @account_blueprint.route("/delete_user", methods=['POST'])
@@ -573,8 +577,8 @@ def users_data_table():
     if f_ident == 'true':    query = query.filter(User.identity_verified.is_(True))
     elif f_ident == 'false': query = query.filter(User.identity_verified.is_(False))
 
-    if f_org == 'none':      query = query.filter(User.organisation_id.is_(None))
-    elif f_org.isdigit():    query = query.filter(User.organisation_id == int(f_org))
+    if f_org == 'none':      query = query.filter(~User.organisations.any())
+    elif f_org.isdigit():    query = query.filter(User.organisations.any(id=int(f_org)))
 
     _sort_map = {
         'created_at': User.created_at, 'last_seen': User.last_seen,

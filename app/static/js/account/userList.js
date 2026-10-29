@@ -11,7 +11,8 @@
  * Events:
  *   toggle-admin(user)
  *   delete-user(user)
- *   organisation(user) — assign an organisation (admin, informative)
+ *   organisation(user) — set the user's organisations (admin, informative)
+ *   manage-organisations — the toolbar's Organisations button (create / edit / delete them)
  *   identity(user)   — identity verification by an admin (justification + history)
  *
  * Verified toggle is handled internally (calls /account/toggle_user_verified
@@ -42,7 +43,7 @@ export default {
         syncUrl:        { type: Boolean,          default: true },
     },
 
-    emits: ['toggle-admin', 'delete-user', 'identity', 'organisation'],
+    emits: ['toggle-admin', 'delete-user', 'identity', 'organisation', 'manage-organisations'],
     expose: ['fetchData'],
 
     template: `
@@ -101,6 +102,12 @@ export default {
                         <option v-for="n in [10,20,50,100]" :key="n" :value="n">{{ n }}</option>
                     </select>
                 </div>
+
+                <!-- Organisations (create / edit / delete) -->
+                <button class="dt-toolbar-btn" @click="$emit('manage-organisations')" title="Create, edit or delete organisations">
+                    <i class="fas fa-building"></i>
+                    <span>Organisations</span>
+                </button>
 
                 <!-- Filters open -->
                 <button class="dt-toolbar-btn" :class="{ 'dt-toolbar-btn--active': filtersOpen }"
@@ -240,8 +247,8 @@ export default {
                         <span v-if="isSelf(user)" class="badge bg-info text-dark">
                             <i class="fas fa-user-check me-1"></i>You
                         </span>
-                        <span v-if="user.organisation" class="ul-org-chip" :title="'Organisation: ' + user.organisation.name"
-                              :style="{ background: user.organisation.color }"><i class="fas me-1" :class="user.organisation.icon"></i>{{ user.organisation.text }}</span>
+                        <span v-for="o in (user.organisations || [])" :key="'org' + o.id" class="ul-org-chip" :title="'Organisation: ' + o.name"
+                              :style="{ background: o.color }"><i class="fas me-1" :class="o.icon"></i>{{ o.text }}</span>
                         <span v-if="user.identity_verified" class="ul-identity-badge" title="Identity verified by an admin">
                             <i class="fas fa-user-check me-1"></i>Verified by an admin
                         </span>
@@ -337,8 +344,8 @@ export default {
                         <i :class="user.admin ? 'fas fa-user-minus' : 'fas fa-user-shield'"></i>
                     </button>
                     <button class="ul-action-secondary"
-                            :class="{ 'ul-action-secondary--identity': user.organisation }"
-                            @click="$emit('organisation', user)" title="Organisation">
+                            :class="{ 'ul-action-secondary--identity': user.organisations && user.organisations.length }"
+                            @click="$emit('organisation', user)" title="Organisations">
                         <i class="fas fa-building"></i>
                     </button>
                     <button class="ul-action-secondary"
@@ -431,9 +438,11 @@ export default {
                                            title="Identity verified by an admin"></i>
                                     </a>
                                     <span class="ul-table-username">@{{ user.username || user.first_name }}</span>
-                                    <span v-if="user.organisation" class="ul-org-chip" :title="'Organisation: ' + user.organisation.name"
-                                          :style="{ background: user.organisation.color }">
-                                        <i class="fas me-1" :class="user.organisation.icon"></i>{{ user.organisation.text }}
+                                    <span v-if="user.organisations && user.organisations.length" class="ul-org-chips">
+                                        <span v-for="o in user.organisations" :key="o.id" class="ul-org-chip"
+                                              :title="'Organisation: ' + o.name" :style="{ background: o.color }">
+                                            <i class="fas me-1" :class="o.icon"></i>{{ o.text }}
+                                        </span>
                                     </span>
                                 </div>
                                 <span v-if="isSelf(user)" class="badge bg-info text-dark ms-1" style="font-size:.6rem;">YOU</span>
@@ -532,8 +541,8 @@ export default {
                                     <i :class="user.admin ? 'fas fa-user-minus' : 'fas fa-user-shield'"></i>
                                 </button>
                                 <button class="dt-action-btn"
-                                        :class="{ 'ul-action-identity-on': user.organisation }"
-                                        :title="user.organisation ? 'Organisation: ' + user.organisation.name : 'Set an organisation'"
+                                        :class="{ 'ul-action-identity-on': user.organisations && user.organisations.length }"
+                                        :title="user.organisations && user.organisations.length ? 'Organisations: ' + user.organisations.map(o => o.name).join(', ') : 'Set organisations'"
                                         @click="$emit('organisation', user)">
                                     <i class="fas fa-building"></i>
                                 </button>

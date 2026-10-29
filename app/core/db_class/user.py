@@ -50,9 +50,9 @@ class User(UserMixin, db.Model):
     # an admin checked that the person really is who they claim to be ("Verified by an admin" badge);
     # each decision, with its justification, in UserIdentityVerification
     identity_verified = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
-    # the organisation an admin assigned (informative: shown on the profile and the UserChip)
-    organisation_id = db.Column(db.Integer, db.ForeignKey('organisation.id', ondelete='SET NULL'), nullable=True, index=True)
-    organisation = db.relationship('Organisation', foreign_keys=[organisation_id])
+    # the organisations an admin assigned (informative: shown on the profile and the UserChip)
+    organisations = db.relationship('Organisation', secondary='user_organisation', order_by='Organisation.name',
+                                    lazy='selectin')
     # the first admin of a new instance (app.py -i) gets a generated password: changed before anything else
     must_change_password = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
     verification_code = db.Column(db.String(6), nullable=True)
@@ -159,7 +159,7 @@ class User(UserMixin, db.Model):
             "is_connected": self.is_connected,
             "is_verified": self.is_verified,
             "identity_verified": bool(self.identity_verified),
-            "organisation": self.organisation.to_json() if self.organisation else None,
+            "organisations": [o.to_json() for o in self.organisations],
             "is_admin": self.is_admin() if include_private else False,
             # new
             "bio": self.bio,
@@ -174,8 +174,16 @@ class User(UserMixin, db.Model):
         }
 
 
+user_organisation = db.Table(
+    'user_organisation',
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('organisation_id', db.Integer, db.ForeignKey('organisation.id', ondelete='CASCADE'), primary_key=True,
+              index=True),
+)
+
+
 class Organisation(db.Model):
-    """An organisation created by an admin; admins assign users to it (one per user).
+    """An organisation created by an admin; admins assign users to it (a user can be in several).
     Informative only: shown on the profile and the UserChip, gives no right."""
     __tablename__ = 'organisation'
 

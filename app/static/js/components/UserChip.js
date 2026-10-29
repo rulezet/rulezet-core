@@ -187,10 +187,11 @@ const UserChip = defineComponent({
         </div>
 
         <!-- Organisation (set by an admin) -->
-        <div v-if="tooltipData && tooltipData.organisation" class="mb-2" style="font-size:.75rem;">
-          <span class="badge" :title="'Organisation: ' + tooltipData.organisation.name"
-                :style="{ background: tooltipData.organisation.color, color: '#fff', fontWeight: 600 }">
-            <i class="fa-solid me-1" :class="tooltipData.organisation.icon"></i>[[ tooltipData.organisation.text ]]
+        <div v-if="tooltipData && tooltipData.organisations && tooltipData.organisations.length"
+             class="d-flex flex-wrap gap-1 mb-2" style="font-size:.75rem;">
+          <span v-for="o in tooltipData.organisations" :key="o.id" class="badge" :title="'Organisation: ' + o.name"
+                :style="{ background: o.color, color: '#fff', fontWeight: 600 }">
+            <i class="fa-solid me-1" :class="o.icon"></i>[[ o.text ]]
           </span>
         </div>
 
