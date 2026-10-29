@@ -70,6 +70,13 @@
                         </div>
                     </div>
                     <div class="dt-toolbar-right">
+                        <button class="dt-toolbar-btn" @click="openTemplates()" title="Ready-made workflows">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i><span>Templates</span>
+                        </button>
+                        <label class="dt-toolbar-btn mb-0" title="Import a workflow file (.json, exported from this page)" style="cursor:pointer;">
+                            <i class="fa-solid fa-file-import"></i><span>Import</span>
+                            <input type="file" accept=".json,application/json" class="d-none" @change="importWorkflowFile">
+                        </label>
                         <button class="dt-toolbar-btn dt-toolbar-btn--primary" @click="openCreateWorkflow()">
                             <i class="fa-solid fa-plus"></i><span>New Workflow</span>
                         </button>
@@ -84,7 +91,20 @@
                 <template v-else-if="workflows.length === 0">
                     <div class="dt-empty">
                         <div class="dt-empty-icon"><i class="fa-solid fa-diagram-project"></i></div>
-                        <p class="dt-empty-text">No workflows yet — create one, then assign tasks into it.</p>
+                        <p class="dt-empty-text">No workflows yet — start from a ready-made one, or create your own.</p>
+                    </div>
+                    <div class="wf-tpl-grid mt-2">
+                        <button v-for="t in templates" :key="t.key" type="button" class="wf-tpl" @click="useTemplate(t)">
+                            <span class="wf-tpl__icon"><i :class="t.icon"></i></span>
+                            <span class="wf-tpl__name">[[ t.label ]]</span>
+                            <span class="wf-tpl__desc">[[ t.description ]]</span>
+                            <span class="wf-tpl__flow">
+                                <template v-for="(s, i) in t.tasks" :key="i">
+                                    <i v-if="i" class="fa-solid fa-chevron-right wf-tpl__arrow"></i>
+                                    <span class="wf-tpl__step" :data-rz-pop-title="s.title"><i :class="s.icon"></i></span>
+                                </template>
+                            </span>
+                        </button>
                     </div>
                 </template>
                 <div v-else class="dt-table-wrap">
@@ -132,6 +152,8 @@
                                     <div class="dt-actions justify-content-center">
                                         <button class="dt-action-btn" title="Open" @click="openWorkflow(w)"><i class="fa-solid fa-arrow-right"></i></button>
                                         <button class="dt-action-btn" title="Edit" @click="openEditWorkflow(w)"><i class="fa-solid fa-pen"></i></button>
+                                        <button class="dt-action-btn" title="Duplicate (tasks copied, first one paused)" @click="duplicateWorkflow(w)"><i class="fa-regular fa-clone"></i></button>
+                                        <a class="dt-action-btn" title="Export as a .json file" :href="'/admin/tasks/workflows/' + w.uuid + '/export'"><i class="fa-solid fa-file-export"></i></a>
                                         <button class="dt-action-btn dt-action-btn--danger" title="Delete" @click="deleteWorkflow(w)"><i class="fa-solid fa-trash"></i></button>
                                     </div>
                                 </td>
@@ -656,6 +678,45 @@
         </div>
     </div>
 
+    <!-- Templates gallery: a ready-made workflow in one click (workflow_spec.py TEMPLATES) -->
+    <div class="modal fade" id="templatesModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg tf-modal">
+                <div class="tf-hero">
+                    <i class="tf-hero__watermark fa-solid fa-wand-magic-sparkles"></i>
+                    <div class="tf-hero__icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                    <div class="tf-hero__text">
+                        <div class="tf-hero__kicker">New workflow</div>
+                        <h5 class="tf-hero__title">Start from a template</h5>
+                        <div class="tf-hero__sub">Created with all its tasks and links, its first task paused until you check it</div>
+                    </div>
+                    <button type="button" class="btn-close tf-hero__close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body tf-body">
+                    <div class="wf-tpl-grid">
+                        <button v-for="t in templates" :key="t.key" type="button" class="wf-tpl" :disabled="templateBusy" @click="useTemplate(t)">
+                            <span class="wf-tpl__icon"><i :class="t.icon"></i></span>
+                            <span class="wf-tpl__name">[[ t.label ]]</span>
+                            <span class="wf-tpl__desc">[[ t.description ]]</span>
+                            <span class="wf-tpl__flow">
+                                <template v-for="(s, i) in t.tasks" :key="i">
+                                    <i v-if="i" class="fa-solid fa-chevron-right wf-tpl__arrow"></i>
+                                    <span class="wf-tpl__step" :data-rz-pop-title="s.title"><i :class="s.icon"></i></span>
+                                </template>
+                            </span>
+                            <span class="wf-tpl__cta">Use this template <i class="fa-solid fa-arrow-right"></i></span>
+                        </button>
+                        <button type="button" class="wf-tpl wf-tpl--blank" data-bs-dismiss="modal" @click="openCreateWorkflow()">
+                            <span class="wf-tpl__icon"><i class="fa-solid fa-plus"></i></span>
+                            <span class="wf-tpl__name">Blank workflow</span>
+                            <span class="wf-tpl__desc">Start empty and add your own tasks.</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Task create/edit modal (css/admin/taskForm.css: .tf-*) -->
     <div class="modal fade" id="taskModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-scrollable">
@@ -862,9 +923,14 @@
                     </section>
                 </div>
                 <div class="modal-footer tf-footer">
-                    <button v-if="form.uuid" type="button" class="btn btn-outline-danger rounded-pill px-4 me-auto" @click="askDeleteTask(editingSchedule)">
-                        <i class="fa-solid fa-trash me-1"></i>Delete
-                    </button>
+                    <template v-if="form.uuid">
+                        <button type="button" class="btn btn-outline-danger rounded-pill px-4" @click="askDeleteTask(editingSchedule)">
+                            <i class="fa-solid fa-trash me-1"></i>Delete
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary rounded-pill px-3 me-auto" @click="duplicateTask()" title="A paused copy, next to it on the graph">
+                            <i class="fa-regular fa-clone me-1"></i>Duplicate
+                        </button>
+                    </template>
                     <span v-else-if="selectedTaskDef" class="tf-footer__summary me-auto">
                         <i :class="selectedTaskDef.icon"></i>[[ taskTypeParts(selectedTaskDef.label).name ]]
                     </span>
@@ -1013,6 +1079,61 @@
                 const url = workflowUuid ? `/admin/tasks/${workflowUuid}` : '/admin/tasks/';
                 window.history.pushState({}, '', url);
             }
+
+            // ── Templates, import, duplicate (workflow_spec.py) ───────────────────
+            const templates = ref([]);
+            const templateBusy = ref(false);
+            async function loadTemplates() {
+                const res = await fetch('/admin/tasks/templates');
+                if (res.ok) templates.value = await res.json();
+            }
+            function openTemplates() {
+                if (!templates.value.length) loadTemplates();
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('templatesModal')).show();
+            }
+            async function postAndOpen(url, body, okMsg) {
+                const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                                               body: body === undefined ? null : JSON.stringify(body) });
+                const data = await res.json().catch(() => ({}));
+                create_message(data.message || (res.ok ? okMsg : 'Failed.'), res.ok ? 'success-subtle' : 'danger-subtle');
+                if (res.ok && data.workflow) {
+                    bootstrap.Modal.getInstance(document.getElementById('templatesModal'))?.hide();
+                    fetchWorkflows(1);
+                    openWorkflow(data.workflow);
+                }
+                return res.ok;
+            }
+            async function useTemplate(t) {
+                templateBusy.value = true;
+                try { await postAndOpen('/admin/tasks/workflows/from_template', { key: t.key }, 'Workflow created.'); }
+                finally { templateBusy.value = false; }
+            }
+            async function importWorkflowFile(e) {
+                const file = e.target.files && e.target.files[0];
+                e.target.value = '';
+                if (!file) return;
+                let spec;
+                try { spec = JSON.parse(await file.text()); }
+                catch { create_message('This file is not JSON.', 'danger-subtle'); return; }
+                await postAndOpen('/admin/tasks/workflows/import', spec, 'Workflow imported.');
+            }
+            async function duplicateWorkflow(w) {
+                const res = await fetch(`/admin/tasks/workflows/${w.uuid}/duplicate`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                const data = await res.json().catch(() => ({}));
+                create_message(data.message || 'Failed.', res.ok ? 'success-subtle' : 'danger-subtle');
+                if (res.ok) fetchWorkflows(1);
+            }
+            async function duplicateTask() {
+                if (!form.uuid) return;
+                const res = await fetch(`/admin/tasks/${form.uuid}/duplicate`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                const data = await res.json().catch(() => ({}));
+                create_message(data.message || 'Failed.', res.ok ? 'success-subtle' : 'danger-subtle');
+                if (res.ok) {
+                    bootstrap.Modal.getInstance(document.getElementById('taskModal'))?.hide();
+                    refreshLists();
+                }
+            }
+            loadTemplates();
 
             function openWorkflow(w) {
                 activeWorkflow.value = w;
@@ -2056,6 +2177,7 @@
                 workflows, workflowsLoading, workflowSearch, onWorkflowSearchInput,
                 workflowsPage, workflowsTotalPages, totalWorkflows,
                 fetchWorkflows, openCreateWorkflow, openEditWorkflow, deleteWorkflow,
+                templates, templateBusy, openTemplates, useTemplate, importWorkflowFile, duplicateWorkflow, duplicateTask,
                 workflowForm, savingWorkflow, submitWorkflowForm, mailConfigured, currentUserEmail,
                 workflowFormInstance, onWorkflowLaunchChange, formatLocalDate,
 
