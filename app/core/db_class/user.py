@@ -47,6 +47,9 @@ class User(UserMixin, db.Model):
     auth_data = db.Column(db.String(128), unique=True, index=True)
 
     is_verified = db.Column(db.Boolean, default=False)
+    # an admin checked that the person really is who they claim to be ("Verified by an admin" badge);
+    # each decision, with its justification, in UserIdentityVerification
+    identity_verified = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
     # the first admin of a new instance (app.py -i) gets a generated password: changed before anything else
     must_change_password = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
     verification_code = db.Column(db.String(6), nullable=True)
@@ -152,6 +155,7 @@ class User(UserMixin, db.Model):
             "username": self.get_username(),
             "is_connected": self.is_connected,
             "is_verified": self.is_verified,
+            "identity_verified": bool(self.identity_verified),
             "is_admin": self.is_admin() if include_private else False,
             # new
             "bio": self.bio,
@@ -163,6 +167,30 @@ class User(UserMixin, db.Model):
             "created_at": self.created_at.strftime('%Y-%m-%d') if self.created_at else None,
             "last_seen": self.last_seen.strftime('%Y-%m-%d %H:%M') if self.last_seen else None,
             "auth_provider": self.auth_provider,
+        }
+
+
+class UserIdentityVerification(db.Model):
+    """One admin decision on a user's identity: verified (really who they claim to be) or
+    withdrawn, with the admin's justification. The history of a user is all their rows."""
+    __tablename__ = 'user_identity_verification'
+
+    id            = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id       = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    verified      = db.Column(db.Boolean, nullable=False)
+    justification = db.Column(db.Text, nullable=False)
+    by_user_id    = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+    created_at    = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+
+    by_user = db.relationship('User', foreign_keys=[by_user_id])
+
+    def to_json(self):
+        return {
+            'id': self.id,
+            'verified': self.verified,
+            'justification': self.justification,
+            'by': self.by_user.to_json(include_private=False) if self.by_user else None,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
         }
 
 

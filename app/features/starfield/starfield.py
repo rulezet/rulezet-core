@@ -30,6 +30,9 @@ def record_run():
     run, error = StarfieldModel.record_run(request.get_json(silent=True), user_id=user_id)
     if error:
         return jsonify({'success': False, 'message': error}), 400
+    if user_id:                     # secret badges come from runs: check on the next page
+        from app.core.db_class.gamification import mark_badge_check
+        mark_badge_check(user_id)
     return jsonify({'success': True, 'uuid': run.uuid}), 201
 
 

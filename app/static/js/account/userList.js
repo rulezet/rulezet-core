@@ -11,6 +11,7 @@
  * Events:
  *   toggle-admin(user)
  *   delete-user(user)
+ *   identity(user)   — identity verification by an admin (justification + history)
  *
  * Verified toggle is handled internally (calls /account/toggle_user_verified
  * itself, same pattern as the role picker's toggleUserRole) — no event to
@@ -40,7 +41,7 @@ export default {
         syncUrl:        { type: Boolean,          default: true },
     },
 
-    emits: ['toggle-admin', 'delete-user'],
+    emits: ['toggle-admin', 'delete-user', 'identity'],
     expose: ['fetchData'],
 
     template: `
@@ -211,6 +212,9 @@ export default {
                         <span v-if="isSelf(user)" class="badge bg-info text-dark">
                             <i class="fas fa-user-check me-1"></i>You
                         </span>
+                        <span v-if="user.identity_verified" class="ul-identity-badge" title="Identity verified by an admin">
+                            <i class="fas fa-user-check me-1"></i>Verified by an admin
+                        </span>
                         <span v-if="user.is_verified" class="badge bg-success">
                             <i class="fas fa-circle-check me-1"></i>Verified
                         </span>
@@ -303,10 +307,16 @@ export default {
                         <i :class="user.admin ? 'fas fa-user-minus' : 'fas fa-user-shield'"></i>
                     </button>
                     <button class="ul-action-secondary"
+                            :class="{ 'ul-action-secondary--identity': user.identity_verified }"
+                            @click="$emit('identity', user)"
+                            :title="user.identity_verified ? 'Identity verified by an admin — history' : 'Verify identity'">
+                        <i class="fas fa-id-card"></i>
+                    </button>
+                    <button class="ul-action-secondary"
                             :class="{ 'ul-action-secondary--warn': !user.is_verified }"
                             :disabled="verifyingIds.has(user.id)"
                             @click="toggleVerified(user)"
-                            :title="user.is_verified ? 'Remove verified badge' : 'Mark as verified'">
+                            :title="user.is_verified ? 'Email verified — click to unset' : 'Mark email as verified'">
                         <i :class="user.is_verified ? 'fas fa-circle-check' : 'fas fa-circle-xmark'"></i>
                     </button>
                     <button class="ul-action-secondary ul-action-secondary--danger"
@@ -382,6 +392,8 @@ export default {
                                 <div class="ul-table-identity">
                                     <a :href="'/account/detail_user/' + user.id" class="ul-table-name">
                                         {{ user.first_name }} {{ user.last_name || '' }}
+                                        <i v-if="user.identity_verified" class="fas fa-user-check ul-identity-tick"
+                                           title="Identity verified by an admin"></i>
                                     </a>
                                     <span class="ul-table-username">@{{ user.username || user.first_name }}</span>
                                 </div>
@@ -481,9 +493,15 @@ export default {
                                     <i :class="user.admin ? 'fas fa-user-minus' : 'fas fa-user-shield'"></i>
                                 </button>
                                 <button class="dt-action-btn"
+                                        :class="{ 'ul-action-identity-on': user.identity_verified }"
+                                        :title="user.identity_verified ? 'Identity verified by an admin — history' : 'Verify identity'"
+                                        @click="$emit('identity', user)">
+                                    <i class="fas fa-id-card"></i>
+                                </button>
+                                <button class="dt-action-btn"
                                         :class="!user.is_verified ? 'dt-action-btn--warn' : ''"
                                         :disabled="verifyingIds.has(user.id)"
-                                        :title="user.is_verified ? 'Remove verified badge' : 'Mark as verified'"
+                                        :title="user.is_verified ? 'Email verified — click to unset' : 'Mark email as verified'"
                                         @click="toggleVerified(user)">
                                     <i :class="user.is_verified ? 'fas fa-circle-check' : 'fas fa-circle-xmark'"></i>
                                 </button>

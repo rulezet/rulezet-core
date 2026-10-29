@@ -1,0 +1,55 @@
+/* "You unlocked a badge" card, any page (js/account/badgeUnlockNotice.js) */
+.rz-badge-unlock {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    z-index: 1090;
+    display: flex;
+    align-items: flex-start;
+    gap: .8rem;
+    max-width: min(360px, calc(100vw - 32px));
+    padding: .9rem 2.2rem .9rem .9rem;
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--badge-color, #0d6efd);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, .18);
+    opacity: 0;
+    transform: translateY(16px) scale(.97);
+    transition: opacity .3s ease, transform .3s ease;
+}
+.rz-badge-unlock.is-shown { opacity: 1; transform: none; }
+.rz-badge-unlock.is-leaving { opacity: 0; transform: translateY(16px); }
+
+.rz-badge-unlock__rulezy { width: 54px; height: 54px; object-fit: contain; flex-shrink: 0; }
+.rz-badge-unlock.is-shown .rz-badge-unlock__rulezy { animation: rz-badge-hop .6s .25s ease-out; }
+.rz-badge-unlock__icon { font-size: 1.8rem; color: var(--badge-color, #0d6efd); padding: .3rem; }
+
+.rz-badge-unlock__title { font-weight: 700; font-size: .95rem; }
+.rz-badge-unlock__text { font-size: .85rem; }
+.rz-badge-unlock__text strong { color: var(--badge-color, #0d6efd); }
+.rz-badge-unlock__desc { font-size: .78rem; color: var(--subtle-text-color); margin-top: .15rem; }
+.rz-badge-unlock__link { display: inline-block; margin-top: .35rem; font-size: .8rem; font-weight: 600; text-decoration: none; }
+.rz-badge-unlock__link:hover { text-decoration: underline; }
+
+.rz-badge-unlock__close {
+    position: absolute;
+    top: .4rem;
+    right: .4rem;
+    border: 0;
+    background: none;
+    color: var(--subtle-text-color);
+    padding: .2rem .4rem;
+    line-height: 1;
+}
+.rz-badge-unlock__close:hover { color: var(--text-color); }
+
+@keyframes rz-badge-hop {
+    0%, 100% { transform: translateY(0); }
+    40% { transform: translateY(-8px) rotate(-6deg); }
+    70% { transform: translateY(0) rotate(3deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .rz-badge-unlock, .rz-badge-unlock__rulezy { transition: none; animation: none !important; }
+}

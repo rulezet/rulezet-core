@@ -317,6 +317,51 @@ def toggle_user_verified() -> jsonify:
     return jsonify({"success": True, "verified": verified})
 
 
+@account_blueprint.route("/identity_verification/<int:user_id>", methods=['GET'])
+@login_required
+def identity_verification_history(user_id):
+    """Admin: who verified (or withdrew) this person's identity, when, and why."""
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+    from app.core.db_class.user import UserIdentityVerification
+    user = AccountModel.get_user(user_id)
+    if not user:
+        return jsonify({"success": False, "message": "User not found"}), 404
+    rows = (UserIdentityVerification.query.filter_by(user_id=user_id)
+            .order_by(UserIdentityVerification.created_at.desc(), UserIdentityVerification.id.desc()).all())
+    return jsonify({"success": True, "identity_verified": bool(user.identity_verified),
+                    "history": [r.to_json() for r in rows]})
+
+
+@account_blueprint.route("/identity_verification", methods=['POST'])
+@login_required
+def set_identity_verification():
+    """Admin: confirm a person is really who they claim to be (badge "Verified by an admin"), or
+    withdraw it — always with a justification, kept in the history."""
+    if not current_user.is_admin():
+        return jsonify({"success": False, "message": "Forbidden"}), 403
+    from app.core.db_class.user import UserIdentityVerification
+    data = json_object()
+    user_id = as_db_id(data.get('userId'))
+    verified = data.get('verified')
+    justification = (data.get('justification') or '').strip()
+    if not user_id or verified not in (True, False):
+        return jsonify({"success": False, "message": "userId and verified (true / false) required"}), 400
+    if len(justification) < 10 or len(justification) > 2000:
+        return jsonify({"success": False, "message": "A justification of 10 to 2000 characters is required"}), 400
+    user = AccountModel.get_user(user_id)
+    if not user:
+        return jsonify({"success": False, "message": "User not found"}), 404
+    user.identity_verified = verified
+    db.session.add(UserIdentityVerification(user_id=user.id, verified=verified,
+                                            justification=justification, by_user_id=current_user.id))
+    db.session.commit()
+    log_activity("admin.identity_verification",
+                 f"{'Verified' if verified else 'Withdrew'} the identity of user id={user.id}: {justification[:200]}",
+                 target_type="user", target_id=user.id)
+    return jsonify({"success": True, "identity_verified": verified})
+
+
 @account_blueprint.route("/delete_user", methods=['POST'])
 @login_required
 def delete_user() -> render_template:
@@ -1018,7 +1063,7 @@ def get_global_leaderboard():
     if active_since and active_since not in _VALID_ACTIVE_SINCE:
         return jsonify({"error": "Invalid active_since parameter"}), 400
 
-    pagination_data = AccountModel.get_leaderboard_paginated(
+    pagination_data = AccountModel.get_leaderboard_cached(
         page=page, per_page=per_page, sort_by=sort_by, direction=direction,
         search=search, active_since=active_since,
     )
@@ -1043,7 +1088,7 @@ def get_category_leaderboard():
     if active_since and active_since not in _VALID_ACTIVE_SINCE:
         return jsonify({"error": "Invalid active_since parameter"}), 400
 
-    pagination_data = AccountModel.get_leaderboard_paginated(
+    pagination_data = AccountModel.get_leaderboard_cached(
         page=page, per_page=per_page, sort_by=sort_by, direction=direction,
         search=search, active_since=active_since,
     )
@@ -1590,3 +1635,20 @@ def get_user_edit_proposals(user_id):
             "rejected": len([p for p in proposals if p.status == 'rejected'])
         }
     })
+
+@account_blueprint.route("/badges/check", methods=['POST'])
+@login_required
+def check_new_badges():
+    """Called by a page only when the user's points just moved (flag set by
+    gamification.mark_badge_check): the badges just unlocked, saved now and returned once —
+    the page shows a congratulations alert."""
+    from app import cache
+    from app.core.db_class.gamification import Gamification, BADGE_CHECK_KEY
+    from .badges import BADGES_BY_KEY
+    cache.delete(BADGE_CHECK_KEY.format(current_user.id))
+    stats = Gamification.query.filter_by(user_id=current_user.id).first()
+    keys = AccountModel.evaluate_badges(stats) if stats else []
+    return jsonify({"new_badges": [
+        {k: BADGES_BY_KEY[key][k] for k in ('key', 'name', 'description', 'icon', 'color', 'rulezy_pose')}
+        for key in keys if key in BADGES_BY_KEY
+    ]}), 200
