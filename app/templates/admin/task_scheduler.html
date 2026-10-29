@@ -2229,6 +2229,11 @@
                 { name: 'date', help: 'Today, UTC' },
                 { name: 'time', help: 'Now, UTC' },
                 { name: 'link', help: "The workflow's page" },
+                { name: 'total_rules', help: 'Rules on the instance (counted when sent)' },
+                { name: 'new_rules_24h', help: 'Rules created in the last 24 h' },
+                { name: 'bad_rules', help: 'Bad rules (failed imports) waiting' },
+                { name: 'failed_jobs_24h', help: 'Background jobs failed in the last 24 h' },
+                { name: 'new_users_24h', help: 'Accounts created in the last 24 h' },
             ];
             const textareaRefs = {};
             function insertVariable(key, name) {
@@ -2562,10 +2567,16 @@
                 pendingConnection.value = null;
             }
 
-            function onAddNodeOnCanvas(x, y, taskType) {
+            function onAddNodeOnCanvas(x, y, taskType, parent) {
                 pendingNewNodePosition.value = { x, y };
                 openCreate();
                 if (taskType && taskTypes.value[taskType]) pickTaskType(taskType);   // quick-add chip: type already chosen
+                if (parent) {   // handle dropped on empty space: runs after that task once it succeeds
+                    triggerKind.value = 'after_task';
+                    form.depends_on_schedule_id = parent.id;
+                    form.depends_on_condition = 'success';
+                    loadPickerSchedules();
+                }
             }
 
             onMounted(() => {

@@ -337,6 +337,13 @@ def _validate_target_payload(task_type, payload):
         err = public_https_url((payload or {}).get('url'))
         if err:
             return f'Webhook: {err}'
+    if task_type == 'action_check':
+        from app.features.admin.task_scheduler.actions import FIGURES, OPERATORS
+        p = payload or {}
+        if p.get('metric') not in FIGURES or p.get('operator') not in OPERATORS:
+            return 'Check: choose a figure and a condition.'
+        if not re.fullmatch(r'-?\d{1,12}', str(p.get('value', '')).strip()):
+            return 'Check: the value must be a whole number.'
     task_def = TASK_TYPES[task_type]
     labels = {o['key']: o['label'] for o in task_def.get('extra_options', [])}
     for key in task_def.get('required_options', []):
