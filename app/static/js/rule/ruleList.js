@@ -764,9 +764,10 @@ export default {
                           :title="rlRiskTitle(rule.validation_risk)">
                         <i class="fa-solid fa-triangle-exclamation me-1"></i>Disagrees with rule's own claim
                     </span>
-                    <span v-if="hasOrgBadge(rule)"
-                          class="rz-org-rule-badge" :data-rz-pop-title="orgOwners.label"
-                          :data-rz-pop-text="'From a ' + orgOwners.label + ' repository or written by a ' + orgOwners.label + ' member.'">
+                    <span v-if="hasOrgBadge(rule)" role="button" tabindex="0"
+                          class="rz-org-rule-badge rz-org-rule-badge--click" :data-rz-pop-title="orgOwners.label"
+                          :data-rz-pop-text="'From a ' + orgOwners.label + ' repository or written by a ' + orgOwners.label + ' member. Click: show every ' + orgOwners.label + ' rule.'"
+                          @click.stop="filterByOrgBadge" @keydown.enter.stop="filterByOrgBadge">
                         <img v-if="orgOwners.logo" :src="orgOwners.logo" alt="">{{ orgOwners.label }}
                     </span>
                     <span v-if="isOwner(rule)" class="rz-role-chip rz-role-chip--owner"
@@ -1314,8 +1315,10 @@ export default {
                             </td>
 
                             <td v-show="colVisible.format" class="dt-td">
-                                <span v-if="hasOrgBadge(rule)" class="rz-org-rule-badge me-1" :data-rz-pop-title="orgOwners.label"
-                                      :data-rz-pop-text="'From a ' + orgOwners.label + ' repository or written by a ' + orgOwners.label + ' member.'">
+                                <span v-if="hasOrgBadge(rule)" role="button" tabindex="0"
+                                      class="rz-org-rule-badge rz-org-rule-badge--click me-1" :data-rz-pop-title="orgOwners.label"
+                                      :data-rz-pop-text="'From a ' + orgOwners.label + ' repository or written by a ' + orgOwners.label + ' member. Click: show every ' + orgOwners.label + ' rule.'"
+                                      @click.stop="filterByOrgBadge" @keydown.enter.stop="filterByOrgBadge">
                                     <img v-if="orgOwners.logo" :src="orgOwners.logo" alt="">{{ orgOwners.label }}
                                 </span>
                                 <span v-if="rule.is_code_format" class="badge bg-danger pt-1 shadow-sm me-1"
@@ -2243,6 +2246,13 @@ export default {
             onFilterChange()
         }
 
+        // a click on the organisation badge (CIRCL): only that organisation's rules, like a format badge
+        function filterByOrgBadge() {
+            if (orgBadgeOnly.value || isFilterHidden('org_badge')) return
+            orgBadgeOnly.value = true
+            onFilterChange()
+        }
+
         function filterByFormat(fmt) {
             if (!fmt || ruleType.value === fmt) return
             ruleType.value = fmt
@@ -2815,7 +2825,7 @@ export default {
         })
 
         return {
-            orgOwners, hasOrgBadge,
+            orgOwners, hasOrgBadge, filterByOrgBadge,
             contentSearch, ruleHref, filterByPlatform, linkedShown,
             // Data
             items, total, totalPages, loading, page, perPage, perPageModel,
