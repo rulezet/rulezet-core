@@ -1,4 +1,5 @@
 import json
+import re
 import os
 from flask import send_from_directory
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, send_from_directory, abort
@@ -13,6 +14,26 @@ from app.core.utils.activity_log import log_activity
 from .features.rule import rule_core as RuleModel
 from .features.account import account_core as AccountModel
 from . import home_core as HomeModel
+from app.core.utils.app_settings import get_setting
+
+
+def _format_looks(formats):
+    """The home's Browse chips: each format with its logo and colour (setting formats.catalog),
+    the same look as the format badge of the rules list (formatChip.js)."""
+    catalog = get_setting('formats.catalog') or {}
+    out = []
+    for fmt in formats:
+        name = (fmt.get('name') if isinstance(fmt, dict) else fmt.name) or ''
+        entry = catalog.get(name.lower()) or {}
+        color = entry.get('color') or ''
+        logo = entry.get('logo') or ''
+        out.append({
+            'name': name,
+            'title': entry.get('title') or name.upper(),
+            'color': color if re.fullmatch(r'#[0-9a-fA-F]{3,8}', color) else '#6C757D',
+            'logo': logo if re.fullmatch(r'[\w.-]+\.(png|svg|webp|jpg)', logo, re.I) else None,
+        })
+    return out
 
 
 home_blueprint = Blueprint(
@@ -105,7 +126,7 @@ def home() -> render_template:
     # and the CSRF token below are per-user/per-session and must never be
     # served from a shared cache.
     try:
-        platform_stats = cache.get('home_platform_stats_v2')
+        platform_stats = cache.get('home_platform_stats_v3')
     except Exception:            # cache backend down (e.g. Redis restarting)
         platform_stats = None
     if platform_stats is None:
@@ -116,15 +137,19 @@ def home() -> render_template:
             'rule_formats':  RuleModel.get_all_rule_format(),
             'total_cves':    sum(1 for v in RuleModel.get_rules_vulnerabilities_usage()
                                  if str(v.get('name', '')).upper().startswith('CVE-')),
+            # platforms named by the rules (Windows, Linux, AWS…): logo, colour, number of rules
+            'platforms':     [{k: p[k] for k in ('label', 'icon', 'color', 'count')}
+                              for p in RuleModel.get_platforms_usage_with_filter({})][:16],
         }
         try:
-            cache.set('home_platform_stats_v2', platform_stats, timeout=60 * 60 * 6)
+            cache.set('home_platform_stats_v3', platform_stats, timeout=60 * 60 * 6)
         except Exception:
             pass
     total_rules   = platform_stats['total_rules']
     total_bundles = platform_stats['total_bundles']
     total_attacks = platform_stats['total_attacks']
-    rule_formats  = platform_stats['rule_formats']
+    rule_formats  = _format_looks(platform_stats['rule_formats'])
+    rule_platforms = platform_stats.get('platforms') or []
     total_cves    = platform_stats['total_cves']
 
     from app.features.blog import blog_core as BlogModel
@@ -146,6 +171,7 @@ def home() -> render_template:
         total_bundles=total_bundles,
         total_attacks=total_attacks,
         rule_formats=rule_formats,
+        rule_platforms=rule_platforms,
         total_cves=total_cves,
         release_url=release_url,
         latest_blog_posts=latest_blog_posts,

@@ -101,7 +101,13 @@ body:has(.hv2) { overflow-x: hidden; }
 .hv2-chip { padding: .28rem .75rem; border-radius: 999px; font-size: .8rem; font-weight: 600; color: var(--text-color); text-decoration: none;
     background: var(--card-bg-color); border: 1px solid var(--border-color); transition: color .2s, border-color .2s, transform .2s; }
 .hv2-chip:hover { color: var(--hv2-blue); border-color: rgba(13, 110, 253, .45); transform: translateY(-2px); }
-.hv2-cta { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+/* Browse: each format with its logo and colour, like the format badge of the rules list */
+.hv2-chip--fmt { display: inline-flex; align-items: center; gap: .4rem; color: var(--fmt); border-color: color-mix(in srgb, var(--fmt) 35%, transparent);
+    background: color-mix(in srgb, var(--fmt) 9%, var(--card-bg-color)); }
+.hv2-chip--fmt img { width: 16px; height: 16px; object-fit: contain; }
+.hv2-chip--fmt:hover { color: var(--fmt); border-color: var(--fmt); box-shadow: 0 6px 14px color-mix(in srgb, var(--fmt) 25%, transparent); }
+body.dark-mode .hv2-chip--fmt { color: color-mix(in srgb, var(--fmt) 65%, #fff); }
+.hv2-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 1.25rem; margin-top: 2rem; }
 .hv2-btn--bundle { color: #198754; background: var(--card-bg-color); border-color: rgba(25, 135, 84, .45); }
 .hv2-btn--bundle:hover { color: #fff; background: #198754; border-color: #198754; }
 .hv2-cta__why { display: inline-flex; align-items: center; gap: .4rem; margin-left: .35rem; font-weight: 600; font-size: .92rem;
@@ -145,6 +151,15 @@ body:has(.hv2) { overflow-x: hidden; }
 
 /* ── sections ────────────────────────────────────────────────────────────── */
 .hv2-section { padding-top: clamp(4.5rem, 9vw, 8rem); }
+.hv2-coverage-zone { margin-top: clamp(1.5rem, 3vw, 2.5rem); }
+/* arrival, as soon as the page loads (no scroll needed): the blue band rises, then its pills */
+.hv2-coverage-zone { animation: hv2-cov-in .8s cubic-bezier(.22, 1, .36, 1) .3s backwards; }
+.hv2-coverage-zone .hv2-head, .hv2-coverage-zone .hv2-platforms > * { animation: hv2-cov-in .6s cubic-bezier(.22, 1, .36, 1) backwards; animation-delay: .5s; }
+.hv2-coverage-zone .hv2-platforms > * { animation-duration: .7s; animation-delay: calc(.55s + var(--i, 0) * 60ms); }
+.hv2-coverage-zone [aria-label="Rules by platform"] > * { animation-delay: calc(.9s + var(--i, 0) * 80ms); }
+.hv2-coverage-zone .hv2-platform i { animation: hv2-platform-pop .6s cubic-bezier(.34, 1.56, .64, 1) backwards; animation-delay: calc(1.15s + var(--i, 0) * 80ms); }
+@keyframes hv2-cov-in { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+.hv2-coverage-zone::before { left: auto; right: -250px; top: -350px; bottom: auto; }
 .hv2-head { margin-bottom: 2.5rem; }
 .hv2-head--row { display: flex; align-items: flex-end; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
 .hv2-head__kicker { display: inline-flex; align-items: center; gap: .6rem; font-size: .78rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--hv2-blue); }
@@ -207,7 +222,8 @@ body:has(.hv2) { overflow-x: hidden; }
 .hv2-segmented button.on { background: var(--card-bg-color); color: var(--hv2-blue); box-shadow: 0 2px 8px rgba(0, 0, 0, .08); }
 
 /* ── live: a tinted band, Rulezy on the left, the feed on the right ──────── */
-.hv2-live-zone { position: relative; margin-top: clamp(4.5rem, 9vw, 8rem); padding: clamp(3.5rem, 7vw, 6rem) 0; overflow: hidden;
+.hv2-live-zone:not(.hv2-coverage-zone) { margin-top: clamp(4.5rem, 9vw, 8rem); }
+.hv2-live-zone { position: relative; padding: clamp(3.5rem, 7vw, 6rem) 0; overflow: hidden;
     background: linear-gradient(180deg, rgba(13, 110, 253, .045), rgba(63, 208, 224, .05)); border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); }
 .hv2-live-zone::before { content: ''; position: absolute; width: 700px; height: 700px; left: -250px; bottom: -350px; border-radius: 50%;
     background: repeating-radial-gradient(circle, rgba(13, 110, 253, .06) 0 1px, transparent 1px 46px); pointer-events: none; }
@@ -383,3 +399,17 @@ body.dark-mode .hv2-post:hover { box-shadow: 0 18px 40px rgba(0, 0, 0, .35); }
     .hv2-insights__tabs button i { width: 26px; height: 26px; border-radius: 50%; font-size: .72rem; }
     .hv2-insights__chart { padding: .5rem; min-height: 0; border-radius: 16px; }
 }
+
+/* platforms the rules cover (Windows, Linux, AWS…), under the key figures: logo, colour, number of rules */
+.hv2-platforms { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .5rem; margin-top: 1.25rem; }
+.hv2-platforms__lbl { font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--subtle-text-color); margin-right: .25rem; }
+.hv2-platform { display: inline-flex; align-items: center; gap: .45rem; padding: .35rem .8rem; border-radius: 999px; text-decoration: none;
+    font-size: .84rem; font-weight: 600; color: var(--brand); background: color-mix(in srgb, var(--brand) 9%, var(--card-bg-color));
+    border: 1px solid color-mix(in srgb, var(--brand) 35%, transparent); transition: transform .15s, box-shadow .15s, background .15s; }
+.hv2-platform i { font-size: 1rem; }
+.hv2-platform b { font-weight: 700; color: var(--text-color); font-variant-numeric: tabular-nums; }
+.hv2-platform:hover { color: var(--brand); transform: translateY(-2px); box-shadow: 0 6px 16px color-mix(in srgb, var(--brand) 25%, transparent);
+    background: color-mix(in srgb, var(--brand) 15%, var(--card-bg-color)); }
+body.dark-mode .hv2-platform { color: color-mix(in srgb, var(--brand) 70%, #fff); }
+@media (max-width: 576px) { .hv2-platforms { justify-content: flex-start; } }
+@keyframes hv2-platform-pop { from { transform: scale(0) rotate(-25deg); opacity: 0; } to { transform: none; opacity: 1; } }

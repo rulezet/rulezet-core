@@ -333,19 +333,19 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                    how_to_implement…) rendered with marked + DOMPurify (static/js/sanitize.js), JSON
                                    (osquery queries, test cases, drill-down searches…) in the code viewer. Copy / download. #}
                                 {% for field in rule_metadata if field.long %}
-                                <details class="rule-meta-long" @toggle="toggleMetaLong($event, '{{ field.key }}', '{{ field.kind }}')">
+                                <details class="rule-meta-long" @toggle="toggleMetaLong($event, {{ loop.index0 }}, '{{ 'json' if field.kind == 'json' else 'markdown' }}')">
                                     <summary>
                                         <i class="fa-solid {{ field.icon }}"></i><span v-pre>{{ field.label }}</span>
                                         <small>{{ 'JSON · ' if field.kind == 'json' }}{{ field.text | length }} characters</small>
                                         <span class="rule-meta-long__actions" @click.prevent>
-                                            <button type="button" class="rule-meta-long__btn" title="Copy" @click.stop.prevent="copyMetaLong('{{ field.key }}')"><i class="fa-regular fa-copy"></i>Copy</button>
-                                            <button type="button" class="rule-meta-long__btn" title="Download" @click.stop.prevent="downloadMetaLong('{{ field.key }}', '{{ field.kind }}')"><i class="fa-solid fa-download"></i>{{ '.json' if field.kind == 'json' else '.md' }}</button>
+                                            <button type="button" class="rule-meta-long__btn" title="Copy" @click.stop.prevent="copyMetaLong({{ loop.index0 }})"><i class="fa-regular fa-copy"></i>Copy</button>
+                                            <button type="button" class="rule-meta-long__btn" title="Download" @click.stop.prevent="downloadMetaLong({{ loop.index0 }}, '{{ 'json' if field.kind == 'json' else 'markdown' }}')"><i class="fa-solid fa-download"></i>{{ '.json' if field.kind == 'json' else '.md' }}</button>
                                         </span>
                                         <i class="fa-solid fa-chevron-down rule-meta-long__chevron"></i>
                                     </summary>
                                     {% if field.kind == 'json' %}
                                     <div class="rule-meta-long__json">
-                                        <code-viewer v-if="metaLongOpen['{{ field.key }}']" :code="metaLongText['{{ field.key }}'] || ''" language="json" max-height="500px"></code-viewer>
+                                        <code-viewer v-if="metaLongOpen[{{ loop.index0 }}]" :code="metaLongText[{{ loop.index0 }}] || ''" language="json" max-height="500px"></code-viewer>
                                     </div>
                                     {% else %}
                                     <div class="rule-meta-markdown" data-meta-key="{{ field.key }}"><em>Loading…</em></div>
@@ -2078,7 +2078,8 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
             }
 
             // Long metadata (Markdown guides, JSON data): rendered the first time a block is opened
-            const metaLongText = Object.fromEntries(({{ (rule_metadata or []) | selectattr('long') | list | tojson }}).map(f => [f.key, f.text]))
+            // indexed by position, never by key: keys come from the rule's text and must not reach a Vue expression
+            const metaLongText = ({{ (rule_metadata or []) | selectattr('long') | map(attribute='text') | list | tojson }})
             const metaLongOpen = reactive({})
             async function toggleMetaLong(event, key, kind) {
                 metaLongOpen[key] = event.target.open
@@ -2088,8 +2089,8 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                 const DOMPurify = purifyMod.default || window.DOMPurify
                 const markedMod = await import('/static/js/marked.min.js')
                 const marked = markedMod.marked || markedMod.default || window.marked
-                const { SANITIZE_CONFIG } = await import('/static/js/sanitize.js')
-                box.innerHTML = DOMPurify.sanitize(marked.parse(metaLongText[key] || ''), SANITIZE_CONFIG)
+                const { SANITIZE_CONFIG, hardenUserHtml } = await import('/static/js/sanitize.js')
+                box.innerHTML = hardenUserHtml(DOMPurify.sanitize(marked.parse(metaLongText[key] || ''), SANITIZE_CONFIG))
                 box.querySelectorAll('a').forEach(a => { a.target = '_blank'; a.rel = 'noopener noreferrer' })
                 box.dataset.rendered = '1'
             }
