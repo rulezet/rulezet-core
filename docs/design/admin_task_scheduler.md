@@ -1223,3 +1223,18 @@ and testable on its own — nothing in Phase 1 needs to be reworked to add
 Phase 2 or 3, only extended (the single-parent columns are the one
 exception, deliberately migrated away in Phase 3 rather than kept
 alongside `AdminTaskDependency` forever).
+
+## 12. Status (2026-10-29) — Phases 2 and 3 implemented, plus usability
+
+- **Several parents** (Phase 3): `AdminTaskDependency` holds the extra parents, the first one stays in
+  `depends_on_schedule_id` (kept, not migrated away). `depends_on_mode` = `all` / `any`;
+  `scheduler_engine._should_fire` decides, never twice for one launch; cycles are refused through every parent.
+- **Reliability** (Phase 2): per task `max_retries` + `retry_delay_minutes` (`retry_at`, `AdminTaskRun.attempt`),
+  `timeout_minutes` (cooperative cancel from `tick`), `max_consecutive_failures` (auto-pause + admin notification),
+  `catch_up` (a launch missed for more than `MISFIRE_GRACE_SECONDS` runs late instead of being skipped).
+  Migration `a9c4e2f7b3d1` only adds columns / the table.
+- **Templates / export / import / duplicate**: `workflow_spec.py` — one JSON format; templates are the setting
+  `workflows.templates` (Admin › Configuration), "Save as template" writes to it.
+- **Workflow page**: header with figures (`/workflows/<uuid>/dashboard`), launch preview (`/preview`),
+  History insights (one bar per launch, failing / slowest tasks, next launches, status filter), task list view
+  with per-task stats and actions, Run from here (`/<task>/run_from_here`), pause / resume a workflow.

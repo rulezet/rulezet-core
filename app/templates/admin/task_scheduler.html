@@ -172,13 +172,62 @@
     <!-- ══════════════════════════ Level 2 — Workflow detail ══════════════════════════ -->
     <template v-else>
 
-        <!-- Compact stat line — replaces 4 separate KPI cards -->
-        <p class="text-muted mb-3" style="font-size:.85rem;">
-            <strong>[[ totalSchedules ]]</strong> total tasks ·
-            <strong class="text-success">[[ activeCount ]]</strong> active ·
-            <strong>[[ pausedCount ]]</strong> paused ·
-            next scheduled run: <strong>[[ nextRunSummary ]]</strong>
-        </p>
+        <!-- Workflow header: what it is, its state, its figures, everything you can do with it -->
+        <div class="wfd-hero mb-3" v-if="activeWorkflow">
+            <i class="wfd-hero__watermark fa-solid fa-diagram-project"></i>
+            <div class="wfd-hero__top">
+                <div class="wfd-hero__icon"><i class="fa-solid fa-diagram-project"></i></div>
+                <div class="wfd-hero__text">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <h4 class="wfd-hero__title">[[ activeWorkflow.title ]]</h4>
+                        <span class="wfd-pill" :class="activeWorkflow.is_active ? 'wfd-pill--on' : 'wfd-pill--off'">
+                            <i class="fa-solid" :class="activeWorkflow.is_active ? 'fa-circle-play' : 'fa-circle-pause'"></i>[[ activeWorkflow.is_active ? 'Active' : 'Paused' ]]
+                        </span>
+                        <span v-if="isWorkflowRunning" class="wfd-pill wfd-pill--run"><span class="wfd-dot"></span>Running</span>
+                    </div>
+                    <div class="wfd-hero__desc" v-if="activeWorkflow.description">[[ activeWorkflow.description ]]</div>
+                </div>
+                <div class="wfd-hero__actions">
+                    <button v-if="isWorkflowRunning" class="btn btn-sm btn-outline-danger rounded-pill px-3" @click="stopWorkflow()"><i class="fa-solid fa-stop me-1"></i>Stop</button>
+                    <button class="btn btn-sm btn-primary rounded-pill px-3 tf-submit" :disabled="!canRunWorkflow || workflowBusy" @click="askRunWorkflow()">
+                        <span v-if="workflowBusy" class="spinner-border spinner-border-sm me-1"></span><i v-else class="fa-solid fa-play me-1"></i>Run
+                    </button>
+                    <button class="btn btn-sm btn-light rounded-pill px-3" @click="toggleWorkflowActive()"
+                            :title="activeWorkflow.is_active ? 'Pause: no scheduled launch until resumed (Run still works)' : 'Resume its scheduled launches'">
+                        <i class="fa-solid me-1" :class="activeWorkflow.is_active ? 'fa-pause' : 'fa-play'"></i>[[ activeWorkflow.is_active ? 'Pause' : 'Resume' ]]
+                    </button>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-light rounded-pill px-3" data-bs-toggle="dropdown" aria-expanded="false"><i class="fa-solid fa-ellipsis"></i></button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+                            <li><button class="dropdown-item" @click="openEditWorkflow(activeWorkflow)"><i class="fa-solid fa-pen me-2"></i>Edit (title, launch date, alerts)</button></li>
+                            <li><button class="dropdown-item" @click="duplicateWorkflow(activeWorkflow)"><i class="fa-regular fa-clone me-2"></i>Duplicate</button></li>
+                            <li><a class="dropdown-item" :href="'/admin/tasks/workflows/' + activeWorkflow.uuid + '/export'"><i class="fa-solid fa-file-export me-2"></i>Export (.json)</a></li>
+                            <li><button class="dropdown-item" @click="saveAsTemplate(activeWorkflow)"><i class="fa-solid fa-bookmark me-2"></i>Save as template</button></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><button class="dropdown-item text-danger" @click="deleteWorkflow(activeWorkflow)"><i class="fa-solid fa-trash me-2"></i>Delete</button></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="wfd-kpis">
+                <div class="wfd-kpi"><span class="wfd-kpi__label">Tasks</span>
+                    <span class="wfd-kpi__value">[[ activeCount ]]<small>/ [[ totalSchedules ]] active</small></span></div>
+                <div class="wfd-kpi"><span class="wfd-kpi__label">Launches</span>
+                    <span class="wfd-kpi__value">[[ dashboard ? dashboard.launches : '—' ]]</span></div>
+                <div class="wfd-kpi"><span class="wfd-kpi__label">Success</span>
+                    <span class="wfd-kpi__value" :class="dashboard && dashboard.success_rate !== null ? (dashboard.success_rate >= 80 ? 'is-good' : 'is-bad') : ''">
+                        [[ dashboard && dashboard.success_rate !== null ? dashboard.success_rate + '%' : '—' ]]<small v-if="dashboard && dashboard.success_rate !== null">last 30</small></span></div>
+                <div class="wfd-kpi"><span class="wfd-kpi__label">Usual duration</span>
+                    <span class="wfd-kpi__value">[[ dashboard && dashboard.avg_seconds !== null ? formatDuration(dashboard.avg_seconds) : '—' ]]</span></div>
+                <div class="wfd-kpi"><span class="wfd-kpi__label">Last launch</span>
+                    <span class="wfd-kpi__value wfd-kpi__value--sm" v-if="dashboard && dashboard.last">
+                        <span class="badge" :class="runStatusBadgeClass(dashboard.last.status)">[[ dashboard.last.status ]]</span>
+                        <small>[[ dashboard.last.started_at ]]</small></span>
+                    <span class="wfd-kpi__value" v-else>—</span></div>
+                <div class="wfd-kpi"><span class="wfd-kpi__label">Next launch</span>
+                    <span class="wfd-kpi__value wfd-kpi__value--sm">[[ nextRunSummary ]]</span></div>
+            </div>
+        </div>
         <div v-if="neverRunsWarning" class="rounded-3 border border-warning p-2 px-3 mb-3 small text-warning-emphasis bg-warning-subtle">
             <i class="fa-solid fa-triangle-exclamation me-1"></i>[[ neverRunsWarning ]]
         </div>
@@ -192,6 +241,44 @@
             </a>
         </div>
 
+        <!-- ── History insights: one bar per recent launch, what fails, what is slow, what comes next ── -->
+        <div v-if="detailTab === 'history' && dashboard && (dashboard.bars.length || dashboard.upcoming.length)" class="wfd-insights mb-3">
+            <div class="wfd-card wfd-card--wide" v-if="dashboard.bars.length">
+                <div class="wfd-card__head"><i class="fa-solid fa-chart-column"></i>Recent launches<span class="ms-auto text-muted small">height = duration · click one to see it</span></div>
+                <div class="wfd-bars">
+                    <button v-for="b in dashboard.bars" :key="b.uuid" type="button" class="wfd-bar" :class="'wfd-bar--' + b.status"
+                            :style="{ height: barHeight(b) + '%' }" @click="viewHistoryRunInTasksTab(b)"
+                            :data-rz-pop-title="b.started_at + ' — ' + b.status"
+                            :data-rz-pop-text="b.done + '/' + b.tasks + ' tasks done' + (b.failed ? ', ' + b.failed + ' failed' : '') + (b.duration_seconds !== null ? ' · ' + formatDuration(b.duration_seconds) : '')"></button>
+                </div>
+            </div>
+            <div class="wfd-card" v-if="dashboard.failing.length">
+                <div class="wfd-card__head"><i class="fa-solid fa-triangle-exclamation text-danger"></i>Fails the most</div>
+                <div v-for="t in dashboard.failing" :key="t.uuid" class="wfd-row">
+                    <i :class="taskTypeIcon(t.task_type)"></i><span class="wfd-row__name">[[ t.title ]]</span>
+                    <span class="wfd-row__val is-bad">[[ t.fail_rate ]]% <small>([[ t.failures ]]/[[ t.runs ]])</small></span>
+                </div>
+            </div>
+            <div class="wfd-card" v-if="dashboard.slowest.length">
+                <div class="wfd-card__head"><i class="fa-solid fa-hourglass-half"></i>Slowest tasks</div>
+                <div v-for="t in dashboard.slowest" :key="t.uuid" class="wfd-row">
+                    <i :class="taskTypeIcon(t.task_type)"></i><span class="wfd-row__name">[[ t.title ]]</span>
+                    <span class="wfd-row__val">~[[ formatDuration(t.avg_seconds) ]]</span>
+                </div>
+            </div>
+            <div class="wfd-card" v-if="dashboard.upcoming.length">
+                <div class="wfd-card__head"><i class="fa-regular fa-calendar"></i>Next launches</div>
+                <div v-for="(u, i) in dashboard.upcoming" :key="i" class="wfd-row">
+                    <i class="fa-regular fa-clock"></i><span class="wfd-row__name">[[ formatLocalDate(u.at) ]]</span>
+                    <span class="wfd-row__val text-muted"><small>[[ u.task ]]</small></span>
+                </div>
+            </div>
+        </div>
+        <div v-if="dashboard && dashboard.auto_paused.length" class="tf-what tf-what--warn mb-3">
+            <i class="fa-solid fa-circle-pause"></i>
+            <div><strong>Paused automatically after repeated failures:</strong> [[ dashboard.auto_paused.join(', ') ]] — fix the cause, then switch them back on.</div>
+        </div>
+
         <!-- ── History tab (default): launch history first, detail on click ── -->
         <div v-if="detailTab === 'history'" class="card border-0 shadow-sm rounded-3">
             <div class="card-body p-3 p-md-4">
@@ -202,6 +289,10 @@
                             <span class="fw-bold" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--subtle-text-color);">
                                 <i class="fa-solid fa-clock-rotate-left me-1"></i>Launch history
                             </span>
+                        </div>
+                        <div class="wfd-filter ms-2">
+                            <button v-for="f in ['all', 'done', 'failed', 'running', 'cancelled']" :key="f" type="button"
+                                    :class="{ 'is-on': runFilter === f }" @click="runFilter = f">[[ f ]]</button>
                         </div>
                     </div>
                     <div class="dt-toolbar-right">
@@ -270,7 +361,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="run in workflowRuns" :key="run.uuid" class="dt-row" style="cursor:pointer;"
+                            <tr v-for="run in filteredWorkflowRuns" :key="run.uuid" class="dt-row" style="cursor:pointer;"
                                 title="View this launch's execution path, timing and logs" @click="viewHistoryRunInTasksTab(run)">
                                 <td class="dt-td dt-td--checkbox" @click.stop>
                                     <input type="checkbox" class="dt-checkbox" :checked="selectedRunUuids.has(run.uuid)"
@@ -384,12 +475,17 @@
                                 <span v-if="workflowBusy" class="spinner-border spinner-border-sm" role="status"></span>
                                 <i v-else class="fa-solid fa-play"></i><span>[[ workflowBusy ? 'Running…' : 'Run Workflow' ]]</span>
                             </button>
+                            <div class="tf-segment tf-segment--sm mb-0" role="tablist" aria-label="View">
+                                <button type="button" :class="{ 'is-on': taskViewMode === 'pipeline' }" @click="switchTaskViewMode('pipeline')"><i class="fa-solid fa-diagram-project"></i>Graph</button>
+                                <button type="button" :class="{ 'is-on': taskViewMode === 'list' }" @click="switchTaskViewMode('list')"><i class="fa-solid fa-list"></i>List</button>
+                            </div>
+                            <button v-if="taskViewMode !== 'canvas'" class="dt-toolbar-btn" @click="openCreate()"><i class="fa-solid fa-plus"></i><span>Add task</span></button>
                             <button class="dt-toolbar-btn dt-toolbar-btn--primary"
                                     :disabled="taskViewMode === 'pipeline' && isWorkflowRunning"
-                                    @click="switchTaskViewMode(taskViewMode === 'pipeline' ? 'canvas' : 'pipeline')"
+                                    @click="switchTaskViewMode(taskViewMode === 'canvas' ? 'pipeline' : 'canvas')"
                                     :title="isWorkflowRunning ? 'Cannot edit while the workflow is running' : (taskViewMode === 'pipeline' ? 'Switch to the drag-and-drop editor' : 'Back to the pipeline view')">
-                                <i class="fa-solid" :class="taskViewMode === 'pipeline' ? 'fa-pen' : 'fa-check'"></i>
-                                <span>[[ taskViewMode === 'pipeline' ? 'Edit' : 'Done' ]]</span>
+                                <i class="fa-solid" :class="taskViewMode !== 'canvas' ? 'fa-pen' : 'fa-check'"></i>
+                                <span>[[ taskViewMode !== 'canvas' ? 'Edit graph' : 'Done' ]]</span>
                             </button>
                         </div>
                     </div>
@@ -409,6 +505,42 @@
                             </button>
                         </div>
                     </template>
+
+                    <!-- List view: every task with its trigger, figures and actions -->
+                    <div v-else-if="taskViewMode === 'list'" class="wfd-tasks">
+                        <div v-for="s in filteredListSchedules" :key="s.uuid" class="wfd-task" :class="{ 'is-off': !s.is_active }">
+                            <span class="wfd-task__icon" :class="'wfd-task__icon--' + (s.last_run_status || 'none')"><i :class="taskTypeIcon(s.task_type)"></i></span>
+                            <div class="wfd-task__main">
+                                <div class="wfd-task__title">[[ s.title ]]
+                                    <span v-if="s.auto_disabled_at" class="wfd-tag wfd-tag--bad">auto-paused</span>
+                                    <span v-else-if="!s.is_active" class="wfd-tag">paused</span>
+                                    <span v-if="liveStatus[s.uuid] && ['pending','running'].includes(liveStatus[s.uuid].job_status)" class="wfd-tag wfd-tag--run"><span class="wfd-dot"></span>running</span>
+                                </div>
+                                <div class="wfd-task__sub">[[ taskTypeParts(taskTypeLabel(s.task_type)).name ]]</div>
+                                <div class="wfd-task__meta">
+                                    <span><i class="fa-regular fa-clock"></i>[[ triggerSummary(s) ]]</span>
+                                    <span v-if="(s.extra_parents || []).length"><i class="fa-solid fa-code-merge"></i>+[[ s.extra_parents.length ]] parent[[ s.extra_parents.length > 1 ? 's' : '' ]] ([[ s.depends_on_mode === 'any' ? 'any' : 'all' ]])</span>
+                                    <span v-if="s.next_run_at"><i class="fa-solid fa-forward"></i>next [[ s.next_run_at ]]</span>
+                                    <span v-if="s.stats && s.stats.runs"><i class="fa-solid fa-play"></i>[[ s.stats.runs ]] runs</span>
+                                    <span v-if="s.stats && s.stats.success_rate !== null" :class="s.stats.success_rate >= 80 ? 'is-good' : 'is-bad'"><i class="fa-solid fa-circle-check"></i>[[ s.stats.success_rate ]]%</span>
+                                    <span v-if="s.stats && s.stats.avg_seconds !== null"><i class="fa-solid fa-stopwatch"></i>~[[ formatDuration(s.stats.avg_seconds) ]]</span>
+                                    <span v-if="s.max_retries"><i class="fa-solid fa-rotate-right"></i>[[ s.max_retries ]] retries</span>
+                                    <span v-if="s.timeout_minutes"><i class="fa-solid fa-hourglass-half"></i>[[ s.timeout_minutes ]] min max</span>
+                                    <span v-if="s.retry_at" class="is-bad"><i class="fa-solid fa-rotate"></i>retry at [[ s.retry_at ]]</span>
+                                </div>
+                            </div>
+                            <div class="wfd-task__actions">
+                                <button class="dt-action-btn" title="Run this task alone, now" @click="runNow(s)"><i class="fa-solid fa-play"></i></button>
+                                <button class="dt-action-btn" title="Run from here: this task and everything after it (a new launch)" @click="runFromHere(s)"><i class="fa-solid fa-forward"></i></button>
+                                <button class="dt-action-btn" :title="s.is_active ? 'Pause' : 'Switch on'" @click="setTaskActive(s, !s.is_active)">
+                                    <i class="fa-solid" :class="s.is_active ? 'fa-pause' : 'fa-power-off'"></i></button>
+                                <button class="dt-action-btn" title="Duplicate" @click="duplicateTask(s)"><i class="fa-regular fa-clone"></i></button>
+                                <button class="dt-action-btn" title="Edit" @click="openEdit(s)"><i class="fa-solid fa-pen"></i></button>
+                                <button class="dt-action-btn dt-action-btn--danger" title="Delete" @click="askDeleteTask(s)"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                        </div>
+                        <p v-if="!filteredListSchedules.length" class="text-muted small mb-0">No task matches.</p>
+                    </div>
 
                     <task-workflow-graph v-else-if="taskViewMode === 'pipeline'" :schedules="graphSchedules" :task-types="taskTypes"
                         :live-status="liveStatus" :search-query="search" :focused-uuids="focusedTaskUuidsArray"
@@ -1074,7 +1206,7 @@
                         <button type="button" class="btn btn-outline-danger rounded-pill px-4" @click="askDeleteTask(editingSchedule)">
                             <i class="fa-solid fa-trash me-1"></i>Delete
                         </button>
-                        <button type="button" class="btn btn-outline-secondary rounded-pill px-3 me-auto" @click="duplicateTask()" title="A paused copy, next to it on the graph">
+                        <button type="button" class="btn btn-outline-secondary rounded-pill px-3 me-auto" @click="duplicateTask(null)" title="A paused copy, next to it on the graph">
                             <i class="fa-regular fa-clone me-1"></i>Duplicate
                         </button>
                     </template>
@@ -1284,9 +1416,12 @@
                 create_message(data.message || 'Failed.', res.ok ? 'success-subtle' : 'danger-subtle');
                 if (res.ok) fetchWorkflows(1);
             }
-            async function duplicateTask() {
-                if (!form.uuid) return;
-                const res = await fetch(`/admin/tasks/${form.uuid}/duplicate`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+            // a task (from the canvas right-click menu, the task list or the open task window) copied on
+            // the server — parents and reliability settings included, paused, next to it on the graph
+            async function duplicateTask(s) {
+                const uuid = (s && s.uuid) || form.uuid;
+                if (!uuid) return;
+                const res = await fetch(`/admin/tasks/${uuid}/duplicate`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
                 const data = await res.json().catch(() => ({}));
                 create_message(data.message || 'Failed.', res.ok ? 'success-subtle' : 'danger-subtle');
                 if (res.ok) {
@@ -1305,6 +1440,8 @@
                 loadGraphSchedules();
                 refreshLiveStatus();
                 loadWorkflowRuns(1);
+                dashboard.value = null;
+                loadDashboard();
             }
 
             function backToWorkflows() {
@@ -1332,6 +1469,57 @@
                 bootstrap.Modal.getInstance(document.getElementById('runPreviewModal'))?.hide();
                 await runWorkflowNow();
             }
+
+            // ── Workflow dashboard (header figures, History insights) ─────────────
+            const dashboard = ref(null);
+            async function loadDashboard() {
+                if (!activeWorkflow.value) return;
+                const res = await fetch(`/admin/tasks/workflows/${activeWorkflow.value.uuid}/dashboard`);
+                if (res.ok) {
+                    dashboard.value = await res.json();
+                    if (dashboard.value.workflow) activeWorkflow.value = { ...activeWorkflow.value, ...dashboard.value.workflow };
+                }
+            }
+            function barHeight(b) {
+                const max = Math.max(1, ...(dashboard.value?.bars || []).map(x => x.duration_seconds || 0));
+                return b.duration_seconds ? Math.max(12, Math.round(100 * b.duration_seconds / max)) : 12;
+            }
+            async function toggleWorkflowActive() {
+                const w = activeWorkflow.value;
+                if (!w) return;
+                const res = await fetch(`/admin/tasks/workflows/${w.uuid}/set_active`, { method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }, body: JSON.stringify({ is_active: !w.is_active }) });
+                const data = await res.json().catch(() => ({}));
+                create_message(data.message || 'Failed.', res.ok ? 'success-subtle' : 'danger-subtle');
+                if (res.ok) { activeWorkflow.value = { ...w, is_active: data.is_active }; loadDashboard(); }
+            }
+            async function runFromHere(s) {
+                const res = await fetch(`/admin/tasks/${s.uuid}/run_from_here`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                const data = await res.json().catch(() => ({}));
+                create_message(data.message || 'Failed.', res.ok ? 'success-subtle' : 'danger-subtle');
+                if (res.ok) {
+                    activeRunUuid.value = data.workflow_run_uuid || null;
+                    taskViewMode.value = 'pipeline';
+                    await refreshLiveStatus();
+                    startLivePolling();
+                    loadWorkflowRuns(1);
+                }
+            }
+            async function setTaskActive(s, isActive) {
+                const res = await fetch('/admin/tasks/bulk_set_active', { method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ workflow_uuid: activeWorkflow.value.uuid, mode: 'partial', selected_uuids: [s.uuid], is_active: isActive }) });
+                const data = await res.json().catch(() => ({}));
+                create_message(isActive ? `"${s.title}" switched on.` : `"${s.title}" paused.`, res.ok ? 'success-subtle' : 'danger-subtle');
+                if (res.ok) refreshLists();
+            }
+            const runFilter = ref('all');
+            const filteredWorkflowRuns = computed(() =>
+                runFilter.value === 'all' ? workflowRuns.value : workflowRuns.value.filter(r => r.status === runFilter.value));
+            const filteredListSchedules = computed(() => {
+                const q = (search.value || '').trim().toLowerCase();
+                return graphSchedules.value.filter(s => !q || s.title.toLowerCase().includes(q) || (s.task_type || '').includes(q));
+            });
 
             async function runWorkflowNow() {
                 if (!activeWorkflow.value || workflowBusy.value) return;
@@ -1641,6 +1829,7 @@
                     const data = await res.json();
                     workflowRuns.value = data.runs || [];
                     workflowRunsTotalPages.value = data.total_pages || 1;
+                    loadDashboard();
                     selectedRunUuids.value.clear();
                     // Auto-latch onto a run that's actively executing (covers
                     // both "I just clicked Run Workflow" and "I reloaded the
@@ -1991,17 +2180,6 @@
                 lastDeletedTask.value = null;
                 await createScheduleFromSnapshot(snap, {
                     successMessage: 'Task restored.', failureMessage: 'Could not restore the task.',
-                });
-            }
-
-            // Right-click → Duplicate (Canvas view) — same settings, offset
-            // position so the copy doesn't sit exactly on top of the original.
-            async function duplicateTask(s) {
-                if (!activeWorkflow.value) return;
-                await createScheduleFromSnapshot(s, {
-                    title: `${s.title} (copy)`,
-                    position: { x: (s.position_x ?? 60) + 40, y: (s.position_y ?? 40) + 40 },
-                    successMessage: 'Task duplicated.', failureMessage: 'Could not duplicate the task.',
                 });
             }
 
@@ -2375,10 +2553,12 @@
                 truncate,
                 route, activeWorkflow, openWorkflow, backToWorkflows, runWorkflowNow,
                 runPreview, runPreviewLoading, askRunWorkflow, confirmRunWorkflow,
+                dashboard, loadDashboard, barHeight, toggleWorkflowActive, runFromHere, setTaskActive,
+                runFilter, filteredWorkflowRuns, filteredListSchedules,
                 workflows, workflowsLoading, workflowSearch, onWorkflowSearchInput,
                 workflowsPage, workflowsTotalPages, totalWorkflows,
                 fetchWorkflows, openCreateWorkflow, openEditWorkflow, deleteWorkflow,
-                templates, templateBusy, openTemplates, useTemplate, importWorkflowFile, duplicateWorkflow, duplicateTask,
+                templates, templateBusy, openTemplates, useTemplate, importWorkflowFile, duplicateWorkflow,
                 saveAsTemplate, deleteTemplate,
                 workflowForm, savingWorkflow, submitWorkflowForm, mailConfigured, currentUserEmail,
                 workflowFormInstance, onWorkflowLaunchChange, formatLocalDate,
