@@ -6,7 +6,7 @@ const MultiBinaryFilter = {
     props: {
         modelValue: { type: Array, default: () => [] },
         options: { type: Array, default: () => [] },
-        placeholder: { type: String, default: 'Filter by binary…' },
+        placeholder: { type: String, default: 'Binary' },
     },
     emits: ['update:modelValue', 'change'],
     delimiters: ['[[', ']]'],

@@ -17,6 +17,7 @@ references and which are skipped: setting `rule.metadata_extraction`.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 
@@ -490,7 +491,7 @@ def display_metadata(extra: dict | None) -> list[dict]:
                         "values": [], "styled": [], "style": None, "is_hash": False})
             continue
         is_hash = bool(prefixes) and key.startswith(prefixes)
-        shown = _shown_values(values, split and not is_hash)
+        shown = _shown_values(values, split, is_hash)
         out.append({
             "key": key,
             "label": known.get("label") or key.replace("_", " ").capitalize(),
@@ -585,10 +586,38 @@ def _with_platform(styled: dict, platforms) -> dict:
     return {**styled, "platform": found}
 
 
-def _shown_values(values, split: bool) -> list[str]:
+_LIST_LITERAL = re.compile(r"\s*\[(.*)\]\s*", re.S)
+_HASH_SEP = re.compile(r"[\s,;|]+")
+
+
+def _list_literal(text: str) -> list[str] | None:
+    """"['a','b']" / '["a", "b"]' (a list written as a string) → ["a", "b"]; else None. Parsed, never run."""
+    m = _LIST_LITERAL.fullmatch(text)
+    if not m:
+        return None
+    try:
+        items = ast.literal_eval(text.strip())
+    except (ValueError, SyntaxError, MemoryError, RecursionError):
+        return None
+    if not isinstance(items, (list, tuple)) or any(isinstance(i, (list, tuple, dict, set)) for i in items):
+        return None
+    return [str(i).strip() for i in items if str(i).strip()]
+
+
+def _shown_values(values, split: bool, is_hash: bool = False) -> list[str]:
+    """One entry per value: lists written as strings ("['a','b']") opened, comma lists split
+    (split_list_value), hashes split on commas / spaces (a hash never holds one)."""
     out = []
     for v in values:
-        for item in (split_list_value(str(v)) if split else [str(v)]):
+        text = str(v)
+        items = _list_literal(text)
+        if items is None:
+            if is_hash:
+                items = [h for h in _HASH_SEP.split(text.strip().strip("[]")) if h.strip("'\"")]
+                items = [h.strip("'\"") for h in items] or [text]
+            else:
+                items = split_list_value(text) if split else [text]
+        for item in items:
             if item not in out:
                 out.append(item)
     return out

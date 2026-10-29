@@ -13,7 +13,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from flask import current_app, jsonify, request, send_file, Response
 from flask_login import current_user
 from sqlalchemy import and_, case, or_, text
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, Session
+from sqlalchemy import event, inspect
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sqlalchemy.orm import aliased
@@ -456,6 +457,70 @@ def _attach_default_tags(rule, user_id):
             ))
             existing_ids.add(tag.id)
 
+_MARKING_KEYS = {"tlp": "tlp", "sharing": "tlp", "pap": "PAP"}
+_MARKING_VALUE = re.compile(r"^\s*(?:(tlp|pap)\s*[:\-_ ]\s*)?([a-z]+(?:\+strict)?)\s*$", re.I)
+
+
+def marking_tags_from_metadata(extra) -> dict:
+    """{namespace: tag name} for the TLP / PAP the rule's metadata declares (tlp = "TLP:AMBER",
+    sharing = "green", pap = "PAP:RED"…) — only names that are real tags of this instance."""
+    out = {}
+    for key, value in (extra or {}).items():
+        namespace = _MARKING_KEYS.get(str(key).lower())
+        if not namespace:
+            continue
+        for v in (value if isinstance(value, list) else [value]):
+            m = _MARKING_VALUE.match(str(v))
+            if not m:
+                continue
+            ns = "PAP" if (m.group(1) or "").lower() == "pap" else ("tlp" if m.group(1) else namespace)
+            # a real tag of the TLP / PAP taxonomy only, never a custom tag with the same name
+            tag = Tag.query.filter(Tag.name.ilike(f"{ns}:{m.group(2)}"), Tag.namespace.ilike(ns)).first()
+            if tag and ns.lower() not in {k.lower() for k in out}:
+                out[ns] = tag
+    return out
+
+
+def sync_marking_tags(rule, extra=None) -> bool:
+    """The TLP / PAP written in the rule's metadata replaces the rule's tag of that namespace
+    (the default tlp:clear / PAP:CLEAR, or an older marking): a rule declaring tlp = "AMBER" is
+    tagged tlp:amber, never tlp:clear. Nothing changes when the metadata declares none.
+    True when a tag changed."""
+    wanted = marking_tags_from_metadata(rule.extra_metadata if extra is None else extra)
+    if not wanted or not rule.id:
+        return False
+    changed = False
+    with db.session.no_autoflush:
+        current = (db.session.query(RuleTagAssociation, Tag)
+                   .join(Tag, Tag.id == RuleTagAssociation.tag_id)
+                   .filter(RuleTagAssociation.rule_id == rule.id).all())
+        for ns, tag in wanted.items():
+            same_ns = [(a, t) for a, t in current if t.name.lower().startswith(ns.lower() + ":")]
+            if any(t.id == tag.id for _, t in same_ns):
+                stale = [a for a, t in same_ns if t.id != tag.id]
+            else:
+                stale = [a for a, _ in same_ns]
+                db.session.add(RuleTagAssociation(
+                    uuid=str(uuid.uuid4()), rule_id=rule.id, tag_id=tag.id, user_id=rule.user_id,
+                    added_at=datetime.datetime.now(tz=datetime.timezone.utc)))
+                changed = True
+            for a in stale:
+                db.session.delete(a)
+                changed = True
+    return changed
+
+
+@event.listens_for(Session, "before_flush")
+def _rule_marking_tags_on_edit(session, flush_context, instances):
+    """A rule whose text (so its metadata) changed: its TLP / PAP tags follow what the text declares."""
+    for obj in list(session.dirty):
+        if isinstance(obj, Rule) and obj.id and inspect(obj).attrs.extra_metadata.history.has_changes():
+            try:
+                sync_marking_tags(obj)
+            except Exception:
+                current_app.logger.exception("TLP / PAP tags of rule %s not synced", obj.id)
+
+
 # CRUD
 
 def _find_in_trash_by_content(content: str):
@@ -821,6 +886,8 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
             ))
 
         _attach_default_tags(new_rule, user_id)
+        db.session.flush()
+        sync_marking_tags(new_rule)          # tlp = "AMBER" in the rule: tlp:amber, not the default tlp:clear
 
         # The author's own tags written in the rule (YARA `rule X : a b`,
         # Sigma `tags:`…) as "Imported" tags — GitHub #70. In a savepoint:

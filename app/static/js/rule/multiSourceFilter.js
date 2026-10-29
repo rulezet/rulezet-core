@@ -1,7 +1,7 @@
 const MultiSourceFilter = {
     props: {
         modelValue: { type: Array, default: () => [] },
-        placeholder: { type: String, default: 'Filter by sources...' },
+        placeholder: { type: String, default: 'Sources' },
         apiEndpoint: { type: String, default: '/rule/get_rules_sources_usage' },
         userId: { type: Number, default: null },
         // Query string of every OTHER currently active RuleList filter (format,

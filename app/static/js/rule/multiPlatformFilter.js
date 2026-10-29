@@ -11,7 +11,7 @@
 const MultiPlatformFilter = {
     props: {
         modelValue: { type: Array, default: () => [] },
-        placeholder: { type: String, default: 'Filter platforms…' },
+        placeholder: { type: String, default: 'Windows, Linux…' },
         apiEndpoint: { type: String, default: '/rule/get_rules_platforms_usage' },
         userId: { type: Number, default: null },
         sourceRules: { type: String, default: '' },

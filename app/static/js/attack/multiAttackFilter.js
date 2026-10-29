@@ -51,7 +51,7 @@ const MultiAttackFilter = {
     name: 'MultiAttackFilter',
     props: {
         modelValue:  { type: Array,  default: () => [] },
-        placeholder: { type: String, default: 'Filter by ATT&CK technique…' },
+        placeholder: { type: String, default: 'T1059, Command…' },
         apiEndpoint: { type: String, default: '/attack/techniques/usage' },
         // Query string of every OTHER currently active RuleList filter — keeps
         // these counts scoped to what's actually visible.

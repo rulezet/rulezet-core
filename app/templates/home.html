@@ -85,6 +85,10 @@
                     <span class="hv2-stat__icon"><i class="fa-solid fa-box"></i></span>
                     <span><span class="hv2-stat__num" data-count="{{ total_bundles }}">{{ "{:,}".format(total_bundles) }}</span><span class="hv2-stat__lbl">rule bundles</span></span>
                 </a>
+                <a href="/rule/github/list_github_url" class="hv2-stat" style="--c:#6f42c1">
+                    <span class="hv2-stat__icon"><i class="fa-solid fa-code-branch"></i></span>
+                    <span><span class="hv2-stat__num" data-count="{{ total_repos }}">{{ "{:,}".format(total_repos) }}</span><span class="hv2-stat__lbl">git repositories</span></span>
+                </a>
                 <a href="/attack/heatmap" class="hv2-stat" style="--c:#fd7e14">
                     <span class="hv2-stat__icon"><i class="fa-solid fa-crosshairs"></i></span>
                     <span><span class="hv2-stat__num" data-count="{{ total_attacks }}">{{ "{:,}".format(total_attacks) }}</span><span class="hv2-stat__lbl">ATT&amp;CK techniques covered</span></span>
@@ -112,6 +116,7 @@
             <div class="hv2-platforms" aria-label="Rules by format">
                 <span class="hv2-platforms__lbl">Browse</span>
                 {% for fmt in rule_formats %}<a href="/rule/rules_list?rule_type={{ fmt.name | urlencode }}" class="hv2-chip hv2-chip--fmt" style="--fmt: {{ fmt.color }}; --i: {{ loop.index }}">{% if fmt.logo %}<img src="{{ url_for('static', filename='images/formats/' ~ fmt.logo) }}" alt="" loading="lazy">{% endif %}{{ fmt.title }}</a>{% endfor %}
+                <a href="/rule/formats" class="hv2-chip hv2-chip--more" style="--i: {{ rule_formats | length + 1 }}">See more<i class="fa-solid fa-arrow-right"></i></a>
             </div>
             {% endif %}
             {% if rule_platforms %}

@@ -104,7 +104,14 @@ def _yarax_diag(raw: str, level: str) -> dict:
 
 # ── CCCS YARA standard ────────────────────────────────────────────────────────────
 
+_INCLUDE_RE = re.compile(r'\binclude\s*"')     # anywhere (after a comment too); a string holding it only skips CCCS
+
+
 def check_cccs(text: str) -> dict:
+    # cccs-yara compiles with yara-python's defaults (includes on): a document with an include
+    # would make it read a file of the server — never run it on one
+    if _INCLUDE_RE.search(text):
+        return _unavailable('documents with include are not checked (no file of the server is read)')
     # the MITRE ATT&CK data Rulezet already ships (submodule app/modules/cti), read by CCCS for the
     # mitre_att / actor fields — set before the package is imported (it reads it at import)
     cti = os.path.join(_MODULES_DIR, 'cti')

@@ -118,6 +118,7 @@ def home() -> render_template:
         and RuleModel.get_total_rules_count() == 0
     )
     from app.core.db_class.attack import AttackTechnique
+    from app.core.db_class.git import GithubRepo
 
     # Platform-wide counts — same for every visitor and barely move given
     # how many rules Rulezet already has (a handful of new/edited rules is
@@ -126,7 +127,7 @@ def home() -> render_template:
     # and the CSRF token below are per-user/per-session and must never be
     # served from a shared cache.
     try:
-        platform_stats = cache.get('home_platform_stats_v3')
+        platform_stats = cache.get('home_platform_stats_v4')
     except Exception:            # cache backend down (e.g. Redis restarting)
         platform_stats = None
     if platform_stats is None:
@@ -134,6 +135,8 @@ def home() -> render_template:
             'total_rules':   Rule.query.filter_by(is_deleted=False).count(),
             'total_bundles': Bundle.query.count(),
             'total_attacks': AttackTechnique.query.count(),
+            # git repositories the rules come from (GitHub, GitLab, Gitea…), registry kept in sync on import
+            'total_repos':   GithubRepo.query.filter(GithubRepo.rule_count > 0).count(),
             'rule_formats':  RuleModel.get_all_rule_format(),
             'total_cves':    sum(1 for v in RuleModel.get_rules_vulnerabilities_usage()
                                  if str(v.get('name', '')).upper().startswith('CVE-')),
@@ -142,12 +145,13 @@ def home() -> render_template:
                               for p in RuleModel.get_platforms_usage_with_filter({})][:16],
         }
         try:
-            cache.set('home_platform_stats_v3', platform_stats, timeout=60 * 60 * 6)
+            cache.set('home_platform_stats_v4', platform_stats, timeout=60 * 60 * 6)
         except Exception:
             pass
     total_rules   = platform_stats['total_rules']
     total_bundles = platform_stats['total_bundles']
     total_attacks = platform_stats['total_attacks']
+    total_repos   = platform_stats.get('total_repos', 0)
     rule_formats  = _format_looks(platform_stats['rule_formats'])
     rule_platforms = platform_stats.get('platforms') or []
     total_cves    = platform_stats['total_cves']
@@ -170,6 +174,7 @@ def home() -> render_template:
         total_rules=total_rules,
         total_bundles=total_bundles,
         total_attacks=total_attacks,
+        total_repos=total_repos,
         rule_formats=rule_formats,
         rule_platforms=rule_platforms,
         total_cves=total_cves,

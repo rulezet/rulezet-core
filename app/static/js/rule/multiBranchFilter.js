@@ -1,7 +1,7 @@
 const MultiBranchFilter = {
     props: {
         modelValue: { type: Array, default: () => [] },
-        placeholder: { type: String, default: 'Filter by branch...' },
+        placeholder: { type: String, default: 'main, dev…' },
         apiEndpoint: { type: String, default: '/rule/get_rules_branches_usage' },
         userId: { type: Number, default: null },
         sourceRules: { type: String, default: '' },

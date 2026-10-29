@@ -5653,6 +5653,8 @@ def handle_reparse_rule_metadata(job, app):
     """
     from sqlalchemy import func
     from app.features.rule.rule_metadata_core import detect_platforms, encode_platforms, extract_rule_metadata
+    from types import SimpleNamespace
+    from app.features.rule.rule_core import sync_marking_tags
 
     payload  = job.payload or {}
     formats  = payload.get('formats', 'ALL')
@@ -5675,7 +5677,7 @@ def handle_reparse_rule_metadata(job, app):
     else:
         log_job(job, f'Resuming from offset {offset}.', level='info', event='resume')
 
-    changed = with_refs = with_extra = 0
+    changed = with_refs = with_extra = markings = 0
     batch_num = 0
     while True:
         if _is_cancelled(job):
@@ -5684,11 +5686,11 @@ def handle_reparse_rule_metadata(job, app):
         while _should_pause(job):
             import time; time.sleep(2)
 
-        rows = (q.with_entities(Rule.id, Rule.format, Rule.to_string, Rule.rule_references, Rule.extra_metadata, Rule.platforms)
+        rows = (q.with_entities(Rule.id, Rule.format, Rule.to_string, Rule.rule_references, Rule.extra_metadata, Rule.platforms, Rule.user_id)
                 .offset(offset).limit(FIELD_PARSE_BATCH).all())
         if not rows:
             break
-        for rule_id, fmt, content, old_refs, old_extra, old_platforms in rows:
+        for rule_id, fmt, content, old_refs, old_extra, old_platforms, owner_id in rows:
             found = extract_rule_metadata(fmt, content)
             refs, extra = found['references'] or None, found['extra'] or None
             platforms = encode_platforms(detect_platforms(extra))
@@ -5699,6 +5701,9 @@ def handle_reparse_rule_metadata(job, app):
                 Rule.query.filter(Rule.id == rule_id).update(
                     {'rule_references': refs, 'extra_metadata': extra, 'platforms': platforms}, synchronize_session=False)
                 changed += 1
+            # tlp = "AMBER" / pap = "RED" in the text: that tag instead of the default tlp:clear / PAP:CLEAR
+            if extra and sync_marking_tags(SimpleNamespace(id=rule_id, user_id=owner_id, extra_metadata=extra)):
+                markings += 1
         db.session.commit()
         offset += len(rows)
         job.done = offset
@@ -5710,4 +5715,4 @@ def handle_reparse_rule_metadata(job, app):
             log_job(job, f'{offset}/{job.total} rules read, {changed} updated.', level='info', event='progress')
 
     log_job(job, f'Done — {offset} rules read, {changed} updated; {with_refs} with references, '
-                 f'{with_extra} with other metadata.', level='success', event='done')
+                 f'{with_extra} with other metadata, {markings} with their TLP / PAP tag set from the text.', level='success', event='done')
