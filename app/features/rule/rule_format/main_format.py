@@ -266,10 +266,12 @@ def verify_syntax_rule_by_format(rule_dict: dict, rule=None) -> tuple[bool, str]
 #   'version': '1.0', 'to_string': 'q', 'cve_id': [], 'author': 'admin', 'creation_date': (datetime.datetime(2025, 9, 10, 12, 9, 47, 2389, tzinfo=datetime.timezone.utc),)}
 
 
-def process_and_import_fixed_rule(bad_rule_obj: InvalidRuleModel, raw_content: str):
+def process_and_import_fixed_rule(bad_rule_obj: InvalidRuleModel, raw_content: str, user=None):
     """
     Process a corrected bad rule from InvalidRuleModel and attempt to import it using format-specific classes.
+    `user`: who imports it — the logged-in user by default; a background job passes the bad rule's owner.
     """
+    user = user or current_user
 
     try:
         rule_dict = {
@@ -303,7 +305,7 @@ def process_and_import_fixed_rule(bad_rule_obj: InvalidRuleModel, raw_content: s
 
         info = {
             "license": bad_rule_obj.license,
-            "author": getattr(current_user, "first_name", "Unknown"),
+            "author": getattr(user, "first_name", "Unknown"),
             "repo_url": bad_rule_obj.url
         }
 
@@ -326,7 +328,7 @@ def process_and_import_fixed_rule(bad_rule_obj: InvalidRuleModel, raw_content: s
 
 
         if validation_result.ok:
-            success, msg = RuleModel.add_rule_core(result_dict["rule"], current_user)
+            success, msg = RuleModel.add_rule_core(result_dict["rule"], user)
             if success:
                 db.session.delete(bad_rule_obj)
                 db.session.commit()
@@ -366,11 +368,14 @@ def import_bad_rule_with_dependency(bad_rule_obj: InvalidRuleModel, raw_content:
     from app.features.rule.rule_format.available_format.yara_format import YaraRule
     from app.features.rule_relation import rule_relation_core as RelationModel
 
-    combined_source = f"{target_rule.to_string or ''}\n\n{raw_content}"
+    # one rule, or several (a condition naming more than one other rule: the bad-rules job)
+    targets = list(target_rule) if isinstance(target_rule, (list, tuple)) else [target_rule]
+    combined_source = "\n\n".join([t.to_string or '' for t in targets] + [raw_content])
     try:
         yara.compile(source=combined_source, includes=False)
     except yara.SyntaxError as e:
-        return False, f"Still doesn't compile together with '{target_rule.title}': {e}", None
+        names = ', '.join(f"'{t.title}'" for t in targets)
+        return False, f"Still doesn't compile together with {names}: {e}", None
     except Exception as e:
         return False, str(e), None
 
@@ -412,11 +417,12 @@ def import_bad_rule_with_dependency(bad_rule_obj: InvalidRuleModel, raw_content:
         db.session.delete(bad_rule_obj)
         db.session.commit()
 
-        RelationModel.add_relation(
-            new_rule.id, target_rule.id, 'depends_on',
-            note=f'Compile-time dependency — YARA condition references "{target_rule.title}"',
-            user_id=user.id, source='manual',
-        )
+        for target in targets:
+            RelationModel.add_relation(
+                new_rule.id, target.id, 'depends_on',
+                note=f'Compile-time dependency — YARA condition references "{target.title}"',
+                user_id=user.id, source='manual',
+            )
         return True, "", new_rule
     except Exception as e:
         db.session.rollback()

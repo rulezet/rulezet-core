@@ -23,6 +23,8 @@ target_picker values understood by task_scheduler.html:
 extra_options[].type values understood by task_scheduler.html:
     'bool' | 'text'
     'multiselect'  — checkboxes over opt['options'] ([{value, label}]), value is a list
+    'select'       — a <select> over opt['options'] ([{value, label}]), or over choices read from the
+                     database at serialization when opt['options_from'] names them (see _with_options)
     'saved_config' — a <select> of the saved Bulk Parse Fields configs of
                      opt['config_type'] ('field_parser' | 'platform_tags');
                      opt['allow_all'] adds the "every saved config" choice
@@ -80,7 +82,7 @@ TASK_TYPES = {
     },
     'rule_validation_run': {
         'label': 'Rule Validation (false-positive gate)',
-        'icon': 'fa-solid fa-shield-check',
+        'icon': 'fa-solid fa-vial-circle-check',   # fa-shield-check is Font Awesome Pro, not in the bundled free set
         'job_type': 'rule_validation_run',
         'target_picker': 'none',
         'extra_options': [
@@ -132,6 +134,60 @@ TASK_TYPES = {
             {'key': 'source', 'type': 'text', 'label': 'Only rules from this repository URL (optional)', 'default': ''},
         ],
         'required_options': ['formats'],
+    },
+    'bad_rules_retry': {
+        'label': 'Bad rules — try them again and link the rules they name',
+        'icon': 'fa-solid fa-screwdriver-wrench',
+        'job_type': 'bad_rules_retry',
+        'target_picker': 'none',
+        # What "Edit" of a bad rule does by hand, for every bad rule: YARA "undefined
+        # identifier X" where X is another rule — imported linked to it (several if needed),
+        # like relink_rules; any format — validated again as it is (fixed validators, rules
+        # imported since). Imports for the bad rule's owner; never edits a rule's text.
+        'extra_options': [
+            {'key': 'formats', 'type': 'multiselect', 'label': 'Formats (none checked = every format)',
+             'options': [{'value': 'yara', 'label': 'YARA — undefined identifier: link the rule it names'},
+                         {'value': 'kunai', 'label': 'Kunai'},
+                         {'value': 'wazuh', 'label': 'Wazuh'},
+                         {'value': 'sigma', 'label': 'Sigma'},
+                         {'value': 'suricata', 'label': 'Suricata'},
+                         {'value': 'splunk', 'label': 'Splunk'},
+                         {'value': 'kql', 'label': 'KQL'}],
+             'default': ['yara']},
+            {'key': 'link_dependencies', 'type': 'bool', 'label': 'YARA: link the rules a condition names', 'default': True},
+            {'key': 'source', 'type': 'text', 'label': 'Only bad rules from this repository URL (optional)', 'default': ''},
+        ],
+    },
+    'reparse_rule_metadata': {
+        'label': 'References & metadata — read them again from every rule (platforms, TLP / PAP…)',
+        'icon': 'fa-solid fa-book-open',
+        'job_type': 'reparse_rule_metadata',
+        'target_picker': 'format_filter_only',
+        'format_key': 'formats',
+    },
+    'github_sync_schedule_launch': {
+        'label': 'Git updates — run a sync schedule now',
+        'icon': 'fa-solid fa-rotate',
+        'job_type': 'github_sync_schedule_launch',
+        'target_picker': 'none',
+        # one of the schedules made on Git Sources → Sync schedules (its repositories, its
+        # accept / add-new-rules choices); the options are filled in by serialize_task_types()
+        'extra_options': [
+            {'key': 'schedule_uuid', 'type': 'select', 'label': 'Sync schedule', 'options_from': 'github_sync_schedules'},
+        ],
+        'required_options': ['schedule_uuid'],
+    },
+    'clear_caches': {
+        'label': 'Caches — clear them (home figures, stats, pages)',
+        'icon': 'fa-solid fa-broom',
+        'job_type': 'clear_caches',
+        'target_picker': 'none',
+    },
+    'git_cache_pull': {
+        'label': 'Git clone cache — pull every kept clone',
+        'icon': 'fa-solid fa-code-pull-request',
+        'job_type': 'git_cache_pull',
+        'target_picker': 'none',
     },
     'rule_git_mirror_sync': {
         'label': 'Rulesets — sync',
@@ -249,6 +305,16 @@ TASK_TYPES = {
 }
 
 
+def _with_options(opt):
+    """An extra option whose choices come from the database ('options_from'), filled in now."""
+    if opt.get('options_from') == 'github_sync_schedules':
+        from app.core.db_class.git import GithubSyncSchedule
+        opts = [{'value': s.uuid, 'label': s.title + ('' if s.is_active else ' (paused)')}
+                for s in GithubSyncSchedule.query.order_by(GithubSyncSchedule.title).all()]
+        return {**opt, 'options': opts}
+    return opt
+
+
 def serialize_task_types():
     """JSON-safe view of the registry for GET /admin/tasks/types — drops
     nothing sensitive (there isn't any), just here so the route doesn't
@@ -259,8 +325,45 @@ def serialize_task_types():
             'icon': t['icon'],
             'target_picker': t['target_picker'],
             'format_key': t.get('format_key', 'format'),
-            'extra_options': t.get('extra_options', []),
+            'extra_options': [_with_options(o) for o in t.get('extra_options', [])],
             'required_options': t.get('required_options', []),
+            'description': t.get('description', ''),
         }
         for key, t in TASK_TYPES.items()
     }
+
+
+# What happens when the task runs — shown on hover of its card and under the chosen type in the
+# task window (task_scheduler.html), so an admin knows what they are about to schedule.
+_DESCRIPTIONS = {
+    'quality_score': 'Scores every targeted rule (documentation, traceability, validity) and stores it; the rules list and rule pages show the new score.',
+    'attack_parser': 'Reads MITRE ATT&CK technique ids in the targeted rules and links them; ATT&CK pages and filters are updated.',
+    'misp_update_data': 'Pulls the latest version of the MISP taxonomies and galaxies already imported; new tags appear, existing ones keep their links.',
+    'misp_import_all_taxonomies': 'Imports every MISP taxonomy not yet on this instance as tags.',
+    'misp_import_all_galaxies': 'Imports every MISP galaxy not yet on this instance (threat actors, tools…).',
+    'attack_update_data': 'Downloads the latest MITRE ATT&CK data (techniques, tactics, names); technique pages use it right away.',
+    'db_backup': 'Dumps the PostgreSQL database to the backup folder; nothing else changes.',
+    'rule_validation_run': 'Runs the false-positive gate on the rules changed since the last run (or all of them with Full scan) and records the results.',
+    'activity_log_purge': 'Deletes old activity log entries (optionally only some actions); the rest of the log is kept.',
+    'connector_pull': 'Pulls rules from one federation connector (another Rulezet instance) and imports or updates them.',
+    'github_repo_resync': 'Rebuilds the Git Sources registry (repositories, rule counts, branches) from the rules in the database.',
+    'relink_rules': 'Looks again for links between rules already imported (Wazuh parents, Kunai shared hashes, YARA rules a condition names) and adds the missing ones.',
+    'bad_rules_retry': 'Tries every bad rule again: YARA rules naming another rule are imported linked to it, any rule now valid is imported for its owner, the others get a fresh error message.',
+    'reparse_rule_metadata': 'Reads references, platforms, TLP / PAP and the other metadata again from each rule\'s text; tags and filters follow. Clear the caches after to see new figures on the home page.',
+    'git_cache_pull': 'Runs git pull on every repository clone kept on the server, so the next import or update reads the latest files.',
+    'rule_git_mirror_sync': 'Pushes the rules of each Rulesets mirror to its git repository (one commit per sync).',
+    'native_tags_import': 'Reads the tags written inside each rule (its own format\'s tag field) and attaches them as Rulezet tags.',
+    'platform_tagging': 'Applies a saved platform-tag config: rules matching its patterns get the platform tags (Windows, Linux…).',
+    'field_parser': 'Applies a saved field-parser config to re-read rule fields (CVE ids and the others it lists).',
+    'github_import': 'Imports the rules of one git repository (any host); new rules are created, bad ones go to Bad rules.',
+    'github_branch_backfill': 'Fills in the git branch of rules imported before branches were recorded.',
+    'suricata_audit': 'Checks Suricata rules and writes a report; no rule is changed.',
+    'suricata_deep_validate': 'Validates Suricata rules with the real Suricata engine, a batch per run, and records the result.',
+    'gamification_recompute': 'Recomputes every user\'s points, level and badges; the leaderboard cache is reset at the end.',
+    'github_sync_schedule_launch': 'Runs one Git sync schedule now: checks its repositories for updated and new rules, then accepts / adds them if the schedule says so — the same as its own timer.',
+    'clear_caches': 'Empties the caches (home figures, ATT&CK / CVE stats, cached pages, leaderboard) so what the workflow changed shows right away. Put it last.',
+    'ai_rule_analysis': 'Asks the AI agent to write an analysis report for rules that have none (a batch per run), published or kept private.',
+}
+for _key, _text in _DESCRIPTIONS.items():
+    if _key in TASK_TYPES:
+        TASK_TYPES[_key].setdefault('description', _text)
