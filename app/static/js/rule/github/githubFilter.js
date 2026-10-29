@@ -1,5 +1,6 @@
 import { loadOrgBadge } from '/static/js/rule/github/orgBadge.js';
 import MultiPersonFilter from '/static/js/rule/multiPersonFilter.js'
+import FormatSelect from '/static/js/rule/formatSelect.js'
 
 const GithubFilter = {
     props: {
@@ -12,7 +13,8 @@ const GithubFilter = {
     emits: ['update:results', 'loading'],
     delimiters: ['[[', ']]'],
     components: {
-        'multi-person-filter': MultiPersonFilter
+        'multi-person-filter': MultiPersonFilter,
+        'format-select': FormatSelect,
     },
     setup(props, { emit }) {
         // ── Initial state from the URL — filters (and sort, read by the
@@ -266,14 +268,10 @@ const GithubFilter = {
                 </div>
 
                 <div class="rl-fp-item">
-                    <select v-model="selectedFormat" @change="fetchUrls(1)" class="rl-fp-select" aria-label="Format">
-                        <option value="">All formats</option>
-                        <option v-for="fmt in availableFormats"
-                                :key="typeof fmt === 'object' ? fmt.name : fmt"
-                                :value="typeof fmt === 'object' ? fmt.name : fmt">
-                            [[ typeof fmt === 'object' ? fmt.name : fmt ]]
-                        </option>
-                    </select>
+                    <!-- same Format filter as the rules list: logo + colour of each format -->
+                    <format-select v-model="selectedFormat"
+                                   :formats="availableFormats.map(f => typeof f === 'object' ? f : { id: f, name: f })"
+                                   @change="fetchUrls(1)"></format-select>
                 </div>
 
                 <div class="rl-fp-item">

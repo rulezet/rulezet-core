@@ -1,6 +1,7 @@
 import PaginationComponent from '/static/js/rule/paginationComponent.js';
 import { loadOrgBadge } from '/static/js/rule/github/orgBadge.js';
 import GithubFilter from '/static/js/rule/github/githubFilter.js';
+import FormatChip from '/static/js/rule/formatChip.js';
 import GithubActionModal from '/static/js/rule/github/githubActionModal.js';
 import JobTracker from '/static/js/jobs/JobTracker.js';
 import { message_list, create_message } from '/static/js/toaster.js'
@@ -34,6 +35,7 @@ const GitHubSelectionTable = {
         'github-filter': GithubFilter,
         'github-action-modal': GithubActionModal,
         'job-tracker': JobTracker,
+        'format-chip': FormatChip,
     },
     data() {
         return {
@@ -646,9 +648,9 @@ const GitHubSelectionTable = {
                                 </span>
                             </td>
                             <td v-show="colVisible.formats" class="dt-td">
-                                <span v-for="fmt in item.formats" :key="fmt"
-                                      class="badge bg-dark text-white me-1"
-                                      style="text-transform:uppercase;">[[ fmt ]]</span>
+                                <span class="d-inline-flex flex-wrap gap-1">
+                                    <format-chip v-for="fmt in item.formats" :key="fmt" :format="fmt"></format-chip>
+                                </span>
                                 <span v-if="!item.formats.length" class="text-muted small">—</span>
                             </td>
                             <td v-show="colVisible.branches" class="dt-td">
@@ -819,10 +821,7 @@ const GitHubSelectionTable = {
                                                     <small class="text-muted d-block mb-2 text-uppercase fw-bold"
                                                            style="font-size:0.7rem">Detected Formats</small>
                                                     <div class="d-flex flex-wrap gap-1">
-                                                        <span v-for="fmt in item.formats" :key="fmt"
-                                                              class="badge border ghst-text fw-normal">
-                                                            [[ fmt ]]
-                                                        </span>
+                                                        <format-chip v-for="fmt in item.formats" :key="fmt" :format="fmt"></format-chip>
                                                         <span v-if="!item.formats.length"
                                                               class="text-muted small">None</span>
                                                     </div>
