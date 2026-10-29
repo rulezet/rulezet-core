@@ -167,6 +167,33 @@ export default {
                     </div>
                 </div>
 
+                <!-- Identity verified by an admin -->
+                <div class="ul-filter-group">
+                    <span class="rl-fp-multi-label"><i class="fas fa-id-card text-primary me-1"></i>Identity</span>
+                    <div class="ul-toggle-group">
+                        <button :class="['ul-toggle-btn', identFilter === '' ? 'ul-toggle-btn--active' : '']"
+                                @click="identFilter = ''; onFilterChange()">All</button>
+                        <button :class="['ul-toggle-btn', identFilter === 'true' ? 'ul-toggle-btn--active' : '']"
+                                @click="identFilter = 'true'; onFilterChange()">
+                            <i class="fas fa-user-check me-1"></i>Verified by an admin
+                        </button>
+                        <button :class="['ul-toggle-btn', identFilter === 'false' ? 'ul-toggle-btn--active' : '']"
+                                @click="identFilter = 'false'; onFilterChange()">
+                            <i class="fas fa-xmark me-1"></i>Not verified
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Organisation -->
+                <div class="ul-filter-group">
+                    <span class="rl-fp-multi-label"><i class="fas fa-building me-1" style="color:#6f42c1;"></i>Organisation</span>
+                    <select v-model="orgFilter" @change="onFilterChange()" class="rl-sort-select">
+                        <option value="">All</option>
+                        <option value="none">No organisation</option>
+                        <option v-for="o in orgOptions" :key="o.id" :value="String(o.id)">{{ o.name }}</option>
+                    </select>
+                </div>
+
                 <button v-if="activeFilterCount > 0" class="rl-fp-reset" @click="resetFilters">
                     <i class="fas fa-rotate-left me-1"></i>Reset
                 </button>
@@ -213,7 +240,8 @@ export default {
                         <span v-if="isSelf(user)" class="badge bg-info text-dark">
                             <i class="fas fa-user-check me-1"></i>You
                         </span>
-                        <span v-if="user.organisation" class="ul-org-chip"><i class="fas fa-building me-1"></i>{{ user.organisation.name }}</span>
+                        <span v-if="user.organisation" class="ul-org-chip" :title="'Organisation: ' + user.organisation.name"
+                              :style="{ background: user.organisation.color }"><i class="fas me-1" :class="user.organisation.icon"></i>{{ user.organisation.text }}</span>
                         <span v-if="user.identity_verified" class="ul-identity-badge" title="Identity verified by an admin">
                             <i class="fas fa-user-check me-1"></i>Verified by an admin
                         </span>
@@ -403,8 +431,9 @@ export default {
                                            title="Identity verified by an admin"></i>
                                     </a>
                                     <span class="ul-table-username">@{{ user.username || user.first_name }}</span>
-                                    <span v-if="user.organisation" class="ul-org-chip" :title="'Organisation: ' + user.organisation.name">
-                                        <i class="fas fa-building me-1"></i>{{ user.organisation.name }}
+                                    <span v-if="user.organisation" class="ul-org-chip" :title="'Organisation: ' + user.organisation.name"
+                                          :style="{ background: user.organisation.color }">
+                                        <i class="fas me-1" :class="user.organisation.icon"></i>{{ user.organisation.text }}
                                     </span>
                                 </div>
                                 <span v-if="isSelf(user)" class="badge bg-info text-dark ms-1" style="font-size:.6rem;">YOU</span>
@@ -589,11 +618,18 @@ export default {
         const adminFilter = ref(_p('admin', ''))
         const connFilter  = ref(_p('connected', ''))
         const verifFilter = ref(_p('verified', ''))
-        const filtersOpen = ref(['admin','connected','verified'].some(k => _url.has(k) && _url.get(k)))
+        const identFilter = ref(_p('identity', ''))
+        const orgFilter   = ref(_p('org', ''))
+        const orgOptions  = ref([])
+        const filtersOpen = ref(['admin','connected','verified','identity','org'].some(k => _url.has(k) && _url.get(k)))
 
         const activeFilterCount = computed(() =>
             (adminFilter.value ? 1 : 0) + (connFilter.value ? 1 : 0) + (verifFilter.value ? 1 : 0)
+            + (identFilter.value ? 1 : 0) + (orgFilter.value ? 1 : 0)
         )
+        // organisations for the filter (admin list only, fetched once)
+        fetch('/account/organisations').then(r => r.ok ? r.json() : {})
+            .then(d => { orgOptions.value = d.organisations || [] }).catch(() => {})
 
         // ── Blur ──────────────────────────────────────────────────────────
         const blurEnabled = ref(true)
@@ -696,6 +732,8 @@ export default {
             if (adminFilter.value)                   p.set('admin',     adminFilter.value)
             if (connFilter.value)                    p.set('connected', connFilter.value)
             if (verifFilter.value)                   p.set('verified',  verifFilter.value)
+            if (identFilter.value)                   p.set('identity',  identFilter.value)
+            if (orgFilter.value)                     p.set('org',       orgFilter.value)
             const qs = p.toString()
             history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
         }
@@ -712,6 +750,8 @@ export default {
                 if (adminFilter.value) p.set('admin',     adminFilter.value)
                 if (connFilter.value)  p.set('connected', connFilter.value)
                 if (verifFilter.value) p.set('verified',  verifFilter.value)
+                if (identFilter.value) p.set('identity',  identFilter.value)
+                if (orgFilter.value)   p.set('org',       orgFilter.value)
 
                 const sep = props.fetchUrl.includes('?') ? '&' : '?'
                 const res = await fetch(`${props.fetchUrl}${sep}${p}`)
@@ -740,6 +780,7 @@ export default {
 
         function resetFilters() {
             adminFilter.value = ''; connFilter.value = ''; verifFilter.value = ''
+            identFilter.value = ''; orgFilter.value = ''
             onFilterChange()
         }
 
@@ -797,7 +838,7 @@ export default {
             gitProviderIcon,
             items, total, totalPages, loading,
             viewMode, page, perPage, perPageModel, sortKey, sortDir, cardSort,
-            search, adminFilter, connFilter, verifFilter,
+            search, adminFilter, connFilter, verifFilter, identFilter, orgFilter, orgOptions,
             filtersOpen, activeFilterCount,
             blurEnabled, revealedIds,
             allRoles, openRoleMenuUserId,

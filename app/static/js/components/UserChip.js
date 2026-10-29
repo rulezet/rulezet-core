@@ -188,8 +188,9 @@ const UserChip = defineComponent({
 
         <!-- Organisation (set by an admin) -->
         <div v-if="tooltipData && tooltipData.organisation" class="mb-2" style="font-size:.75rem;">
-          <span class="badge" style="background:rgba(111,66,193,.12);color:#6f42c1;border:1px solid rgba(111,66,193,.28);font-weight:600;">
-            <i class="fa-solid fa-building me-1"></i>[[ tooltipData.organisation.name ]]
+          <span class="badge" :title="'Organisation: ' + tooltipData.organisation.name"
+                :style="{ background: tooltipData.organisation.color, color: '#fff', fontWeight: 600 }">
+            <i class="fa-solid me-1" :class="tooltipData.organisation.icon"></i>[[ tooltipData.organisation.text ]]
           </span>
         </div>
 

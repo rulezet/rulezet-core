@@ -182,11 +182,17 @@ class Organisation(db.Model):
     id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
     name        = db.Column(db.String(100), unique=True, nullable=False)
     website     = db.Column(db.String(256), nullable=True)
+    # the badge's look, like a tag: colour (hex), Font Awesome icon, text (the name when empty)
+    color       = db.Column(db.String(20), nullable=True)
+    icon        = db.Column(db.String(50), nullable=True)
+    label       = db.Column(db.String(40), nullable=True)
     created_at  = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
     created_by  = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
 
     def to_json(self):
-        return {'id': self.id, 'name': self.name, 'website': self.website}
+        return {'id': self.id, 'name': self.name, 'website': self.website,
+                'color': self.color or '#6f42c1', 'icon': self.icon or 'fa-building',
+                'label': self.label or '', 'text': self.label or self.name}
 
 
 class UserIdentityVerification(db.Model):
