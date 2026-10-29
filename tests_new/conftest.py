@@ -59,6 +59,10 @@ def _empty_all_tables():
     for table in reversed(db.metadata.sorted_tables):
         db.session.execute(table.delete())
     db.session.commit()
+    # settings changed by a test (app_setting rows) are cached in memory: forget them with the rows,
+    # or the next tests keep running with them (e.g. editor.access left on "admins")
+    from app.core.utils.app_settings import clear_cache
+    clear_cache()
 
 
 @pytest.fixture
