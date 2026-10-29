@@ -5114,9 +5114,9 @@ def get_url_github():
 @rule_blueprint.route("/github_repo/circl_badge", methods=['POST'])
 @login_required
 def set_github_repo_circl_badge():
-    """Admin: add / remove the organisation badge (setting git.org_badge) of a git repository, or give it back to the automatic rule."""
-    if not current_user.is_admin():
-        return jsonify({"success": False, "message": "Admins only"}), 403
+    """Admin or GitHub Manager: add / remove the organisation badge (setting git.org_badge) of a git repository, or give it back to the automatic rule."""
+    if not _is_github_manager():
+        return jsonify({"success": False, "message": "Admins and GitHub managers only"}), 403
     data = request.get_json(silent=True) or {}
     url = (data.get("url") or "").strip()
     value = data.get("value")
