@@ -121,6 +121,22 @@
                     </div>
                 </div>
 
+                <!-- Caches -->
+                <div class="rounded-3 border p-3 mb-4 d-flex flex-wrap align-items-center gap-3" style="background:var(--light-bg-color);">
+                    <i class="fa-solid fa-broom text-primary"></i>
+                    <div class="flex-grow-1" style="min-width:220px;">
+                        <div class="fw-semibold" style="font-size:.9rem;">Caches</div>
+                        <div class="text-muted" style="font-size:.8rem;">
+                            Home figures (formats, platforms, git repositories…), ATT&amp;CK and CVE stats, cached pages and list answers.
+                            Clear them after a job that changes many rules (e.g. References &amp; metadata) to see the new numbers right away.
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary" :disabled="cacheClearing" @click="clearCaches">
+                        <span v-if="cacheClearing" class="spinner-border spinner-border-sm me-1"></span>
+                        <i v-else class="fa-solid fa-rotate me-1"></i>Clear all caches
+                    </button>
+                </div>
+
                 <!-- Disk + Memory + DB -->
                 <div class="row g-3 mb-4">
                     <!-- Disk -->
@@ -1341,6 +1357,7 @@ createApp({
         const instanceLoaded    = ref(false)
         const instanceInitSaving = ref(false)
         const chatbotToggleSaving = ref(false)
+        const cacheClearing = ref(false)
 
         /* ── CSRF ── */
         function csrf() {
@@ -1354,6 +1371,18 @@ createApp({
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
                 body: JSON.stringify(body),
             }).then(r => r.json())
+        }
+
+        /* ── Caches ── */
+        async function clearCaches() {
+            cacheClearing.value = true
+            try {
+                const data = await post('/admin/settings/cache/clear', {})
+                const { create_message } = await import('/static/js/toaster.js')
+                create_message(data.message || (data.success ? 'Caches cleared.' : 'Failed.'), data.success ? 'success-subtle' : 'danger-subtle')
+            } finally {
+                cacheClearing.value = false
+            }
         }
 
         /* ── System ── */
@@ -1717,7 +1746,7 @@ createApp({
 
         return {
             emailToggleSaving, toggleEmailFeatures, TEST_ACCESS, testAccessSaving, setTestAccess, editorAccessSaving, setEditorAccess,
-            system, systemLoading,
+            system, systemLoading, cacheClearing, clearCaches,
             packages, packagesLoading, pkgSearch, filteredPackages, loadPackages,
             createPkgJob, confirmPkgUninstall, pkgToUninstall, doPkgUninstall,
             submodules, submodulesLoading, selectedSubs, selectedSub, lastJobMsg,
