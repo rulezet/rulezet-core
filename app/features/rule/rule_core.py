@@ -3634,7 +3634,64 @@ def set_circl_badge(url, value):
         return None
     repo.circl_badge = value
     db.session.commit()
+    reset_org_badge_owners()
     return repo
+
+
+_ORG_BADGE_KEY = 'org_badge_owners'
+
+
+def org_badge_owners() -> dict:
+    """Who carries the organisation badge (setting git.org_badge, CIRCL by default) on rules:
+    the git repositories with the badge (Git Sources) and the users in a Rulezet organisation
+    of that name or keyword (Admin › Users › Organisations).
+    {"label", "logo", "urls": [...], "user_ids": [...]} — cached, reset when a badge or an
+    organisation changes."""
+    from app import cache
+    from sqlalchemy import func as _func
+    try:
+        hit = cache.get(_ORG_BADGE_KEY)
+        if hit is not None:
+            return hit
+    except Exception:
+        hit = None
+    from app.core.utils.app_settings import get_setting
+    from app.core.db_class.user import Organisation, User, user_organisation
+    conf = get_setting('git.org_badge') or {}
+    label = conf.get('label') or 'Organisation'
+    logo = conf.get('logo') or ''
+    if logo and not logo.lower().startswith('https://'):
+        logo = '/static/' + logo.lstrip('/').removeprefix('static/')
+    words = {w for w in _circl_keywords()} | {label.strip().lower()}
+    urls = [r.url for r in GithubRepo.query.filter(circl_badge_expr()).all() if r.url]
+    orgs = [o.id for o in Organisation.query.all()
+            if any(w and w in (o.name or '').lower() for w in words)]
+    user_ids = [uid for (uid,) in db.session.query(user_organisation.c.user_id)
+                .filter(user_organisation.c.organisation_id.in_(orgs)).distinct().all()] if orgs else []
+    data = {"label": label, "logo": logo, "urls": urls, "user_ids": user_ids}
+    try:
+        cache.set(_ORG_BADGE_KEY, data, timeout=600)
+    except Exception:
+        pass
+    return data
+
+
+def reset_org_badge_owners():
+    try:
+        from app import cache
+        cache.delete(_ORG_BADGE_KEY)
+    except Exception:
+        pass
+
+
+def rule_org_badge(rule):
+    """{"label", "logo"} when this rule carries the organisation badge, else None."""
+    if not rule:
+        return None
+    data = org_badge_owners()
+    if (rule.source and rule.source in data["urls"]) or rule.user_id in data["user_ids"]:
+        return {"label": data["label"], "logo": data["logo"]}
+    return None
 
 
 def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, author_names: list = None, editor_names: list = None, license_filter: str = None, conflicts_only: bool = False, sort: str = None, sort_dir: str = 'asc', provider_filter: str = None, circl_only: bool = False):

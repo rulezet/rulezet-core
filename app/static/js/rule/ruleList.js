@@ -72,6 +72,17 @@ import { repoTreeUrl as gitTreeUrl, repoBlobUrl as gitBlobUrl } from '/static/js
 import FormatChip                from '/static/js/rule/formatChip.js'
 import { MASCOT_ENABLED }       from '/static/js/components/mascot.js'
 
+// Organisation badge (CIRCL by default): its repositories and members, fetched once per page
+let _orgOwners = null
+function loadOrgOwners() {
+    if (!_orgOwners) {
+        _orgOwners = fetch('/rule/org_badge_owners').then(r => r.ok ? r.json() : null)
+            .then(d => d && { label: d.label, logo: d.logo, urls: new Set(d.urls || []), users: new Set(d.user_ids || []) })
+            .catch(() => null)
+    }
+    return _orgOwners
+}
+
 const { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue
 
 export default {
@@ -744,6 +755,11 @@ export default {
                           class="badge rounded-pill shadow-sm pt-1 bg-danger"
                           :title="rlRiskTitle(rule.validation_risk)">
                         <i class="fa-solid fa-triangle-exclamation me-1"></i>Disagrees with rule's own claim
+                    </span>
+                    <span v-if="orgOwners && (orgOwners.urls.has(rule.source) || orgOwners.users.has(rule.user_id))"
+                          class="rz-org-rule-badge" :data-rz-pop-title="orgOwners.label"
+                          :data-rz-pop-text="'From a ' + orgOwners.label + ' repository or written by a ' + orgOwners.label + ' member.'">
+                        <img v-if="orgOwners.logo" :src="orgOwners.logo" alt="">{{ orgOwners.label }}
                     </span>
                     <span v-if="isOwner(rule)" class="rz-role-chip rz-role-chip--owner"
                           data-rz-pop-title="Owner" data-rz-pop-text="You own this rule: you can edit or delete it."
@@ -1732,6 +1748,8 @@ export default {
 
     setup(props, { emit }) {
         const init = props.initialFilters
+        const orgOwners = ref(null)
+        loadOrgOwners().then(o => { orgOwners.value = o })
 
         // ── URL param helpers ─────────────────────────────────────────────
         const _url = new URLSearchParams(window.location.search)
@@ -2777,6 +2795,7 @@ export default {
         })
 
         return {
+            orgOwners,
             contentSearch, ruleHref, filterByPlatform, linkedShown,
             // Data
             items, total, totalPages, loading, page, perPage, perPageModel,

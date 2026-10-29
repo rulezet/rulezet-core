@@ -440,6 +440,8 @@ def update_organisation(org_id):
     for k, v in fields.items():
         setattr(org, k, v)
     db.session.commit()
+    from app.features.rule.rule_core import reset_org_badge_owners
+    reset_org_badge_owners()
     log_activity("admin.organisation", f"Edited the organisation {org.name}", target_type="organisation", target_id=org.id)
     return jsonify({"success": True, "organisation": org.to_json()})
 
@@ -473,6 +475,8 @@ def create_organisation():
     org = Organisation(created_by=current_user.id, **fields)
     db.session.add(org)
     db.session.commit()
+    from app.features.rule.rule_core import reset_org_badge_owners
+    reset_org_badge_owners()
     log_activity("admin.organisation", f"Created the organisation {org.name}", target_type="organisation", target_id=org.id)
     return jsonify({"success": True, "organisation": org.to_json()}), 201
 
@@ -490,6 +494,8 @@ def delete_organisation(org_id):
     name = org.name
     db.session.delete(org)
     db.session.commit()
+    from app.features.rule.rule_core import reset_org_badge_owners
+    reset_org_badge_owners()
     log_activity("admin.organisation", f"Deleted the organisation {name}", target_type="organisation", target_id=org_id)
     return jsonify({"success": True})
 
@@ -517,6 +523,8 @@ def assign_organisation():
     user.organisations = orgs
     db.session.commit()
     names = ', '.join(o.name for o in user.organisations) or 'none'
+    from app.features.rule.rule_core import reset_org_badge_owners
+    reset_org_badge_owners()
     log_activity("admin.organisation", f"Organisations of user id={user.id}: {names}",
                  target_type="user", target_id=user.id)
     return jsonify({"success": True, "organisations": [o.to_json() for o in user.organisations]})

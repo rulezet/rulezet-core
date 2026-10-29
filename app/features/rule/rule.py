@@ -6871,3 +6871,15 @@ def permanent_delete_bulk():
 def rulelist_test():
     """Dev/test page for the RuleList component — showcases all modes."""
     return render_template('rule/rulelist_test.html')
+
+
+@rule_blueprint.route("/org_badge_owners", methods=['GET'])
+def get_org_badge_owners():
+    """Public: the repositories and users whose rules carry the organisation badge (CIRCL by
+    default) — fetched once per page by the rules list."""
+    return jsonify(RuleModel.org_badge_owners())
+
+
+@rule_blueprint.app_template_global('rule_org_badge')
+def _rule_org_badge(rule):
+    return RuleModel.rule_org_badge(rule)

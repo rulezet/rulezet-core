@@ -1210,3 +1210,9 @@ button.rl-platform:hover { background: color-mix(in srgb, var(--brand) 17%, tran
 .rz-role-chip--admin { --role: #d4a106; }
 .rz-role-chip--code  { --role: #dc3545; }
 body.dark-mode .rz-role-chip { color: color-mix(in srgb, var(--role) 70%, #fff); }
+
+/* Organisation badge on a rule (setting git.org_badge, CIRCL by default): same look as Git Sources' */
+.rz-org-rule-badge { display: inline-flex; align-items: center; gap: 4px; padding: .16rem .55rem; border-radius: 999px;
+    font-size: .68rem; font-weight: 700; letter-spacing: .03em; line-height: 1.3; white-space: nowrap;
+    color: #000; background: #fff; border: 1px solid #000; box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+.rz-org-rule-badge img { width: 14px; height: 14px; object-fit: contain; }
