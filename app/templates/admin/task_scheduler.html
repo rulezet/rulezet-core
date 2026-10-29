@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/taskCanvas.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/taskForm.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/workflowNotebook.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/workflowRunTrace.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/jobs/jobs.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
@@ -60,6 +61,29 @@
 
     <!-- ══════════════════════════ Level 1 — Workflows ══════════════════════════ -->
     <template v-if="route === 'workflows'">
+        <!-- Health board: what needs a look across every workflow (workflow_notes.health_board) -->
+        <div v-if="health && health.total" class="wfh mb-3">
+            <div class="wfh-kpi" :class="{ 'is-bad': health.failing.length }">
+                <span class="wfh-kpi__value">[[ health.failing.length ]]</span><span class="wfh-kpi__label"><i class="fa-solid fa-circle-xmark"></i>Last launch failed</span>
+            </div>
+            <div class="wfh-kpi" :class="{ 'is-run': health.running.length }">
+                <span class="wfh-kpi__value">[[ health.running.length ]]</span><span class="wfh-kpi__label"><i class="fa-solid fa-spinner"></i>Running now</span>
+            </div>
+            <div class="wfh-kpi" :class="{ 'is-warn': health.auto_paused.length }">
+                <span class="wfh-kpi__value">[[ health.auto_paused.length ]]</span><span class="wfh-kpi__label"><i class="fa-solid fa-plug-circle-xmark"></i>Tasks auto-paused</span>
+            </div>
+            <div class="wfh-kpi">
+                <span class="wfh-kpi__value">[[ health.total - health.paused ]]<small> / [[ health.total ]]</small></span><span class="wfh-kpi__label"><i class="fa-solid fa-circle-play"></i>Workflows active</span>
+            </div>
+            <div v-if="health.failing.length || health.auto_paused.length" class="wfh-alerts">
+                <a v-for="f in health.failing" :key="'f' + f.uuid" :href="'/admin/tasks/' + f.uuid" class="wfh-alert is-bad">
+                    <i class="fa-solid fa-circle-xmark"></i><strong>[[ f.title ]]</strong> failed on [[ f.at ]]
+                </a>
+                <a v-for="(t, i) in health.auto_paused" :key="'a' + i" :href="'/admin/tasks/' + t.workflow_uuid" class="wfh-alert is-warn">
+                    <i class="fa-solid fa-plug-circle-xmark"></i><strong>[[ t.task ]]</strong> paused after repeated failures ([[ t.workflow ]])
+                </a>
+            </div>
+        </div>
         <div class="card border-0 shadow-sm rounded-3">
             <div class="card-body p-3 p-md-4">
                 <div class="dt-toolbar mb-3">
@@ -116,6 +140,7 @@
                                 <th class="dt-th text-center">Tasks</th>
                                 <th class="dt-th">Editor</th>
                                 <th class="dt-th text-center">Status</th>
+                                <th class="dt-th">Health</th>
                                 <th class="dt-th">Next launch</th>
                                 <th class="dt-th">Created</th>
                                 <th class="dt-th text-center">Actions</th>
@@ -136,6 +161,20 @@
                                     <span class="badge" :class="w.is_active ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
                                         [[ w.is_active ? 'Active' : 'Paused' ]]
                                     </span>
+                                </td>
+                                <td class="dt-td">
+                                    <template v-if="health && health.per_workflow[w.uuid] && health.per_workflow[w.uuid].dots.length">
+                                        <div class="wfh-dots">
+                                            <span v-for="(d, i) in health.per_workflow[w.uuid].dots" :key="i" class="wfh-dot" :class="'wfh-dot--' + d.status"
+                                                  :data-rz-pop-title="d.status" :data-rz-pop-text="d.at"></span>
+                                        </div>
+                                        <div class="text-muted" style="font-size:.72rem;">
+                                            [[ health.per_workflow[w.uuid].rate != null ? health.per_workflow[w.uuid].rate + '% success' : 'running' ]]
+                                            <span v-if="health.per_workflow[w.uuid].notes"> · <i class="fa-solid fa-note-sticky"></i> [[ health.per_workflow[w.uuid].notes ]]</span>
+                                            <span v-if="health.per_workflow[w.uuid].files"> · <i class="fa-solid fa-paperclip"></i> [[ health.per_workflow[w.uuid].files ]]</span>
+                                        </div>
+                                    </template>
+                                    <span v-else class="text-muted small">No launch yet</span>
                                 </td>
                                 <td class="dt-td">
                                     <span v-if="!w.is_active" class="text-muted small">— (paused)</span>
@@ -247,6 +286,8 @@
                 <div class="wfd-kpi"><span class="wfd-kpi__label">Next launch</span>
                     <span class="wfd-kpi__value wfd-kpi__value--sm">[[ nextRunSummary ]]</span></div>
             </div>
+            <!-- Pinned notes of the notebook, rendered (long ones folded) — js/admin/workflowNotebook.js -->
+            <pinned-notes v-if="pinnedNotes.length" :notes="pinnedNotes" @open="showPinned"></pinned-notes>
         </div>
         <div v-if="neverRunsWarning" class="rounded-3 border border-warning p-2 px-3 mb-3 small text-warning-emphasis bg-warning-subtle">
             <i class="fa-solid fa-triangle-exclamation me-1"></i>[[ neverRunsWarning ]]
@@ -439,7 +480,7 @@
         <!-- Notes (markdown), attached files and activity of this workflow — js/admin/workflowNotebook.js -->
         <workflow-notebook v-if="detailTab === 'history' && activeWorkflow" ref="notebook" :key="activeWorkflow.uuid"
                            :workflow-uuid="activeWorkflow.uuid" :csrf-token="csrfToken" :runs="workflowRuns"
-                           @changed="loadWorkflowRuns(workflowRunsPage)"></workflow-notebook>
+                           @changed="loadWorkflowRuns(workflowRunsPage)" @pinned="pinnedNotes = $event"></workflow-notebook>
 
         <!-- ── Tasks tab: manage tasks, browse the pipeline graph ── -->
         <template v-if="detailTab === 'tasks'">
@@ -1167,6 +1208,26 @@
                         </div>
                     </section>
 
+                    <!-- Email alert of this task (notifications.send_point_alert) -->
+                    <section class="tf-step">
+                        <header class="tf-step__head">
+                            <span class="tf-step__num"><i class="fa-solid fa-bell" style="font-size:.75rem;"></i></span>
+                            <div><div class="tf-step__title">Email alert</div>
+                                 <div class="tf-step__sub">Be told when the workflow gets here, or how this task ends</div></div>
+                        </header>
+                        <div class="tf-chips">
+                            <button v-for="p in ALERT_POINTS" :key="p.key" type="button" class="tf-chip" :class="{ 'is-on': taskAlert.on.includes(p.key) }"
+                                    @click="taskAlert.on.includes(p.key) ? taskAlert.on.splice(taskAlert.on.indexOf(p.key), 1) : taskAlert.on.push(p.key)">
+                                <i :class="p.icon"></i>[[ p.label ]]
+                            </button>
+                        </div>
+                        <template v-if="taskAlert.on.length">
+                            <input class="form-control tf-input mt-2" v-model="taskAlert.to" placeholder="Addresses (comma separated) — empty: the workflow's alert recipients">
+                            <textarea class="form-control tf-input mt-2" rows="2" v-model="taskAlert.message" maxlength="1000"
+                                      placeholder="Message, with {variables} — e.g. {task} reached in {workflow}: {status}. {link}"></textarea>
+                        </template>
+                    </section>
+
                     <!-- Reliability: retries, time limit, auto-pause, catch-up -->
                     <section class="tf-step">
                         <header class="tf-step__head">
@@ -1319,6 +1380,19 @@
                     <button type="button" class="btn btn-outline-secondary text-start" @click="confirmConnection('always')">
                         <i class="fa-solid fa-circle-notch me-2"></i>…no matter what
                     </button>
+                    <div v-if="pendingConnectionIsEdit" class="tf-alert mt-1">
+                        <label class="tf-switch">
+                            <input type="checkbox" v-model="linkAlert.on">
+                            <span class="tf-switch__track"><span class="tf-switch__thumb"></span></span>
+                            <span><i class="fa-solid fa-bell me-1"></i>Email me when the workflow takes this link</span>
+                        </label>
+                        <template v-if="linkAlert.on">
+                            <input class="form-control form-control-sm mt-2" v-model="linkAlert.to" placeholder="Addresses (comma separated) — empty: the workflow's alert recipients">
+                            <textarea class="form-control form-control-sm mt-2" rows="2" v-model="linkAlert.message" maxlength="1000"
+                                      placeholder="Message — e.g. {workflow} reached {task}: {status}"></textarea>
+                        </template>
+                        <button type="button" class="btn btn-sm btn-primary rounded-pill mt-2" @click="saveLinkAlert()"><i class="fa-solid fa-bell me-1"></i>Save the alert</button>
+                    </div>
                     <hr v-if="pendingConnectionIsEdit" class="my-1">
                     <button v-if="pendingConnectionIsEdit" type="button" class="btn btn-link text-danger text-start text-decoration-none" @click="removeConnection()">
                         <i class="fa-solid fa-link-slash me-2"></i>Remove connection
@@ -1343,7 +1417,7 @@
     import TaskCanvas from '/static/js/admin/taskCanvas.js';
     import WorkflowRunTrace, { formatDuration } from '/static/js/admin/workflowRunTrace.js';
     import JobTracker from '/static/js/jobs/JobTracker.js';
-    import WorkflowNotebook from '/static/js/admin/workflowNotebook.js';
+    import WorkflowNotebook, { PinnedNotes } from '/static/js/admin/workflowNotebook.js';
     import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js';
     import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
 
@@ -1363,6 +1437,7 @@
             'workflow-run-trace': WorkflowRunTrace,
             'job-tracker': JobTracker,
             'workflow-notebook': WorkflowNotebook,
+            'pinned-notes': PinnedNotes,
             'tags-displays-list': TagsDisplaysList,
             'vulnerability-displays-list': VulnerabilityDisplaysList,
         },
@@ -1380,6 +1455,12 @@
             const totalWorkflows = ref(0);
             let workflowSearchDebounce = null;
 
+            const health = ref(null);
+            async function loadHealth() {
+                const res = await fetch('/admin/tasks/workflows/health');
+                if (res.ok) health.value = await res.json();
+            }
+
             async function fetchWorkflows(page) {
                 workflowsLoading.value = true;
                 try {
@@ -1390,6 +1471,7 @@
                     const data = await res.json();
                     workflows.value = data.workflows || [];
                     totalWorkflows.value = data.total || 0;
+                    loadHealth();
                     workflowsTotalPages.value = data.total_pages || 1;
                 } finally {
                     workflowsLoading.value = false;
@@ -1479,6 +1561,15 @@
 
             // Notebook under the history (js/admin/workflowNotebook.js): a note about one launch.
             const notebook = ref(null);
+            const pinnedNotes = ref([]);
+            function showPinned(n) {
+                if (detailTab.value !== 'history') switchDetailTab('history');
+                nextTick(() => {
+                    if (!notebook.value) return;
+                    notebook.value.show(n.uuid);
+                    notebook.value.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            }
             function noteOnRun(run) {
                 if (!notebook.value) return;
                 notebook.value.newNote(run.uuid);
@@ -2405,6 +2496,7 @@
             function openCreate() {
                 bootstrap.Modal.getOrCreateInstance(document.getElementById('taskModal')).show();
                 formInstance.value++;
+                Object.assign(taskAlert, { on: [], to: '', message: '' });
                 editingSchedule.value = null;
                 Object.assign(form, {
                     uuid: null, title: '', description: '', is_active: true,
@@ -2461,6 +2553,8 @@
                 if (selectedTaskDef.value && selectedTaskDef.value.target_picker === 'rule_list_select' && (s.target_payload || {}).filters) {
                     ruleTargetPayload = { filters: s.target_payload.filters };
                 }
+                const savedAlert = (s.target_payload || {})._alert || {};
+                Object.assign(taskAlert, { on: [...(savedAlert.on || [])], to: savedAlert.to || '', message: savedAlert.message || '' });
                 (selectedTaskDef.value ? selectedTaskDef.value.extra_options : []).forEach(opt => {
                     const saved = (s.target_payload || {})[opt.key];
                     form.extra_options[opt.key] = saved ?? (Array.isArray(opt.default) ? [...opt.default] : opt.default);
@@ -2489,6 +2583,7 @@
                 for (const [key, value] of Object.entries(form.extra_options)) {
                     payload[key] = typeof value === 'string' ? value.trim() : value;
                 }
+                if (taskAlert.on.length) payload._alert = { on: [...taskAlert.on], to: taskAlert.to.trim(), message: taskAlert.message.trim() };
                 return payload;
             }
 
@@ -2595,11 +2690,35 @@
                 bootstrap.Modal.getOrCreateInstance(document.getElementById('connectConditionModal')).show();
             }
 
+            // Alert on a link = the child's "reached" alert (notifications.send_point_alert).
+            const linkAlert = reactive({ on: false, to: '', message: '' });
+            const taskAlert = reactive({ on: [], to: '', message: '' });
+            const ALERT_POINTS = [
+                { key: 'reached', label: 'When the workflow gets here', icon: 'fa-solid fa-location-dot' },
+                { key: 'success', label: 'If it succeeds', icon: 'fa-solid fa-circle-check' },
+                { key: 'failure', label: 'If it fails', icon: 'fa-solid fa-circle-xmark' },
+            ];
+            async function saveLinkAlert() {
+                const child = pendingConnection.value && pendingConnection.value.to;
+                if (!child) return;
+                const cur = (child.target_payload || {})._alert || {};
+                const on = (cur.on || []).filter(p => p !== 'reached').concat(linkAlert.on ? ['reached'] : []);
+                const res = await fetch(`/admin/tasks/${child.uuid}/alert`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ alert: { on, to: linkAlert.to, message: linkAlert.message } }),
+                });
+                const data = await res.json();
+                create_message(data.message, data.toast_class);
+                if (res.ok) loadGraphSchedules();
+            }
+
             function onEdgeClick(childSchedule) {
                 const parent = graphSchedules.value.find(s => s.id === childSchedule.depends_on_schedule_id);
                 if (!parent) return;
                 pendingConnection.value = { from: parent, to: childSchedule };
                 pendingConnectionIsEdit.value = true;
+                const a = (childSchedule.target_payload || {})._alert || {};
+                Object.assign(linkAlert, { on: (a.on || []).includes('reached'), to: a.to || '', message: a.message || '' });
                 bootstrap.Modal.getOrCreateInstance(document.getElementById('connectConditionModal')).show();
             }
 
@@ -2663,7 +2782,7 @@
             onUnmounted(() => stopLivePolling());
 
             return {
-                truncate, notebook, noteOnRun, share, openShare, shareAction, copyShare,
+                truncate, health, linkAlert, saveLinkAlert, taskAlert, ALERT_POINTS, notebook, noteOnRun, pinnedNotes, showPinned, share, openShare, shareAction, copyShare,
                 route, activeWorkflow, openWorkflow, backToWorkflows, runWorkflowNow,
                 runPreview, runPreviewLoading, askRunWorkflow, confirmRunWorkflow,
                 dashboard, loadDashboard, barHeight, toggleWorkflowActive, runFromHere, setTaskActive,

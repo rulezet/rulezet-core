@@ -339,6 +339,10 @@ def _validate_target_payload(task_type, payload):
         err = public_https_url((payload or {}).get('url'))
         if err:
             return f'Webhook: {err}'
+    from app.features.admin.task_scheduler.notifications import validate_alert
+    err = validate_alert((payload or {}).get('_alert'))
+    if err:
+        return err
     if task_type == 'action_check':
         from app.features.admin.task_scheduler.actions import FIGURES, OPERATORS
         p = payload or {}
