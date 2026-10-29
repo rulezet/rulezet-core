@@ -592,7 +592,8 @@ _HASH_SEP = re.compile(r"[\s,;|]+")
 
 def _list_literal(text: str) -> list[str] | None:
     """"['a','b']" / '["a", "b"]' (a list written as a string) → ["a", "b"]; else None. Parsed, never run."""
-    m = _LIST_LITERAL.fullmatch(text)
+    # a rule's text is anyone's: no parse of a huge value (literal_eval is CPU / memory heavy)
+    m = len(text) <= 20000 and _LIST_LITERAL.fullmatch(text)
     if not m:
         return None
     try:
