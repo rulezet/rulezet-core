@@ -256,6 +256,7 @@
 .wfd-hero__text { flex: 1 1 260px; min-width: 0; }
 .wfd-hero__title { margin: 0; font-weight: 800; }
 .wfd-hero__desc { color: var(--subtle-text-color); font-size: .88rem; margin-top: .2rem; }
+.wfd-hero__actions .dropdown-menu { z-index: 1080; }   /* above the cards below (menu positioned "fixed": the header clips its watermark) */
 .wfd-hero__actions { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; }
 .wfd-pill { display: inline-flex; align-items: center; gap: .35rem; padding: .18rem .65rem; border-radius: 999px; font-size: .72rem; font-weight: 700; }
 .wfd-pill--on { background: rgba(25, 135, 84, .12); color: #198754; }
@@ -317,3 +318,8 @@
 .wfd-tag--bad { background: rgba(220, 53, 69, .12); color: #dc3545; }
 .wfd-tag--run { background: rgba(13, 110, 253, .12); color: #0d6efd; }
 @media (max-width: 640px) { .wfd-task { flex-wrap: wrap; } .wfd-task__actions { width: 100%; justify-content: flex-start; } }
+.tf-vars { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin-top: .4rem; }
+.tf-vars__label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--subtle-text-color); margin-right: .2rem; }
+.tf-var { border: 1px solid rgba(13, 110, 253, .3); background: rgba(13, 110, 253, .06); color: #0d6efd; border-radius: 6px;
+    padding: .05rem .45rem; font-family: var(--bs-font-monospace, monospace); font-size: .72rem; }
+.tf-var:hover { background: rgba(13, 110, 253, .14); }
