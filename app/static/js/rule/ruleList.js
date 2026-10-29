@@ -1315,12 +1315,6 @@ export default {
                             </td>
 
                             <td v-show="colVisible.format" class="dt-td">
-                                <span v-if="hasOrgBadge(rule)" role="button" tabindex="0"
-                                      class="rz-org-rule-badge rz-org-rule-badge--click me-1" :data-rz-pop-title="orgOwners.label"
-                                      :data-rz-pop-text="'From a ' + orgOwners.label + ' repository or written by a ' + orgOwners.label + ' member. Click: show every ' + orgOwners.label + ' rule.'"
-                                      @click.stop="filterByOrgBadge" @keydown.enter.stop="filterByOrgBadge">
-                                    <img v-if="orgOwners.logo" :src="orgOwners.logo" alt="">{{ orgOwners.label }}
-                                </span>
                                 <span v-if="rule.is_code_format" class="badge bg-danger pt-1 shadow-sm me-1"
                                       title="Executable code, not a declarative detection rule">
                                     <i class="fa-solid fa-code me-1"></i>CODE
@@ -1377,6 +1371,13 @@ export default {
 
                             <td v-show="colVisible.platforms" class="dt-td">
                                 <div class="rl-platforms rl-platforms--table">
+                                    <!-- organisation badge (CIRCL) first, then the platforms -->
+                                    <span v-if="hasOrgBadge(rule)" role="button" tabindex="0"
+                                          class="rz-org-rule-badge rz-org-rule-badge--click" :data-rz-pop-title="orgOwners.label"
+                                          :data-rz-pop-text="'From a ' + orgOwners.label + ' repository or written by a ' + orgOwners.label + ' member. Click: show every ' + orgOwners.label + ' rule.'"
+                                          @click.stop="filterByOrgBadge" @keydown.enter.stop="filterByOrgBadge">
+                                        <img v-if="orgOwners.logo" :src="orgOwners.logo" alt="">{{ orgOwners.label }}
+                                    </span>
                                     <div v-for="p in (rule.platforms || [])" :key="p.label" class="dropdown vdl-item d-inline-block" @click.stop>
                                         <button type="button" class="rl-platform rl-platform--logo" data-bs-toggle="dropdown" aria-expanded="false"
                                                 data-bs-popper-config='{"strategy":"fixed"}' :style="{ '--brand': p.color }"
@@ -1403,7 +1404,7 @@ export default {
                                 </li>
                             </ul>
                                     </div>
-                                    <span v-if="!rule.platforms || !rule.platforms.length" class="text-muted small">—</span>
+                                    <span v-if="(!rule.platforms || !rule.platforms.length) && !hasOrgBadge(rule)" class="text-muted small">—</span>
                                 </div>
                             </td>
 
