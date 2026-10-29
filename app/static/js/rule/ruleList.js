@@ -764,7 +764,7 @@ export default {
                           :title="rlRiskTitle(rule.validation_risk)">
                         <i class="fa-solid fa-triangle-exclamation me-1"></i>Disagrees with rule's own claim
                     </span>
-                    <span v-if="orgOwners && (orgOwners.urls.has(rule.source) || orgOwners.users.has(rule.user_id))"
+                    <span v-if="hasOrgBadge(rule)"
                           class="rz-org-rule-badge" :data-rz-pop-title="orgOwners.label"
                           :data-rz-pop-text="'From a ' + orgOwners.label + ' repository or written by a ' + orgOwners.label + ' member.'">
                         <img v-if="orgOwners.logo" :src="orgOwners.logo" alt="">{{ orgOwners.label }}
@@ -1314,6 +1314,10 @@ export default {
                             </td>
 
                             <td v-show="colVisible.format" class="dt-td">
+                                <span v-if="hasOrgBadge(rule)" class="rz-org-rule-badge me-1" :data-rz-pop-title="orgOwners.label"
+                                      :data-rz-pop-text="'From a ' + orgOwners.label + ' repository or written by a ' + orgOwners.label + ' member.'">
+                                    <img v-if="orgOwners.logo" :src="orgOwners.logo" alt="">{{ orgOwners.label }}
+                                </span>
                                 <span v-if="rule.is_code_format" class="badge bg-danger pt-1 shadow-sm me-1"
                                       title="Executable code, not a declarative detection rule">
                                     <i class="fa-solid fa-code me-1"></i>CODE
@@ -1758,6 +1762,9 @@ export default {
         const init = props.initialFilters
         const orgOwners = ref(null)
         loadOrgOwners().then(o => { orgOwners.value = o })
+        // the rule carries the organisation badge: from one of its repositories or owned by a member
+        const hasOrgBadge = (rule) => !!(orgOwners.value && rule &&
+            (orgOwners.value.urls.has(rule.source) || orgOwners.value.users.has(rule.user_id)))
 
         // ── URL param helpers ─────────────────────────────────────────────
         const _url = new URLSearchParams(window.location.search)
@@ -2808,7 +2815,7 @@ export default {
         })
 
         return {
-            orgOwners,
+            orgOwners, hasOrgBadge,
             contentSearch, ruleHref, filterByPlatform, linkedShown,
             // Data
             items, total, totalPages, loading, page, perPage, perPageModel,
