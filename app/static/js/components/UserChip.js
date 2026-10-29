@@ -28,6 +28,19 @@ function fetchMini(userId) {
     return _cache[userId];
 }
 
+// The ids of every account verified by an admin: one request per page, shared by every chip
+// (a chip is rendered once per row and must not fetch on its own), made when the first chip mounts.
+let _verifiedIds = null;
+function verifiedIds() {
+    if (!_verifiedIds) {
+        _verifiedIds = fetch('/account/verified_ids')
+            .then(r => r.ok ? r.json() : { ids: [] })
+            .then(d => new Set(d.ids || []))
+            .catch(() => new Set());
+    }
+    return _verifiedIds;
+}
+
 function getInitials(name) {
     if (!name) return '?';
     return name.trim()[0].toUpperCase();
@@ -49,6 +62,8 @@ const UserChip = defineComponent({
         const tooltipVisible = ref(false);
         const tooltipStyle   = ref({});
         const chipRef        = ref(null);
+        const verified       = ref(false);
+        onMounted(() => { verifiedIds().then(ids => { verified.value = ids.has(props.userId); }); });
         let showTimer = null;
         let hideTimer = null;
         let tooltipEl = null;
@@ -103,7 +118,7 @@ const UserChip = defineComponent({
         // expose tooltip handler refs so the teleported tooltip can cancel hide
         return {
             tooltipData, tooltipVisible, tooltipStyle, chipRef,
-            px, displayName, initials,
+            px, displayName, initials, verified,
             onMouseEnter, onMouseLeave, onTooltipEnter, onTooltipLeave,
         };
     },
@@ -142,6 +157,8 @@ const UserChip = defineComponent({
     <span v-if="showName" class="user-chip-name" style="font-size:0.8rem;color:var(--subtle-text-color);">
       [[ displayName ]]
     </span>
+    <i v-if="verified" class="fa-solid fa-circle-check" style="color:#0d6efd;font-size:.7rem;margin-left:-2px;"
+       aria-label="Identity verified by an admin"></i>
   </a>
 
   <!-- Tooltip teleported to body -->
