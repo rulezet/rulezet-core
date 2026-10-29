@@ -656,129 +656,125 @@
         </div>
     </div>
 
-    <!-- Task create/edit modal -->
+    <!-- Task create/edit modal (css/admin/taskForm.css: .tf-*) -->
     <div class="modal fade" id="taskModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-scrollable">
-            <div class="modal-content border-0 shadow-lg rounded-4">
-                <div class="modal-header border-0 pb-0 pt-4 px-4">
-                    <div class="d-flex align-items-center gap-3">
-                        <div class="rounded-circle d-flex align-items-center justify-content-center shadow-sm"
-                             style="background-color:#0d6efd; width:52px; height:52px; color:white; transition:all .3s ease;">
-                            <i :class="selectedTaskDef ? selectedTaskDef.icon : 'fa-solid fa-list-check'" style="font-size:1.4rem;"></i>
-                        </div>
-                        <div>
-                            <h5 class="modal-title fw-bold mb-0">[[ form.uuid ? 'Edit Task' : 'New Task' ]]</h5>
-                            <p class="text-muted small mb-0">Configure what runs, when, and on what target</p>
-                        </div>
+            <div class="modal-content border-0 shadow-lg tf-modal">
+                <div class="tf-hero">
+                    <i class="tf-hero__watermark" :class="selectedTaskDef ? selectedTaskDef.icon : 'fa-solid fa-list-check'"></i>
+                    <div class="tf-hero__icon"><i :class="selectedTaskDef ? selectedTaskDef.icon : 'fa-solid fa-list-check'"></i></div>
+                    <div class="tf-hero__text">
+                        <div class="tf-hero__kicker">[[ form.uuid ? 'Edit task' : 'New task' ]]</div>
+                        <h5 class="tf-hero__title">[[ form.title || (selectedTaskDef ? taskTypeParts(selectedTaskDef.label).name : 'Untitled task') ]]</h5>
+                        <div class="tf-hero__sub">What runs, on what, and when</div>
                     </div>
-                    <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close tf-hero__close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body px-4">
+                <div class="modal-body tf-body">
 
-                    <!-- ── Basics ── -->
-                    <div class="task-form-section">
-                        <div class="task-form-section__title">
-                            <div class="task-form-bar"></div>
-                            <span><i class="fa-solid fa-file-lines me-1"></i>Basics</span>
+                    <!-- 1 · Task type -->
+                    <section class="tf-step">
+                        <header class="tf-step__head">
+                            <span class="tf-step__num">1</span>
+                            <div><div class="tf-step__title">Task type<span class="required-marker">*</span></div>
+                                 <div class="tf-step__sub">What the task does</div></div>
+                            <div class="tf-search ms-auto">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="search" v-model="typeSearch" placeholder="Search a task…" aria-label="Search a task type">
+                            </div>
+                        </header>
+                        <div class="tf-types">
+                            <button v-for="t in filteredTaskTypes" :key="t.key" type="button" class="tf-type"
+                                    :class="{ 'is-on': form.task_type === t.key }" @click="pickTaskType(t.key)"
+                                    :data-rz-pop-title="taskTypeParts(t.label).name" :data-rz-pop-text="t.description || null"
+                                    :data-rz-pop-icon="(t.icon || '').replace('fa-solid ', '') || null" data-rz-pop-color="#0d6efd">
+                                <span class="tf-type__icon"><i :class="t.icon || 'fa-solid fa-gear'"></i></span>
+                                <span class="tf-type__text">
+                                    <span class="tf-type__cat">[[ taskTypeParts(t.label).cat ]]</span>
+                                    <span class="tf-type__name">[[ taskTypeParts(t.label).name ]]</span>
+                                </span>
+                                <i v-if="form.task_type === t.key" class="fa-solid fa-circle-check tf-type__check"></i>
+                            </button>
+                            <p v-if="!filteredTaskTypes.length" class="text-muted small mb-0">No task matches "[[ typeSearch ]]".</p>
                         </div>
-                        <div class="row g-3">
-                            <div class="col-12">
-                                <label class="form-label fw-bold mb-1">Title<span class="required-marker">*</span></label>
-                                <input type="text" class="form-control" v-model="form.title" placeholder="e.g. Weekly quality re-analysis">
-                            </div>
-                            <div class="col-12">
-                                <label class="form-label fw-bold mb-1">Description</label>
-                                <textarea class="form-control" rows="2" v-model="form.description" placeholder="Optional notes about what this task does"></textarea>
-                            </div>
-                            <div class="col-12">
-                                <div class="form-check form-switch mb-0">
-                                    <input class="form-check-input" type="checkbox" id="taskActiveToggle" v-model="form.is_active">
-                                    <label class="form-check-label" for="taskActiveToggle">Active</label>
-                                </div>
-                            </div>
+                        <!-- what the chosen task does when it runs -->
+                        <div v-if="selectedTaskDef && selectedTaskDef.description" class="tf-what">
+                            <i class="fa-solid fa-circle-info"></i>
+                            <div><strong>When it runs:</strong> [[ selectedTaskDef.description ]]</div>
                         </div>
-                    </div>
 
-                    <!-- ── Type & options ── -->
-                    <div class="task-form-section">
-                        <div class="task-form-section__title">
-                            <div class="task-form-bar"></div>
-                            <span><i class="fa-solid fa-gear me-1"></i>Task type</span>
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-12">
-                                <label class="form-label fw-bold mb-1">Type<span class="required-marker">*</span></label>
-                                <select class="form-select" v-model="form.task_type" @change="onTaskTypeChange">
-                                    <option value="" disabled>Choose a task type…</option>
-                                    <option v-for="(t, key) in taskTypes" :key="key" :value="key">[[ t.label ]]</option>
-                                </select>
-                            </div>
-                            <div v-if="selectedTaskDef && selectedTaskDef.extra_options.length" class="col-12">
-                                <div class="task-form-subcard">
-                                    <div v-for="opt in selectedTaskDef.extra_options" :key="opt.key" class="mb-2 last-child-mb-0">
-                                        <div v-if="opt.type === 'bool'" class="form-check">
-                                            <input class="form-check-input" type="checkbox" :id="'opt_' + opt.key" v-model="form.extra_options[opt.key]">
-                                            <label class="form-check-label" :for="'opt_' + opt.key" style="font-size:.85rem;">[[ opt.label ]]</label>
-                                        </div>
-                                        <div v-else-if="opt.type === 'multiselect'">
-                                            <div class="d-flex align-items-center justify-content-between mb-1">
-                                                <label class="form-label mb-0" style="font-size:.78rem;">[[ opt.label ]]<span v-if="isRequiredOption(opt)" class="required-marker">*</span></label>
-                                                <span class="task-form-multi-actions">
-                                                    <button type="button" class="btn btn-link btn-sm p-0" @click="form.extra_options[opt.key] = opt.options.map(o => o.value)">All</button>
-                                                    <span class="text-muted mx-1">·</span>
-                                                    <button type="button" class="btn btn-link btn-sm p-0" @click="form.extra_options[opt.key] = []">None</button>
-                                                </span>
-                                            </div>
-                                            <div class="task-form-multi">
-                                                <div v-for="o in opt.options" :key="o.value" class="form-check">
-                                                    <input class="form-check-input" type="checkbox" :id="'opt_' + opt.key + '_' + o.value"
-                                                           :value="o.value" v-model="form.extra_options[opt.key]">
-                                                    <label class="form-check-label" :for="'opt_' + opt.key + '_' + o.value">[[ o.label ]]</label>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div v-else-if="opt.type === 'saved_config'">
-                                            <label class="form-label mb-1" style="font-size:.78rem;">[[ opt.label ]]<span v-if="isRequiredOption(opt)" class="required-marker">*</span></label>
-                                            <select class="form-select form-select-sm" v-model="form.extra_options[opt.key]">
-                                                <option value="" disabled>Choose a saved config…</option>
-                                                <option v-if="opt.allow_all" value="ALL">Every saved config (combined)</option>
-                                                <option v-for="c in savedConfigs[opt.config_type] || []" :key="c.id" :value="c.id">[[ c.name ]]</option>
-                                            </select>
-                                            <p v-if="savedConfigs[opt.config_type] && !savedConfigs[opt.config_type].length" class="text-muted small mt-1 mb-0">
-                                                No saved config yet — create one on <a href="/account/admin/bulk_parse_fields" target="_blank">Bulk Parse Fields</a>.
-                                            </p>
-                                        </div>
-                                        <div v-else>
-                                            <label class="form-label mb-1" style="font-size:.78rem;">[[ opt.label ]]<span v-if="isRequiredOption(opt)" class="required-marker">*</span></label>
-                                            <input type="text" class="form-control form-control-sm" v-model="form.extra_options[opt.key]">
-                                        </div>
+                        <div v-if="selectedTaskDef && selectedTaskDef.extra_options.length" class="tf-options">
+                            <div v-for="opt in selectedTaskDef.extra_options" :key="opt.key" class="tf-option">
+                                <label v-if="opt.type === 'bool'" class="tf-switch">
+                                    <input type="checkbox" v-model="form.extra_options[opt.key]">
+                                    <span class="tf-switch__track"><span class="tf-switch__thumb"></span></span>
+                                    <span>[[ opt.label ]]</span>
+                                </label>
+                                <template v-else-if="opt.type === 'multiselect'">
+                                    <div class="tf-option__head">
+                                        <span class="tf-label">[[ opt.label ]]<span v-if="isRequiredOption(opt)" class="required-marker">*</span></span>
+                                        <span class="tf-option__actions">
+                                            <button type="button" @click="form.extra_options[opt.key] = opt.options.map(o => o.value)">All</button>
+                                            <button type="button" @click="form.extra_options[opt.key] = []">None</button>
+                                        </span>
                                     </div>
-                                </div>
+                                    <div class="tf-chips">
+                                        <label v-for="o in opt.options" :key="o.value" class="tf-chip"
+                                               :class="{ 'is-on': (form.extra_options[opt.key] || []).includes(o.value) }">
+                                            <input type="checkbox" :value="o.value" v-model="form.extra_options[opt.key]">
+                                            <i class="fa-solid" :class="(form.extra_options[opt.key] || []).includes(o.value) ? 'fa-check' : 'fa-plus'"></i>[[ o.label ]]
+                                        </label>
+                                    </div>
+                                </template>
+                                <template v-else-if="opt.type === 'select'">
+                                    <span class="tf-label">[[ opt.label ]]<span v-if="isRequiredOption(opt)" class="required-marker">*</span></span>
+                                    <select class="form-select tf-input" v-model="form.extra_options[opt.key]">
+                                        <option value="" disabled>Choose…</option>
+                                        <option v-for="o in opt.options || []" :key="o.value" :value="o.value">[[ o.label ]]</option>
+                                    </select>
+                                    <p v-if="!(opt.options || []).length" class="text-muted small mt-1 mb-0">
+                                        Nothing to choose yet — create a sync schedule on <a href="/rule/github/list_github_url" target="_blank">Git Sources</a>.
+                                    </p>
+                                </template>
+                                <template v-else-if="opt.type === 'saved_config'">
+                                    <span class="tf-label">[[ opt.label ]]<span v-if="isRequiredOption(opt)" class="required-marker">*</span></span>
+                                    <select class="form-select tf-input" v-model="form.extra_options[opt.key]">
+                                        <option value="" disabled>Choose a saved config…</option>
+                                        <option v-if="opt.allow_all" value="ALL">Every saved config (combined)</option>
+                                        <option v-for="c in savedConfigs[opt.config_type] || []" :key="c.id" :value="c.id">[[ c.name ]]</option>
+                                    </select>
+                                    <p v-if="savedConfigs[opt.config_type] && !savedConfigs[opt.config_type].length" class="text-muted small mt-1 mb-0">
+                                        No saved config yet — create one on <a href="/account/admin/bulk_parse_fields" target="_blank">Bulk Parse Fields</a>.
+                                    </p>
+                                </template>
+                                <template v-else>
+                                    <span class="tf-label">[[ opt.label ]]<span v-if="isRequiredOption(opt)" class="required-marker">*</span></span>
+                                    <input type="text" class="form-control tf-input" v-model="form.extra_options[opt.key]">
+                                </template>
                             </div>
                         </div>
-                    </div>
+                    </section>
 
-                    <!-- ── Target ── -->
-                    <div v-if="selectedTaskDef && selectedTaskDef.target_picker !== 'none'" class="task-form-section">
-                        <div class="task-form-section__title">
-                            <div class="task-form-bar"></div>
-                            <span><i class="fa-solid fa-bullseye me-1"></i>Target</span>
-                        </div>
-
+                    <!-- 2 · Target -->
+                    <section v-if="selectedTaskDef && selectedTaskDef.target_picker !== 'none'" class="tf-step">
+                        <header class="tf-step__head">
+                            <span class="tf-step__num">2</span>
+                            <div><div class="tf-step__title">Target</div>
+                                 <div class="tf-step__sub">Which rules or connector it works on</div></div>
+                        </header>
                         <div v-if="selectedTaskDef.target_picker === 'format_filter_only'" class="row g-3">
                             <div class="col-12 col-sm-6">
-                                <label class="form-label fw-bold mb-1">Rule format</label>
-                                <select class="form-select" v-model="formatFilter">
+                                <span class="tf-label">Rule format</span>
+                                <select class="form-select tf-input" v-model="formatFilter">
                                     <option value="">All formats</option>
                                     <option v-for="f in availableFormats" :key="f" :value="f">[[ f ]]</option>
                                 </select>
                             </div>
                         </div>
-
                         <div v-if="selectedTaskDef.target_picker === 'connector_select'" class="row g-3">
                             <div class="col-12 col-sm-8">
-                                <label class="form-label fw-bold mb-1">Connector<span class="required-marker">*</span></label>
-                                <select class="form-select" v-model="connectorId">
+                                <span class="tf-label">Connector<span class="required-marker">*</span></span>
+                                <select class="form-select tf-input" v-model="connectorId">
                                     <option value="" disabled>Choose a connector…</option>
                                     <option v-for="c in availableConnectors" :key="c.id" :value="c.id">
                                         [[ c.name ]][[ c.is_system ? ' (Official)' : '' ]]
@@ -786,7 +782,6 @@
                                 </select>
                             </div>
                         </div>
-
                         <template v-if="selectedTaskDef.target_picker === 'rule_list_select'">
                             <p class="text-muted small mb-2" v-if="form.uuid && !targetJustChanged">
                                 Currently targets: [[ currentTargetSummary ]]. Use the picker below to change it, or leave as-is to keep it.
@@ -798,46 +793,40 @@
                             </rule-list>
                             <p v-if="targetJustChanged" class="text-success small mt-2 mb-0"><i class="fa-solid fa-check me-1"></i>[[ currentTargetSummary ]]</p>
                         </template>
-                    </div>
+                    </section>
 
-                    <!-- ── Trigger ── -->
-                    <div class="task-form-section">
-                        <div class="task-form-section__title">
-                            <div class="task-form-bar"></div>
-                            <span><i class="fa-solid fa-clock me-1"></i>Trigger<span class="required-marker">*</span></span>
-                        </div>
-
-                        <div class="d-flex gap-2 mb-3">
-                            <button type="button" class="btn btn-sm rounded-pill px-3"
-                                :class="triggerKind === 'time' ? 'btn-primary' : 'btn-outline-secondary'"
-                                @click="triggerKind = 'time'">
-                                <i class="fa-solid fa-calendar-days me-1"></i>Time-based
+                    <!-- 3 · Trigger -->
+                    <section class="tf-step">
+                        <header class="tf-step__head">
+                            <span class="tf-step__num">[[ selectedTaskDef && selectedTaskDef.target_picker !== 'none' ? 3 : 2 ]]</span>
+                            <div><div class="tf-step__title">Trigger<span class="required-marker">*</span></div>
+                                 <div class="tf-step__sub">When it runs</div></div>
+                        </header>
+                        <div class="tf-segment" role="tablist">
+                            <button type="button" :class="{ 'is-on': triggerKind === 'time' }" @click="triggerKind = 'time'">
+                                <i class="fa-solid fa-calendar-days"></i>On a schedule
                             </button>
-                            <button type="button" class="btn btn-sm rounded-pill px-3"
-                                :class="triggerKind === 'after_task' ? 'btn-primary' : 'btn-outline-secondary'"
-                                @click="triggerKind = 'after_task'; loadPickerSchedules()">
-                                <i class="fa-solid fa-link me-1"></i>After another task
+                            <button type="button" :class="{ 'is-on': triggerKind === 'after_task' }" @click="triggerKind = 'after_task'; loadPickerSchedules()">
+                                <i class="fa-solid fa-link"></i>After another task
                             </button>
                         </div>
-
-                        <div class="task-form-subcard">
+                        <div class="task-form-subcard tf-panel">
                             <schedule-recurrence-picker v-if="triggerKind === 'time'" :key="formInstance"
                                 allow-now allow-once
                                 :initial="form.recurrence" @recurrence-change="onRecurrenceChange">
                             </schedule-recurrence-picker>
-
                             <div v-if="triggerKind === 'after_task'" class="row g-3">
                                 <div class="col-12 col-sm-7">
-                                    <label class="form-label fw-bold mb-1">After task<span class="required-marker">*</span></label>
-                                    <select class="form-select" v-model="form.depends_on_schedule_id">
+                                    <span class="tf-label">After task<span class="required-marker">*</span></span>
+                                    <select class="form-select tf-input" v-model="form.depends_on_schedule_id">
                                         <option :value="null" disabled>Choose a task…</option>
                                         <option v-for="p in pickerSchedules" :key="p.id" :value="p.id">[[ p.title ]]</option>
                                     </select>
                                     <p v-if="pickerSchedules.length === 0" class="text-muted small mt-1 mb-0">No other tasks in this workflow yet — create one first.</p>
                                 </div>
                                 <div class="col-12 col-sm-5">
-                                    <label class="form-label fw-bold mb-1">Condition</label>
-                                    <select class="form-select" v-model="form.depends_on_condition">
+                                    <span class="tf-label">Condition</span>
+                                    <select class="form-select tf-input" v-model="form.depends_on_condition">
                                         <option value="success">If it succeeds</option>
                                         <option value="failure">If it fails</option>
                                         <option value="always">No matter what</option>
@@ -845,16 +834,45 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </section>
+
+                    <!-- 4 · Name -->
+                    <section class="tf-step">
+                        <header class="tf-step__head">
+                            <span class="tf-step__num"><i class="fa-solid fa-pen" style="font-size:.7rem;"></i></span>
+                            <div><div class="tf-step__title">Name &amp; notes</div>
+                                 <div class="tf-step__sub">How it shows in the workflow</div></div>
+                            <label class="tf-switch ms-auto">
+                                <input type="checkbox" v-model="form.is_active">
+                                <span class="tf-switch__track"><span class="tf-switch__thumb"></span></span>
+                                <span>[[ form.is_active ? 'Active' : 'Paused' ]]</span>
+                            </label>
+                        </header>
+                        <div class="row g-3">
+                            <div class="col-12 col-md-5">
+                                <span class="tf-label">Title<span class="required-marker">*</span></span>
+                                <input type="text" class="form-control tf-input" v-model="form.title"
+                                       :placeholder="selectedTaskDef ? taskTypeParts(selectedTaskDef.label).name : 'e.g. Weekly quality re-analysis'">
+                            </div>
+                            <div class="col-12 col-md-7">
+                                <span class="tf-label">Description</span>
+                                <input type="text" class="form-control tf-input" v-model="form.description" placeholder="Optional notes about what this task does">
+                            </div>
+                        </div>
+                    </section>
                 </div>
-                <div class="modal-footer border-0">
+                <div class="modal-footer tf-footer">
                     <button v-if="form.uuid" type="button" class="btn btn-outline-danger rounded-pill px-4 me-auto" @click="askDeleteTask(editingSchedule)">
                         <i class="fa-solid fa-trash me-1"></i>Delete
                     </button>
+                    <span v-else-if="selectedTaskDef" class="tf-footer__summary me-auto">
+                        <i :class="selectedTaskDef.icon"></i>[[ taskTypeParts(selectedTaskDef.label).name ]]
+                    </span>
                     <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary rounded-pill px-4" :disabled="saving" @click="submitForm()">
+                    <button type="button" class="btn btn-primary rounded-pill px-4 tf-submit" :disabled="saving" @click="submitForm()">
                         <span v-if="saving" class="spinner-border spinner-border-sm me-1"></span>
-                        [[ (triggerKind === 'time' && recurrenceMode === 'now') ? 'Run now' : (form.uuid ? 'Save changes' : 'Create Task') ]]
+                        <i v-else class="fa-solid me-1" :class="(triggerKind === 'time' && recurrenceMode === 'now') ? 'fa-play' : 'fa-check'"></i>
+                        [[ (triggerKind === 'time' && recurrenceMode === 'now') ? 'Run now' : (form.uuid ? 'Save changes' : 'Create task') ]]
                     </button>
                 </div>
             </div>
@@ -1710,6 +1728,23 @@
 
             const selectedTaskDef = computed(() => taskTypes.value[form.task_type] || null);
 
+            // task type picker: "Category — what it does" labels split for the cards, searchable
+            const typeSearch = ref('');
+            function taskTypeParts(label) {
+                const i = (label || '').indexOf(' — ');
+                return i > 0 ? { cat: label.slice(0, i), name: label.slice(i + 3) } : { cat: 'Task', name: label || '' };
+            }
+            const filteredTaskTypes = computed(() => {
+                const q = typeSearch.value.trim().toLowerCase();
+                return Object.entries(taskTypes.value).map(([key, t]) => ({ key, ...t }))
+                    .filter(t => !q || (t.label || '').toLowerCase().includes(q) || t.key.includes(q));
+            });
+            function pickTaskType(key) {
+                if (form.task_type === key) return;
+                form.task_type = key;
+                onTaskTypeChange();
+            }
+
             function onTaskTypeChange() {
                 formatFilter.value = '';
                 connectorId.value = '';
@@ -2045,6 +2080,7 @@
                 savedConfigs, isRequiredOption,
                 targetJustChanged, currentTargetSummary, selectedTaskDef,
                 onTaskTypeChange, loadPickerSchedules, onRecurrenceChange, onRuleTargetChange,
+                typeSearch, taskTypeParts, filteredTaskTypes, pickTaskType,
                 openCreate, openEdit, submitForm,
                 taskViewMode, pendingConnection, pendingConnectionIsEdit,
                 onNodeMove, onNodeConnect, onEdgeClick, confirmConnection, removeConnection, onAddNodeOnCanvas,

@@ -777,6 +777,158 @@ def handle_relink_rules(job, app):
             level='warning' if errors else 'success', event='done')
 
 
+# ─── github_sync_schedule_launch / clear_caches (Workflows) ───────────────────
+
+@register_handler('github_sync_schedule_launch')
+def handle_github_sync_schedule_launch(job, app):
+    """A Workflows task: run one Git sync schedule now (its update check, accept / add-new rules
+    as the schedule says), like its own timer does — the same GithubSyncRun and the same
+    handler (github_sync_schedule_run), in this job. Payload: schedule_uuid."""
+    from app.core.db_class.git import GithubSyncRun, GithubSyncSchedule
+    import datetime as _dt
+    import uuid as _uuid
+    schedule_uuid = (job.payload or {}).get('schedule_uuid')
+    schedule = GithubSyncSchedule.query.filter_by(uuid=schedule_uuid).first() if schedule_uuid else None
+    if not schedule or not schedule.repos:
+        msg = 'Sync schedule not found.' if not schedule else f'"{schedule.title}" has no repository.'
+        log_job(job, msg, level='error', event='failed')
+        job.status, job.error = 'failed', msg
+        db.session.commit()
+        return
+    run = GithubSyncRun(uuid=str(_uuid.uuid4()), schedule_id=schedule.id, status='pending', job_uuid=job.uuid)
+    db.session.add(run)
+    schedule.last_run_at = _dt.datetime.utcnow()
+    job.total = len(schedule.repos)
+    job.payload = {**(job.payload or {}), 'run_uuid': run.uuid}
+    db.session.commit()
+    log_job(job, f'Running the sync schedule "{schedule.title}" ({len(schedule.repos)} repositories)…',
+            level='info', event='start')
+    return handle_github_sync_schedule_run(job, app)
+
+
+@register_handler('clear_caches')
+def handle_clear_caches(job, app):
+    """A Workflows task, typically last: empty the caches (home figures, stats, cached pages,
+    leaderboard) so what the workflow changed shows right away. Payload: none."""
+    from app import cache
+    cache.clear()
+    job.total = job.done = 1
+    db.session.commit()
+    log_job(job, 'Caches cleared: pages and figures are computed again on their next visit.',
+            level='success', event='done')
+
+
+# ─── bad_rules_retry ───────────────────────────────────────────────────────────
+
+@register_handler('bad_rules_retry')
+def handle_bad_rules_retry(job, app):
+    """Try every bad rule again, what "Edit" of a bad rule does by hand, for all of them:
+
+    - YARA "undefined identifier X" where X is another rule's name (a condition naming a rule,
+      `condition: Macho and …`): find the rule(s) it names on this instance — several if needed —,
+      compile them together and, if it compiles, import the bad rule linked to them (depends_on),
+      like the relink job does for rules already in the database;
+    - any format: validate the rule again as it is — a validator fixed since the import, or a rule it
+      needed imported since, makes it valid; it is imported for its owner. When it still fails, its
+      error message is refreshed.
+    A bad rule whose content is already a rule is removed from the bad rules (duplicate).
+
+    Payload: formats (list, empty = every format), link_dependencies (bool, YARA, default true),
+    source (optional repository URL).
+    """
+    import yara
+    from sqlalchemy import func
+    from app.core.db_class.rule import InvalidRuleModel
+    from app.features.rule.rule_format.available_format.yara_format import (
+        extract_undefined_identifier, find_missing_dependency_rule,
+    )
+    from app.features.rule.rule_format.main_format import (
+        import_bad_rule_with_dependency, process_and_import_fixed_rule,
+    )
+    from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import load_all_rule_formats
+
+    payload = job.payload or {}
+    formats = [str(f).lower() for f in (payload.get('formats') or []) if str(f).strip()]
+    link = payload.get('link_dependencies', True) not in (False, 'false', 0)
+    source = (payload.get('source') or '').strip() or None
+
+    load_all_rule_formats()
+    q = InvalidRuleModel.query
+    if formats:
+        q = q.filter(func.lower(InvalidRuleModel.rule_type).in_(formats))
+    if source:
+        q = q.filter(InvalidRuleModel.url == source)
+    ids = [i for (i,) in q.with_entities(InvalidRuleModel.id).order_by(InvalidRuleModel.id).all()]
+    job.total = len(ids)
+    db.session.commit()
+    log_job(job, f"Trying {len(ids)} bad rule(s) again — {', '.join(formats) if formats else 'every format'}"
+                 f"{f' from {source}' if source else ''}"
+                 f"{' (YARA: linking the rules a condition names)' if link else ''}…", level='info', event='start')
+
+    imported = linked = duplicates = still_bad = skipped = 0
+    for n, bad_id in enumerate(ids, start=1):
+        if n % 25 == 0 and _is_cancelled(job):
+            log_job(job, f'Cancelled after {job.done}/{job.total} bad rule(s).', level='warning', event='cancelled')
+            return
+        bad = db.session.get(InvalidRuleModel, bad_id)
+        job.done = n
+        if not bad or not bad.raw_content or not bad.user:
+            skipped += 1
+            continue
+        owner, content, fmt = bad.user, bad.raw_content, (bad.rule_type or '').lower()
+        try:
+            # 1. YARA: a condition naming other rules — compile with them, add them one by one
+            if fmt == 'yara' and link and 'undefined identifier' in (bad.error_message or ''):
+                deps = []
+                for _ in range(8):
+                    try:
+                        yara.compile(source='\n\n'.join([d.to_string or '' for d in deps] + [content]), includes=False)
+                        break
+                    except yara.SyntaxError as e:
+                        name = extract_undefined_identifier(str(e))
+                        dep = find_missing_dependency_rule(name, bad) if name else None
+                        if not dep or dep in deps:
+                            deps = []
+                            break
+                        deps.append(dep)
+                if deps:
+                    title = bad.file_name
+                    ok, msg, rule = import_bad_rule_with_dependency(bad, content, deps, owner)
+                    if ok and msg == 'DUPLICATE_REDIRECT':
+                        duplicates += 1
+                    elif ok:
+                        linked += 1
+                        log_job(job, f'Imported "{rule.title}" linked to {", ".join(d.title for d in deps)}.',
+                                level='success', event='progress')
+                    else:
+                        still_bad += 1
+                        if still_bad <= 20:
+                            log_job(job, f'{title}: {str(msg)[:200]}', level='warning', event='progress')
+                    continue
+            # 2. any format: validate again as it is
+            ok, msg, rule = process_and_import_fixed_rule(bad, content, user=owner)
+            if ok:
+                imported += 1
+            elif db.session.get(InvalidRuleModel, bad_id) is None:
+                duplicates += 1          # already a rule: the bad rule entry was removed
+            else:
+                still_bad += 1
+        except Exception as e:
+            db.session.rollback()
+            still_bad += 1
+            if still_bad <= 20:
+                log_job(job, f'Bad rule {bad_id} ({fmt}): {str(e)[:200]}', level='warning', event='progress')
+        if n % 25 == 0:
+            db.session.commit()
+            if n % 250 == 0:
+                log_job(job, f'{n}/{len(ids)} — {imported + linked} imported so far.', level='info', event='progress')
+    db.session.commit()
+    log_job(job, f'Done — {imported + linked} bad rule(s) imported ({linked} linked to the rules they name, '
+                 f'{imported} valid as they are), {duplicates} already rules (removed from the bad rules), '
+                 f'{still_bad} still bad (error refreshed){f", {skipped} skipped (no content or owner)" if skipped else ""}.',
+            level='success', event='done')
+
+
 # ─── git_cache_pull ────────────────────────────────────────────────────────────
 
 @register_handler('git_cache_pull')
@@ -5660,6 +5812,8 @@ def handle_reparse_rule_metadata(job, app):
 
     payload  = job.payload or {}
     formats  = payload.get('formats', 'ALL')
+    if isinstance(formats, str) and formats != 'ALL':     # one format, from the Workflows format picker
+        formats = [formats] if formats.strip() else 'ALL'
     rule_ids = payload.get('rule_ids', 'ALL')
     offset   = payload.get('_resume_offset', 0)
 
