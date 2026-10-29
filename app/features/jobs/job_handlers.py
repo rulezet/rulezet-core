@@ -818,6 +818,115 @@ def handle_clear_caches(job, app):
             level='success', event='done')
 
 
+# ─── Workflows actions: email, notification, log, webhook (not jobs on rules) ──
+# Their messages take {variables} — see app/features/admin/task_scheduler/actions.py.
+
+def _action_setup(job):
+    from flask import current_app
+    from app.features.admin.task_scheduler import actions
+    ctx = actions.run_context(job)
+    base = current_app.config.get('INSTANCE_PUBLIC_URL') or ''
+    return actions, ctx, actions.variables(ctx, base), (job.payload or {})
+
+
+def _action_fail(job, msg):
+    job.status, job.error = 'failed', msg
+    db.session.commit()
+    log_job(job, msg, level='error', event='failed')
+
+
+@register_handler('action_email')
+def handle_action_email(job, app):
+    """Send an email (recipients: the workflow's alert addresses and its editor, plus the ones given)."""
+    from flask_mail import Message
+    from markupsafe import escape
+    from app import mail
+    from app.core.utils.mail_status import is_email_available
+    actions, ctx, values, p = _action_setup(job)
+    if not is_email_available():
+        return _action_fail(job, 'Email is not configured on this instance (Admin → Settings → Mail).')
+    recipients = [e.strip() for e in re.split(r'[,;\s]+', p.get('to') or '') if re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', e.strip())]
+    wf = ctx.get('workflow')
+    if p.get('to_workflow_recipients', True) and wf:
+        if wf.editor and wf.editor.email:
+            recipients.append(wf.editor.email)
+        recipients += list(wf.notify_emails or [])
+    recipients = list(dict.fromkeys(recipients))[:20]
+    if not recipients:
+        return _action_fail(job, 'No recipient.')
+    subject = actions.render(p.get('subject') or '[Rulezet] {workflow}: {task}', values)[:200]
+    body = actions.render(p.get('message') or '', values)
+    msg = Message(subject, recipients=recipients)
+    msg.body = body
+    msg.html = ('<div style="font-family:Segoe UI,Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #eee;border-radius:12px;overflow:hidden">'
+                f'<div style="background:#0d6efd;color:#fff;padding:18px 24px;font-size:18px;font-weight:700">{escape(subject)}</div>'
+                f'<div style="padding:24px;line-height:1.6;color:#333">{escape(body).replace(chr(10), "<br>")}</div>'
+                f'<div style="padding:12px 24px;background:#f8f9fa;font-size:12px;color:#888">Workflow <a href="{escape(values["link"])}">{escape(values["workflow"])}</a> — {escape(values["date"])} {escape(values["time"])}</div></div>')
+    try:
+        mail.send(msg)
+    except Exception as e:
+        return _action_fail(job, f'Email not sent: {str(e)[:200]}')
+    job.total = job.done = 1
+    db.session.commit()
+    log_job(job, f'Email "{subject}" sent to {len(recipients)} recipient(s).', level='success', event='done')
+
+
+@register_handler('action_notify')
+def handle_action_notify(job, app):
+    """A notification in the bell of every admin (or of the workflow's editor only)."""
+    from app.features.notification.notification_core import create_notification, _get_all_admin_ids
+    actions, ctx, values, p = _action_setup(job)
+    title = actions.render(p.get('title') or '{workflow}: {task}', values)[:200]
+    body = actions.render(p.get('message') or '', values)[:2000] or None
+    wf = ctx.get('workflow')
+    users = [wf.editor_id] if p.get('only_editor') and wf else _get_all_admin_ids()
+    for uid in users:
+        create_notification(uid, 'workflow_action', title, body=body,
+                            link=f'/admin/tasks/{wf.uuid}' if wf else '/admin/tasks/', icon='fa-solid fa-diagram-project')
+    job.total = job.done = 1
+    db.session.commit()
+    log_job(job, f'Notification "{title}" sent to {len(users)} admin(s).', level='success', event='done')
+
+
+@register_handler('action_log')
+def handle_action_log(job, app):
+    """A line in the activity log (Admin → Logs): what happened, written by the workflow."""
+    from app.core.utils.activity_log import log_activity
+    actions, ctx, values, p = _action_setup(job)
+    text = actions.render(p.get('message') or '{workflow}: {status}', values)[:1000]
+    wf = ctx.get('workflow')
+    log_activity('admin.workflow_note', text, target_type='admin_workflow',
+                 target_uuid=wf.uuid if wf else None, icon='fa-solid fa-pen-to-square', is_public=False)
+    job.total = job.done = 1
+    db.session.commit()
+    log_job(job, f'Written to the activity log: {text[:200]}', level='success', event='done')
+
+
+@register_handler('action_webhook')
+def handle_action_webhook(job, app):
+    """POST a JSON message to a public https URL (Slack / Mattermost / Teams incoming webhook,
+    or any service): {"text": message, "workflow", "task", "status", "failed_tasks", "link"}."""
+    import requests as _req
+    actions, ctx, values, p = _action_setup(job)
+    url = (p.get('url') or '').strip()
+    err = actions.public_https_url(url)
+    if err:
+        return _action_fail(job, f'Webhook refused: {err}')
+    payload = {'text': actions.render(p.get('message') or '{workflow}: {task} — {status}', values)[:4000],
+               'workflow': values['workflow'], 'task': values['task'], 'status': values['status'],
+               'failed_tasks': values['failed_tasks'], 'link': values['link']}
+    try:
+        res = _req.post(url, json=payload, timeout=15, allow_redirects=False,
+                        headers={'User-Agent': 'Rulezet-Workflows'})
+    except Exception as e:
+        return _action_fail(job, f'Webhook not reached: {str(e)[:200]}')
+    if res.status_code >= 300:
+        return _action_fail(job, f'Webhook answered {res.status_code}.')
+    job.total = job.done = 1
+    db.session.commit()
+    log_job(job, f'Webhook called ({res.status_code}).', level='success', event='done')
+
+
 # ─── submodules_update (Workflows) ─────────────────────────────────────────────
 
 # Data submodules a workflow may update (never code: the editor / tester / validation float with

@@ -332,6 +332,11 @@ def _validate_target_payload(task_type, payload):
     """Per-type sanity checks on what a task will hand its job — catches a
     blank repo URL or an empty format list at save time instead of as a
     failed run in the middle of the night. Returns an error string or None."""
+    if task_type == 'action_webhook':
+        from app.features.admin.task_scheduler.actions import public_https_url
+        err = public_https_url((payload or {}).get('url'))
+        if err:
+            return f'Webhook: {err}'
     task_def = TASK_TYPES[task_type]
     labels = {o['key']: o['label'] for o in task_def.get('extra_options', [])}
     for key in task_def.get('required_options', []):

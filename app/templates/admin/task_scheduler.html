@@ -197,7 +197,8 @@
                         <i class="fa-solid me-1" :class="activeWorkflow.is_active ? 'fa-pause' : 'fa-play'"></i>[[ activeWorkflow.is_active ? 'Pause' : 'Resume' ]]
                     </button>
                     <div class="dropdown">
-                        <button class="btn btn-sm btn-light rounded-pill px-3" data-bs-toggle="dropdown" aria-expanded="false"><i class="fa-solid fa-ellipsis"></i></button>
+                        <button class="btn btn-sm btn-light rounded-pill px-3" data-bs-toggle="dropdown" aria-expanded="false"
+                                data-bs-popper-config='{"strategy":"fixed"}' aria-label="More actions"><i class="fa-solid fa-ellipsis"></i></button>
                         <ul class="dropdown-menu dropdown-menu-end shadow border-0">
                             <li><button class="dropdown-item" @click="openEditWorkflow(activeWorkflow)"><i class="fa-solid fa-pen me-2"></i>Edit (title, launch date, alerts)</button></li>
                             <li><button class="dropdown-item" @click="duplicateWorkflow(activeWorkflow)"><i class="fa-regular fa-clone me-2"></i>Duplicate</button></li>
@@ -980,6 +981,17 @@
                                             <input type="checkbox" :value="o.value" v-model="form.extra_options[opt.key]">
                                             <i class="fa-solid" :class="(form.extra_options[opt.key] || []).includes(o.value) ? 'fa-check' : 'fa-plus'"></i>[[ o.label ]]
                                         </label>
+                                    </div>
+                                </template>
+                                <template v-else-if="opt.type === 'textarea'">
+                                    <span class="tf-label">[[ opt.label ]]<span v-if="isRequiredOption(opt)" class="required-marker">*</span></span>
+                                    <textarea class="form-control tf-input" rows="4" :ref="el => { if (el) textareaRefs[opt.key] = el }"
+                                              v-model="form.extra_options[opt.key]"></textarea>
+                                    <div v-if="opt.variables" class="tf-vars">
+                                        <span class="tf-vars__label">Insert</span>
+                                        <button v-for="v in MESSAGE_VARIABLES" :key="v.name" type="button" class="tf-var"
+                                                :data-rz-pop-title="'{' + v.name + '}'" :data-rz-pop-text="v.help"
+                                                @click="insertVariable(opt.key, v.name)">{[[ v.name ]]}</button>
                                     </div>
                                 </template>
                                 <template v-else-if="opt.type === 'select'">
@@ -2207,6 +2219,27 @@
 
             const selectedTaskDef = computed(() => taskTypes.value[form.task_type] || null);
 
+            // {variables} of the action tasks' messages (actions.py) — click one to insert it at the cursor
+            const MESSAGE_VARIABLES = [
+                { name: 'workflow', help: "The workflow's title" },
+                { name: 'task', help: "This task's title" },
+                { name: 'status', help: 'The launch so far, e.g. "3 done, 1 failed"' },
+                { name: 'failed_tasks', help: 'Titles of the tasks that failed in this launch' },
+                { name: 'done_tasks', help: 'Titles of the tasks done in this launch' },
+                { name: 'date', help: 'Today, UTC' },
+                { name: 'time', help: 'Now, UTC' },
+                { name: 'link', help: "The workflow's page" },
+            ];
+            const textareaRefs = {};
+            function insertVariable(key, name) {
+                const el = textareaRefs[key];
+                const text = form.extra_options[key] || '';
+                const tag = `{${name}}`;
+                const at = el && typeof el.selectionStart === 'number' ? el.selectionStart : text.length;
+                form.extra_options[key] = text.slice(0, at) + tag + text.slice(el ? el.selectionEnd : at);
+                nextTick(() => { if (el) { el.focus(); el.selectionStart = el.selectionEnd = at + tag.length; } });
+            }
+
             function formatDuration(sec) {
                 if (sec == null) return '—';
                 if (sec < 60) return `${sec}s`;
@@ -2529,9 +2562,10 @@
                 pendingConnection.value = null;
             }
 
-            function onAddNodeOnCanvas(x, y) {
+            function onAddNodeOnCanvas(x, y, taskType) {
                 pendingNewNodePosition.value = { x, y };
                 openCreate();
+                if (taskType && taskTypes.value[taskType]) pickTaskType(taskType);   // quick-add chip: type already chosen
             }
 
             onMounted(() => {
@@ -2585,6 +2619,7 @@
                 targetJustChanged, currentTargetSummary, selectedTaskDef,
                 onTaskTypeChange, loadPickerSchedules, onRecurrenceChange, onRuleTargetChange,
                 typeSearch, taskTypeParts, filteredTaskTypes, pickTaskType, formatDuration,
+                MESSAGE_VARIABLES, textareaRefs, insertVariable,
                 openCreate, openEdit, submitForm,
                 taskViewMode, pendingConnection, pendingConnectionIsEdit,
                 onNodeMove, onNodeConnect, onEdgeClick, confirmConnection, removeConnection, onAddNodeOnCanvas,

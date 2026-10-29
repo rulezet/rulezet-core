@@ -64,6 +64,13 @@ const TaskCanvas = {
             connectingFrom: null, // schedule currently dragging a connection from
             connectPoint: null,   // {x, y} in canvas space — live end of the connection line
             contextMenu: null,    // {schedule, x, y} in viewport (client) coords while a right-click menu is open
+            quickActions: [
+                { type: 'action_email', label: 'Email', icon: 'fa-solid fa-envelope' },
+                { type: 'action_notify', label: 'Notify admins', icon: 'fa-solid fa-bell' },
+                { type: 'action_log', label: 'Write to the log', icon: 'fa-solid fa-pen-to-square' },
+                { type: 'action_webhook', label: 'Webhook', icon: 'fa-solid fa-paper-plane' },
+                { type: 'clear_caches', label: 'Clear caches', icon: 'fa-solid fa-broom' },
+            ],
         };
     },
     computed: {
@@ -292,15 +299,54 @@ const TaskCanvas = {
             }
         },
 
+        // zoom around a point of the viewport (the cursor, or its centre): what is under it stays put
+        zoomAt(factor, clientX, clientY) {
+            const rect = this.$refs.wrap.getBoundingClientRect();
+            const px = (clientX ?? rect.left + rect.width / 2) - rect.left;
+            const py = (clientY ?? rect.top + rect.height / 2) - rect.top;
+            const next = Math.min(2, Math.max(0.3, +(this.scale * factor).toFixed(3)));
+            this.pan = { x: px - (px - this.pan.x) * next / this.scale, y: py - (py - this.pan.y) * next / this.scale };
+            this.scale = next;
+        },
         onWheel(evt) {
             evt.preventDefault();
-            const delta = evt.deltaY > 0 ? -0.1 : 0.1;
-            this.scale = Math.min(1.6, Math.max(0.4, this.scale + delta));
+            this.zoomAt(evt.deltaY > 0 ? 0.9 : 1.1, evt.clientX, evt.clientY);
         },
+        zoomIn() { this.zoomAt(1.2); },
+        zoomOut() { this.zoomAt(1 / 1.2); },
 
         resetView() {
             this.pan = { x: 40, y: 40 };
             this.scale = 1;
+        },
+        // every task in view: the zoom and the pan that frame them all
+        fitView() {
+            const pts = Object.values(this.nodePositions);
+            if (!pts.length) return this.resetView();
+            const rect = this.$refs.wrap.getBoundingClientRect();
+            const minX = Math.min(...pts.map(p => p.x)), minY = Math.min(...pts.map(p => p.y));
+            const maxX = Math.max(...pts.map(p => p.x + 190)), maxY = Math.max(...pts.map(p => p.y + 70));
+            const pad = 40;
+            const scale = Math.min(1.4, Math.max(0.3, Math.min((rect.width - pad * 2) / (maxX - minX), (rect.height - pad * 2) / (maxY - minY))));
+            this.scale = +scale.toFixed(3);
+            this.pan = { x: pad - minX * this.scale + ((rect.width - pad * 2) - (maxX - minX) * this.scale) / 2,
+                         y: pad - minY * this.scale };
+        },
+        // tidy up: every task back on the left-to-right grid of its dependency depth (saved)
+        tidyUp() {
+            this.autoLayoutColumns.forEach((col, depth) => {
+                col.forEach((s, row) => {
+                    const pos = { x: 60 + depth * GRID_COL_WIDTH, y: 40 + row * GRID_ROW_HEIGHT };
+                    this.localPositions[s.uuid] = pos;
+                    this.$emit('move', s, pos.x, pos.y);
+                });
+            });
+            this.$nextTick(() => this.fitView());
+        },
+        // a quick-add chip: a new task of that type, in the middle of the view
+        quickAdd(taskType) {
+            const rect = this.$refs.wrap.getBoundingClientRect();
+            this.$emit('add-node', (rect.width / 2 - this.pan.x) / this.scale, (rect.height / 2 - this.pan.y) / this.scale, taskType);
         },
 
         onAddNode() {
@@ -324,16 +370,31 @@ const TaskCanvas = {
                 <span class="twg-legend-item"><span class="twg-dot" style="background:#6c757d;"></span>always</span>
             </div>
             <div class="tc-toolbar-actions">
-                <button class="btn btn-sm btn-outline-secondary rounded-pill" @click="resetView" title="Reset pan/zoom">
-                    <i class="fa-solid fa-compress"></i>
+                <button class="btn btn-sm btn-outline-secondary rounded-pill" @click="tidyUp" title="Tidy up: every task back on the grid, left to right">
+                    <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Tidy up
                 </button>
                 <button class="btn btn-sm btn-primary rounded-pill px-3" @click="onAddNode" title="Add a task here">
                     <i class="fa-solid fa-plus me-1"></i>Add task
                 </button>
             </div>
         </div>
+        <!-- quick add: the actions that are not jobs (email, notification, log, webhook) in one click -->
+        <div class="tc-palette">
+            <span class="tc-palette__label">Quick add</span>
+            <button v-for="a in quickActions" :key="a.type" type="button" class="tc-palette__btn" @click="quickAdd(a.type)"
+                    :data-rz-pop-title="a.label" :data-rz-pop-text="(taskTypes[a.type] || {}).description || null">
+                <i :class="a.icon"></i>[[ a.label ]]
+            </button>
+        </div>
 
         <div class="tc-wrap" ref="wrap" @mousedown="startPan" @wheel="onWheel">
+            <!-- zoom controls, bottom right of the canvas -->
+            <div class="tc-zoom" @mousedown.stop>
+                <button type="button" @click="zoomIn" title="Zoom in"><i class="fa-solid fa-plus"></i></button>
+                <span class="tc-zoom__pct" @click="resetView" title="Back to 100 %">[[ Math.round(scale * 100) ]]%</span>
+                <button type="button" @click="zoomOut" title="Zoom out"><i class="fa-solid fa-minus"></i></button>
+                <button type="button" @click="fitView" title="Fit every task in view"><i class="fa-solid fa-expand"></i></button>
+            </div>
             <div class="tc-inner" :style="[transformStyle, { width: canvasSize.w + 'px', height: canvasSize.h + 'px' }]">
                 <svg class="tc-edges" :width="canvasSize.w" :height="canvasSize.h">
                     <path v-for="e in edges" :key="e.id" :d="e.d" :stroke="e.color" fill="none" stroke-width="2" opacity="0.8"
