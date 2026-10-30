@@ -79,6 +79,10 @@
         </p>
     </div>
 
+    <!-- Forks: forked from, ahead / behind, Sync, Propose, Fork (js/bundle/BundleForkPanel.js) -->
+    <bundle-fork-bar v-if="!viewRelease" :bundle-id="bundle_id" :csrf-token="csrfToken" :authenticated="IS_AUTHENTICATED"
+                     @loaded="d => forkInfo = d" @changed="reloadPage" @open-tab="setTab('forks'); scrollToZone()"></bundle-fork-bar>
+
     <template v-if="detail_page_1_is_loading">
         <!-- Main Card -->
         <div class="card h-100 border-0 card-security-premium-detail mb-4 card_detail border-top shadow-lg position-relative"
@@ -282,6 +286,22 @@
                             </ul>
                         </div>
 
+                        <!-- Fork: your own copy, linked to this bundle (bundle_fork_routes.py) -->
+                        <button v-if="IS_AUTHENTICATED && forkInfo && forkInfo.enabled !== false && !viewRelease" type="button"
+                                class="bd-btn bd-btn--icon" :disabled="forkBusy || !forkInfo.can_fork"
+                                :title="forkInfo.can_fork ? 'Make your own copy of this bundle, linked to it — change it, then propose your changes back' : forkInfo.why_not_fork"
+                                @click="forkBundle">
+                            <i class="fa-solid fa-code-fork"></i><span>Fork</span><span v-if="forkInfo.forks_count" class="bf-count">[[ forkInfo.forks_count ]]</span>
+                        </button>
+                        <!-- Suggest changes: works on your fork (made on the first click), then you propose it back -->
+                        <button v-if="IS_AUTHENTICATED && forkInfo && forkInfo.enabled !== false && !viewRelease && !forkInfo.is_manager
+                                      && (forkInfo.can_fork || forkInfo.my_fork)" type="button"
+                                class="bd-btn bd-btn--icon" :disabled="forkBusy"
+                                :title="forkInfo.my_fork ? 'Continue in your fork: ' + forkInfo.my_fork.name : 'Make your own copy to change, then propose your changes to the owner'"
+                                @click="suggestChanges">
+                            <i class="fa-solid fa-pen-to-square"></i><span>Suggest changes</span>
+                        </button>
+
                         <template v-if="parseInt('{{ current_user.id }}') === bundle.user_id || is_admin">
                             <button type="button" class="bd-btn bd-btn--icon" :class="{ 'bd-btn--active': sharePanelOpen }"
                                     title="Private share link" @click="toggleSharePanel">
@@ -458,6 +478,9 @@
                             <i class="fa-solid fa-arrow-rotate-left"></i><span>Back to current</span>
                         </button>
                     </div>
+                    <!-- In your fork with changes: the big "Propose the merge request" card (js/bundle/BundleForkPanel.js) -->
+                    <bundle-propose-card v-if="!viewRelease" :bundle-id="bundle_id" :csrf-token="csrfToken"
+                                         @open-tab="setTab('forks'); scrollToZone()"></bundle-propose-card>
                     <nav class="dr-nav bd-nav" role="tablist">
                         <button v-for="t in contentTabs" :key="t.key" type="button" role="tab"
                                 class="dr-nav__item" :data-tour="'btab-' + t.key" :class="{ active: activeTab === t.key }"
@@ -680,6 +703,20 @@
                         </div>
 
                         <!-- History -->
+                        <!-- Forks & merge requests -->
+                        <div v-show="activeTab === 'forks'" role="tabpanel">
+                            <div class="bd-section-head">
+                                <div class="bd-section-title">
+                                    <i class="fa-solid fa-code-fork"></i>
+                                    <div>
+                                        <div class="bd-section-name">Forks &amp; merge requests <help-tip title="Forks" text="Anyone signed in can fork a public bundle: their own copy, linked to this one. They change it, then propose their changes back with a merge request — the owner reviews every change, resolves conflicts and merges. A fork can also bring in this bundle's new changes (Sync)."></help-tip></div>
+                                        <div class="bd-section-sub">Copies of this bundle and the changes they propose</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <bundle-forks-panel :bundle-id="bundle_id" :csrf-token="csrfToken" :active="activeTab === 'forks'" @changed="reloadPage"></bundle-forks-panel>
+                        </div>
+
                         <div v-show="activeTab === 'history'" role="tabpanel">
                             <div class="bd-section-head">
                                 <div class="bd-section-title">
@@ -909,6 +946,7 @@
     import BundleFilesPanel from '/static/js/bundle/BundleFilesPanel.js';
     import BundleHealthPanel from '/static/js/bundle/BundleHealthPanel.js';
     import BundleReleasesPanel from '/static/js/bundle/BundleReleasesPanel.js';
+    import BundleForkBar, { BundleForksPanel, BundleProposeCard } from '/static/js/bundle/BundleForkPanel.js';
     import BundleReleaseRules from '/static/js/bundle/BundleReleaseRules.js';
     import HelpTip from '/static/js/components/help-tip.js';
     import PaginationComponent from '/static/js/rule/paginationComponent.js';
@@ -939,6 +977,9 @@
             'bundle-files-panel': BundleFilesPanel,
             'bundle-health-panel': BundleHealthPanel,
             'bundle-releases-panel': BundleReleasesPanel,
+            'bundle-fork-bar': BundleForkBar,
+            'bundle-forks-panel': BundleForksPanel,
+            'bundle-propose-card': BundleProposeCard,
             'bundle-release-rules': BundleReleaseRules,
             'help-tip': HelpTip,
             'pagination-component': PaginationComponent,
@@ -1651,7 +1692,7 @@
             const HISTORY_ICONS = {
                 created: 'fa-solid fa-plus', details: 'fa-solid fa-pen', visibility: 'fa-solid fa-lock-open',
                 tags: 'fa-solid fa-tags', structure: 'fa-solid fa-folder-tree', rules: 'fa-solid fa-shield-halved',
-                sharing: 'fa-solid fa-link', release: 'fa-solid fa-tag',
+                sharing: 'fa-solid fa-link', release: 'fa-solid fa-tag', merge: 'fa-solid fa-code-merge',
             };
             const historyEntries = ref([]);
             const historyPage    = ref(0);
@@ -1859,7 +1900,7 @@
             // One panel at a time instead of five stacked sections. The
             // active tab is mirrored in the URL hash (#files…) so it can be
             // linked and survives a reload.
-            const TAB_KEYS = ['structure', 'rules', 'files', 'attack', 'releases', 'health', 'notes', 'ai', 'history', 'misp'];
+            const TAB_KEYS = ['structure', 'rules', 'files', 'attack', 'releases', 'health', 'notes', 'ai', 'forks', 'history', 'misp'];
             const notesSummary = ref(null);
             const notesAlert = computed(() => {
                 const open = (notesSummary.value?.notes || []).filter(n => n.status === 'open' && n.severity !== 'info');
@@ -1908,6 +1949,25 @@
                 .then(d => { if (d) aiSummary.value = { count: (d.items || []).length, latest: (d.items || [])[0] || null }; })
                 .catch(() => {});
             const releasesSummary = ref(null);
+            const forkInfo = ref(null);
+            const reloadPage = () => window.location.reload();
+            const forkBusy = ref(false);
+            async function forkBundle() {
+                forkBusy.value = true;
+                try {
+                    const res = await fetch(`/bundle/${bundle_id}/fork`, { method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }, body: '{}' });
+                    const out = await res.json().catch(() => ({}));
+                    if (out.message) create_message(out.message, out.toast_class || (res.ok ? 'success-subtle' : 'danger-subtle'));
+                    if (res.ok && out.url) window.location.href = out.url + '?fork_welcome=1';
+                } finally { forkBusy.value = false; }
+            }
+            // your existing fork, or a new one — opened with the "where to start" note
+            function suggestChanges() {
+                const mine = forkInfo.value && forkInfo.value.my_fork;
+                if (mine) window.location.href = `/bundle/detail/${mine.id}?fork_welcome=1`;
+                else forkBundle();
+            }
             const _hashTab = (location.hash || '').slice(1);
             const activeTab = ref(TAB_KEYS.includes(_hashTab) ? _hashTab : 'structure');
 
@@ -1929,6 +1989,9 @@
                 if (showAiTab.value)
                     tabs.push({ key: 'ai', label: 'AI Analysis', icon: 'fa-solid fa-robot',
                                 count: aiSummary.value && aiSummary.value.count ? aiSummary.value.count : null });
+                if (forkInfo.value && forkInfo.value.enabled !== false)
+                    tabs.push({ key: 'forks', label: 'Forks', icon: 'fa-solid fa-code-fork',
+                                count: (forkInfo.value.open_incoming || 0) + (forkInfo.value.open_outgoing || 0) || forkInfo.value.forks_count || null });
                 tabs.push({ key: 'history', label: 'History', icon: 'fa-solid fa-clock-rotate-left', count: historyTotal.value || null });
                 if (rules.value.length && !viewRelease.value)
                     tabs.push({ key: 'misp', label: 'MISP Event', icon: 'fa-solid fa-diagram-project', count: null });
@@ -2066,7 +2129,7 @@
                 treeData, fileTreeNodes, allFiles, docFiles,
                 openedFile, viewerList, openedIndex, openFile, closeFile, stepFile,
                 openedOrigin, fileTreeRef, filesPanelRef, focusRule, locateOpenedFile, onAttackRuleAction, onRuleListAction,
-                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, scrollToZone, noteRefs, openNoteRef, canEditStructure, openInEditor, onTreeRowAction, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, showRuleInStructure, showRuleInList, structureLoaded, toggleFavorite, showAiTab, aiSummary, CAN_MANAGE_AI,
+                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, scrollToZone, noteRefs, openNoteRef, canEditStructure, openInEditor, onTreeRowAction, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, forkInfo, reloadPage, IS_AUTHENTICATED, forkBusy, forkBundle, suggestChanges, showRuleInStructure, showRuleInList, structureLoaded, toggleFavorite, showAiTab, aiSummary, CAN_MANAGE_AI,
                 viewRelease, releaseData, releaseSwitching, releaseOptions, switchVersion, openReleaseRule, openReleaseRuleDiff, descHtml, descEl, descOverflows, copyDescription, downloadDescription,
                 sharePanelOpen, shareUrl, shareCreatedAt, shareLoading, shareBusy, regenArmed,
                 toggleSharePanel, regenerateShare, revokeShare, copyShareUrl,

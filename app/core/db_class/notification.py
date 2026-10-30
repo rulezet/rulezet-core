@@ -114,6 +114,9 @@ class NotificationPreference(db.Model):
     # A rule I favorited had its content changed (issue #84)
     pref_favorite_rule_update = db.Column(db.Boolean, nullable=False, default=True)
 
+    # Bundle forks: my bundle was forked, merge requests on my bundles / from my forks
+    pref_bundle_fork = db.Column(db.Boolean, nullable=False, default=True)
+
     user = db.relationship('User', backref=db.backref(
         'notification_preference', uselist=False, cascade='all, delete-orphan'))
 
@@ -136,4 +139,5 @@ class NotificationPreference(db.Model):
             'workflow_runs':      self.pref_workflow_runs,
             'alerts':             self.pref_alerts,
             'favorite_rule_update': self.pref_favorite_rule_update,
+            'bundle_fork':        self.pref_bundle_fork,
         }

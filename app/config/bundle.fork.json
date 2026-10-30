@@ -1,0 +1,11 @@
+{
+    "label": "Bundle forks",
+    "category": "Bundles",
+    "description": "Forks and merge requests of bundles (docs/future/bundle_forks.md): enabled — users can fork a bundle and propose its changes back; daily_limit — forks a user (not an admin) can make per day, 0 = no limit; job_threshold — a fork of a bundle with more rules than this is made by a background job.",
+    "public": true,
+    "value": {
+        "enabled": true,
+        "daily_limit": 20,
+        "job_threshold": 400
+    }
+}

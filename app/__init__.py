@@ -103,6 +103,7 @@ def create_app(start_worker=True):
     from .features.rule.rule import rule_blueprint  
     from .features.rule import rule_review  # noqa: F401  (review routes on the rule blueprint)
     from .features.rule import issue_report_routes  # noqa: F401  ("Create issue" reports)
+    from .features.bundle import bundle_fork_routes  # noqa: F401  (bundle forks & merge requests)
     from .features.bundle.bundle import bundle_blueprint
     from .features.tags.tags import tags_blueprint
     from app.features.jobs.jobs import jobs_blueprint

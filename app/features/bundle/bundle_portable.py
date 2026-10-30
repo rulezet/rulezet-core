@@ -136,6 +136,8 @@ def bundle_to_portable(bundle: Bundle) -> dict:
             "created_at": _iso(bundle.created_at),
             "vulnerabilities": vulns,
             "tags": sorted(a.tag.name for a in bundle.tags_assocs if a.tag),
+            # fork link (bundle_fork_core.py): kept so another instance knows where it came from
+            "forked_from_uuid": bundle.forked_from_uuid,
         },
         "rules": rules,
         "structure": [c for c in (node_json(n) for n in children.get(None, [])) if c],

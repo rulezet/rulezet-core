@@ -814,9 +814,11 @@ def add_rule_core(form_dict, user, record_activity: bool = True) -> tuple[bool, 
         if trashed_rule is not None:
             return False, f"TRASH_CONFLICT:{trashed_rule.uuid}:{trashed_rule.id}:{trashed_rule.title}"
 
-        unique_ok, unique_error = check_identifier_uniqueness(form_dict.get("format"), new_to_string)
-        if not unique_ok:
-            return False, unique_error
+        # A fork's copy of a rule (bundle_fork_core.fork_rule_copy) keeps the original's identifier on purpose
+        if not form_dict.get("_fork_copy_of"):
+            unique_ok, unique_error = check_identifier_uniqueness(form_dict.get("format"), new_to_string)
+            if not unique_ok:
+                return False, unique_error
 
         dataset_risk = check_dataset_collision_risk(form_dict.get("format"), new_to_string)
         if dataset_risk['rejected']:

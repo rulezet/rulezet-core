@@ -368,6 +368,7 @@ export default {
                        :title="'Latest release (' + bundle.release_count + ' in total) — open it'">
                         <i class="fa-solid fa-tag"></i>{{ bundle.latest_release.version }}
                     </a>
+                    <span v-if="bundle.is_fork" class="bl-chip bl-chip--fork" :title="bundle.forked_from_name ? 'Fork of ' + bundle.forked_from_name : 'A fork of another bundle'"><i class="fa-solid fa-code-fork"></i>Fork</span>
                     <span v-if="bundle.is_verified" class="bl-chip bl-chip--blue" title="Verified bundle">
                         <i class="fa-solid fa-circle-check"></i>Verified
                     </span>
@@ -527,6 +528,16 @@ export default {
                                             <i class="fas fa-eye me-2 text-muted"></i>View Detail
                                         </a>
                                     </li>
+                                    <li v-if="canFork(bundle)">
+                                        <button class="dropdown-item rounded-2" @click.stop="forkBundle(bundle)">
+                                            <i class="fa-solid fa-code-fork me-2" style="color:#6f42c1;"></i>Fork
+                                        </button>
+                                    </li>
+                                    <li v-if="canFork(bundle) && !isOwner(bundle)">
+                                        <button class="dropdown-item rounded-2" @click.stop="forkBundle(bundle, true)">
+                                            <i class="fa-solid fa-pen-to-square me-2 text-primary"></i>Suggest changes
+                                        </button>
+                                    </li>
                                     <template v-if="numericCurrentUserId && (isOwner(bundle) || currentUserIsAdmin)">
                                         <li><hr class="dropdown-divider"></li>
                                         <li>
@@ -645,6 +656,23 @@ export default {
                         <i class="fas fa-folder-open opacity-25 me-2"></i>No rules in this bundle.
                     </div>
                 </div>
+
+                <!-- ── Forks of this bundle, hanging under it ── -->
+                <div v-if="bundle.fork_count" class="bl-forks">
+                    <button type="button" class="bl-forks__toggle" @click="toggleForks(bundle)">
+                        <i class="fa-solid fa-code-fork"></i>{{ bundle.fork_count }} fork{{ bundle.fork_count === 1 ? '' : 's' }} of this bundle
+                        <i class="fa-solid" :class="forkOpen.has(bundle.id) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                    </button>
+                    <div v-if="forkOpen.has(bundle.id)" class="bl-forks__list">
+                        <div v-if="!forksOf[bundle.id]" class="small text-muted px-2 py-1">Loading…</div>
+                        <a v-for="f in (forksOf[bundle.id] || [])" :key="f.id" :href="'/bundle/detail/' + f.id" class="bl-fork">
+                            <span class="bl-fork__branch"></span>
+                            <span class="bl-fork__name">{{ f.name }}</span>
+                            <span class="bl-fork__sub">by {{ f.owner || '?' }} · {{ f.updated_at }}<template v-if="!f.access"> · private</template></span>
+                            <span v-if="f.open_merge_request" class="bl-chip bl-chip--fork"><i class="fa-solid fa-code-pull-request"></i>proposes changes</span>
+                        </a>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -728,7 +756,8 @@ export default {
 
                             <td class="dt-td" style="max-width:200px;word-break:break-word;">
                                 <div class="bl-chips bl-chips--sm mb-1">
-                                    <span v-if="bundle.is_verified" class="bl-chip bl-chip--blue" title="Verified bundle">
+                                    <span v-if="bundle.is_fork" class="bl-chip bl-chip--fork" :title="bundle.forked_from_name ? 'Fork of ' + bundle.forked_from_name : 'A fork of another bundle'"><i class="fa-solid fa-code-fork"></i>Fork</span>
+                    <span v-if="bundle.is_verified" class="bl-chip bl-chip--blue" title="Verified bundle">
                                         <i class="fa-solid fa-circle-check"></i>
                                     </span>
                                     <span class="bl-chip" :class="bundle.access ? 'bl-chip--green' : 'bl-chip--red'"
@@ -738,6 +767,10 @@ export default {
                                 </div>
                                 <a :href="'/bundle/detail/' + bundle.id" class="dt-rule-title"
                                    v-html="highlight(bundle.name)"></a>
+                                <button v-if="bundle.fork_count" type="button" class="bl-forks__toggle bl-forks__toggle--table" @click.stop="toggleForks(bundle)">
+                                    <i class="fa-solid fa-code-fork"></i>{{ bundle.fork_count }} fork{{ bundle.fork_count === 1 ? '' : 's' }}
+                                    <i class="fa-solid" :class="forkOpen.has(bundle.id) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                                </button>
                             </td>
 
                             <td v-show="colVisible.description" class="dt-td dt-td--truncate">
@@ -848,6 +881,12 @@ export default {
                                             <a :href="'/bundle/detail/' + bundle.id" class="rl-action-item">
                                                 <i class="fas fa-eye"></i> View
                                             </a>
+                                            <button v-if="canFork(bundle)" class="rl-action-item" @click.stop="forkBundle(bundle)">
+                                                <i class="fa-solid fa-code-fork"></i> Fork
+                                            </button>
+                                            <button v-if="canFork(bundle) && !isOwner(bundle)" class="rl-action-item" @click.stop="forkBundle(bundle, true)">
+                                                <i class="fa-solid fa-pen-to-square"></i> Suggest changes
+                                            </button>
                                             <template v-if="numericCurrentUserId && (isOwner(bundle) || currentUserIsAdmin)">
                                                 <div class="rl-action-divider"></div>
                                                 <a :href="'/bundle/edit/' + bundle.id" class="rl-action-item">
@@ -886,6 +925,19 @@ export default {
                         </tr>
 
                         <!-- Expanded row: inline rule list -->
+                        <tr v-if="bundle.fork_count && forkOpen.has(bundle.id)" :key="'forks-' + bundle.id" class="dt-row-expand">
+                            <td :colspan="tableColspan" class="p-0">
+                                <div class="bl-forks__list bl-forks__list--table">
+                                    <div v-if="!forksOf[bundle.id]" class="small text-muted px-2 py-1">Loading…</div>
+                                    <a v-for="f in (forksOf[bundle.id] || [])" :key="f.id" :href="'/bundle/detail/' + f.id" class="bl-fork">
+                                        <span class="bl-fork__branch"></span>
+                                        <span class="bl-fork__name">{{ f.name }}</span>
+                                        <span class="bl-fork__sub">by {{ f.owner || '?' }} · {{ f.updated_at }}<template v-if="!f.access"> · private</template></span>
+                                        <span v-if="f.open_merge_request" class="bl-chip bl-chip--fork"><i class="fa-solid fa-code-pull-request"></i>proposes changes</span>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
                         <tr v-if="expandedIds.has(bundle.id)"
                             :key="'expand-' + bundle.id" class="dt-row-expand">
                             <td :colspan="tableColspan" class="dt-expand-cell p-0">
@@ -1179,6 +1231,34 @@ export default {
         function isOwner(bundle) {
             return numericCurrentUserId.value !== null &&
                    numericCurrentUserId.value === bundle.user_id
+        }
+
+        // Forks hang under their original in the list: opened on demand, fetched once per bundle
+        const forkOpen = ref(new Set())
+        const forksOf = reactive({})
+        async function toggleForks(bundle) {
+            const next = new Set(forkOpen.value)
+            if (next.has(bundle.id)) { next.delete(bundle.id); forkOpen.value = next; return }
+            next.add(bundle.id)
+            forkOpen.value = next
+            if (!forksOf[bundle.id]) {
+                const r = await fetch(`/bundle/${bundle.id}/forks`).catch(() => null)
+                const d = r && r.ok ? await r.json().catch(() => null) : null
+                forksOf[bundle.id] = (d && d.forks) || []
+            }
+        }
+
+        // Fork (bundle_fork_routes.py): any signed-in user for a public bundle; owner / admin for a private one.
+        // The server decides for real (daily limit, setting) and says why not.
+        const canFork = (bundle) => numericCurrentUserId.value !== null
+            && (bundle.access || isOwner(bundle) || props.currentUserIsAdmin)
+        async function forkBundle(bundle, reuse = false) {   // reuse: "Suggest changes" opens your fork if you have one
+            const token = props.csrfToken || document.getElementById('csrf_token')?.value || ''
+            const res = await fetch(`/bundle/${bundle.id}/fork`, { method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token }, body: JSON.stringify({ reuse }) })
+            const out = await res.json().catch(() => ({}))
+            if (out.message) create_message(out.message, out.toast_class || (res.ok ? 'success-subtle' : 'danger-subtle'))
+            if (res.ok && out.url) window.location.href = out.url + '?fork_welcome=1'
         }
 
         function isFilterHidden(key) { return props.hiddenFilters.includes(key) }
@@ -1607,6 +1687,7 @@ export default {
         watch(viewMode, () => { page.value = 1; fetchData() })
 
         return {
+            canFork, forkBundle, forkOpen, forksOf, toggleForks,
             items, total, totalPages, loading, page, perPage, perPageModel,
             sortKey, sortDir, search,
             filtersOpen, selectedTags, selectedVulns, selectedAttacks, accessFilter, scopeMine,

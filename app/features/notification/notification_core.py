@@ -1361,3 +1361,57 @@ def notify_favorite_rule_updated(rule, actor_id=None, history_id=None):
         db.session.rollback()
         print(f"[notification_core] notify_favorite_rule_updated error: {e}")
         return 0
+
+
+# ── Bundle forks & merge requests (app/features/bundle/bundle_fork_core.py) ──
+
+def _notify_bundle_fork(user_ids, notif_type, title, body, link, actor_id=None):
+    """One notification per user (not the actor), honours pref_bundle_fork. Never raises."""
+    sent = 0
+    for uid in dict.fromkeys(u for u in user_ids if u and u != actor_id):
+        try:
+            if not _get_pref(uid).pref_bundle_fork:
+                continue
+            db.session.add(Notification(user_id=uid, notif_type=notif_type, title=title[:255], body=body,
+                                        link=link, icon=_TYPE_ICON.get(notif_type), is_read=False,
+                                        created_at=datetime.datetime.utcnow()))
+            sent += 1
+        except Exception as e:
+            print(f"[notification_core] bundle fork notification error: {e}")
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] bundle fork notification error: {e}")
+        return 0
+    return sent
+
+
+def notify_bundle_forked(upstream, fork, actor_id):
+    """The owner of a public bundle: someone forked it (a private fork is never announced)."""
+    if not fork.access:
+        return 0
+    return _notify_bundle_fork([upstream.user_id], 'bundle_forked', f'Your bundle was forked: {upstream.name}',
+                               f'New fork "{fork.name}".', f'/bundle/detail/{fork.id}', actor_id)
+
+
+def notify_bundle_merge_request(mr, event, actor_id):
+    """event: opened / updated (→ target owner) | merged / closed (→ its author, and the target's owner
+    when someone else — an admin — did it). Never the one who acted."""
+    target = mr.target
+    link = f'/bundle/merge_request/{mr.uuid}'
+    if event == 'opened':
+        users, title = [target.user_id] if target else [], f'New merge request on {target.name if target else "your bundle"}: {mr.title}'
+    elif event == 'updated':
+        users, title = [target.user_id] if target else [], f'Merge request updated: {mr.title}'
+    elif event in ('merged', 'closed'):
+        sent = _notify_bundle_fork([mr.user_id], f'bundle_mr_{event}', f'Your merge request was {event}: {mr.title}',
+                                   mr.review_note or None, link, actor_id)
+        if target and target.user_id != mr.user_id:
+            sent += _notify_bundle_fork([target.user_id], f'bundle_mr_{event}',
+                                        f'A merge request on {target.name} was {event}: {mr.title}', mr.review_note or None,
+                                        link, actor_id)
+        return sent
+    else:
+        return 0
+    return _notify_bundle_fork(users, f'bundle_mr_{event}', title, mr.review_note or None, link, actor_id)

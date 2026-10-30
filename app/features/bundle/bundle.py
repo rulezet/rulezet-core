@@ -2386,6 +2386,21 @@ def bundle_data_table():
         else:
             query = query.filter(Bundle.access.is_(True))
 
+    # Forks hang under their original (the card / row shows them): the plain list shows originals only —
+    # and a fork whose original the viewer can't see. A search or a filter lists every match, forks too.
+    grouped = not (search or ids_filter or only_favorites or user_id or tag_names or vuln_list or creator_list or attack_ids)
+    if grouped:
+        from sqlalchemy.orm import aliased
+        Up = aliased(Bundle)
+        query = query.outerjoin(Up, Up.id == Bundle.forked_from_id)
+        if current_user.is_authenticated and current_user.is_admin():
+            query = query.filter(Bundle.forked_from_id.is_(None))
+        elif current_user.is_authenticated:
+            query = query.filter(or_(Bundle.forked_from_id.is_(None),
+                                     (Up.access.is_(False)) & (Up.user_id != current_user.id)))
+        else:
+            query = query.filter(or_(Bundle.forked_from_id.is_(None), Up.access.is_(False)))
+
     _sort_map = {
         'created_at':     Bundle.created_at,
         'updated_at':     Bundle.updated_at,
@@ -2425,7 +2440,17 @@ def bundle_data_table():
         for bid, version, created, _id in rel_rows:
             n_rel[bid] = n_rel.get(bid, 0) + 1
             latest.setdefault(bid, {"version": version, "created_at": created.strftime('%Y-%m-%d %H:%M')})
+        # forks of each bundle the viewer may see, and the name of each fork's original
+        fork_q = db.session.query(Bundle.forked_from_id, _f.count(Bundle.id)).filter(Bundle.forked_from_id.in_(page_ids))
+        if not (current_user.is_authenticated and current_user.is_admin()):
+            fork_q = fork_q.filter(or_(Bundle.access.is_(True),
+                                       Bundle.user_id == (current_user.id if current_user.is_authenticated else -1)))
+        fork_counts = dict(fork_q.group_by(Bundle.forked_from_id).all())
+        up_ids = {i['forked_from_id'] for i in items if i.get('forked_from_id')}
+        up_names = dict(db.session.query(Bundle.id, Bundle.name).filter(Bundle.id.in_(up_ids)).all()) if up_ids else {}
         for item in items:
+            item['fork_count'] = int(fork_counts.get(item['id'], 0))
+            item['forked_from_name'] = up_names.get(item.get('forked_from_id'))
             files, folders = counts.get(item['id'], (0, 0))
             item['number_of_files'] = int(files)
             item['number_of_folders'] = int(folders)

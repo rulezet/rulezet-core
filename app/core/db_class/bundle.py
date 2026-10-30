@@ -39,6 +39,13 @@ class Bundle(db.Model):
     connector_id        = db.Column(db.Integer, db.ForeignKey('connector.id', ondelete='SET NULL'), nullable=True, index=True)
     remote_bundle_uuid  = db.Column(db.String(36), nullable=True, index=True)
 
+    # Forks (docs/future/bundle_forks.md, app/features/bundle/bundle_fork_core.py)
+    forked_from_id     = db.Column(db.Integer, db.ForeignKey('bundle.id', ondelete='SET NULL'), nullable=True, index=True)
+    forked_from_uuid   = db.Column(db.String(255), nullable=True, index=True)   # kept if the upstream disappears
+    fork_base_snapshot = db.Column(db.JSON, nullable=True)      # common ancestor with the upstream (hashes only)
+    fork_base_at       = db.Column(db.DateTime, nullable=True)  # last fork / sync / merge with the upstream
+    accepts_proposals  = db.Column(db.Boolean, nullable=False, default=True, server_default='1')  # merge requests open to others
+
     # Set when this bundle was generated via a workspace's "Export as Bundle" action.
     source_workspace_id = db.Column(db.Integer, db.ForeignKey('workspace.id', ondelete='SET NULL'), nullable=True, index=True)
 
@@ -81,6 +88,9 @@ class Bundle(db.Model):
             "download_count": self.download_count,
             "uuid": self.uuid,
             "created_by": self.created_by,
+            "forked_from_id": self.forked_from_id,
+            "forked_from_uuid": self.forked_from_uuid,
+            "is_fork": bool(self.forked_from_uuid),
             "vulnerability_identifiers": json.loads(self.vulnerability_identifiers) if self.vulnerability_identifiers else [],
             "source_workspace_id": self.source_workspace_id,
         }

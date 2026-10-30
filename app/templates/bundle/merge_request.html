@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}{{ mr.title }} — Merge request — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/comment-thread.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/proposal_discuss.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-fork.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4" id="mr-app" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-code-pull-request banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/bundle/list" class="text-decoration-none text-muted">Bundles</a></li>
+                {% if mr.target %}<li class="breadcrumb-item"><a href="/bundle/detail/{{ mr.target.id }}" class="text-decoration-none text-muted">{% if mr.target.name|length > 40 %}{{ mr.target.name[:40] }}…{% else %}{{ mr.target.name }}{% endif %}</a></li>{% endif %}
+                <li class="breadcrumb-item active text-muted" aria-current="page">Merge request</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-code-pull-request"></i></div>
+            <div><h2 class="fw-bold mb-1" v-pre>{% if mr.title|length > 60 %}{{ mr.title[:60] }}…{% else %}{{ mr.title }}{% endif %}</h2><div class="banner-accent"></div></div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+            {% if mr.kind == 'sync' %}The changes of the upstream bundle, brought into this fork.{% else %}Changes made in a fork, proposed back to the bundle it was forked from.{% endif %}
+        </p>
+    </div>
+
+    <div v-if="!mr" class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+
+    <template v-else>
+        <!-- Header: status, source → target, author, message -->
+        <div class="card h-100 border-0 card_detail border-top shadow-lg position-relative mb-4" style="border-radius:12px;">
+            <div class="card-watermark-detail"><i class="fa-solid fa-code-merge"></i></div>
+            <div class="position-absolute top-0 end-0 mt-3 me-3 d-flex gap-2" style="z-index:2;">
+                <span class="bf-status" :class="'bf-status--' + mr.status"><i :class="statusIcon"></i>[[ mr.status ]]</span>
+                <span v-if="mr.kind === 'sync'" class="bf-status bf-status--sync"><i class="fa-solid fa-rotate"></i>sync</span>
+            </div>
+            <div class="card-body p-4 p-md-5">
+                <div class="bf-route mb-3">
+                    <a v-if="mr.source && mr.source.id" :href="'/bundle/detail/' + mr.source.id" class="bf-route__bundle"><i class="fa-solid fa-code-fork"></i>[[ mr.source.name ]]</a>
+                    <span v-else class="bf-route__bundle is-gone">[[ mr.source ? mr.source.name : '(deleted bundle)' ]]</span>
+                    <i class="fa-solid fa-arrow-right-long bf-route__arrow"></i>
+                    <a v-if="mr.target" :href="'/bundle/detail/' + mr.target.id" class="bf-route__bundle"><i class="fa-solid fa-layer-group"></i>[[ mr.target.name ]]</a>
+                </div>
+                <div class="d-flex flex-wrap align-items-center gap-2 small text-muted mb-3">
+                    <user-chip v-if="mr.user" :user-id="mr.user.id" :username="mr.user.name" size="xs"></user-chip>
+                    <span>opened [[ mr.created_at ]]</span>
+                    <template v-if="mr.reviewed_by"><span>·</span><span>[[ mr.status ]] by</span>
+                        <user-chip :user-id="mr.reviewed_by.id" :username="mr.reviewed_by.name" size="xs"></user-chip>
+                        <span>[[ mr.reviewed_at ]]</span></template>
+                </div>
+
+                <template v-if="!editing">
+                    <div v-if="messageHtml" class="bf-message" v-html="messageHtml"></div>
+                    <p v-else class="text-muted fst-italic small mb-0">No description.</p>
+                    <button v-if="data.is_author && mr.status === 'open'" type="button" class="btn btn-sm btn-link px-0 mt-2" @click="startEdit"><i class="fa-solid fa-pen me-1"></i>Edit title and description</button>
+                </template>
+                <div v-else class="d-flex flex-column gap-2">
+                    <input class="form-control" v-model="edit.title" maxlength="255" aria-label="Title">
+                    <smart-editor v-model="edit.message" mode="markdown" placeholder="What changes and why (Markdown)" min-height="140px" max-height="420px" :hardened-preview="true"></smart-editor>
+                    <div class="d-flex gap-2"><button class="btn btn-sm btn-primary rounded-pill" @click="saveEdit">Save</button>
+                        <button class="btn btn-sm btn-light rounded-pill" @click="editing = false">Cancel</button></div>
+                </div>
+
+                <div v-if="mr.review_note" class="rounded-3 border p-3 mt-3" style="background:var(--light-bg-color);">
+                    <div class="small fw-bold mb-1"><i class="fa-solid fa-comment me-1"></i>Reviewer's note</div>
+                    <div class="small" style="white-space:pre-wrap;">[[ mr.review_note ]]</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panels: the conversation (with what happened, like rule proposals) and the changes -->
+        <nav class="dr-nav mb-3" role="tablist">
+            <button type="button" class="dr-nav__item" :class="{ active: tab === 'conversation' }" @click="setTab('conversation')">
+                <i class="fa-solid fa-comments"></i><span>Conversation</span></button>
+            <button type="button" class="dr-nav__item" :class="{ active: tab === 'changes' }" @click="setTab('changes')">
+                <i class="fa-solid fa-code-compare"></i><span>Changes</span><span class="dr-nav__badge">[[ data.summary.total ]]</span>
+                <span v-if="mr.counts.unresolved" class="dr-nav__badge dr-nav__badge--alert" title="Conflicts to resolve">[[ mr.counts.unresolved ]]</span></button>
+        </nav>
+
+        <!-- ── Conversation ── -->
+        <div v-show="tab === 'conversation'">
+            <!-- where it stands, in one card -->
+            <div class="card border-0 shadow-sm rounded-3 mb-4">
+                <div class="card-body p-4">
+                    <div class="bf-standing">
+                        <div class="bf-standing__item"><b>[[ data.summary.total ]]</b><span>[[ data.summary.total === 1 ? 'change' : 'changes' ]]</span></div>
+                        <div class="bf-standing__item"><b>[[ mr.counts.accepted ]]</b><span>to merge</span></div>
+                        <div class="bf-standing__item" :class="{ 'is-bad': mr.counts.unresolved }"><b>[[ mr.counts.unresolved ]]</b><span>[[ mr.counts.unresolved === 1 ? 'conflict' : 'conflicts' ]] to resolve</span></div>
+                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill ms-auto" @click="setTab('changes')">
+                            <i class="fa-solid fa-code-compare me-1"></i>[[ data.can_review && mr.status === 'open' ? 'Review the changes' : 'See the changes' ]]</button>
+                    </div>
+                    <template v-if="mr.status === 'open' && (data.can_review || data.can_close)">
+                        <hr>
+                        <div v-if="data.blockers.length" class="bf-blockers mb-3"><i class="fa-solid fa-circle-exclamation me-1"></i>[[ data.blockers.join(' ') ]]</div>
+                        <textarea v-if="data.can_review" class="form-control mb-3" rows="2" v-model="note" placeholder="A note for the author, shown with the decision (optional)"></textarea>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button v-if="data.can_review" type="button" class="btn btn-success rounded-pill px-4" :disabled="busy || data.blockers.length > 0" @click="doMerge">
+                                <i class="fa-solid fa-code-merge me-1"></i>Merge [[ mr.counts.accepted ]] [[ mr.counts.accepted === 1 ? 'change' : 'changes' ]]</button>
+                            <button v-if="data.can_close" type="button" class="btn btn-outline-danger rounded-pill px-4" :disabled="busy" @click="doClose">
+                                <i class="fa-solid fa-xmark me-1"></i>Close</button>
+                        </div>
+                    </template>
+                    <div v-if="(mr.status === 'closed' || mr.status === 'stale') && data.can_close" class="mt-3">
+                        <button type="button" class="btn btn-outline-primary rounded-pill" @click="doReopen"><i class="fa-solid fa-rotate-left me-1"></i>Reopen</button>
+                    </div>
+                    <div v-if="mr.status === 'merged' && mr.merged_summary" class="mt-3">
+                        <div class="bf-group-title"><i class="fa-solid fa-code-merge"></i>What the merge did</div>
+                        <ul class="small mb-0">
+                            <li v-for="x in mr.merged_summary.applied" :key="'a' + x">[[ x ]]</li>
+                            <li v-for="x in mr.merged_summary.proposals" :key="'p' + x">[[ x ]]</li>
+                            <li v-for="x in mr.merged_summary.skipped" :key="'s' + x" class="text-muted">left out: [[ x ]]</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-divider">
+                <div class="section-divider__line"></div>
+                <span class="section-divider__label"><i class="fa-solid fa-comments me-1"></i>Discussion</span>
+            </div>
+            <comment-thread
+                object-type="bundle_mr"
+                :object-id="data.id"
+                :can-create="{{ current_user.is_authenticated | tojson }}"
+                :can-edit-own="{{ current_user.is_authenticated | tojson }}"
+                :can-delete-own="{{ current_user.is_authenticated | tojson }}"
+                :can-moderate="{{ (current_user.is_authenticated and current_user.is_admin()) | tojson }}"
+                :current-user-id="{{ current_user.id if current_user.is_authenticated else 0 }}"
+                :allow-markdown="true"
+                :system-events="data.system_events || []"
+                :oldest-first="true"
+                csrf-token="{{ csrf_token() }}">
+            </comment-thread>
+        </div>
+
+        <!-- ── Changes ── -->
+        <div v-show="tab === 'changes'">
+            <div class="bf-summary mb-3">
+                <span v-if="data.summary.rules"><i class="fa-solid fa-shield-halved"></i>[[ data.summary.rules ]] rule(s)</span>
+                <span v-if="data.summary.files"><i class="fa-solid fa-file-lines"></i>[[ data.summary.files ]] file(s)</span>
+                <span v-if="data.summary.folders"><i class="fa-solid fa-folder"></i>[[ data.summary.folders ]] folder(s)</span>
+                <span v-if="data.summary.meta"><i class="fa-solid fa-circle-info"></i>[[ data.summary.meta ]] detail(s)</span>
+                <span v-if="data.summary.conflicts" class="text-danger"><i class="fa-solid fa-triangle-exclamation"></i>[[ data.summary.conflicts ]] conflict(s), [[ mr.counts.unresolved ]] to resolve</span>
+                <span v-if="mr.status === 'open' && mr.computed_at" class="ms-auto small text-muted" title="Recomputed each time the page opens">
+                    <i class="fa-solid fa-rotate me-1"></i>up to date — [[ mr.computed_at ]]</span>
+            </div>
+            <p v-if="data.can_review && mr.status === 'open'" class="small text-muted mb-3">
+                <i class="fa-solid fa-circle-info me-1"></i>Every change is taken unless you leave it out (<i class="fa-solid fa-xmark"></i>).
+                A conflict needs a side. Then go back to <a href="#" @click.prevent="setTab('conversation')">Conversation</a> to merge.</p>
+            <div class="card border-0 shadow-sm rounded-3 mb-4">
+                <div class="card-body p-4">
+                    <bundle-change-list :items="items" :reviewable="data.can_review && mr.status === 'open'"
+                        :left-label="mr.target ? mr.target.name : 'Target'" :right-label="mr.source ? mr.source.name : 'Source'"
+                        @decide="e => decide(e.item, e.decision, e.rule_mode)"></bundle-change-list>
+                </div>
+            </div>
+        </div>
+    </template>
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    import { create_message } from '/static/js/toaster.js';
+    import { renderMarkdown } from '/static/js/sanitize.js';
+    import BundleChangeList from '/static/js/bundle/BundleChangeList.js';
+    import UserChip from '/static/js/components/UserChip.js';
+    import CommentThread from '/static/js/components/comments/comment-thread.js';
+    import SmartEditor from '/static/js/components/smart-editor.js';
+    const { createApp, ref, reactive, computed, onMounted } = Vue;
+
+    const MR_UUID = {{ mr.uuid | tojson }};
+    const CSRF = {{ csrf_token() | tojson }};
+
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: { 'bundle-change-list': BundleChangeList, 'user-chip': UserChip, 'comment-thread': CommentThread, 'smart-editor': SmartEditor },
+        setup() {
+            const data = ref(null);
+            const mr = computed(() => data.value);
+            const items = computed(() => (data.value && data.value.items) || []);
+            const messageHtml = ref('');
+            const note = ref('');
+            const busy = ref(false);
+            const editing = ref(false);
+            const tab = ref(location.hash === '#changes' ? 'changes' : 'conversation');
+            const setTab = (t) => { tab.value = t; history.replaceState(null, '', t === 'changes' ? '#changes' : location.pathname + location.search); };
+            const edit = reactive({ title: '', message: '' });
+            const statusIcon = computed(() => ({ open: 'fa-solid fa-code-pull-request', merged: 'fa-solid fa-code-merge',
+                                                 closed: 'fa-solid fa-circle-xmark', stale: 'fa-solid fa-hourglass-end' }[mr.value && mr.value.status]));
+
+            // Always up to date: the server recomputes an open merge request's changes on every load
+            // (either bundle may have changed since), and again when the tab comes back to the front.
+            async function load() {
+                const res = await fetch(`/bundle/merge_request/${MR_UUID}/json?refresh=1`);
+                if (!res.ok) { create_message('This merge request could not be loaded.', 'danger-subtle'); return; }
+                data.value = await res.json();
+                messageHtml.value = data.value.message ? await renderMarkdown(data.value.message) : '';
+            }
+            async function post(path, body = {}) {
+                busy.value = true;
+                try {
+                    const res = await fetch(`/bundle/merge_request/${MR_UUID}/${path}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF }, body: JSON.stringify(body) });
+                    const out = await res.json().catch(() => ({}));
+                    if (out.message) create_message(out.message, out.toast_class || (res.ok ? 'success-subtle' : 'danger-subtle'));
+                    return res.ok ? out : null;
+                } finally { busy.value = false; }
+            }
+            async function decide(it, decision, rule_mode) {
+                const out = await post('decision', { item_id: it.id, decision, rule_mode: rule_mode || undefined });
+                if (out) { it.decision = decision; if (rule_mode !== undefined) it.rule_mode = rule_mode; data.value.blockers = out.blockers; data.value.counts = out.counts; }
+            }
+            async function doMerge() { if (await post('merge', { note: note.value })) load(); }
+            async function doClose() { if (await post('close', { note: note.value })) load(); }
+            async function doReopen() { if (await post('reopen')) load(); }
+            function startEdit() { edit.title = mr.value.title; edit.message = mr.value.message; editing.value = true; }
+            async function saveEdit() { if (await post('edit', { ...edit })) { editing.value = false; load(); } }
+
+            onMounted(() => {
+                load();
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible' && data.value && data.value.status === 'open') load();
+                });
+            });
+            return { tab, setTab, data, mr, items, messageHtml, note, busy, editing, edit, statusIcon,
+                     load, decide, doMerge, doClose, doReopen, startEdit, saveEdit };
+        },
+    }).mount('#mr-app');
+</script>
+{% endblock %}

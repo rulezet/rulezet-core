@@ -27,7 +27,7 @@ from app import db
 
 comment_ns = Namespace('comments', description='Unified comment thread API')
 
-_VALID_OBJECT_TYPES = {'rule', 'bundle', 'proposal', 'blog_post'}
+_VALID_OBJECT_TYPES = {'rule', 'bundle', 'proposal', 'blog_post', 'bundle_mr'}
 _PER_PAGE_MAX = 50
 
 # Official rulezet-core repo — admin-proposed issues from comments always land here,
@@ -65,6 +65,10 @@ def _can_read_object(object_type, object_id) -> bool:
     if object_type == 'proposal':
         proposal = db.session.get(RuleEditProposal, object_id)
         return bool(proposal) and _can_read_object('rule', proposal.rule_id)
+    if object_type == 'bundle_mr':
+        from app.core.db_class.bundle_fork import BundleMergeRequest
+        from app.features.bundle.bundle_fork_core import can_view_mr
+        return can_view_mr(db.session.get(BundleMergeRequest, object_id))
     return False
 
 
@@ -89,6 +93,10 @@ def _user_can_read_object(user, object_type, object_id) -> bool:
     if object_type == 'blog_post':
         post = db.session.get(BlogPost, object_id)
         return bool(post) and ((post.is_public and not post.is_draft) or post.user_id == user.id or is_admin)
+    if object_type == 'bundle_mr':
+        from app.core.db_class.bundle_fork import BundleMergeRequest
+        from app.features.bundle.bundle_fork_core import can_view_mr
+        return can_view_mr(db.session.get(BundleMergeRequest, object_id), user)
     return False
 
 
@@ -372,6 +380,26 @@ class CommentList(Resource):
                         parent_comment = UnifiedComment.query.get(parent_id)
                         if parent_comment and parent_comment.created_by:
                             notify_comment_reply(parent_comment.created_by, current_user.id, blog_post.title, link)
+
+            elif object_type == 'bundle_mr':
+                from app.core.db_class.bundle_fork import BundleMergeRequest
+                from app.core.db_class.user import User
+                mr = db.session.get(BundleMergeRequest, object_id)
+                if mr:
+                    title = mr.title
+                    link = f'/bundle/merge_request/{mr.uuid}?comment={comment.id}'
+                    log_activity("bundle.mr_comment", f"Commented on merge request '{mr.title}'",
+                                 target_type="bundle_merge_request", target_uuid=mr.uuid,
+                                 icon="fa-solid fa-comment", is_public=bool(mr.target and mr.target.access))
+                    # both sides of the merge request hear about it (not the commenter)
+                    from app.features.notification.notification_core import _notify_bundle_fork
+                    _notify_bundle_fork([mr.user_id, mr.target.user_id if mr.target else None], 'bundle_mr_comment',
+                                        f'New comment on merge request: {mr.title}', None, link, current_user.id)
+                    if parent_id:
+                        parent_comment = UnifiedComment.query.get(parent_id)
+                        if parent_comment and parent_comment.created_by and \
+                                _user_can_read_object(db.session.get(User, parent_comment.created_by), 'bundle_mr', object_id):
+                            notify_comment_reply(parent_comment.created_by, current_user.id, title, link)
 
             # ── @mentions — any object type, "@[Display Name](id)" tokens ──
             # Only existing users who can open the object hear about it — a

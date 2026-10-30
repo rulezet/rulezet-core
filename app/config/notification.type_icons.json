@@ -45,6 +45,12 @@
         "ai_analysis_accepted": "fa-solid fa-wand-magic-sparkles",
         "ai_analysis_rejected": "fa-solid fa-circle-xmark",
         "new_version": "fa-solid fa-arrow-up-right-dots",
-        "favorite_rule_update": "fa-solid fa-star"
+        "favorite_rule_update": "fa-solid fa-star",
+        "bundle_forked": "fa-solid fa-code-fork",
+        "bundle_mr_opened": "fa-solid fa-code-pull-request",
+        "bundle_mr_merged": "fa-solid fa-code-merge",
+        "bundle_mr_closed": "fa-solid fa-circle-xmark",
+        "bundle_mr_updated": "fa-solid fa-rotate",
+        "bundle_mr_comment": "fa-solid fa-comment"
     }
 }

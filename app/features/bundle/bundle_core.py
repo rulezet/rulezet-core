@@ -386,7 +386,28 @@ def update_bundle(bundle_id: int, form_dict: dict ) -> Bundle | None:
         bundle.access = form_dict["public"]
     bundle.updated_at = datetime.datetime.now(tz=datetime.timezone.utc)
     db.session.commit()
+    if not bundle.access:
+        _fork_side_effects(bundle_id)
     return bundle
+
+
+def _fork_side_effects(bundle_id: int, deleted: bool = False):
+    """A bundle went private or is deleted: its open merge requests as source go stale; deleted, its
+    forks keep forked_from_uuid but lose the link (bundle_fork_core.py)."""
+    try:
+        from app.features.bundle.bundle_fork_core import on_bundle_hidden_or_deleted
+        on_bundle_hidden_or_deleted(bundle_id)
+        if deleted:
+            # the oldest fork becomes the original; the other forks now hang under it
+            forks = Bundle.query.filter_by(forked_from_id=bundle_id).order_by(Bundle.created_at, Bundle.id).all()
+            if forks:
+                head = forks[0]
+                head.forked_from_id, head.forked_from_uuid, head.fork_base_snapshot = None, None, None
+                for f in forks[1:]:
+                    f.forked_from_id, f.forked_from_uuid = head.id, head.uuid
+                db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 def delete_bundle(bundle_id: int) -> bool:
@@ -402,6 +423,7 @@ def delete_bundle(bundle_id: int) -> bool:
     # comment_v2 targets bundles via object_type/object_id, not a real FK,
     # so it needs an explicit purge.
     purge_unified_comments('bundle', bundle_id)
+    _fork_side_effects(bundle_id, deleted=True)
     db.session.delete(bundle)
     db.session.commit()
     return True
@@ -842,6 +864,8 @@ def toggle_bundle_accessibility(bundle_id: int) -> bool:
         return False , "Bundle not found"
     bundle.access = not bundle.access
     db.session.commit()
+    if not bundle.access:
+        _fork_side_effects(bundle_id)
     return True , "Bundle access toggled successfully"
 
 def get_bundles_of_user_with_id_page(

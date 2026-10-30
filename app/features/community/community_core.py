@@ -35,6 +35,11 @@ def object_context_path(object_type, object_id, blog_slug=None):
         return f'/rule/proposal_content_discuss?id={object_id}'
     if object_type == 'blog_post':
         return f'/blog/post/{blog_slug or object_id}'
+    if object_type == 'bundle_mr':
+        from app import db
+        from app.core.db_class.bundle_fork import BundleMergeRequest
+        mr = db.session.get(BundleMergeRequest, object_id)
+        return f'/bundle/merge_request/{mr.uuid}' if mr else '/'
     return '/'
 
 
