@@ -290,6 +290,16 @@ def create_app(start_worker=True):
         }
 
     @app.context_processor
+    def inject_nav_state():
+        # Navbar counters + unread bell + active jobs, rendered in the page (app/core/utils/nav_state.py)
+        from flask_login import current_user as _cu
+        from app.core.utils.nav_state import nav_state
+        try:
+            return {'nav_state': nav_state(_cu)}
+        except Exception:
+            return {'nav_state': {}}
+
+    @app.context_processor
     def inject_globals():
         from flask import current_app
         from app.core.db_class.ai import AIAgentConfig

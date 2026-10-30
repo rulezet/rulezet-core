@@ -2,7 +2,8 @@
  * jobWidget.js — Floating background-job status widget
  * Mounts on #job-widget in base.html.
  *
- * Polling is on-demand, not permanent: one /jobs/my_active call on page load,
+ * Polling is on-demand, not permanent: no request on page load unless the page
+ * says this user has an active job (window.RZ_NAV.active_jobs, nav_state.py),
  * then a 5 s loop ONLY while at least one job is pending/running/paused.
  * Once every job is terminal (or there are none) the loop stops — an idle
  * user costs a single request per page load.
@@ -11,7 +12,7 @@
  *   - window event 'rz:job-created' — dispatched by any page right after it
  *     creates a background job (fire-and-forget, no import needed):
  *         window.dispatchEvent(new Event('rz:job-created'))
- *   - tab regaining focus / becoming visible (catches jobs created elsewhere)
+ *   - tab regaining focus / becoming visible, when the widget shows jobs
  *
  * Dismissed job UUIDs are stored in sessionStorage and survive page
  * navigation within the same tab, but reset on a new session.
@@ -180,7 +181,10 @@ const JobWidget = {
         }
 
         function onVisible() {
-            if (document.visibilityState === 'visible') wake()
+            if (document.visibilityState === 'visible' && jobs.value.length) wake()
+        }
+        function onFocus() {
+            if (jobs.value.length) wake()
         }
 
         // ── Toggle log panel ─────────────────────────────────────────────────
@@ -297,11 +301,11 @@ const JobWidget = {
 
         // ── Lifecycle ────────────────────────────────────────────────────────
         onMounted(() => {
-            wake()
+            if ((window.RZ_NAV && window.RZ_NAV.active_jobs) || 0) wake()
             window.addEventListener('rz:job-created', wake)
             window.addEventListener('rz:job-widget-settings-changed', onSettingsChanged)
             document.addEventListener('visibilitychange', onVisible)
-            window.addEventListener('focus', wake)
+            window.addEventListener('focus', onFocus)
         })
 
         onUnmounted(() => {
@@ -309,7 +313,7 @@ const JobWidget = {
             window.removeEventListener('rz:job-created', wake)
             window.removeEventListener('rz:job-widget-settings-changed', onSettingsChanged)
             document.removeEventListener('visibilitychange', onVisible)
-            window.removeEventListener('focus', wake)
+            window.removeEventListener('focus', onFocus)
         })
 
         return {

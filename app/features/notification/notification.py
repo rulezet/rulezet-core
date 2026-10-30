@@ -18,6 +18,15 @@ def _require_auth():
         abort(401)
 
 
+@notification_blueprint.after_request
+def _refresh_nav_state(response):
+    # Read / deleted a notification: the next page shows the new unread count at once.
+    if request.method != 'GET' and current_user.is_authenticated:
+        from app.core.utils.nav_state import forget
+        forget(current_user.id)
+    return response
+
+
 # ── Bell API ───────────────────────────────────────────────────────────────────
 
 @notification_blueprint.get('/unread_count')

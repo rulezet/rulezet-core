@@ -5,11 +5,11 @@
  * Mounts on #notif-bell-app.
  * Opens/closes the #notifOffcanvas Bootstrap offcanvas.
  *
- * No background polling at all: every fetch (bell badge/count, "All" tab,
- * "Jobs" tab) happens once on mount/open and on explicit events (a job you
- * just started, a notification you just read). Reload the page to see
- * something new that arrived while you weren't looking — nothing here
- * silently hits the server on a timer.
+ * No request on page load: the badge starts from the unread count rendered in
+ * the page (window.RZ_NAV.unread, app/core/utils/nav_state.py). The list is
+ * fetched only when the panel opens, or on explicit events (a job you just
+ * started, a notification you just read). Reload the page to see something
+ * new that arrived meanwhile — nothing here hits the server on a timer.
  *
  * Bell persistence rule for jobs:
  *   A job notification stays visible in the bell until BOTH:
@@ -77,7 +77,9 @@ const NotificationBell = {
         const notifStyle = computed(() => localStorage.getItem('rz-notif-style') || 'discrete')
 
         // ── Computed ─────────────────────────────────────────────────────────
-        const unreadCount = computed(() => items.value.filter(n => !n.is_read).length)
+        const loaded      = ref(false)
+        const serverUnread = (window.RZ_NAV && window.RZ_NAV.unread) || 0
+        const unreadCount = computed(() => loaded.value ? items.value.filter(n => !n.is_read).length : serverUnread)
 
         const showBanner = computed(() =>
             notifStyle.value === 'prominent' && unreadCount.value > 0 && !bannerDismissed.value
@@ -95,6 +97,7 @@ const NotificationBell = {
                 const data = await apiFetch('/notifications/bell')
                 if (data) {
                     items.value = data
+                    loaded.value = true
                     // Reset banner dismiss when new unread arrive
                     if (unreadCount.value > 0) bannerDismissed.value = false
                 }
@@ -173,7 +176,6 @@ const NotificationBell = {
                 bsOffcanvas = new bootstrap.Offcanvas(offcanvasEl.value)
                 offcanvasEl.value.addEventListener('show.bs.offcanvas', fetchBell)
             }
-            fetchBell()
             window.addEventListener('rz:job-created', fetchBell)
             window.addEventListener('rz:notif-read', fetchBell)
         })
@@ -304,7 +306,6 @@ const NotificationPanel = {
             if (el) {
                 el.addEventListener('show.bs.offcanvas', fetchAll)
             }
-            fetchAll()
             window.addEventListener('rz:job-created', fetchAll)
         })
 

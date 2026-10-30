@@ -505,44 +505,16 @@
       components: { GlobalSearch },
       setup() {
 
-         // ── Admin counters ────────────────────────────────────────────────
-         const requests_to_validate = ref(0)
-         const changes_to_validate  = ref(0)
-         const update_to_validate   = ref(0)
-         const running_jobs_count   = ref(0)
-         const reports_to_check     = ref(0)
-
-         async function getNbRequestAdmin() {
-            try { requests_to_validate.value = (await (await fetch('/request_to_check')).json()).count || 0 } catch {}
-         }
-         async function getNbChanges() {
-            try { changes_to_validate.value = (await (await fetch('/rule/change_to_check')).json()).count || 0 } catch {}
-         }
-         async function getNbUpdate() {
-            try { update_to_validate.value = (await (await fetch('/rule/update_to_check')).json()).count || 0 } catch {}
-         }
-         async function getRunningJobs() {
-            try {
-               const data = await (await fetch('/jobs/get_jobs?status=running')).json()
-               running_jobs_count.value = Array.isArray(data) ? data.length : 0
-            } catch { running_jobs_count.value = 0 }
-         }
-         async function getReportsToCheck() {
-            try { reports_to_check.value = (await (await fetch('/report/count')).json()).count || 0 } catch {}
-         }
-
-         // ── Init ────────────────────────────────────────────────────────────
-         onMounted(() => {
-            getNbRequestAdmin()
-            getNbChanges()
-            getNbUpdate()
-            getRunningJobs()
-            getReportsToCheck()
-         })
+         // ── Counters: rendered by the server (app/core/utils/nav_state.py), no request ──
+         const NAV = {{ (nav_state or {}) | tojson }}
+         const requests_to_validate = ref(NAV.requests_to_check || 0)
+         const changes_to_validate  = ref(NAV.changes_to_check || 0)
+         const update_to_validate   = ref(NAV.updates_to_check || 0)
+         const reports_to_check     = ref(NAV.reports_to_check || 0)
 
          return {
             requests_to_validate, changes_to_validate,
-            update_to_validate, running_jobs_count, reports_to_check,
+            update_to_validate, reports_to_check,
             currentUserId, isAdmin, isAuthenticated, NAV_PAGES,
          }
       },
