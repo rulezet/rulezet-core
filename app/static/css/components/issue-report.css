@@ -1,0 +1,24 @@
+/* "Create issue" window — js/components/issue-report.js (loaded by the component itself) */
+.irp-modal { position: fixed; inset: 0; background: rgba(15,23,42,.5); z-index: 2070; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.irp-box { background: var(--card-bg-color); color: var(--text-color); border-radius: 16px; width: 100%; max-width: 900px; max-height: calc(100vh - 32px);
+           display: flex; flex-direction: column; box-shadow: 0 24px 70px rgba(0,0,0,.3); overflow: hidden; }
+.irp-head { display: flex; align-items: center; justify-content: space-between; padding: .9rem 1.2rem; border-bottom: 1px solid var(--border-color); }
+.irp-title { font-weight: 800; font-size: 1.05rem; }
+.irp-title i { color: #dc3545; }
+.irp-x { border: 0; background: none; font-size: 1.5rem; line-height: 1; color: var(--subtle-text-color); }
+.irp-sub { display: flex; gap: .6rem; align-items: center; padding: .7rem 1.2rem; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; }
+.irp-issue-title { flex: 1; min-width: 220px; font-weight: 600; }
+.irp-tabs { display: inline-flex; gap: 3px; padding: 3px; border-radius: 999px; background: var(--light-bg-color); border: 1px solid var(--border-color); }
+.irp-tabs button { border: 0; background: none; color: var(--subtle-text-color); font-size: .78rem; font-weight: 600; padding: .25rem .75rem; border-radius: 999px; display: inline-flex; gap: .35rem; align-items: center; }
+.irp-tabs button.is-on { background: #0d6efd; color: #fff; }
+.irp-body { padding: 1rem 1.2rem; overflow-y: auto; flex: 1; min-height: 240px; }
+.irp-preview { font-size: .88rem; overflow-wrap: anywhere; }
+.irp-preview h2 { font-size: 1.2rem; font-weight: 800; }
+.irp-preview h3 { font-size: 1rem; font-weight: 700; margin-top: 1rem; }
+.irp-preview pre { background: var(--light-bg-color); padding: .6rem; border-radius: 8px; font-size: .76rem; white-space: pre-wrap; }
+.irp-preview details { border: 1px solid var(--border-color); border-radius: 8px; padding: .4rem .7rem; margin-bottom: .5rem; }
+.irp-preview summary { cursor: pointer; }
+.irp-md { font-family: var(--bs-font-monospace); font-size: .78rem; min-height: 55vh; }
+.irp-foot { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .8rem 1.2rem; border-top: 1px solid var(--border-color); flex-wrap: wrap; }
+.irp-hint { font-size: .76rem; color: var(--subtle-text-color); }
+.irp-actions { display: flex; gap: .4rem; flex-wrap: wrap; }

@@ -71,33 +71,12 @@ def list_posts():
 
 
 def _share_card(post):
-    """What a link to the post shows on social networks / chat apps (Open Graph, Twitter card):
-    they read the HTML as the server sends it, without running the page's Vue, so it is filled here."""
-    import re as _re
-    base = (current_app.config.get('INSTANCE_PUBLIC_URL') or request.url_root).rstrip('/')
-    text = post.excerpt or ''
-    if not text:
-        # the post's first words, Markdown / HTML stripped
-        raw = _re.sub(r'```.*?```', ' ', post.content or '', flags=_re.S)
-        raw = _re.sub(r'<[^>]+>|!\[[^\]]*\]\([^)]*\)', ' ', raw)
-        raw = _re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', raw)
-        raw = _re.sub(r'[#>*_`|~-]+', ' ', raw)
-        text = ' '.join(raw.split())
-    if len(text) > 200:
-        text = text[:197].rsplit(' ', 1)[0] + '…'
-    image = post.cover_image_url or url_for('static', filename='image/logo.png')
-    if image.startswith('/'):
-        image = base + image
-    elif not image.lower().startswith(('http://', 'https://')):
-        image = None
-    return {
-        'title': post.title,
-        'description': text or 'Security blog post from the Rulezet team.',
-        'url': base + url_for('blog.detail', post_uuid=post.uuid),
-        'image': image,
-        'published': post.published_at.strftime('%Y-%m-%dT%H:%M:%SZ') if post.published_at else None,
-        'author': ((post.author.first_name or '') + ' ' + (post.author.last_name or '')).strip() if post.author else None,
-    }
+    """Link preview of a post (app/core/utils/share_card.py): excerpt or first words, cover image, date, author."""
+    from app.core.utils.share_card import share_card
+    author = ((post.author.first_name or '') + ' ' + (post.author.last_name or '')).strip() if post.author else None
+    return share_card(post.title, post.excerpt or post.content or 'Security blog post from the Rulezet team.',
+                      path=url_for('blog.detail', post_uuid=post.uuid), image=post.cover_image_url,
+                      kind='article', published=post.published_at, author=author)
 
 
 @blog_blueprint.route('/post/<string:post_uuid>')

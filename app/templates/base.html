@@ -7,6 +7,28 @@
     <script type="importmap">{{ static_import_map() | tojson }}</script>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>{% block title %}RULEZET{% endblock %}</title>
+    {# Link previews (LinkedIn, Mastodon, Slack, X…): a page's own card (app/core/utils/share_card.py),
+       else the instance's default one — crawlers read this HTML without running Vue #}
+    {% set _card = card if card is defined and card else {
+        'title': 'Rulezet', 'type': 'website', 'url': request.base_url,
+        'description': 'Community platform for cybersecurity detection rules: YARA, Sigma, Suricata, Zeek and more.',
+        'image': request.url_root.rstrip('/') ~ url_for('static', filename='image/rulezet_official_logo.png')} %}
+    <meta name="description" content="{{ _card.description }}">
+    <link rel="canonical" href="{{ _card.url }}">
+    <meta property="og:type" content="{{ _card.type or 'website' }}">
+    <meta property="og:site_name" content="Rulezet">
+    <meta property="og:title" content="{{ _card.title }}">
+    <meta property="og:description" content="{{ _card.description }}">
+    <meta property="og:url" content="{{ _card.url }}">
+    {% if _card.image %}<meta property="og:image" content="{{ _card.image }}">
+    <meta property="og:image:alt" content="{{ _card.title }}">{% endif %}
+    {% if _card.published %}<meta property="article:published_time" content="{{ _card.published }}">{% endif %}
+    {% if _card.author %}<meta property="article:author" content="{{ _card.author }}">
+    <meta name="author" content="{{ _card.author }}">{% endif %}
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ _card.title }}">
+    <meta name="twitter:description" content="{{ _card.description }}">
+    {% if _card.image %}<meta name="twitter:image" content="{{ _card.image }}">{% endif %}
 
     {# Inject custom themes before theme.js so applyTheme() knows about them #}
     <script>window.__CUSTOM_THEMES__ = {{ custom_themes_for_js | tojson | safe }};</script>

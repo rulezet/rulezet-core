@@ -92,6 +92,14 @@ def _can_manage_update_session(updater) -> bool:
     return updater.mode == 'by_rule' and str(updater.user_id) == str(current_user.id)
 
 
+def _rule_card(rule):
+    """Link preview of a rule page (app/core/utils/share_card.py)."""
+    from app.core.utils.share_card import share_card
+    return share_card(f"{rule.title} ({(rule.format or '').upper()} rule)",
+                      rule.description or f"{(rule.format or '').upper()} detection rule on Rulezet.",
+                      path=f"/rule/detail_rule/{rule.id}", author=rule.author)
+
+
 @rule_blueprint.route("/create_rule", methods=['GET', 'POST'])
 @login_required
 def rule() -> render_template:
@@ -982,6 +990,7 @@ def detail_rule_by_uuid(rule_uuid):
         rule_risk = RuleModel.get_rule_risk_flags(rule)
         from app.features.admin.rule_mirror.rule_mirror_core import get_mirror_github_urls
         return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string,
+                               card=_rule_card(rule),
                                rule_misp_object=rule_misp_object, rule_misp_event=rule_misp_event,
                                rule_velociraptor_artifact=rule_velociraptor_artifact,
                                rule_to_json=rule_to_json, active_tab=active_tab,
@@ -1116,6 +1125,7 @@ def detail_rule(rule_id)-> render_template:
         rule_risk = RuleModel.get_rule_risk_flags(rule)
         from app.features.admin.rule_mirror.rule_mirror_core import get_mirror_github_urls
         return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string,
+                               card=_rule_card(rule),
                                rule_misp_object=rule_misp_object, rule_misp_event=rule_misp_event,
                                rule_velociraptor_artifact=rule_velociraptor_artifact,
                                rule_to_json=rule_to_json, active_tab=active_tab,

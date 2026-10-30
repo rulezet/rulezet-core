@@ -6,6 +6,7 @@ import GithubActionModal from '/static/js/rule/github/githubActionModal.js';
 import JobTracker from '/static/js/jobs/JobTracker.js';
 import { message_list, create_message } from '/static/js/toaster.js'
 import { repoTreeUrl as gitTreeUrl, gitProviderIcon, gitProviderLabel } from '/static/js/components/git-links.js'
+import IssueReport, { openIssueReport } from '/static/js/components/issue-report.js'
 
 // Columns hidden behind the column-picker (same pattern as ruleList.js) —
 // URL/Rules/Actions stay always visible, everything else is optional.
@@ -32,6 +33,7 @@ const GitHubSelectionTable = {
     },
     delimiters: ['[[', ']]'],
     components: {
+        'issue-report': IssueReport,
         'pagination-component': PaginationComponent,
         'github-filter': GithubFilter,
         'github-action-modal': GithubActionModal,
@@ -65,7 +67,7 @@ const GitHubSelectionTable = {
 
             sortKey: new URLSearchParams(window.location.search).get('sort') || 'url',
             sortDir: new URLSearchParams(window.location.search).get('dir') || 'asc',
-            colVisible: Object.fromEntries(TOGGLEABLE_COLS.map(c => [c.key, true])),
+            colVisible: Object.fromEntries(TOGGLEABLE_COLS.map(c => [c.key, c.key !== 'license'])),
             showColPicker: false,
             colPickerStyle: {},
 
@@ -146,6 +148,9 @@ const GitHubSelectionTable = {
         document.removeEventListener('click', this.handleColPickerOutsideClick);
     },
     methods: {
+        createIssue(item) {
+            openIssueReport('/rule/github/issue_report?url=' + encodeURIComponent(item.url));
+        },
         async setCirclBadge(item, value) {
             const res = await fetch('/rule/github_repo/circl_badge', {
                 method: 'POST',
@@ -452,6 +457,7 @@ const GitHubSelectionTable = {
 
     template: `
     <div class="dt-wrapper">
+        <issue-report></issue-report>
         <!-- ── GitHub API rate-limit banner — big and hard to miss when
              actually exhausted (explains otherwise-confusing import/backfill
              failures); silent when healthy (see the small pill in the
@@ -776,6 +782,10 @@ const GitHubSelectionTable = {
                                        class="dt-action-btn" title="View Details">
                                         <i class="fas fa-eye"></i>
                                     </a>
+                                    <button v-if="currentUserIsAdmin" class="dt-action-btn" @click="createIssue(item)"
+                                            title="Create issue — a Markdown report of what went wrong importing it (bad rules, references, failed updates) to post on the repository">
+                                        <i class="fas fa-bug"></i>
+                                    </button>
                                     <template v-if="isAdmin">
                                         <button class="dt-action-btn"
                                                 @click="updateSingleRepo(item)"

@@ -65,6 +65,7 @@ import CodeViewer               from '/static/js/components/code-viewer.js'
 import RuleExportAction         from '/static/js/rule/ruleExportAction.js'
 import { create_message }       from '/static/js/toaster.js'
 import ReportModal              from '/static/js/components/ReportModal.js'
+import IssueReport, { openIssueReport } from '/static/js/components/issue-report.js'
 import MultiAttackFilter        from '/static/js/attack/multiAttackFilter.js'
 import AttackDisplayList        from '/static/js/attack/attackDisplayList.js'
 import YaraMatchDetail           from '/static/js/rule_tester/YaraMatchDetail.js'
@@ -88,6 +89,7 @@ const { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue
 export default {
     name: 'RuleList',
     components: {
+        IssueReport,
         PaginationComponent,
         MultiVulnerabilityFilter,
         MultiSourceFilter,
@@ -267,6 +269,8 @@ export default {
 
     template: `
     <div class="rl-wrapper">
+        <!-- "Create issue" window (one per page, components/issue-report.js) -->
+        <issue-report></issue-report>
 
         <!-- ── Toolbar: search + sort + view toggle ── -->
         <div class="rl-toolbar">
@@ -1473,6 +1477,10 @@ export default {
                                                class="rl-action-item">
                                                 <i class="fas fa-eye"></i> View
                                             </a>
+                                            <button v-if="currentUserIsAdmin" class="rl-action-item" @click.stop="createIssue(rule)"
+                                                    title="A Markdown report of this rule (evaluation, errors) to post as an issue on its repository">
+                                                <i class="fas fa-bug"></i> Create issue
+                                            </button>
                                             <template v-if="currentUserIsAuthenticated">
                                                 <report-modal
                                                     object-type="rule"
@@ -2849,7 +2857,10 @@ export default {
             if (val !== 'content') collapseAll()
         })
 
+        const createIssue = (rule) => openIssueReport('/rule/' + rule.id + '/issue_report')
+
         return {
+            createIssue,
             searchIdKind,
             orgOwners, hasOrgBadge, filterByOrgBadge,
             contentSearch, ruleHref, filterByPlatform, linkedShown,
