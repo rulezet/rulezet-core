@@ -359,6 +359,8 @@
 
     {% if current_user.is_authenticated %}
     <div id="job-widget"></div>
+    {# unread notifications / active jobs as of this page (nav_state.py): the bell and the job widget start from these, no request #}
+    <script>window.RZ_NAV = {{ (nav_state or {}) | tojson }};</script>
     <script type="module" src="{{ url_for('static', filename='js/jobs/jobWidget.js') }}"></script>
     <script type="module" src="{{ url_for('static', filename='js/notification/notificationBell.js') }}"></script>
     {% if badge_check_pending %}
