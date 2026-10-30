@@ -194,9 +194,54 @@ _LOG_NOISE = ("Starting gunicorn", "Listening at:", "Using worker:",
 _STOPPING = threading.Event()          # CTRL+C: children ending is expected, not an incident
 
 
+def _ts() -> str:
+    """When a log line happened — "10-30 09:12:03" (month-day, local time), grey."""
+    return f"\033[0;90m{time.strftime('%m-%d %H:%M:%S')}\033[0m"
+
+
 def _event(color: str, icon: str, tag: str, text: str) -> None:
     """A lifecycle line (start, restart, job done…): icon + bold text, stands out from plain logs."""
-    _say(f"\033[0;90m  {tag} │\033[0m \033[1;{color}m{icon} {text}\033[0m")
+    _say(f"  {_ts()} \033[0;90m{tag} │\033[0m \033[1;{color}m{icon} {text}\033[0m")
+
+
+_COLUMNS_MIN = 120          # terminal width from which web requests go left and API requests right
+
+
+def _request_line(kind: str, ip: str, code: int, color: str, method: str, path: str, secs: float) -> str:
+    """One request, laid out in two columns when the terminal is wide enough: the site's pages on
+    the left, API calls on the right (each half its own scroll of the eye) — a single column otherwise."""
+    import shutil
+    width = shutil.get_terminal_size((100, 20)).columns
+    badge = "\033[1;35m" if kind == "api " else "\033[1;34m"     # api magenta, web blue
+    ms = f"{secs * 1000:.0f} ms"
+    if width < _COLUMNS_MIN:
+        return (f"  {_ts()} {badge}{kind}\033[0;90m │\033[0m \033[0;36m{ip:<15}\033[0;90m │\033[0m "
+                f"\033[{color}m{code}\033[0m {method:<6} {path} \033[0;90m{ms}\033[0m")
+    half = width // 2
+    ip = ip[:15]
+    # visible: "  10-30 09:12:03 web │ 203.0.113.7     │ 200 GET    " + path + " " + ms
+    lead = 2 + 15 + 4 + 3 + 15 + 3 + 4 + 7          # columns before the path, inside a half
+    room = max(12, half - 2 - lead)
+    # A long path continues on the next lines, under itself, in its own column (3 lines at most)
+    chunks = [path[i:i + room] for i in range(0, len(path), room)] or [""]
+    if len(chunks) > 3:
+        chunks = chunks[:3]
+        chunks[-1] = chunks[-1][:-1] + "…"
+    sep = "\033[0;90m┃\033[0m"
+    first = (f"{_ts()} {badge}{kind}\033[0;90m │\033[0m \033[0;36m{ip:<15}\033[0;90m │\033[0m "
+             f"\033[{color}m{code}\033[0m {method:<6} ")
+    rows = []
+    for n, chunk in enumerate(chunks):
+        last = n == len(chunks) - 1
+        tail = f" \033[0;90m{ms}\033[0m" if last else ""
+        visible = lead + len(chunk) + ((1 + len(ms)) if last else 0)
+        head = first if n == 0 else " " * (lead - 2)
+        body = f"{head}{chunk}{tail}"
+        if kind == "api ":
+            rows.append(" " * half + sep + " " + body)
+        else:
+            rows.append("  " + body + " " * max(0, half - visible) + sep)
+    return "\n".join(rows)
 
 
 def _relay(proc, tag: str) -> None:
@@ -253,13 +298,13 @@ def _relay(proc, tag: str) -> None:
             continue
         clean = re.sub(r"^\[[^\]]+\] \[\d+\] |^\[worker[-:\w]*\] ", "", line)   # drop "[date] [pid] " / "[worker] "
         if "[ERROR]" in line or "[CRITICAL]" in line or "Traceback" in line or "Error" in clean[:40]:
-            _say(f"\033[1;31m  {tag} │ {clean}\033[0m")
+            _say(f"  {_ts()} \033[1;31m{tag} │ {clean}\033[0m")
         elif line.startswith("[site]") or line.startswith("[api]"):
             if "Python-urllib" in line:
                 continue                                        # our own "is it up?" probe
             m = access_re.search(line)
             if not m:
-                _say(f"\033[0;90m  {tag} │\033[0m {line}")
+                _say(f"  {_ts()} \033[0;90m{tag} │\033[0m {line}")
                 continue
             method, path, code, secs = m.group(1), m.group(2), int(m.group(3)), float(m.group(4))
             color = "32" if code < 300 else "36" if code < 400 else "33" if code < 500 else "31"
@@ -268,11 +313,9 @@ def _relay(proc, tag: str) -> None:
             ip = "local" if ip in ("127.0.0.1", "::1", "-") else ip
             # API calls (/api/…, or the dedicated API process) tagged "api ", the site's pages "web "
             kind = "api " if line.startswith("[api]") or path.startswith("/api/") else tag
-            badge = "\033[1;35m" if kind == "api " else "\033[1;34m"     # api magenta, web blue
-            _say(f"  {badge}{kind}\033[0;90m │\033[0m \033[0;36m{ip:<15}\033[0;90m │\033[0m "
-                 f"\033[{color}m{code}\033[0m {method:<6} {path} \033[0;90m{secs * 1000:.0f} ms\033[0m")
+            _say(_request_line(kind, ip, code, color, method, path, secs))
         else:
-            _say(f"\033[0;90m  {tag} │\033[0m {clean}")
+            _say(f"  {_ts()} \033[0;90m{tag} │\033[0m {clean}")
     code = proc.wait()
     if _STOPPING.is_set() or code == 0:
         _event("90", "■", tag, "stopped")

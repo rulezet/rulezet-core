@@ -115,6 +115,10 @@ import re
 assert not re.search(r'__[A-Z_]+__', s), 'unreplaced placeholder'
 open(sys.argv[2], 'w').write(s)
 PY
+# the "Rulezet is being updated" page the config includes (deploy/nginx/maintenance.*)
+mkdir -p /var/www/rulezet-maintenance /etc/nginx/snippets
+cp "$ROOT/deploy/nginx/maintenance.html" /var/www/rulezet-maintenance/maintenance.html
+cp "$ROOT/deploy/nginx/maintenance.conf" /etc/nginx/snippets/rulezet-maintenance.conf
 ln -sf "$SITE_CONF" /etc/nginx/sites-enabled/rulezet
 if [ -L /etc/nginx/sites-enabled/default ]; then
     rm /etc/nginx/sites-enabled/default      # the stock "Welcome to nginx" site (still in sites-available)

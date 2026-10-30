@@ -8,6 +8,8 @@
 #   bash deploy/nginx_switch.sh report    who WOULD have been rate-limited (dry-run log)
 #   bash deploy/nginx_switch.sh enforce   rate limiting for real (429 above the limits)
 #   bash deploy/nginx_switch.sh dry-run   back to "log only"
+#   bash deploy/nginx_switch.sh maintenance on|off   show / stop the "being updated" page to everyone
+#   bash deploy/nginx_switch.sh maintenance-install  (re)install that page after a git pull
 set -euo pipefail
 cd "$(dirname "$0")/.."
 STATE=/etc/nginx/rulezet.state
@@ -24,6 +26,36 @@ env_set() {   # env_set KEY VALUE — replace or append in .env
     if grep -qE "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else echo "$1=$2" >> .env; fi
 }
 port_open() { ss -Hltn "( sport = :$1 )" | grep -q .; }
+MAINT_DIR=/var/www/rulezet-maintenance
+MAINT_SNIPPET=/etc/nginx/snippets/rulezet-maintenance.conf
+
+# The "Rulezet is being updated" page nginx shows while Rulezet restarts (deploy/nginx/maintenance.*).
+# Idempotent: copies the page and the snippet, adds the include to the generated site config if it
+# predates it, checks nginx. Leaves the config as it was if nginx refuses it.
+install_maintenance() {
+    mkdir -p "$MAINT_DIR" /etc/nginx/snippets
+    cp deploy/nginx/maintenance.html "$MAINT_DIR/maintenance.html"
+    cp deploy/nginx/maintenance.conf "$MAINT_SNIPPET"
+    if ! grep -q "rulezet-maintenance.conf" "$SITE_CONF"; then
+        cp "$SITE_CONF" "$SITE_CONF.before-maintenance"
+        python3 - "$SITE_CONF" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+anchor = "error_log  /var/log/nginx/rulezet.error.log warn;"
+assert anchor in s, "anchor not found"
+s = s.replace(anchor, anchor + "\n\n    # \"Rulezet is being updated\" page while it restarts (deploy/nginx/maintenance.conf)\n"
+                      "    include /etc/nginx/snippets/rulezet-maintenance.conf;", 1)
+open(p, "w").write(s)
+PY
+    fi
+    if ! nginx -t >/dev/null 2>&1; then
+        [ -f "$SITE_CONF.before-maintenance" ] && cp "$SITE_CONF.before-maintenance" "$SITE_CONF"
+        die "nginx refused the maintenance page — config put back as it was (nothing else changed)."
+    fi
+    echo "✔ \"Being updated\" page installed ($MAINT_DIR/maintenance.html)."
+}
+
 screen_hint() {
     echo "    screen -r            (attach to Rulezet's screen)"
     echo "    Ctrl-C               (stop the running Rulezet)"
@@ -34,6 +66,7 @@ screen_hint() {
 case "${1:-}" in
 on)
     systemctl is-active --quiet nginx && die "nginx is already on."
+    install_maintenance
     [ -f "$BACKUP" ] || cp .env "$BACKUP"
     env_set GUNICORN_BIND_HOST 127.0.0.1
     env_set PORT "$SITE_PORT"
@@ -107,6 +140,17 @@ enforce|dry-run)
     nginx -t && systemctl reload nginx
     echo "✔ rate limiting: $([ "$1" = enforce ] && echo 'ENFORCED (HTTP 429 above the limits)' || echo 'dry-run')"
     ;;
+maintenance)
+    case "${2:-}" in
+        on)  mkdir -p "$MAINT_DIR" && touch "$MAINT_DIR/on" && echo "✔ Everyone now sees the \"being updated\" page. Stop it: bash deploy/nginx_switch.sh maintenance off" ;;
+        off) rm -f "$MAINT_DIR/on" && echo "✔ Maintenance page off — Rulezet is served again." ;;
+        *)   die "Usage: bash deploy/nginx_switch.sh maintenance on|off" ;;
+    esac
+    ;;
+maintenance-install)
+    install_maintenance
+    systemctl is-active --quiet nginx && systemctl reload nginx && echo "✔ nginx reloaded."
+    ;;
 *)
-    sed -n '2,12p' "$0"; exit 1 ;;
+    sed -n '2,14p' "$0"; exit 1 ;;
 esac

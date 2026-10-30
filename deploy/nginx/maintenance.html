@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Rulezet is being updated</title>
+<!--
+  Served by nginx (deploy/nginx/maintenance.conf) while Rulezet restarts or is updated, and when
+  `bash deploy/nginx_switch.sh maintenance on` is set. Self-contained: no request to Rulezet itself.
+  It checks every 5 s and comes back to the page the visitor asked for as soon as Rulezet answers.
+-->
+<style>
+  :root { --bg: #f4f7fb; --card: #ffffff; --ink: #17434e; --muted: #5b6b78; --blue: #0d6efd; --cyan: #40d4e2; --line: #dbe3ec; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1720; --card: #16212d; --ink: #e6eef5; --muted: #93a4b3; --line: #263545; }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         display: flex; align-items: center; justify-content: center; padding: 16px; overflow: hidden; }
+  .bg-grid { position: fixed; inset: 0; background-image: linear-gradient(var(--line) 1px, transparent 1px),
+             linear-gradient(90deg, var(--line) 1px, transparent 1px); background-size: 42px 42px; opacity: .45;
+             mask-image: radial-gradient(circle at center, #000 0%, transparent 70%); animation: drift 30s linear infinite; }
+  @keyframes drift { to { background-position: 42px 42px; } }
+  .card { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 40px 36px 32px;
+          max-width: 460px; width: 100%; text-align: center; box-shadow: 0 20px 60px rgba(13, 40, 90, .12); }
+  /* magnifier scanning lines of rules */
+  .scan { position: relative; width: 132px; height: 132px; margin: 0 auto 22px; }
+  .lines { position: absolute; inset: 18px 10px; display: flex; flex-direction: column; justify-content: space-between; }
+  .lines span { height: 7px; border-radius: 4px; background: var(--line); }
+  .lines span:nth-child(1) { width: 80%; } .lines span:nth-child(2) { width: 62%; } .lines span:nth-child(3) { width: 92%; }
+  .lines span:nth-child(4) { width: 55%; } .lines span:nth-child(5) { width: 74%; }
+  .lens { position: absolute; width: 64px; height: 64px; border-radius: 50%; border: 7px solid var(--ink); background: rgba(64, 212, 226, .18);
+          top: 6px; left: 4px; animation: scan 3.2s ease-in-out infinite; }
+  .lens::after { content: ""; position: absolute; width: 9px; height: 30px; background: var(--ink); border-radius: 5px;
+                 right: -16px; bottom: -24px; transform: rotate(-45deg); }
+  .lens::before { content: "<!>"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+                  font: 800 16px/1 ui-monospace, monospace; color: var(--cyan); }
+  @keyframes scan {
+    0% { transform: translate(0, 0); } 25% { transform: translate(56px, 10px); } 50% { transform: translate(40px, 52px); }
+    75% { transform: translate(4px, 40px); } 100% { transform: translate(0, 0); }
+  }
+  .brand { font-weight: 900; letter-spacing: .28em; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  h1 { font-size: 22px; margin: 0 0 10px; }
+  p { color: var(--muted); line-height: 1.55; margin: 0 0 22px; font-size: 15px; }
+  .bar { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; margin-bottom: 14px; }
+  .bar span { display: block; height: 100%; width: 40%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan));
+              animation: slide 1.6s ease-in-out infinite; }
+  @keyframes slide { 0% { transform: translateX(-110%); } 100% { transform: translateX(260%); } }
+  .status { font-size: 13px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #fd7e14; animation: pulse 1.2s ease-in-out infinite; }
+  .dot.ok { background: #198754; animation: none; }
+  @keyframes pulse { 50% { opacity: .25; transform: scale(.7); } }
+  @media (prefers-reduced-motion: reduce) { .lens, .bar span, .dot, .bg-grid { animation: none; } }
+</style>
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+  <main class="card">
+    <div class="scan" aria-hidden="true">
+      <div class="lines"><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="lens"></div>
+    </div>
+    <div class="brand">RULEZET</div>
+    <h1>Rulezet is being updated</h1>
+    <p>We're installing a new version — it usually takes less than a minute.<br>
+       This page reloads by itself as soon as Rulezet is back.</p>
+    <div class="bar" aria-hidden="true"><span></span></div>
+    <div class="status" role="status" aria-live="polite"><span class="dot" id="dot"></span><span id="state">Waiting for Rulezet…</span></div>
+  </main>
+<script>
+  // Check every 5 s; back to the page asked for as soon as Rulezet answers (not this page again).
+  (function () {
+    var started = Date.now(), state = document.getElementById('state'), dot = document.getElementById('dot');
+    function check() {
+      fetch(location.href, { cache: 'no-store', headers: { 'X-Rulezet-Maintenance-Check': '1' } })
+        .then(function (r) {
+          if (r.ok) { state.textContent = 'Rulezet is back — loading…'; dot.className = 'dot ok'; location.reload(); return; }
+          wait();
+        })
+        .catch(wait);
+    }
+    function wait() {
+      var s = Math.round((Date.now() - started) / 1000);
+      state.textContent = 'Waiting for Rulezet… (' + s + ' s)';
+      setTimeout(check, 5000);
+    }
+    setTimeout(check, 5000);
+  })();
+</script>
+</body>
+</html>
