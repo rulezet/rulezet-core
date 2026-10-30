@@ -1218,3 +1218,4 @@ body.dark-mode .rz-role-chip { color: color-mix(in srgb, var(--role) 70%, #fff);
 .rz-org-rule-badge img { width: 14px; height: 14px; object-fit: contain; }
 .rz-org-rule-badge--click { cursor: pointer; text-decoration: none; transition: box-shadow .15s, transform .15s; }
 .rz-org-rule-badge--click:hover { box-shadow: 0 2px 6px rgba(0, 0, 0, .15); transform: translateY(-1px); color: #000; }
+.rl-id-uuid { display: block; font-family: var(--bs-font-monospace); font-size: .68rem; color: var(--subtle-text-color); word-break: break-all; line-height: 1.25; margin-top: .1rem; }

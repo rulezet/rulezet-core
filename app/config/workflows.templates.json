@@ -7,7 +7,7 @@
     "weekly_maintenance": {
       "label": "Weekly maintenance",
       "icon": "fa-solid fa-screwdriver-wrench",
-      "description": "Every Sunday night: pull the git clones, resync Git Sources, look again for links between rules, try the bad rules again, re-read references & metadata, recompute the leaderboard, clear the caches.",
+      "description": "Every Sunday night: pull the git clones, resync Git Sources, look again for links between rules, try the bad rules again, re-read references & metadata, recompute the leaderboard, clear the caches, then re-scores the rules and the Git sources.",
       "spec": {
         "title": "Weekly maintenance",
         "description": "Keeps rules, links, metadata and figures fresh — every Sunday at 02:00 UTC.",
@@ -87,11 +87,32 @@
             }
           },
           {
+            "ref": "quality",
+            "title": "Rule quality scores",
+            "task_type": "quality_score",
+            "trigger": {
+              "after": "points",
+              "condition": "always"
+            }
+          },
+          {
+            "ref": "repos",
+            "title": "Git source scores",
+            "task_type": "repo_quality",
+            "target_payload": {
+              "scope": "all"
+            },
+            "trigger": {
+              "after": "quality",
+              "condition": "always"
+            }
+          },
+          {
             "ref": "cache",
             "title": "Clear the caches",
             "task_type": "clear_caches",
             "trigger": {
-              "after": "points",
+              "after": "repos",
               "condition": "always"
             }
           }
@@ -332,6 +353,60 @@
             "task_type": "clear_caches",
             "trigger": {
               "after": "relink",
+              "condition": "always"
+            }
+          }
+        ]
+      }
+    },
+    "quality_refresh": {
+      "label": "Quality scores refresh",
+      "icon": "fa-solid fa-ranking-star",
+      "description": "Re-scores every rule (documentation, validity, reviews, tests, YARA external checks), then every Git source from its rules, then refreshes the pages. Weekly.",
+      "spec": {
+        "rulezet_workflow": 1,
+        "title": "Quality scores refresh",
+        "description": "Rule quality scores, then Git source scores, then caches.",
+        "notify_on_failure": true,
+        "notify_on_success": false,
+        "tasks": [
+          {
+            "ref": "rules",
+            "title": "Rule quality scores",
+            "task_type": "quality_score",
+            "target_payload": {},
+            "is_active": true,
+            "trigger": {
+              "trigger_mode": "weekly",
+              "days_of_week": [
+                6
+              ],
+              "hour": 4,
+              "minute": 0,
+              "timezone": "UTC"
+            }
+          },
+          {
+            "ref": "repos",
+            "title": "Git source scores",
+            "task_type": "repo_quality",
+            "target_payload": {
+              "scope": "all"
+            },
+            "is_active": true,
+            "trigger": {
+              "after": "rules",
+              "condition": "always"
+            }
+          },
+          {
+            "ref": "cache",
+            "title": "Clear caches",
+            "task_type": "clear_caches",
+            "target_payload": {},
+            "is_active": true,
+            "trigger": {
+              "after": "repos",
               "condition": "always"
             }
           }

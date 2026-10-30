@@ -15,6 +15,7 @@ const TOGGLEABLE_COLS = [
     { key: 'branches',  label: 'Branches' },
     { key: 'license',   label: 'License' },
     { key: 'cves',      label: 'CVEs' },
+    { key: 'quality',   label: 'Quality' },
     { key: 'conflicts', label: 'Conflicts' },
     { key: 'imported',  label: 'Imported' },
     { key: 'updated',   label: 'Updated' },
@@ -595,6 +596,14 @@ const GitHubSelectionTable = {
                                 CVEs <i class="fas dt-sort-icon" :class="sortIcon('cve_count')"></i>
                             </div>
                         </th>
+                        <th v-show="colVisible.quality" class="dt-th text-center dt-th--sortable"
+                            :class="{ 'dt-th--sorted': sortKey === 'quality_score' }"
+                            @click="setSort('quality_score')"
+                            title="Quality of the source, 0-100: its rules' quality, failed imports, validity, licenses, last sync, conflicts (workflow task Git Sources — quality score)">
+                            <div class="dt-th-inner" style="justify-content:center;">
+                                Quality <i class="fas dt-sort-icon" :class="sortIcon('quality_score')"></i>
+                            </div>
+                        </th>
                         <th v-show="colVisible.conflicts" class="dt-th text-center">Conflicts</th>
                         <th v-show="colVisible.imported" class="dt-th">Imported</th>
                         <th v-show="colVisible.updated" class="dt-th">Updated</th>
@@ -681,6 +690,13 @@ const GitHubSelectionTable = {
                                 <span v-if="!item.licenses || !item.licenses.length" class="text-muted small">—</span>
                             </td>
                             <td v-show="colVisible.cves" class="dt-td text-center">[[ item.cve_count ]]</td>
+                            <td v-show="colVisible.quality" class="dt-td text-center">
+                                <span v-if="item.quality_score !== null && item.quality_score !== undefined" class="repo-quality"
+                                      :class="item.quality_score >= 80 ? 'is-excellent' : item.quality_score >= 60 ? 'is-good' : item.quality_score >= 40 ? 'is-fair' : 'is-poor'"
+                                      :title="'Quality ' + Math.round(item.quality_score) + '/100 — computed ' + (item.quality_computed_at || '')">
+                                    [[ Math.round(item.quality_score) ]]</span>
+                                <span v-else class="text-muted small" title="Not computed yet — workflow task Git Sources — quality score">—</span>
+                            </td>
                             <td v-show="colVisible.conflicts" class="dt-td text-center">
                                 <span v-if="item.has_conflicts" class="badge bg-danger" title="High similarity (&gt;90%) with another rule">
                                     <i class="fas fa-triangle-exclamation"></i>
