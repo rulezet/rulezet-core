@@ -12,10 +12,51 @@ Rule" form and submit through the existing, unmodified creation pipeline
 See ~/Documents/Rulezet/IA-Integration-plan/AI_03_RULE_GENERATOR.md.
 """
 
+import re
 import uuid as uuid_mod
 
 from app import db
 from app.core.db_class.ai import AIGeneration
+
+
+_META_HEAD = re.compile(r'(?m)^([ \t]*)meta[ \t]*:[ \t]*$')
+_RULE_OPEN = re.compile(r'(?m)^([ \t]*(?:(?:private|global)[ \t]+)*rule[ \t]+\w+[^{]*\{)[ \t]*$')
+
+
+def stamp_ai_meta(content: str, model: str | None) -> str:
+    """Says in the rule itself which AI wrote it — author / generated_by / written_with in each rule's
+    meta (a meta block added when there is none) — so the "Written with" badge (rule/ai_writers.py)
+    shows the AI and its model wherever the rule goes."""
+    if not content or not model:
+        return content
+    model = str(model).replace('\\', '').replace('"', '')[:80]
+    author = f'Rulezet AI Generator with {model}'
+
+    def fields(indent):
+        return (f'{indent}generated_by = "Rulezet AI Generator (Rulezy)"\n'
+                f'{indent}written_with = "{model}"\n')
+
+    out, pos = [], 0
+    for m in _RULE_OPEN.finditer(content):
+        start = m.end()
+        nxt = _RULE_OPEN.search(content, start)
+        body_end = nxt.start() if nxt else len(content)
+        body = content[start:body_end]
+        meta = _META_HEAD.search(body)
+        if meta:
+            indent = meta.group(1) + '    '
+            body = re.sub(r'(?m)^(\s*)author\s*=\s*"[^"\n]*"', lambda a: f'{a.group(1)}author = "{author}"', body, count=1)
+            if 'author =' not in body[meta.end():]:
+                body = body[:meta.end()] + f'\n{indent}author = "{author}"' + body[meta.end():]
+            meta = _META_HEAD.search(body)
+            body = body[:meta.end()] + '\n' + fields(indent).rstrip('\n') + body[meta.end():]
+        else:
+            base = (re.match(r'[ \t]*', m.group(1)).group(0) or '') + '    '
+            body = f'\n{base}meta:\n{base}    author = "{author}"\n' + fields(base + '    ').rstrip('\n') + body
+        out.append(content[pos:start] + body)
+        pos = body_end
+    out.append(content[pos:])
+    return ''.join(out)
 
 
 def run_ai_generate_streaming(user, description: str, sample: str = None):
@@ -67,7 +108,7 @@ def run_ai_generate_streaming(user, description: str, sample: str = None):
         yield {"type": "result", "ok": False, "error": result.error}
         return
 
-    content = result.content
+    content = stamp_ai_meta(result.content, result.model_used)
     title = result.meta.get('title') or ''
     explanation = result.meta.get('explanation') or ''
 

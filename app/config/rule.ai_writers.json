@@ -4,15 +4,113 @@
   "description": "AI assistants / models recognised in a rule's author and in the author / written_with / generated_by fields of its text, shown as a badge on the rule page. pattern = what names it (regex, case-insensitive), model = what captures the model name (regex), logo = an image URL (Simple Icons) or null for initials, color = the badge colour.",
   "public": true,
   "value": [
-    {"key": "claude", "label": "Claude", "vendor": "Anthropic", "pattern": "\\bclaude\\b|anthropic", "model": "claude[\\s-]*(?:opus|sonnet|haiku|fable)?[\\s-]*\\d+(?:[.-]\\d+)*|(?:opus|sonnet|haiku|fable)[\\s-]*\\d+(?:\\.\\d+)*", "logo": "https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/claude.svg", "color": "#D97757"},
-    {"key": "chatgpt", "label": "ChatGPT", "vendor": "OpenAI", "pattern": "chat\\s*gpt|openai|\\bgpt[-\\s]?\\d|\\bo[134](?:-mini)?\\b|\\bcodex\\b", "model": "gpt[-\\s]?\\d+(?:\\.\\d+)?(?:o|-turbo|-mini)?|\\bo[134](?:-mini)?\\b", "logo": "https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/openai.svg", "color": "#10A37F"},
-    {"key": "gemini", "label": "Gemini", "vendor": "Google", "pattern": "\\bgemini\\b|\\bbard\\b", "model": "gemini[\\s-]*\\d+(?:\\.\\d+)?(?:[\\s-](?:pro|flash|ultra))?", "logo": "https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/googlegemini.svg", "color": "#8E75B2"},
-    {"key": "copilot", "label": "Copilot", "vendor": "GitHub / Microsoft", "pattern": "\\bcopilot\\b", "model": null, "logo": "https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/githubcopilot.svg", "color": "#24292F"},
-    {"key": "llama", "label": "Llama", "vendor": "Meta", "pattern": "\\bllama\\b", "model": "llama[\\s-]*\\d+(?:\\.\\d+)?", "logo": "https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/meta.svg", "color": "#0467DF"},
-    {"key": "mistral", "label": "Mistral", "vendor": "Mistral AI", "pattern": "\\bmistral\\b|\\bmixtral\\b|\\bcodestral\\b", "model": "(?:mistral|mixtral|codestral)[\\s-]*(?:large|medium|small)?[\\s-]*\\d*(?:\\.\\d+)?", "logo": null, "color": "#FA520F"},
-    {"key": "deepseek", "label": "DeepSeek", "vendor": "DeepSeek", "pattern": "\\bdeepseek\\b", "model": "deepseek[\\s-]*(?:v|r)\\d+(?:\\.\\d+)?", "logo": null, "color": "#4D6BFE"},
-    {"key": "grok", "label": "Grok", "vendor": "xAI", "pattern": "\\bgrok\\b", "model": "grok[\\s-]*\\d+(?:\\.\\d+)?", "logo": "https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/x.svg", "color": "#000000"},
-    {"key": "qwen", "label": "Qwen", "vendor": "Alibaba", "pattern": "\\bqwen\\b", "model": "qwen[\\s-]*\\d+(?:\\.\\d+)?", "logo": null, "color": "#615CED"},
-    {"key": "perplexity", "label": "Perplexity", "vendor": "Perplexity", "pattern": "\\bperplexity\\b", "model": null, "logo": "https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/perplexity.svg", "color": "#1FB8CD"}
+    {
+      "key": "claude",
+      "label": "Claude",
+      "vendor": "Anthropic",
+      "pattern": "\\bclaude(?![a-z])|anthropic",
+      "model": "claude[\\s-]*(?:opus|sonnet|haiku|fable)?[\\s-]*\\d+(?:[.-]\\d+)*|(?:opus|sonnet|haiku|fable)[\\s-]*\\d+(?:\\.\\d+)*",
+      "logo": "https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/claude.svg",
+      "color": "#D97757"
+    },
+    {
+      "key": "chatgpt",
+      "label": "ChatGPT",
+      "vendor": "OpenAI",
+      "pattern": "chat\\s*gpt|openai|\\bgpt[-\\s]?\\d|\\bo[134](?:-mini)?\\b|\\bcodex\\b",
+      "model": "gpt[-\\s]?\\d+(?:\\.\\d+)?(?:o|-turbo|-mini)?|\\bo[134](?:-mini)?\\b",
+      "logo": "https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/openai.svg",
+      "color": "#10A37F"
+    },
+    {
+      "key": "gemini",
+      "label": "Gemini",
+      "vendor": "Google",
+      "pattern": "\\bgemini(?![a-z])|\\bbard\\b",
+      "model": "gemini[\\s-]*\\d+(?:\\.\\d+)?(?:[\\s-](?:pro|flash|ultra))?",
+      "logo": "https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/googlegemini.svg",
+      "color": "#8E75B2"
+    },
+    {
+      "key": "copilot",
+      "label": "Copilot",
+      "vendor": "GitHub / Microsoft",
+      "pattern": "\\bcopilot",
+      "model": null,
+      "logo": "https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/githubcopilot.svg",
+      "color": "#24292F"
+    },
+    {
+      "key": "llama",
+      "label": "Llama",
+      "vendor": "Meta",
+      "pattern": "\\bllama(?![a-z])",
+      "model": "llama[\\s-]*\\d+(?:\\.\\d+)?",
+      "logo": "https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/meta.svg",
+      "color": "#0467DF"
+    },
+    {
+      "key": "mistral",
+      "label": "Mistral",
+      "vendor": "Mistral AI",
+      "pattern": "\\bmistral(?![a-z])|\\bmixtral(?![a-z])|\\bcodestral(?![a-z])",
+      "model": "(?:mistral|mixtral|codestral)[\\s-]*(?:large|medium|small)?[\\s-]*\\d*(?:\\.\\d+)?",
+      "logo": null,
+      "color": "#FA520F"
+    },
+    {
+      "key": "deepseek",
+      "label": "DeepSeek",
+      "vendor": "DeepSeek",
+      "pattern": "\\bdeepseek(?![a-z])",
+      "model": "deepseek[\\s-]*(?:v|r)\\d+(?:\\.\\d+)?",
+      "logo": null,
+      "color": "#4D6BFE"
+    },
+    {
+      "key": "grok",
+      "label": "Grok",
+      "vendor": "xAI",
+      "pattern": "\\bgrok(?![a-z])",
+      "model": "grok[\\s-]*\\d+(?:\\.\\d+)?",
+      "logo": "https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/x.svg",
+      "color": "#000000"
+    },
+    {
+      "key": "qwen",
+      "label": "Qwen",
+      "vendor": "Alibaba",
+      "pattern": "\\bqwen(?![a-z])",
+      "model": "qwen[\\s-]*\\d+(?:\\.\\d+)?",
+      "logo": null,
+      "color": "#615CED"
+    },
+    {
+      "key": "perplexity",
+      "label": "Perplexity",
+      "vendor": "Perplexity",
+      "pattern": "\\bperplexity",
+      "model": null,
+      "logo": "https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/perplexity.svg",
+      "color": "#1FB8CD"
+    },
+    {
+      "key": "gemma",
+      "label": "Gemma",
+      "vendor": "Google",
+      "pattern": "\\bgemma(?![a-z])",
+      "model": "gemma[\\s:-]*\\d*(?:\\.\\d+)?",
+      "logo": null,
+      "color": "#4285F4"
+    },
+    {
+      "key": "phi",
+      "label": "Phi",
+      "vendor": "Microsoft",
+      "pattern": "\\bphi[\\s:-]?\\d",
+      "model": "phi[\\s:-]?\\d+(?:\\.\\d+)?",
+      "logo": null,
+      "color": "#0078D4"
+    }
   ]
 }
