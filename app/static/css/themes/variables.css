@@ -15,6 +15,7 @@
   --light-bg-color: #f1f1f1;
   --code-bg-color: #f8f9fa;
   --border-color: #dee2e6;
+  --focus-ring: #0d6efd;               /* keyboard / mouse focus of fields (#87): ≥ 3:1 on every light theme */
   --card-header-bg-color: rgb(207, 226, 255);
   --navbar-bg-color: #ffffff;
   --navbar-text-color: #000000;
@@ -49,6 +50,7 @@ html.dark-mode,
   --light-bg-color: #242e42;
   --code-bg-color: #0a0e16;
   --border-color: #2b3549;
+  --focus-ring: #5b9dff;               /* 5.9:1 on the dark cards */
   --text-color: #e9edf5;
   --subtle-text-color: #93a1b8;
   --rule-name-color: #5b9dff;

@@ -902,12 +902,44 @@ body.modal-open .custom-rule-link {
   box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
 }
 
-.form-control.rounded-pill::placeholder {
-  color: rgba(128, 128, 128, 0.6);
-}
-
+/* ── Readable fields, visible focus — every theme (issue #87) ──────────────
+   Measured on the theme colours (WCAG 2.2): placeholders were 2.1:1 (rounded inputs) and 3.4:1
+   (textareas) on light backgrounds, the focus ring 1.4:1. Now: placeholder = 66 % of the text colour
+   over the card colour → 4.9–6.8:1 in light, dark, ocean, forest and midnight, still lighter than typed
+   text (15:1); focus = 2px outline in --focus-ring (3.6–4.4:1), also when a field has border-0. */
+.form-control::placeholder,
+.form-select::placeholder,
+input::placeholder,
 textarea::placeholder {
-  color: #888 !important;
+  color: color-mix(in srgb, var(--text-color) 66%, var(--card-bg-color)) !important;
+  opacity: 1;
+}
+.form-control:focus-visible,
+.form-select:focus-visible,
+.form-check-input:focus-visible,
+textarea:focus-visible,
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visible {
+  outline: 2px solid var(--focus-ring) !important;
+  outline-offset: 1px;
+}
+.form-control:focus,
+.form-select:focus {
+  box-shadow: 0 0 0 .2rem color-mix(in srgb, var(--focus-ring) 22%, transparent) !important;
+}
+/* Bootstrap utilities used on fields (bg-light, text-muted) are fixed colours: inside a form field
+   they follow the theme instead — typed text never looks greyed out, never light-on-light. */
+.form-control.bg-light,
+.form-select.bg-light,
+.input-group-text.bg-light {
+  background-color: var(--light-bg-color) !important;
+  color: var(--text-color) !important;
+}
+.form-control.text-muted,
+.form-select.text-muted {
+  color: var(--text-color) !important;
+}
+.input-group:focus-within {
+  border-radius: .5rem;
 }
 
 .invalid-feedback {
@@ -2367,11 +2399,6 @@ body.dark-mode .form-control {
   border-color: #444;
 }
 
-body.dark-mode input::placeholder,
-body.dark-mode .form-control::placeholder,
-body.dark-mode .form-control.rounded-pill::placeholder {
-  color: rgba(255, 255, 255, 0.6);
-}
 
 body.dark-mode .invalid-feedback {
   color: #ff6b6b;
