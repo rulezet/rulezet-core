@@ -40,6 +40,9 @@ __REAL_IP__
     access_log /var/log/nginx/rulezet-site.access.log rz_timed;
     error_log  /var/log/nginx/rulezet.error.log warn;
 
+    # "Rulezet is being updated" page while it restarts (deploy/nginx/maintenance.conf)
+    include /etc/nginx/snippets/rulezet-maintenance.conf;
+
     proxy_http_version 1.1;
     proxy_set_header Connection "";
     proxy_set_header Host $host;
