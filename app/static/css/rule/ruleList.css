@@ -1126,6 +1126,15 @@
     .rl-card-meta .rl-meta-item:not(.rl-meta-item--author) { display: none; }
     .rl-card-meta:not(:has(.rl-meta-item--author)) { display: none; }
     .rl-rule-card .border-top.mt-auto { padding-top: .6rem !important; }
+    /* Nothing overlaps: the badges leave their top-right corner and sit above the title, wrapping */
+    .rl-rule-card > [data-tour="rl-card-badges"] { position: static !important; margin: .9rem 1.1rem 0 !important;
+        flex-wrap: wrap; row-gap: .35rem; justify-content: flex-start; }
+    .rl-rule-card .mb-3.pe-5 { padding-right: 0 !important; }
+    .rl-rule-card h5 a { overflow-wrap: anywhere; }
+    .rl-rule-card .card-body > * { min-width: 0; max-width: 100%; }
+    .rl-rule-card .border-top.mt-auto { flex-wrap: wrap; row-gap: .5rem; column-gap: .5rem; }
+    .rl-rule-card .border-top.mt-auto > .d-flex { flex-wrap: wrap; margin-left: auto; }
+    .rl-rule-card pre, .rl-rule-card .code-viewer { max-width: 100%; overflow-x: auto; }
 }
 
 /* ── Platforms (Windows, Linux, AWS…): card chips, table logos, filter (js/rule/multiPlatformFilter.js) ── */

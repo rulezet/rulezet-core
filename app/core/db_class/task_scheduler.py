@@ -19,6 +19,9 @@ class AdminWorkflow(db.Model):
     editor_id   = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     is_active   = db.Column(db.Boolean, default=True, index=True)
     share_key   = db.Column(db.String(64), nullable=True, unique=True)   # read-only link (workflow_notes.py)
+    # How it looks in the list and the calendar (none = a colour picked from its uuid, the default icon)
+    color       = db.Column(db.String(7), nullable=True)    # "#0d6efd"
+    icon        = db.Column(db.String(64), nullable=True)   # Font Awesome name, "fa-database"
 
     # Email alerts — configured per workflow (not per task): the admin who
     # created the workflow always receives it, plus any notify_emails.
@@ -52,6 +55,8 @@ class AdminWorkflow(db.Model):
             "uuid": self.uuid,
             "title": self.title,
             "description": self.description,
+            "color": self.color,
+            "icon": self.icon,
             "editor": {
                 "id": self.editor.id,
                 "name": f"{self.editor.first_name} {self.editor.last_name}".strip(),

@@ -125,6 +125,7 @@ def export_workflow(workflow, include_files=True) -> dict:
     return {'rulezet_workflow': SPEC_VERSION, 'title': workflow.title, 'description': workflow.description,
             'notify_on_failure': bool(workflow.notify_on_failure), 'notify_on_success': bool(workflow.notify_on_success),
             'notify_emails': list(workflow.notify_emails or []),
+            'color': workflow.color, 'icon': workflow.icon,
             'warnings': warnings, 'tasks': out_tasks, 'notes': notes, 'files': files}
 
 
@@ -145,6 +146,8 @@ def create_from_spec(spec, editor, title=None, root_paused=False, report=None):
         'notify_on_failure': spec.get('notify_on_failure', True),
         'notify_on_success': spec.get('notify_on_success', False),
         'notify_emails': [e for e in (spec.get('notify_emails') or []) if isinstance(e, str)][:20],
+        'color': spec.get('color') if isinstance(spec.get('color'), str) else None,
+        'icon': spec.get('icon') if isinstance(spec.get('icon'), str) else None,
     }, editor)
     if err:
         return None, err

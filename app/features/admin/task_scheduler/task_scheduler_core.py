@@ -52,6 +52,20 @@ def get_workflow_by_uuid(workflow_uuid):
     return AdminWorkflow.query.filter_by(uuid=workflow_uuid).first()
 
 
+_COLOR_RE = re.compile(r'^#[0-9a-fA-F]{6}$')
+_ICON_RE = re.compile(r'^fa-[a-z0-9-]{1,60}$')
+
+
+def _look(data, workflow):
+    """Colour and icon of a workflow, when given and well formed (an empty value resets it)."""
+    if 'color' in data:
+        c = (data.get('color') or '').strip()
+        workflow.color = c.lower() if _COLOR_RE.match(c) else None
+    if 'icon' in data:
+        i = (data.get('icon') or '').strip().lower()
+        workflow.icon = i if _ICON_RE.match(i) else None
+
+
 def create_workflow(data, editor):
     title = (data.get('title') or '').strip()
     if not title:
@@ -67,6 +81,7 @@ def create_workflow(data, editor):
         notify_on_success=bool(data.get('notify_on_success', False)),
         notify_emails=_clean_notify_emails(data.get('notify_emails')),
     )
+    _look(data, workflow)
     db.session.add(workflow)
     db.session.commit()
     return workflow, None
@@ -88,6 +103,7 @@ def update_workflow(workflow_uuid, data):
     workflow.notify_on_success = bool(data.get('notify_on_success', workflow.notify_on_success))
     if 'notify_emails' in data:
         workflow.notify_emails = _clean_notify_emails(data.get('notify_emails'))
+    _look(data, workflow)
 
     if data.get('launch'):
         err = _set_workflow_launch(workflow, data['launch'])
