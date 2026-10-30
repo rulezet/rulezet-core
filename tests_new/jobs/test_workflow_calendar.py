@@ -74,3 +74,13 @@ def test_no_more_than_the_daily_limit(clients):
                                    json={"launch": {"trigger_mode": "once", "run_once_at": f"{day}T0{n}:00:00Z"}}).status_code)
     assert statuses[:5] == [200] * 5
     assert statuses[5] == 400                     # the 6th launch that day is refused
+
+
+def test_colour_and_icon_kept_and_checked(clients):
+    admin = clients["admin"]
+    w = admin.post("/admin/tasks/workflows/create",
+                   json={"title": "Night", "color": "#AbCdEf", "icon": "fa-database"}).get_json()["workflow"]
+    assert (w["color"], w["icon"]) == ("#abcdef", "fa-database")
+    w = admin.post(f"/admin/tasks/workflows/{w['uuid']}/update",
+                   json={"title": "Night", "color": "red;", "icon": "<b>x</b>"}).get_json()["workflow"]
+    assert (w["color"], w["icon"]) == (None, None)
