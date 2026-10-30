@@ -11,6 +11,7 @@ the new rule always belongs to the user importing it.
 """
 import json
 
+from app import db
 from app.core.db_class.rule import Rule
 from app.core.db_class.tag import Tag
 
@@ -125,6 +126,8 @@ def normalize_rule_json(parsed) -> tuple[dict | None, str | None]:
         # the references added by hand on the other instance (the rule's own are read again from
         # its text); older exports have none
         "references": _name_list(flat.get("references_manual")),
+        # how the rule was written (human / AI / both), as its owner / an admin said it
+        "written_with": flat.get("written_with") if flat.get("written_with") in WRITTEN_WITH else None,
     }
     if not rule_dict["title"] or not rule_dict["format"] or not rule_dict["to_string"].strip():
         return None, 'The JSON must include at least "title", "format" and "to_string".'
@@ -155,10 +158,26 @@ def find_existing_rule(rule_dict: dict):
     return None, None
 
 
-def _known_tags(names) -> dict:
+WRITTEN_WITH = ("human", "ai", "human_ai")
+
+
+def _known_tags(names, user=None) -> dict:
+    """The tags of `names` this instance has — and, when an admin imports, the missing ones created
+    (otherwise a rule's own tags like "claude-code" would silently vanish on another instance)."""
     if not names:
         return {}
-    return {t.name.lower(): t for t in Tag.query.filter(Tag.name.in_(names)).all()}
+    found = {t.name.lower(): t for t in Tag.query.filter(Tag.name.in_(names)).all()}
+    if user is not None and getattr(user, 'is_admin', lambda: False)():
+        import uuid as _uuid
+        for name in names:
+            clean = (name or '').strip()[:100]
+            if clean and clean.lower() not in found and ':' not in clean:      # taxonomy tags (tlp:…) only if known
+                tag = Tag(uuid=str(_uuid.uuid4()), name=clean, is_active=True, visibility='public',
+                          created_by=user.id, source='Import')
+                db.session.add(tag)
+                db.session.flush()
+                found[clean.lower()] = tag
+    return found
 
 
 def _known_attacks(ids) -> set:
@@ -199,11 +218,15 @@ def create_rule_from_portable(rule_dict: dict, user, record_activity: bool = Tru
     from app.features.rule.rule_format.utils_format.utils_import_update import fill_all_void_field
 
     data = dict(rule_dict)
-    tags = _known_tags(data.pop("tag_names", []))
+    tags = _known_tags(data.pop("tag_names", []), user)
     attacks = data.pop("attacks", [])
+    written_with = data.pop("written_with", None)
     data["tags"] = [{"id": t.id} for t in tags.values()]
     data = fill_all_void_field(data)
     new_rule, message = RuleModel.add_rule_core(data, user, record_activity=record_activity)
+    if new_rule and written_with in WRITTEN_WITH:
+        new_rule.written_with = written_with
+        db.session.commit()
     if new_rule:
         from app.features.attack.attack_core import add_technique_to_rule
         for tid in _known_attacks(attacks):
@@ -257,6 +280,9 @@ def update_rule_from_portable(rule_dict: dict, existing: Rule, user) -> tuple[bo
     ok, rule = RuleModel.edit_rule_core(form, existing.id)
     if not ok:
         return False, "update failed"
+    if rule_dict.get("written_with") in WRITTEN_WITH:
+        rule.written_with = rule_dict["written_with"]
+        db.session.commit()
     new_snapshot = RuleModel.rule_metadata_snapshot(rule)
     content_changed = (old_content or "").strip() != (rule.to_string or "").strip()
     RuleModel.create_rule_history({

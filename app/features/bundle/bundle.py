@@ -2185,6 +2185,10 @@ def get_bundle_page():
         bundle_data['user_vote'] = None
         bundle_data['is_favorited'] = False
 
+    # "Written with" badge: an AI named in the description's authorship sentences (rule/ai_writers.py)
+    from app.features.rule.ai_writers import detect_in_description
+    bundle_data['ai_writers'] = detect_in_description(bundle_data.get('description') or '')
+
     return {
         "success": True,
         "bundle": bundle_data,

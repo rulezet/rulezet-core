@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ bundle_name if bundle_name is defined else 'Bundle' }} — Rulezet{% endblock %}
 {% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/ai-writer-badge.css') }}">
 <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/comment-thread.css') }}">
@@ -145,6 +146,20 @@
                     </span>
                     {% endif %}
                     </div>
+                </div>
+
+                <!-- Written with an AI, as its description says (rule/ai_writers.py, setting rule.ai_writers) -->
+                <div v-if="!viewRelease && bundle.ai_writers && bundle.ai_writers.length" class="d-flex align-items-center gap-1 flex-wrap mb-2">
+                    <i class="fa-solid fa-robot text-secondary"></i>
+                    <small class="text-muted">Written with:</small>
+                    <span v-for="w in bundle.ai_writers" :key="w.key" class="ai-writer-badge" :style="{ '--ai-color': w.color }"
+                          :data-rz-pop-title="w.label + (w.vendor ? ' — ' + w.vendor : '')"
+                          :data-rz-pop-text="(w.model ? 'Model: ' + w.model + '. ' : '') + 'Named in the bundle description.'">
+                        <img v-if="w.logo" :src="w.logo" alt="" class="ai-writer-badge__logo">
+                        <span v-else class="ai-writer-badge__initial">[[ w.label.charAt(0) ]]</span>
+                        <span class="ai-writer-badge__name">[[ w.label ]]</span>
+                        <span v-if="w.model && w.model.toLowerCase() !== w.label.toLowerCase()" class="ai-writer-badge__model">[[ w.model ]]</span>
+                    </span>
                 </div>
 
                 <!-- Description (markdown, collapsed when long) -->

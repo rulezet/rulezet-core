@@ -910,8 +910,11 @@ def get_current_rule() -> jsonify:
         # Score kept as is unless something it reads changed since (or never scored): then it is
         # recomputed here, so rules refresh themselves as people open them.
         from app.features.rule.rule_quality.quality_score_core import ensure_fresh_quality
+        from app.features.rule.ai_writers import detect as detect_ai_writers
         ensure_fresh_quality(rule)
-        return {"rule": rule.to_json()}
+        data = rule.to_json()
+        data["ai_writers"] = detect_ai_writers(rule)      # badge: which AI helped write it
+        return {"rule": data}
     return {"message": "No Rule"}, 404
 
 @rule_blueprint.route("/get_related_rules", methods=['GET'])
