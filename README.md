@@ -42,15 +42,15 @@ Rulezet is available as an online service at [https://rulezet.org/](https://rule
 
 ## Installation
 
-> A Python virtual environment is strongly recommended.
+> Dependencies are managed with [uv](https://docs.astral.sh/uv/) — it creates the virtual environment in `.venv/`.
 
 ```bash
-# 1. Create a virtual environment
-python3 -m venv env
-source env/bin/activate
+# 1. Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 2. Install dependencies and initialize the database
+# 2. Install dependencies (uv sync → .venv/) and initialize the database
 python3 manage.py init
+source .venv/bin/activate
 
 ```
 
@@ -63,7 +63,7 @@ python3 manage.py init
 If you have already run `init`, this step is likely complete. If you need to initialize or re-initialize tables:
 
 ```bash
-source env/bin/activate
+source .venv/bin/activate
 python3 manage.py db-init
 
 ```

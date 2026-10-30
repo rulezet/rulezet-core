@@ -1,4 +1,77 @@
-# pyproject.toml
+[project]
+name = "rulezet-core"
+version = "1.7.4"
+description = "Community-Driven Detection Rules Platform"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiofiles>=25.1.0",
+    "apscheduler>=3.11.3",
+    "authlib>=1.8.0",
+    "cachelib>=0.17.0",
+    "cryptography>=50.0.1",
+    "dotenv>=0.9.9",
+    "email-validator>=2.3.0",
+    "faiss-cpu>=1.14.2",
+    "flask>=3.1.3",
+    "flask-caching>=2.5.1",
+    "flask-login>=0.6.3",
+    "flask-mail>=0.10.0",
+    "flask-migrate>=4.1.0",
+    "flask-restx>=1.3.2",
+    "flask-session>=0.8.0",
+    "flask-sqlalchemy>=3.1.1",
+    "flask-wtf>=1.3.0",
+    "gitpython>=3.1.50",
+    "grpcio>=1.83.1",
+    "gunicorn>=26.0.0",
+    "idstools>=0.6.5",
+    "jsonschema>=4.26.0",
+    "markdown>=3.10.2",
+    "msc-pyparser>=1.2.2",
+    "nova-hunting>=0.1.4",
+    "psutil>=7.2.2",
+    "psycopg2-binary>=2.9.12",
+    "pymisp>=2.5.34.1",
+    "pysigma>=1.4.0",
+    "pysigma-backend-elasticsearch>=2.1.1",
+    "pysigma-backend-kusto>=1.0.1",
+    "pysigma-backend-loki>=0.13.0",
+    "pysigma-backend-secops>=1.0.0",
+    "pysigma-backend-splunk>=2.1.0",
+    "pysigma-backend-sumologic>=0.2.3",
+    "pytest>=9.0.3",
+    "python-dateutil>=2.9.0.post0",
+    "pyvelociraptor>=0.1.14",
+    "pyyaml>=6.0.3",
+    "rapidfuzz>=3.14.5",
+    "requests>=2.34.2",
+    "rulezet-validation",
+    "schedule>=1.2.2",
+    "scikit-learn>=1.9.0",
+    "sqlalchemy>=2.0.50",
+    "suricataparser>=1.0.0",
+    "weasyprint>=69.0",
+    "werkzeug>=3.1.8",
+    "wtforms>=3.2.2",
+    "yara-python>=4.5.4",
+    "zeekscript>=1.3.6",
+]
+
+[project.optional-dependencies]
+redis = [
+    "redis>=8.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
+
+[tool.alembic]
+# path to migration scripts
+script_location = "%(here)s/migrations"
+
 [tool.pytest.ini_options]
 # tests/ is the suite run on every commit (CI, ./launch.sh -t, manage.py test).
 # tests_new/ is the rework in progress (docs/design/test_restructure.md) —
@@ -10,6 +83,5 @@ filterwarnings = [
     "ignore::DeprecationWarning"
 ]
 
-[tool.alembic]
-# path to migration scripts
-script_location = "%(here)s/migrations"
+[tool.uv.sources]
+rulezet-validation = { git = "https://github.com/rulezet/rulezet-validation.git", rev = "4853401" }

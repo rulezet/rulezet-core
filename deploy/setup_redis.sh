@@ -52,7 +52,25 @@ redis-cli ping | grep -q PONG || { echo "✘ Redis does not answer — nothing c
 echo "✔ Redis is running (redis-cli ping → PONG)."
 
 echo "==> Installing the Python client in Rulezet's venv…"
-./env/bin/pip install -q redis
+# redis is the optional `redis` extra (pyproject.toml / uv.lock). Once .env
+# uses RedisCache, `manage.py update` keeps it installed (--extra redis).
+# Needs uv's .venv/ — a server still on the pip-era env/ is moved to it by
+# the next manage.py run.
+if [ ! -x .venv/bin/python ]; then
+    echo "✘ No .venv/ yet (still the old env/?) — nothing changed in .env."
+    echo "→ Run  python3 manage.py update  first (it moves env/ to .venv/), then re-run this script."
+    exit 1
+fi
+OWNER="$(stat -c %U .)"
+OWNER_HOME="$(getent passwd "$OWNER" | cut -d: -f6)"
+UV="$(command -v uv || true)"
+[ -n "$UV" ] || UV="$OWNER_HOME/.local/bin/uv"
+[ -x "$UV" ] || { echo "✘ uv not found (PATH or $OWNER_HOME/.local/bin) — nothing changed in .env."; exit 1; }
+# As the checkout's owner, so .venv/ doesn't end up with root-owned files.
+# --inexact: don't remove anything else installed in the venv.
+sudo -u "$OWNER" -H env -u UV_PROJECT_ENVIRONMENT "$UV" sync --locked --inexact --extra redis
+.venv/bin/python -c 'import redis' 2>/dev/null || { echo "✘ redis still not importable — nothing changed in .env."; exit 1; }
+echo "✔ redis Python package installed."
 
 echo "==> Switching the cache to Redis in .env…"
 cp "$ENV_FILE" "$ENV_FILE.bak.$(date +%Y%m%d-%H%M%S)"

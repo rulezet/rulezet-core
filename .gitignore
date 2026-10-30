@@ -6,6 +6,10 @@
 
 # Ignore environment files
 env/*
+# pip-era virtualenv: after the move to uv, env is a symlink to .venv and the
+# old one sits in env.old-<date>/ (see _migrate_legacy_venv in manage.py)
+/env
+/env.old-*/
 
 # Ignore log files
 *.log

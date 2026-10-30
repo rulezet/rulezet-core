@@ -1313,8 +1313,9 @@ level: medium</code></pre>
                   <div class="code-block-body">
                     <pre><code class="language-bash">git clone https://github.com/ngsoti/rulezet-core.git
 cd rulezet-core
-python3 -m venv env
-source env/bin/activate</code></pre>
+curl -LsSf https://astral.sh/uv/install.sh | sh   # if uv isn't installed yet
+uv sync
+source .venv/bin/activate</code></pre>
                   </div>
                 </div>
               </div>

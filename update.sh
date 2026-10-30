@@ -58,27 +58,16 @@ git submodule update --remote --depth 1 app/modules/cti 2>/dev/null && \
     echo -e "${RED}⚠ CTI update skipped (no network or submodule not initialised).${NC}"
 
 # 4. REQUIREMENTS CHECK
-echo -e "\n${YELLOW}[4/6] Checking and installing requirements...${NC}"
-if [ -f "requirements.txt" ]; then
-    # Install what's in requirements.txt
-    if pip install -r requirements.txt; then
-        echo -e "${GREEN}✔ Requirements installed.${NC}"
-    else
-        echo -e "${RED}✘ Error during pip install -r requirements.txt${NC}"
-        exit 1
-    fi
-    
-    # Check for missing dependencies in the whole project
-    echo -e "${YELLOW}Searching for missing libraries in project...${NC}"
-    # 'pip check' verifies if installed packages have compatible dependencies
-    if pip check; then
-        echo -e "${GREEN}✔ No dependency conflicts found.${NC}"
-    else
-        echo -e "${RED}⚠ Dependency conflicts or missing packages detected!${NC}"
-        # We don't exit here as pip check is often strict, but we warn the user.
-    fi
+echo -e "\n${YELLOW}[4/6] Syncing Python dependencies (uv → .venv/)...${NC}"
+# --locked: install exactly what uv.lock pins (fails if it's out of date with
+# pyproject.toml); --inexact: keep packages installed outside the lock (e.g.
+# AI provider SDKs the app installs at runtime) instead of removing them.
+unset UV_PROJECT_ENVIRONMENT
+if uv sync --locked --inexact; then
+    echo -e "${GREEN}✔ Dependencies in sync with uv.lock.${NC}"
 else
-    echo -e "${RED}✘ requirements.txt not found! Skipping installation.${NC}"
+    echo -e "${RED}✘ Error during uv sync — is uv installed and uv.lock up to date?${NC}"
+    exit 1
 fi
 
 # 5. OLLAMA (powers the in-app chat assistant prototype — optional, never blocks the update)
