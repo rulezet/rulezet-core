@@ -1780,8 +1780,12 @@ def download_rule_unified() -> Response:
             if (rule.format or '').lower() != 'sigma':
                 error_mesg = f"{target_meta['label']} export is only supported for Sigma rules"
             else:
-                content = convert_sigma_rule(rule, fmt)
-                filename = f"{rule.title}_{fmt}.{target_meta['extension']}"
+                from app.features.rule.exporters.sigma_convert_exporter import SigmaConversionUnavailable
+                try:
+                    content = convert_sigma_rule(rule, fmt)
+                    filename = f"{rule.title}_{fmt}.{target_meta['extension']}"
+                except SigmaConversionUnavailable as e:
+                    error_mesg = str(e)     # expected for some rules, not an application error
 
         elif fmt == 'all':
             zip_buffer = io.BytesIO()
