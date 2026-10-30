@@ -178,6 +178,15 @@ def reset_editor_layout():
     return jsonify(BundleLayoutModel.reset_layout())
 
 
+def _bundle_card(bundle):
+    """Link preview of a public bundle; none for a private one (it would leak to the chat app)."""
+    if not bundle.access:
+        return None
+    from app.core.utils.share_card import share_card
+    return share_card(f"{bundle.name} (bundle)", bundle.description or 'Bundle of detection rules on Rulezet.',
+                      path=f"/bundle/detail/{bundle.id}")
+
+
 @bundle_blueprint.route("/detail/<int:bundle_id>", methods=['GET'])
 def detail(bundle_id) :     
     """Go to detail of a bundle"""    
@@ -188,6 +197,7 @@ def detail(bundle_id) :
             return resp
         if _can_view_bundle(bundle):
             return _no_referrer_leak(render_template("bundle/detail_bundle.html", bundle_id=bundle_id, bundle_name=bundle.name,
+                                   card=_bundle_card(bundle),
                                    via_share_link=not bundle.access and not _is_bundle_manager(bundle)))
         else:
             return render_template("access_denied.html"),403
@@ -204,6 +214,7 @@ def detail_uuid(bundle_uuid) :
             return resp
         if _can_view_bundle(bundle):
             return _no_referrer_leak(render_template("bundle/detail_bundle.html", bundle_id=bundle.id, bundle_name=bundle.name,
+                                   card=_bundle_card(bundle),
                                    via_share_link=not bundle.access and not _is_bundle_manager(bundle)))
         else:
             return render_template("access_denied.html"),403

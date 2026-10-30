@@ -279,9 +279,11 @@
             <div class="col-md-12">
               <div class="d-flex align-items-center gap-1 mb-1">
                 <label class="form-label-styled mb-0" for="description">{{ form.description.label.text }}<span class="opt-badge">optional</span></label>
-                <i class="rf-label-hint" data-tip="Explain the threat scenario this rule covers. Markdown is not rendered.">?</i>
+                <i class="rf-label-hint" data-tip="Explain the threat scenario this rule covers. Markdown is supported.">?</i>
               </div>
-              {{ form.description(class_="form-control", rows=3, placeholder="Describe what this rule detects and why it matters...") }}
+              <smart-editor v-model="ruleDescription" mode="markdown" name="description"
+                            placeholder="Describe what this rule detects and why it matters (Markdown)…"
+                            min-height="140px" max-height="400px" :hardened-preview="true"></smart-editor>
             </div>
             <div class="col-md-12">
               <div class="d-flex align-items-center gap-1 mb-1">
@@ -1080,6 +1082,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                   }
 
                   // ── Generate with AI (Beta) ──────────────────────────────
+                  const ruleDescription = ref({{ (form.description.data or '') | tojson }});
                   const aiGenDescription = ref(requestedPrompt);
                   const aiGenSample      = ref('');
                   const aiGenBusy        = ref(false);
@@ -1201,8 +1204,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                         }
                         const sourceInput = document.getElementById('source');
                         if (sourceInput) sourceInput.value = `AI Generator (${aiGenModel.value || 'unknown model'})`;
-                        const descriptionInput = document.getElementById('description');
-                        if (descriptionInput) descriptionInput.value = aiGenExplanation.value || '';
+                        ruleDescription.value = aiGenExplanation.value || '';
 
                         activeTab.value = 'manual';
                         create_message(
@@ -1535,6 +1537,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                         submitGithubProposal,
                         cancelMyProposal,
 
+                        ruleDescription,
                         aiGenDescription,
                         aiGenSample,
                         aiGenBusy,

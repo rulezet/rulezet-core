@@ -2,25 +2,6 @@
 {% block title %}{{ post.title if post else 'Post' }} — Rulezet{% endblock %}
 
 {% block head %}
-{% if card %}
-{# link previews (LinkedIn, Mastodon, Slack, X…): read from the HTML the server sends, without running Vue #}
-<meta name="description" content="{{ card.description }}">
-<link rel="canonical" href="{{ card.url }}">
-<meta property="og:type" content="article">
-<meta property="og:site_name" content="Rulezet">
-<meta property="og:title" content="{{ card.title }}">
-<meta property="og:description" content="{{ card.description }}">
-<meta property="og:url" content="{{ card.url }}">
-{% if card.image %}<meta property="og:image" content="{{ card.image }}">
-<meta property="og:image:alt" content="{{ card.title }}">{% endif %}
-{% if card.published %}<meta property="article:published_time" content="{{ card.published }}">{% endif %}
-{% if card.author %}<meta property="article:author" content="{{ card.author }}">
-<meta name="author" content="{{ card.author }}">{% endif %}
-<meta name="twitter:card" content="{{ 'summary_large_image' if card.image else 'summary' }}">
-<meta name="twitter:title" content="{{ card.title }}">
-<meta name="twitter:description" content="{{ card.description }}">
-{% if card.image %}<meta name="twitter:image" content="{{ card.image }}">{% endif %}
-{% endif %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/comment-thread.css') }}">

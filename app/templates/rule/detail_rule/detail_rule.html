@@ -179,7 +179,8 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                         </div>
 
                         <div class="mb-4">
-                            <p class="text-muted small lh-base mb-0">
+                            <div v-if="descriptionHtml" class="text-muted small lh-base mb-0 rule-description-md" v-html="descriptionHtml"></div>
+                            <p v-else class="text-muted small lh-base mb-0">
                                 <i class="fas fa-quote-left me-2 opacity-50 text-primary"></i>
                                 [[ currentRule.description ]]
                             </p>
@@ -831,6 +832,17 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                 </button>
                                 {% endif %}
 
+                                <!-- Create issue: a Markdown report of this rule to post on its repository (components/issue-report.js), admins -->
+                                {% if current_user.is_authenticated and current_user.is_admin() %}
+                                <button type="button" class="btn btn-sm rounded-pill px-3"
+                                        style="background:transparent; border:1px solid var(--border-color); color:var(--text-color);"
+                                        @click="openIssueReport('/rule/' + currentRule.id + '/issue_report')"
+                                        title="A Markdown report of this rule — evaluation, what is good, what is wrong — to post as an issue on its repository">
+                                    <i class="fa-solid fa-bug me-1"></i>Create issue
+                                </button>
+                                <issue-report></issue-report>
+                                {% endif %}
+
                                 <!-- Download -->
                                 <div data-tour="rule-download" class="dropdown">
                                     <button class="btn btn-sm rounded-pill px-3 dropdown-toggle"
@@ -1455,12 +1467,14 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
     import VoterPopover from '/static/js/components/VoterPopover.js';
     import RuleList from '/static/js/rule/ruleList.js';
     import RuleQualityPanel from '/static/js/rule/ruleQualityPanel.js';
+    import IssueReport, { openIssueReport } from '/static/js/components/issue-report.js';
 
 
     createApp({
         delimiters: ['[[', ']]'],
         components: {
             'rule-quality-panel': RuleQualityPanel,
+            'issue-report': IssueReport,
             'vulnerability-display': VulnerabilityDisplay,
             'tag-display': TagDisplay,
             'format-chip': FormatChip,
@@ -1812,7 +1826,15 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                 if (response.ok) {
                     const data = await response.json();
                     currentRule.value = data.rule;
+                    renderDescription(data.rule && data.rule.description);
                 }
+            }
+            // Description written in Markdown: rendered + hardened like other user content
+            const descriptionHtml = ref('')
+            async function renderDescription(text) {
+                if (!text) { descriptionHtml.value = ''; return }
+                const { renderMarkdown, hardenUserHtml } = await import('/static/js/sanitize.js')
+                descriptionHtml.value = hardenUserHtml(await renderMarkdown(text))
             }
 
             async function getCurrentRuleHistoryCount() {
@@ -2163,6 +2185,8 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
             }
 
             return {
+                descriptionHtml,
+                openIssueReport,
                 copyMetaValue, highlightQuery, metaAgo, toggleMetaLong, copyMetaLong, downloadMetaLong, metaLongText, metaLongOpen,
                 getRandomColor,
                 bundleListRule, bundleListLoaded,

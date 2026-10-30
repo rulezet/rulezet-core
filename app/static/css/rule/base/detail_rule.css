@@ -82,3 +82,9 @@
 /* Tests on sample sets: badge of the rule's current version */
 .rule-sample-badge--ok { background: rgba(25, 135, 84, .12); color: #198754; border: 1px solid rgba(25, 135, 84, .3); }
 .rule-sample-badge--fp { background: rgba(220, 53, 69, .1); color: #dc3545; border: 1px solid rgba(220, 53, 69, .3); }
+
+/* Rule description rendered from Markdown */
+.rule-description-md > :last-child { margin-bottom: 0; }
+.rule-description-md p { margin-bottom: .5rem; }
+.rule-description-md ul, .rule-description-md ol { padding-left: 1.2rem; margin-bottom: .5rem; }
+.rule-description-md code { font-size: .85em; }

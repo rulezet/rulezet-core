@@ -177,6 +177,15 @@
                 <i class="fa-solid fa-bell me-1"></i>Watch this repo
             </a>
             {% endif %}
+            <!-- Create issue: what went wrong importing it, as Markdown to post on the repository (admins) -->
+            {% if current_user.is_admin() %}
+            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 flex-shrink-0"
+                    @click="openIssueReport('/rule/github/issue_report?url=' + encodeURIComponent({{ url | tojson | forceescape }}))"
+                    title="A Markdown report of this source — bad rules grouped by error, references that do not resolve, failed updates — to post as an issue on the repository">
+                <i class="fa-solid fa-bug me-1"></i>Create issue
+            </button>
+            <issue-report></issue-report>
+            {% endif %}
         </div>
         <p class="text-muted mb-3" style="max-width: 700px; font-size: 0.95rem;">
             All detection rules imported from
@@ -596,6 +605,7 @@
 
 {% block script %}
 <script type="module">
+    import IssueReport, { openIssueReport } from '/static/js/components/issue-report.js';
     const { createApp, ref, computed, onMounted } = Vue
     import { message_list } from '/static/js/toaster.js'
     import { repoTreeUrl as gitTreeUrl, gitProviderLabel, gitProviderIcon } from '/static/js/components/git-links.js'
@@ -628,6 +638,7 @@
     createApp({
         delimiters: ['[[', ']]'],
         components: {
+            'issue-report':                IssueReport,
             'rule-list':                   RuleList,
             'tags-displays-list':          TagsDisplaysList,
             'vulnerability-displays-list': VulnerabilityDisplaysList,
@@ -717,6 +728,7 @@
             }
 
             return {
+                openIssueReport,
                 message_list, stats,
                 selectedBranch, selectBranch,
                 ghExpanded, toggleGh,

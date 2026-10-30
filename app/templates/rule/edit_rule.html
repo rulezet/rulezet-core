@@ -219,8 +219,10 @@
                                 <div class="form-group">
                                     <label class="form-label fw-bold text-dark">{{ form.description.label.text
                                         }}</label>
-                                    {{ form.description(class_="form-control rounded-3", rows=3, placeholder="Describe
-                                    the purpose of this rule...") }}
+                                    <smart-editor v-model="ruleDescription" mode="markdown" name="description"
+                                        placeholder="Describe the purpose of this rule (Markdown)…"
+                                        min-height="140px" max-height="400px" :hardened-preview="true"
+                                        :readonly="restrictedEdit"></smart-editor>
                                 </div>
                             </div>
                             <div class="col-md-12 text-start">
@@ -367,6 +369,7 @@
 
             const ruleId = ref("{{ rule.id }}");
             const currentRule = ref({ title: '', to_string: '' });
+            const ruleDescription = ref({{ (form.description.data or '') | tojson }});
             const editFormat   = ref('{{ rule.format | e }}');
             const rules_formats = ref([]);
             const restrictedEdit = ref({{ 'true' if restricted_edit else 'false' }});
@@ -383,7 +386,7 @@
             function readForm() {
                 return {
                     title: formInput('title')?.value || '',
-                    description: formInput('description')?.value || '',
+                    description: ruleDescription.value || '',
                     source: formInput('source')?.value || '',
                     original_uuid: formInput('original_uuid')?.value || '',
                     license: manualLicense.value || '',
@@ -399,7 +402,7 @@
             }
             async function pullPanelToForm(v) {
                 const setInput = (id, value) => { const el = formInput(id); if (el && value !== undefined && el.value !== value) el.value = value; };
-                setInput('title', v.title); setInput('description', v.description);
+                setInput('title', v.title); if (v.description !== undefined) ruleDescription.value = v.description;
                 setInput('source', v.source); setInput('original_uuid', v.original_uuid);
                 if (v.license !== undefined) manualLicense.value = v.license;
                 if (v.version) formData.version = v.version;
@@ -517,6 +520,7 @@
 
             return {
                 message_list,
+                ruleDescription,
                 create_message,
                 detectedVulnerabilities,
                 manualLicense,

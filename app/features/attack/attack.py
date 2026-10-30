@@ -195,7 +195,10 @@ def technique_detail(technique_id):
     tech = AttackKit.get_technique(technique_id)
     if not tech:
         abort(404)
-    return render_template('attack/technique_detail.html', technique=tech)
+    from app.core.utils.share_card import share_card
+    card = share_card(f'{tech.technique_id} {tech.name} — ATT&CK detection rules',
+                      tech.description or f'Every detection rule on Rulezet for ATT&CK technique {tech.technique_id}.')
+    return render_template('attack/technique_detail.html', technique=tech, card=card)
 
 
 @attack_blueprint.route('/technique/<string:technique_id>/kit_data')
