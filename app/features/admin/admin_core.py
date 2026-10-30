@@ -90,8 +90,9 @@ def _get_memory_info() -> dict:
 def get_installed_packages() -> list:
     """Return installed Python packages sorted alphabetically."""
     try:
+        from app.core.utils.python_packages import pip_command
         result = subprocess.run(
-            [sys.executable, '-m', 'pip', 'list', '--format=json'],
+            pip_command('list', '--format=json'),
             capture_output=True, text=True, timeout=30,
         )
         if result.returncode == 0:

@@ -33,6 +33,7 @@ from app.core.db_class.tag import RuleTagAssociation, Tag
 from app.core.db_class.user import User
 from app.features.rule.rule_core import _wipe_rule_children, create_rule_history, add_contributor
 from app.core.utils.activity_log import log_activity
+from app.core.utils.python_packages import pip_command
 
 BATCH_SIZE = 2000   # bulk_insert_mappings handles large batches efficiently
 
@@ -2494,7 +2495,7 @@ def handle_update_package(job, app):
         log_job(job, f"Upgrading: {name}", level='info', event='started')
         try:
             result = subprocess.run(
-                [sys.executable, '-m', 'pip', 'install', '--upgrade', name],
+                pip_command('install', '--upgrade', name),
                 capture_output=True, text=True, timeout=180,
             )
             output = (result.stdout + result.stderr).strip()
@@ -2539,7 +2540,7 @@ def handle_uninstall_package(job, app):
         log_job(job, f"Uninstalling: {name}", level='warning', event='started')
         try:
             result = subprocess.run(
-                [sys.executable, '-m', 'pip', 'uninstall', '-y', name],
+                pip_command('uninstall', '-y', name),
                 capture_output=True, text=True, timeout=60,
             )
             output = (result.stdout + result.stderr).strip()

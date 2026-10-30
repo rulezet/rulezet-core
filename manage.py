@@ -25,22 +25,32 @@ Commands:
 import contextlib
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-VENV = ROOT / "env"
+# Python dependencies: uv (pyproject.toml + uv.lock) into uv's default project environment .venv/
+VENV = ROOT / ".venv"
 VENV_BIN = VENV / "bin"
+LEGACY_VENV = ROOT / "env"           # the pip-era virtualenv, moved aside once (_migrate_legacy_venv)
 
 PYTHON   = str(VENV_BIN / "python3")
 FLASK    = str(VENV_BIN / "flask")
 GUNICORN = str(VENV_BIN / "gunicorn")
 PYTEST   = str(VENV_BIN / "pytest")
-PIP      = str(VENV_BIN / "pip")
+UV       = shutil.which("uv") or str(Path.home() / ".local" / "bin" / "uv")
+
+# --frozen: install exactly what uv.lock pins, without re-resolving (the rule editor / tester submodules
+#   float to their remote branch, their own changes must not stop an update — _ensure_editor reinstalls
+#   them editable, with any new dependency of theirs);
+# --inexact: keep what is installed outside the lock (AI provider SDKs, packages an admin added).
+UV_SYNC  = [UV, "sync", "--frozen", "--inexact"]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -348,6 +358,7 @@ def _venv_env() -> dict:
     env["VIRTUAL_ENV"] = str(VENV)
     env["PATH"] = str(VENV_BIN) + os.pathsep + env.get("PATH", "")
     env.pop("PYTHONHOME", None)
+    env.pop("UV_PROJECT_ENVIRONMENT", None)      # uv must sync into .venv/, not wherever a shell points it
     return env
 
 
@@ -646,10 +657,66 @@ def _confirm(prompt: str) -> bool:
         return False
 
 
+def _check_uv() -> None:
+    """uv installs the Python dependencies. Missing (a server updated from the pip era): install it
+    with its official installer — into ~/.local/bin, no root needed — so the update goes on unattended."""
+    global UV, UV_SYNC
+    if Path(UV).exists():
+        return
+    info("uv not found — installing it (https://astral.sh/uv, into ~/.local/bin)…")
+    res = subprocess.run("curl -LsSf https://astral.sh/uv/install.sh | sh", shell=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    UV = shutil.which("uv") or str(Path.home() / ".local" / "bin" / "uv")
+    if res.returncode != 0 or not Path(UV).exists():
+        error("Could not install uv:")
+        _say((res.stderr or "").strip()[-600:])
+        print("\n  Install it by hand, then run the command again:\n"
+              "    curl -LsSf https://astral.sh/uv/install.sh | sh\n")
+        sys.exit(1)
+    UV_SYNC = [UV, *UV_SYNC[1:]]
+    ok(f"uv installed ({UV})")
+
+
+# Rulezet's own modules, installed editable by uv from these submodules (pyproject.toml [tool.uv.sources])
+_SOURCE_SUBMODULES = ("rulezet-validation", "rulezet-editor", "rulezet-tester")
+
+
+def _ensure_source_submodules() -> None:
+    """uv sync installs them from their checkout: fetch any that is missing first."""
+    for folder in _SOURCE_SUBMODULES:
+        if not (ROOT / "app" / "modules" / folder / "pyproject.toml").is_file():
+            run(["git", "submodule", "update", "--init", "--recursive", f"app/modules/{folder}"],
+                label=f"Fetching the {folder} submodule")
+
+
+def _uv_sync(label: str = "Installing the Python dependencies (uv sync)") -> None:
+    _ensure_source_submodules()
+    run(UV_SYNC, label=label)
+
+
+def _migrate_legacy_venv() -> None:
+    """One-time move from the pip-era env/ virtualenv to uv's .venv/.
+
+    Servers installed before uv have `python3 -m venv env`. The first manage.py run after the switch
+    builds .venv/ with uv (env/ is left untouched until that succeeds), moves env/ aside to
+    env.old-<date>/ and leaves an `env` → `.venv` symlink, so whatever still says env/bin/… outside the
+    repo (service units, cron jobs, `source env/bin/activate`) keeps working. Later runs do nothing."""
+    if VENV_BIN.exists() or LEGACY_VENV.is_symlink() or not LEGACY_VENV.is_dir():
+        return
+    info("Moving the virtualenv from env/ to .venv/ (one time, uv) — env/ stays until this succeeds…")
+    _uv_sync("Building .venv/ with uv")
+    backup = ROOT / f"env.old-{datetime.now():%Y%m%d-%H%M%S}"
+    LEGACY_VENV.rename(backup)
+    LEGACY_VENV.symlink_to(VENV.name, target_is_directory=True)
+    ok(f"Virtualenv now in .venv/ (env → .venv). The old one is in {backup.name}/ — delete it once all runs fine.")
+
+
 def _check_venv() -> None:
+    _check_uv()
+    _migrate_legacy_venv()
     if not VENV_BIN.exists():
         error(f"Virtualenv not found at {VENV}")
-        print(f"\n  Create it first:\n    python3 -m venv {VENV}\n    python3 manage.py init\n")
+        print("\n  Create it first:\n    python3 manage.py init\n")
         sys.exit(1)
 
 
@@ -771,7 +838,7 @@ def cmd_help() -> None:
 {W}Commands:{R}
 
   {G}init{R}          {D}First-time setup:{R}
-                  {D}  install deps from requirements.txt → init DB{R}
+                  {D}  uv sync (creates .venv/) → init DB{R}
                   {D}→ Run once after cloning the repo{R}
 
   {G}start-dev{R}     {D}Start locally (FLASKENV=development): worker.py + gunicorn wsgi:app{R}
@@ -780,7 +847,7 @@ def cmd_help() -> None:
                   {D}→ Use this for local development{R}
 
   {G}start-prod{R}    {D}Full production launch:{R}
-                  {D}  backup → sync with origin → pip install → ensure ollama → db upgrade{R}
+                  {D}  backup → sync with origin → uv sync → ensure ollama → db upgrade{R}
                   {D}  → worker.py (background jobs, its own process) + gunicorn wsgi:app --bind 0.0.0.0:80{R}
                   {D}→ Use this on the production server (needs root for port 80){R}
                   {D}→ "Sync with origin" hard-resets to origin/<branch> — any local{R}
@@ -793,7 +860,7 @@ def cmd_help() -> None:
 
   {G}test{R}          {D}Run the full test suite (FLASKENV=testing){R}
 
-  {G}update{R}        {D}sync with origin + pip install + ensure ollama + flask db upgrade{R}
+  {G}update{R}        {D}sync with origin + uv sync + ensure ollama + flask db upgrade{R}
                   {D}→ Use this after pulling new code — see start-prod's note on sync{R}
 
   {G}pivotick{R}      {D}Rebuild the graph assets from app/modules/pivotick (release build){R}
@@ -827,7 +894,7 @@ def cmd_help() -> None:
 {W}Examples:{R}
 
   {D}# Fresh install{R}
-  {G}python3 -m venv env{R}
+  {G}curl -LsSf https://astral.sh/uv/install.sh | sh{R}   {D}# once: uv, the dependency manager{R}
   {G}python3 manage.py init{R}
   {G}python3 manage.py start-dev{R}
 
@@ -849,7 +916,7 @@ def cmd_help() -> None:
 
 
 def cmd_init() -> None:
-    _check_venv()
+    _check_uv()            # .venv/ is created by uv sync below (after the submodules it installs from)
     banner("first-time setup")
     with step(1, 3, "Git submodules"):
         run(["git", "submodule", "update", "--init", "--recursive", "--depth", "1",
@@ -860,8 +927,8 @@ def cmd_init() -> None:
             label="Fetching rulezet-tester")
         ok("Submodules initialised")
     with step(2, 3, "Python dependencies"):
-        run([PIP, "install", "-r", "requirements.txt"], label="Installing the Python dependencies")
-        ok("Dependencies installed")
+        _uv_sync()
+        ok("Dependencies installed in .venv/")
     with step(3, 3, "Database (tables + admin user)"):
         run([PYTHON, "app.py", "-i"], extra_env={"FLASKENV": "development"}, label="Creating the tables")
         ok("Database initialised")
@@ -980,19 +1047,17 @@ def _run_gunicorn_with_worker(flaskenv: str, port: str, reload: bool = False) ->
 
 def _ensure_editor() -> None:
     """The rule editor (app/modules/rulezet-editor) and the rule tester (app/modules/rulezet-tester)
-    are submodules installed editable by requirements.txt. A checkout made before they existed has
-    neither: fetch and install them here so start-dev / start-prod never boot without them."""
+    are submodules installed editable (pyproject.toml). They float to their remote branch, so a new
+    dependency of theirs is not in uv.lock yet: reinstall them editable here (uv is fast, nothing
+    happens when nothing changed), and fetch them on a checkout made before they existed."""
     for folder, module, label in (("rulezet-editor", "rulezet_editor", "rule editor"),
                                   ("rulezet-tester", "rulezet_tester", "rule tester")):
         path = os.path.join(ROOT, "app", "modules", folder)
         if not os.path.isfile(os.path.join(path, "pyproject.toml")):
             info(f"Fetching the {label} submodule (app/modules/{folder})…")
             run(["git", "submodule", "update", "--init", "--recursive", f"app/modules/{folder}"])
-        probe = subprocess.run([PYTHON, "-c", f"import {module}"], cwd=ROOT, env=_venv_env(),
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if probe.returncode != 0:
-            info(f"Installing the {label} (pip install -e app/modules/{folder})…")
-            run([PIP, "install", "-e", f"./app/modules/{folder}"])
+        run([UV, "pip", "install", "--python", PYTHON, "-q", "-e", f"./app/modules/{folder}"],
+            label=f"Installing the {label} (editable, app/modules/{folder})")
 
 
 def _env_value(key: str, default: str = "") -> str:
@@ -1071,23 +1136,22 @@ def _quiet(cmd: list, label: str, extra_env: dict | None = None) -> bool:
 
 def _prepare_dev() -> None:
     """Everything a fresh clone or a `git pull` needs, done automatically on start-dev: the
-    virtualenv, the Python dependencies (only when requirements.txt changed) and the database
-    migrations. Nothing to run by hand first."""
+    virtualenv and the Python dependencies (uv, only when pyproject.toml / uv.lock changed) and the
+    database migrations. Nothing to run by hand first."""
     import hashlib
-    if not VENV_BIN.exists():
-        info(f"No virtualenv yet: creating {VENV}")
-        _quiet([sys.executable, "-m", "venv", str(VENV)], "Creating the virtualenv") or sys.exit(1)
-    ok(f"Virtualenv {VENV}")
-    stamp = VENV / ".requirements.sha256"
-    digest = hashlib.sha256((ROOT / "requirements.txt").read_bytes()).hexdigest()
-    if not stamp.is_file() or stamp.read_text().strip() != digest:
-        _SPIN.label = "Installing the Python dependencies (requirements.txt changed)…"
-        if not _quiet([PIP, "install", "-q", "-r", "requirements.txt"], "pip install"):
+    _check_uv()
+    _migrate_legacy_venv()
+    stamp = VENV / ".uv-lock.sha256"
+    digest = hashlib.sha256((ROOT / "uv.lock").read_bytes() + (ROOT / "pyproject.toml").read_bytes()).hexdigest()
+    if not VENV_BIN.exists() or not stamp.is_file() or stamp.read_text().strip() != digest:
+        _ensure_source_submodules()
+        _SPIN.label = "Installing the Python dependencies (uv sync)…"
+        if not _quiet(UV_SYNC, "uv sync"):
             sys.exit(1)
         stamp.write_text(digest)
-        ok("Python dependencies installed")
+        ok(f"Python dependencies installed in {VENV.name}/")
     else:
-        ok("Python dependencies up to date")
+        ok(f"Python dependencies up to date ({VENV.name}/)")
     _SPIN.label = "Applying the database migrations…"
     if _quiet([FLASK, "db", "upgrade"], "Database migrations", {"FLASKENV": "development"}):
         ok("Database schema up to date")
@@ -1133,8 +1197,8 @@ def _update_code() -> None:
 
 
 def _update_deps() -> None:
-    run([PIP, "install", "-r", "requirements.txt"], label="Installing the Python dependencies")
-    ok("Dependencies up to date")
+    _uv_sync()
+    ok("Dependencies up to date (uv.lock)")
     _ensure_ollama()
 
 

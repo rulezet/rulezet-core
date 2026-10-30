@@ -216,7 +216,7 @@ def test_server_connection(server: MispServer) -> tuple[bool, str]:
         db.session.commit()
         return False, "Connected, but could not read the instance version."
     except ImportError:
-        msg = "pymisp is not installed on this server — run `pip install -r requirements.txt`."
+        msg = "pymisp is not installed on this server — run `python3 manage.py update` (uv sync)."
         server.last_error = msg
         db.session.commit()
         return False, msg
@@ -251,7 +251,7 @@ def push_to_misp(server: MispServer, event) -> tuple[bool, str]:
         db.session.commit()
         return False, f"Push failed: {error_msg}"
     except ImportError:
-        msg = "pymisp is not installed on this server — run `pip install -r requirements.txt`."
+        msg = "pymisp is not installed on this server — run `python3 manage.py update` (uv sync)."
         server.last_error = msg
         db.session.commit()
         return False, msg

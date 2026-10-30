@@ -74,7 +74,7 @@ def check_yarax(text: str) -> dict:
     try:
         import yara_x
     except ImportError:
-        return _unavailable('yara-x is not installed (pip install yara-x)')
+        return _unavailable('yara-x is not installed (uv sync installs it)')
     compiler = yara_x.Compiler(includes_enabled=False)        # never read a file of the server
     errors = []
     try:
@@ -120,7 +120,7 @@ def check_cccs(text: str) -> dict:
     try:
         from yara_validator.validator import run_yara_validator
     except ImportError:
-        return _unavailable('cccs-yara is not installed (see requirements.txt)')
+        return _unavailable('cccs-yara is not installed (see pyproject.toml, uv sync)')
     with tempfile.NamedTemporaryFile('w', suffix='.yar', encoding='utf-8', delete=False) as fh:
         fh.write(text)
         path = fh.name

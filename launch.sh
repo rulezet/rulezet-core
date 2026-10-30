@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# The rule editor and the rule tester are submodules installed editable (requirements.txt):
-# fetch / install them when this checkout predates them.
+# The rule editor and the rule tester are submodules installed editable (pyproject.toml, uv):
+# fetch / install them when this checkout predates them. Run inside the virtualenv (.venv/).
 function ensure_editor {
     for mod in rulezet-editor rulezet-tester; do
         if [ ! -f app/modules/$mod/pyproject.toml ]; then
             git submodule update --init --recursive app/modules/$mod
         fi
-        python3 -c "import ${mod//-/_}" 2>/dev/null || pip install -e ./app/modules/$mod
+        python3 -c "import ${mod//-/_}" 2>/dev/null || uv pip install --python "$(command -v python3)" -e ./app/modules/$mod
     done
 }
 

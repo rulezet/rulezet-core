@@ -517,18 +517,18 @@ def providers_install_sdk():
     if not missing_sdk(kind):
         return jsonify({'success': True, 'package': module, 'already_installed': True})
 
+    from app.core.utils.python_packages import install_hint, pip_command
     try:
-        proc = subprocess.run([sys.executable, '-m', 'pip', 'install', '--disable-pip-version-check', spec],
-                              capture_output=True, text=True, timeout=110)
+        proc = subprocess.run(pip_command('install', spec), capture_output=True, text=True, timeout=110)
     except subprocess.TimeoutExpired:
         return jsonify({"success": False, "error": f"Installing {spec} took too long — run "
-                                                   f"“pip install {spec}” on the server."}), 504
+                                                   f"“{install_hint(spec)}” on the server."}), 504
     importlib.invalidate_caches()
     if proc.returncode != 0 or missing_sdk(kind):
         tail = (proc.stderr or proc.stdout or '').strip().splitlines()[-3:]
         current_app.logger.warning(f'AI SDK install failed ({spec}): {" | ".join(tail)}')
-        return jsonify({"success": False, "error": f"Could not install {spec}: {' '.join(tail)[:300] or 'pip failed'}. "
-                                                   f"Run “pip install {spec}” on the server."}), 500
+        return jsonify({"success": False, "error": f"Could not install {spec}: {' '.join(tail)[:300] or 'the install failed'}. "
+                                                   f"Run “{install_hint(spec)}” on the server."}), 500
     log_activity('ai.provider_sdk_install', f'Installed Python package {spec} for AI providers',
                  target_type='ai_provider', is_public=False)
     return jsonify({'success': True, 'package': module, 'spec': spec})

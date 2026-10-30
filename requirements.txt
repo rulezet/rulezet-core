@@ -1,59 +1,554 @@
-flask
-sqlalchemy
-Flask-Login
-flask-session
-flask-sqlalchemy
-Flask-Migrate
-Flask-Caching
-redis
-Flask-WTF
-Flask-Mail
-WTForms
-Werkzeug
-flask-restx
-email_validator
-python-dateutil
-pytest
-gunicorn
-jsonschema
-requests
-gitpython
-pyyaml
-yara-python
-idstools
-suricataparser
-psycopg2-binary
-schedule
-APScheduler
-aiofiles
-zeekscript
-msc_pyparser
-nova-hunting
-pymisp
-flask_mail
-scikit-learn
-faiss-cpu
-rapidfuzz
-dotenv
-pySigma
-pySigma-backend-splunk
-pySigma-backend-elasticsearch
-pySigma-backend-kusto
-pysigma-backend-sumologic
-pySigma-backend-secops
-pySigma-backend-loki
-weasyprint
-markdown
-cryptography
-grpcio
-pyvelociraptor
-psutil
-anthropic
-openai
-authlib
-# YARA editor external checks (app/features/editor/external_checks.py) — advice only, optional
-yara-x==1.22.1
-cccs-yara @ git+https://github.com/CybercentreCanada/CCCS-Yara@3ac8d8aa6ab38d90c1e0ea8d4719ba751b6e9fa4
--e ./app/modules/rulezet-validation
+# GENERATED from uv.lock — do not edit. Rulezet installs with uv (pyproject.toml + uv.lock → .venv/).
+# Kept only for servers whose manage.py still runs pip on their first update to the uv version.
+# Regenerate after `uv lock`:  uv export --no-hashes --no-header --frozen -o requirements.txt  (then put this header back)
 -e ./app/modules/rulezet-editor
+    # via rulezet-core
 -e ./app/modules/rulezet-tester
+    # via rulezet-core
+-e ./app/modules/rulezet-validation
+    # via rulezet-core
+aiofiles==25.1.0
+    # via rulezet-core
+alembic==1.18.4
+    # via flask-migrate
+aniso8601==10.0.1
+    # via flask-restx
+annotated-doc==0.0.4
+    # via typer
+annotated-types==0.7.0
+    # via pydantic
+anthropic==0.107.1
+    # via
+    #   nova-hunting
+    #   rulezet-core
+antlr4-python3-runtime==4.13.2
+    # via stix2-patterns
+anyio==4.13.0
+    # via
+    #   anthropic
+    #   httpx
+    #   openai
+apscheduler==3.11.3
+    # via rulezet-core
+argcomplete==3.6.3
+    # via zeekscript
+args==0.1.0
+    # via clint
+attrs==26.1.0
+    # via
+    #   jsonschema
+    #   referencing
+authlib==1.8.0
+    # via rulezet-core
+blinker==1.9.0
+    # via
+    #   flask
+    #   flask-mail
+brotli==1.2.0 ; platform_python_implementation == 'CPython'
+    # via fonttools
+brotlicffi==1.2.0.1 ; platform_python_implementation != 'CPython'
+    # via fonttools
+cachelib==0.17.0
+    # via
+    #   flask-caching
+    #   flask-session
+    #   rulezet-core
+cccs-yara @ git+https://github.com/CybercentreCanada/CCCS-Yara@3ac8d8aa6ab38d90c1e0ea8d4719ba751b6e9fa4
+    # via rulezet-core
+certifi==2026.5.20
+    # via
+    #   httpcore
+    #   httpx
+    #   pysigma-backend-kusto
+    #   requests
+cffi==2.1.0
+    # via
+    #   brotlicffi
+    #   cryptography
+    #   weasyprint
+charset-normalizer==3.4.7
+    # via requests
+click==8.4.1
+    # via
+    #   flask
+    #   huggingface-hub
+    #   typer
+clint==0.5.1
+    # via cccs-yara
+colorama==0.4.6
+    # via
+    #   click
+    #   nova-hunting
+    #   pytest
+    #   tqdm
+cryptography==50.0.1
+    # via
+    #   authlib
+    #   joserfc
+    #   pyvelociraptor
+    #   rulezet-core
+cssselect2==0.9.0
+    # via weasyprint
+cuda-bindings==13.3.1 ; sys_platform == 'linux'
+    # via torch
+cuda-pathfinder==1.5.5 ; sys_platform == 'linux'
+    # via cuda-bindings
+cuda-toolkit==13.0.2 ; sys_platform == 'linux'
+    # via torch
+defusedxml==0.7.1
+    # via pysigma-backend-sumologic
+deprecated==1.3.1
+    # via pymisp
+diskcache==5.6.3
+    # via pysigma
+diskcache-stubs==5.6.3.6.20240818
+    # via pysigma
+distro==1.9.0
+    # via
+    #   anthropic
+    #   openai
+dnspython==2.8.0
+    # via email-validator
+docstring-parser==0.18.0
+    # via anthropic
+dotenv==0.9.9
+    # via rulezet-core
+email-validator==2.3.0
+    # via rulezet-core
+faiss-cpu==1.14.2
+    # via rulezet-core
+filelock==3.29.1
+    # via
+    #   huggingface-hub
+    #   torch
+flask==3.1.3
+    # via
+    #   flask-caching
+    #   flask-login
+    #   flask-mail
+    #   flask-migrate
+    #   flask-restx
+    #   flask-session
+    #   flask-sqlalchemy
+    #   flask-wtf
+    #   rulezet-core
+    #   rulezet-editor
+flask-caching==2.5.1
+    # via rulezet-core
+flask-login==0.6.3
+    # via rulezet-core
+flask-mail==0.10.0
+    # via rulezet-core
+flask-migrate==4.1.0
+    # via rulezet-core
+flask-restx==1.3.2
+    # via rulezet-core
+flask-session==0.8.0
+    # via rulezet-core
+flask-sqlalchemy==3.1.1
+    # via
+    #   flask-migrate
+    #   rulezet-core
+flask-wtf==1.3.0
+    # via rulezet-core
+fonttools==4.63.0
+    # via weasyprint
+fsspec==2026.4.0
+    # via
+    #   huggingface-hub
+    #   torch
+gitdb==4.0.12
+    # via gitpython
+gitpython==3.1.62
+    # via
+    #   cccs-yara
+    #   rulezet-core
+greenlet==3.5.1 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
+    # via sqlalchemy
+grpcio==1.83.1
+    # via
+    #   grpcio-tools
+    #   pyvelociraptor
+    #   rulezet-core
+grpcio-tools==1.83.1
+    # via pyvelociraptor
+gunicorn==26.0.0
+    # via rulezet-core
+h11==0.16.0
+    # via httpcore
+hf-xet==1.5.0 ; platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'
+    # via huggingface-hub
+httpcore==1.0.9
+    # via httpx
+httpx==0.28.1
+    # via
+    #   anthropic
+    #   huggingface-hub
+    #   openai
+huggingface-hub==1.18.0
+    # via
+    #   sentence-transformers
+    #   tokenizers
+    #   transformers
+idna==3.18
+    # via
+    #   anyio
+    #   email-validator
+    #   httpx
+    #   requests
+idstools==0.6.5
+    # via rulezet-core
+importlib-resources==7.1.0
+    # via
+    #   flask-restx
+    #   pysigma-backend-secops
+iniconfig==2.3.0
+    # via pytest
+itsdangerous==2.2.0
+    # via
+    #   flask
+    #   flask-wtf
+jinja2==3.1.6
+    # via
+    #   flask
+    #   pysigma
+    #   torch
+jiter==0.15.0
+    # via
+    #   anthropic
+    #   openai
+joblib==1.5.3
+    # via scikit-learn
+joserfc==1.7.5
+    # via authlib
+jq==1.12.0
+    # via pysigma
+jsonschema==4.26.0
+    # via
+    #   flask-restx
+    #   rulezet-core
+jsonschema-specifications==2025.9.1
+    # via jsonschema
+mako==1.3.12
+    # via alembic
+markdown==3.10.2
+    # via rulezet-core
+markdown-it-py==4.2.0
+    # via rich
+markupsafe==3.0.3
+    # via
+    #   flask
+    #   jinja2
+    #   mako
+    #   werkzeug
+    #   wtforms
+mdurl==0.1.2
+    # via markdown-it-py
+mpmath==1.3.0
+    # via sympy
+msc-pyparser==1.2.2
+    # via rulezet-core
+msgspec==0.21.1
+    # via flask-session
+narwhals==2.22.1
+    # via scikit-learn
+networkx==3.6.1
+    # via torch
+nova-hunting==0.1.4
+    # via rulezet-core
+numpy==2.4.6
+    # via
+    #   faiss-cpu
+    #   scikit-learn
+    #   scipy
+    #   sentence-transformers
+    #   transformers
+nvidia-cublas==13.1.1.3 ; sys_platform == 'linux'
+    # via
+    #   nvidia-cudnn-cu13
+    #   nvidia-cusolver
+    #   torch
+nvidia-cuda-cupti==13.0.85 ; sys_platform == 'linux'
+    # via cuda-toolkit
+nvidia-cuda-nvrtc==13.0.88 ; sys_platform == 'linux'
+    # via
+    #   cuda-toolkit
+    #   nvidia-cublas
+nvidia-cuda-runtime==13.0.96 ; sys_platform == 'linux'
+    # via cuda-toolkit
+nvidia-cudnn-cu13==9.20.0.48 ; sys_platform == 'linux'
+    # via torch
+nvidia-cufft==12.0.0.61 ; sys_platform == 'linux'
+    # via cuda-toolkit
+nvidia-cufile==1.15.1.6 ; sys_platform == 'linux'
+    # via cuda-toolkit
+nvidia-curand==10.4.0.35 ; sys_platform == 'linux'
+    # via cuda-toolkit
+nvidia-cusolver==12.0.4.66 ; sys_platform == 'linux'
+    # via cuda-toolkit
+nvidia-cusparse==12.6.3.3 ; sys_platform == 'linux'
+    # via
+    #   cuda-toolkit
+    #   nvidia-cusolver
+nvidia-cusparselt-cu13==0.8.1 ; sys_platform == 'linux'
+    # via torch
+nvidia-nccl-cu13==2.29.7 ; sys_platform == 'linux'
+    # via torch
+nvidia-nvjitlink==13.0.88 ; sys_platform == 'linux'
+    # via
+    #   cuda-toolkit
+    #   nvidia-cufft
+    #   nvidia-cusolver
+    #   nvidia-cusparse
+nvidia-nvshmem-cu13==3.4.5 ; sys_platform == 'linux'
+    # via torch
+nvidia-nvtx==13.0.85 ; sys_platform == 'linux'
+    # via cuda-toolkit
+openai==1.109.1
+    # via
+    #   nova-hunting
+    #   rulezet-core
+packaging==26.3
+    # via
+    #   cccs-yara
+    #   faiss-cpu
+    #   gunicorn
+    #   huggingface-hub
+    #   pysigma
+    #   pytest
+    #   transformers
+pillow==12.3.0
+    # via weasyprint
+pluggy==1.6.0
+    # via pytest
+ply==3.11
+    # via msc-pyparser
+plyara==2.2.8
+    # via cccs-yara
+protobuf==7.36.1
+    # via grpcio-tools
+psutil==7.2.2
+    # via rulezet-core
+psycopg2-binary==2.9.12
+    # via rulezet-core
+pycparser==3.0 ; implementation_name != 'PyPy'
+    # via cffi
+pydantic==2.13.4
+    # via
+    #   anthropic
+    #   openai
+pydantic-core==2.46.4
+    # via pydantic
+pydyf==0.12.1
+    # via weasyprint
+pygments==2.20.0
+    # via
+    #   pytest
+    #   rich
+pymisp==2.5.34.1
+    # via rulezet-core
+pyparsing==3.3.2
+    # via pysigma
+pyphen==0.17.2
+    # via weasyprint
+pysigma==1.4.0
+    # via
+    #   pysigma-backend-elasticsearch
+    #   pysigma-backend-kusto
+    #   pysigma-backend-loki
+    #   pysigma-backend-secops
+    #   pysigma-backend-splunk
+    #   pysigma-backend-sumologic
+    #   rulezet-core
+pysigma-backend-elasticsearch==2.1.1
+    # via rulezet-core
+pysigma-backend-kusto==1.0.1
+    # via rulezet-core
+pysigma-backend-loki==0.13.0
+    # via rulezet-core
+pysigma-backend-secops==1.0.0
+    # via rulezet-core
+pysigma-backend-splunk==2.1.0
+    # via rulezet-core
+pysigma-backend-sumologic==0.2.3
+    # via rulezet-core
+pytest==9.0.3
+    # via rulezet-core
+python-baseconv==1.2.2
+    # via cccs-yara
+python-dateutil==2.9.0.post0
+    # via
+    #   pymisp
+    #   rulezet-core
+python-dotenv==1.2.2
+    # via dotenv
+pytz==2026.6
+    # via stix2
+pyvelociraptor==0.1.14
+    # via rulezet-core
+pyyaml==6.0.3
+    # via
+    #   cccs-yara
+    #   huggingface-hub
+    #   nova-hunting
+    #   pysigma
+    #   pysigma-backend-sumologic
+    #   pyvelociraptor
+    #   rulezet-core
+    #   transformers
+rapidfuzz==3.14.5
+    # via rulezet-core
+redis==8.1.0
+    # via rulezet-core
+referencing==0.37.0
+    # via
+    #   flask-restx
+    #   jsonschema
+    #   jsonschema-specifications
+regex==2026.5.9
+    # via transformers
+requests==2.34.2
+    # via
+    #   nova-hunting
+    #   pymisp
+    #   pysigma
+    #   rulezet-core
+    #   stix2
+rich==15.0.0
+    # via typer
+rpds-py==2026.5.1
+    # via
+    #   jsonschema
+    #   referencing
+safetensors==0.7.0
+    # via transformers
+schedule==1.2.2
+    # via rulezet-core
+scikit-learn==1.9.0
+    # via
+    #   rulezet-core
+    #   sentence-transformers
+scipy==1.17.1
+    # via
+    #   scikit-learn
+    #   sentence-transformers
+sentence-transformers==5.5.1
+    # via nova-hunting
+setuptools==81.0.0
+    # via
+    #   grpcio-tools
+    #   torch
+shellingham==1.5.4
+    # via typer
+simplejson==4.2.0
+    # via stix2
+six==1.17.0
+    # via python-dateutil
+smmap==5.0.3
+    # via gitdb
+sniffio==1.3.1
+    # via
+    #   anthropic
+    #   openai
+sqlalchemy==2.0.50
+    # via
+    #   alembic
+    #   flask-sqlalchemy
+    #   rulezet-core
+stix2==3.0.2
+    # via cccs-yara
+stix2-patterns==2.1.2
+    # via stix2
+suricataparser==1.0.0
+    # via rulezet-core
+sympy==1.14.0
+    # via torch
+threadpoolctl==3.6.0
+    # via scikit-learn
+tinycss2==1.5.1
+    # via
+    #   cssselect2
+    #   weasyprint
+tinyhtml5==2.1.0
+    # via weasyprint
+tokenizers==0.22.2
+    # via transformers
+torch==2.12.0
+    # via sentence-transformers
+tqdm==4.68.1
+    # via
+    #   huggingface-hub
+    #   openai
+    #   sentence-transformers
+    #   transformers
+transformers==5.10.2
+    # via
+    #   nova-hunting
+    #   sentence-transformers
+tree-sitter==0.25.2
+    # via zeekscript
+tree-sitter-zeek==0.2.15
+    # via zeekscript
+triton==3.7.0 ; sys_platform == 'linux'
+    # via torch
+typer==0.25.1
+    # via
+    #   huggingface-hub
+    #   transformers
+types-pyyaml==6.0.12.20260518
+    # via pysigma
+typing-extensions==4.15.0
+    # via
+    #   alembic
+    #   anthropic
+    #   anyio
+    #   diskcache-stubs
+    #   grpcio
+    #   huggingface-hub
+    #   openai
+    #   pydantic
+    #   pydantic-core
+    #   pysigma
+    #   referencing
+    #   sentence-transformers
+    #   sqlalchemy
+    #   torch
+    #   typing-inspection
+typing-inspection==0.4.2
+    # via pydantic
+tzdata==2026.3 ; sys_platform == 'win32'
+    # via tzlocal
+tzlocal==5.4.4
+    # via apscheduler
+urllib3==2.7.0
+    # via requests
+weasyprint==69.0
+    # via rulezet-core
+webencodings==0.5.1
+    # via
+    #   cssselect2
+    #   tinycss2
+    #   tinyhtml5
+werkzeug==3.1.8
+    # via
+    #   flask
+    #   flask-login
+    #   flask-restx
+    #   rulezet-core
+wrapt==2.2.1
+    # via deprecated
+wtforms==3.2.2
+    # via
+    #   flask-wtf
+    #   rulezet-core
+yara-python==4.5.4
+    # via
+    #   cccs-yara
+    #   rulezet-core
+    #   rulezet-validation
+yara-x==1.22.1
+    # via rulezet-core
+zeekscript==1.3.6
+    # via rulezet-core
+zopfli==0.4.3
+    # via fonttools

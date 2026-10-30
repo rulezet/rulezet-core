@@ -333,7 +333,7 @@ def _new_usage():
     return {'input_tokens': 0, 'output_tokens': 0, 'cache_write_tokens': 0, 'cache_read_tokens': 0}
 
 
-# Python SDK each provider type needs. Installed with requirements.txt; when a
+# Python SDK each provider type needs. In pyproject.toml (uv sync); when a
 # server lacks one, the providers page offers to install it — only these
 # exact, pinned specs, never anything taken from the request.
 PROVIDER_SDKS = {

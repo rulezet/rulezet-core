@@ -59,14 +59,16 @@ git submodule update --remote --depth 1 app/modules/cti 2>/dev/null && \
 
 # 4. REQUIREMENTS CHECK
 echo -e "\n${YELLOW}[4/6] Syncing Python dependencies (uv → .venv/)...${NC}"
-# --locked: install exactly what uv.lock pins (fails if it's out of date with
-# pyproject.toml); --inexact: keep packages installed outside the lock (e.g.
-# AI provider SDKs the app installs at runtime) instead of removing them.
+# --frozen: install exactly what uv.lock pins, without re-resolving (the rule editor / tester
+# submodules float to their remote branch above — they are reinstalled editable just after, with any
+# new dependency of theirs); --inexact: keep packages installed outside the lock (e.g. AI provider
+# SDKs the app installs at runtime) instead of removing them. Same as manage.py update.
 unset UV_PROJECT_ENVIRONMENT
-if uv sync --locked --inexact; then
+if uv sync --frozen --inexact \
+   && uv pip install --python .venv/bin/python -q -e ./app/modules/rulezet-editor -e ./app/modules/rulezet-tester; then
     echo -e "${GREEN}✔ Dependencies in sync with uv.lock.${NC}"
 else
-    echo -e "${RED}✘ Error during uv sync — is uv installed and uv.lock up to date?${NC}"
+    echo -e "${RED}✘ Error during uv sync — is uv installed (curl -LsSf https://astral.sh/uv/install.sh | sh)?${NC}"
     exit 1
 fi
 

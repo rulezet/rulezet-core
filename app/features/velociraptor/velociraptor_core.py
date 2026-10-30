@@ -316,7 +316,7 @@ def test_server_connection(server: VelociraptorServer) -> tuple[bool, str]:
         db.session.commit()
         return False, "Connected, but the info() query returned no rows."
     except ImportError:
-        msg = "pyvelociraptor is not installed on this server — run `pip install -r requirements.txt`."
+        msg = "pyvelociraptor is not installed on this server — run `python3 manage.py update` (uv sync)."
         server.last_error = msg
         db.session.commit()
         return False, msg
@@ -352,7 +352,7 @@ def push_artifact(server: VelociraptorServer, artifact_yaml: str) -> tuple[bool,
         db.session.commit()
         return True, f"Artifact '{name}' registered on {server.name}."
     except ImportError:
-        msg = "pyvelociraptor is not installed on this server — run `pip install -r requirements.txt`."
+        msg = "pyvelociraptor is not installed on this server — run `python3 manage.py update` (uv sync)."
         server.last_error = msg
         db.session.commit()
         return False, msg

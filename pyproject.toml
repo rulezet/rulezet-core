@@ -1,19 +1,22 @@
+# pyproject.toml — Rulezet's Python dependencies, installed with uv (https://docs.astral.sh/uv/):
+#
+#     uv sync            # creates .venv/ and installs exactly what uv.lock pins
+#     uv lock            # after changing the dependencies below (commit uv.lock with it)
+#
+# python3 manage.py init / update / start-dev / start-prod run `uv sync` for you.
+# requirements.txt is generated from uv.lock (`uv export`, see its header) — only for servers whose
+# manage.py still installs with pip on their first update to this version.
+
 [project]
 name = "rulezet-core"
-version = "1.7.4"
+version = "1.7.5"
 description = "Community-Driven Detection Rules Platform"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "aiofiles>=25.1.0",
-    "apscheduler>=3.11.3",
-    "authlib>=1.8.0",
-    "cachelib>=0.17.0",
-    "cryptography>=50.0.1",
-    "dotenv>=0.9.9",
-    "email-validator>=2.3.0",
-    "faiss-cpu>=1.14.2",
+    # web app
     "flask>=3.1.3",
+    "werkzeug>=3.1.8",
     "flask-caching>=2.5.1",
     "flask-login>=0.6.3",
     "flask-mail>=0.10.0",
@@ -22,17 +25,37 @@ dependencies = [
     "flask-session>=0.8.0",
     "flask-sqlalchemy>=3.1.1",
     "flask-wtf>=1.3.0",
-    "gitpython>=3.1.50",
-    "grpcio>=1.83.1",
+    "wtforms>=3.2.2",
+    "email-validator>=2.3.0",
+    "sqlalchemy>=2.0.50",
+    "psycopg2-binary>=2.9.12",
+    "redis>=7.0.0",                       # cache when .env says CACHE_TYPE=RedisCache (deploy/setup_redis.sh)
+    "cachelib>=0.17.0",
+    "authlib>=1.8.0",
+    "cryptography>=50.0.1",
+    "dotenv>=0.9.9",
     "gunicorn>=26.0.0",
-    "idstools>=0.6.5",
+    "psutil>=7.2.2",
+    "requests>=2.34.2",
+    "gitpython>=3.1.50",
+    "pyyaml>=6.0.3",
     "jsonschema>=4.26.0",
+    "python-dateutil>=2.9.0.post0",
     "markdown>=3.10.2",
+    "weasyprint>=69.0",                   # PDF exports (needs libpango, see install.sh)
+    "aiofiles>=25.1.0",
+    "apscheduler>=3.11.3",
+    "schedule>=1.2.2",
+    "grpcio>=1.83.1",
+    # rule formats
+    "yara-python>=4.5.4",
+    "yara-x==1.22.1",                     # editor external checks (app/features/editor/external_checks.py)
+    "cccs-yara",                          # idem, CCCS YARA standard — git source below
+    "idstools>=0.6.5",
+    "suricataparser>=1.0.0",
+    "zeekscript>=1.3.6",
     "msc-pyparser>=1.2.2",
     "nova-hunting>=0.1.4",
-    "psutil>=7.2.2",
-    "psycopg2-binary>=2.9.12",
-    "pymisp>=2.5.34.1",
     "pysigma>=1.4.0",
     "pysigma-backend-elasticsearch>=2.1.1",
     "pysigma-backend-kusto>=1.0.1",
@@ -40,33 +63,32 @@ dependencies = [
     "pysigma-backend-secops>=1.0.0",
     "pysigma-backend-splunk>=2.1.0",
     "pysigma-backend-sumologic>=0.2.3",
-    "pytest>=9.0.3",
-    "python-dateutil>=2.9.0.post0",
+    # integrations
+    "pymisp>=2.5.34.1",
     "pyvelociraptor>=0.1.14",
-    "pyyaml>=6.0.3",
-    "rapidfuzz>=3.14.5",
-    "requests>=2.34.2",
-    "rulezet-validation",
-    "schedule>=1.2.2",
+    # similarity / AI
     "scikit-learn>=1.9.0",
-    "sqlalchemy>=2.0.50",
-    "suricataparser>=1.0.0",
-    "weasyprint>=69.0",
-    "werkzeug>=3.1.8",
-    "wtforms>=3.2.2",
-    "yara-python>=4.5.4",
-    "zeekscript>=1.3.6",
-]
-
-[project.optional-dependencies]
-redis = [
-    "redis>=8.1.0",
-]
-
-[dependency-groups]
-dev = [
+    "faiss-cpu>=1.14.2",
+    "rapidfuzz>=3.14.5",
+    "anthropic>=0.67.0,<1",              # same SDK major as the AI code was written for
+    "openai>=1.107.1,<2",                # idem (2.x changes the client API)
+    # tests (CI, manage.py test)
     "pytest>=9.0.3",
+    # Rulezet's own modules — git submodules in app/modules/, installed editable (sources below)
+    "rulezet-validation",
+    "rulezet-editor",
+    "rulezet-tester",
 ]
+
+[tool.uv]
+# Rulezet is an application, not a package to build
+package = false
+
+[tool.uv.sources]
+rulezet-validation = { path = "app/modules/rulezet-validation", editable = true }
+rulezet-editor = { path = "app/modules/rulezet-editor", editable = true }
+rulezet-tester = { path = "app/modules/rulezet-tester", editable = true }
+cccs-yara = { git = "https://github.com/CybercentreCanada/CCCS-Yara", rev = "3ac8d8aa6ab38d90c1e0ea8d4719ba751b6e9fa4" }
 
 [tool.alembic]
 # path to migration scripts
@@ -82,6 +104,3 @@ filterwarnings = [
     "ignore::UserWarning",
     "ignore::DeprecationWarning"
 ]
-
-[tool.uv.sources]
-rulezet-validation = { git = "https://github.com/rulezet/rulezet-validation.git", rev = "4853401" }
