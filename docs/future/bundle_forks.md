@@ -1,6 +1,27 @@
 # Bundle forks, merge requests and contributors — "GitHub for bundles"
 
-Status: **planned — next big thing to build.** Nothing here exists yet.
+Status: **phases 1–3 built (2026-10-30), phases 4–6 planned.**
+
+Built — `app/core/db_class/bundle_fork.py`, `app/features/bundle/bundle_fork_core.py` (engine),
+`bundle_fork_routes.py` (routes), `templates/bundle/merge_request.html`, `static/js/bundle/BundleForkPanel.js`,
+tests `tests_new/bundles/test_bundle_fork.py`, migration `f7c2a1d9e4b3`, setting `bundle.fork`:
+- fork (rights, daily limit, private bundles admin-only, big bundles through the `bundle_fork` job), "Forked from",
+  ahead / behind, forks list, the viewer's own fork, Fork button with count, "Fork" chip in the bundle list;
+- copy-on-write ("Edit my copy" in a fork, `BundleForkRule`), matched with its original in every diff;
+- merge requests fork → upstream: three-way diff (rules by uuid, files by path, folders, description, tags, CVEs),
+  item-by-item accept / reject, conflicts (content, modify/delete, move) with a side to pick, per changed rule:
+  update the rule / use the fork's copy / open an edit proposal; merge all-or-nothing, recorded in the bundle
+  history (`merge`), common ancestor moved; close / reopen / edit; owner switch "take merge requests";
+- Sync fork (upstream → fork, merged at once, or a `sync` merge request when there are conflicts);
+- fork made private / deleted → its open merge requests go `stale`; upstream deleted → the fork keeps
+  `forked_from_uuid`, "a bundle that was deleted";
+- activity log (`bundle.fork`, `bundle.fork_rule`, `bundle.mr_open|mr_merge|mr_close|mr_reopen|mr_settings`, `bundle.sync`),
+  notifications + preference "Forks and merge requests" (`pref_bundle_fork`), alerts (a public fork is a new
+  bundle, a merge bumps `updated_at`), `.bundle.json` export keeps `forked_from_uuid`.
+
+Not built yet: node uuids (a move across folders of a *file* shows as remove + add), contributors & roles,
+reviews / approvals, watch levels, network graph, merge-and-release, release comparison page (§8),
+comments on a merge request, API endpoints, federation across instances.
 
 A signed-in user can **fork** a bundle to work on their own copy, change it (rules, files, folders,
 description), then **propose the changes back** to the original as a *merge request*. The owner
