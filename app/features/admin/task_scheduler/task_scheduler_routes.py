@@ -813,3 +813,111 @@ def backups_folder():
     """The backup folder as the "Database backup + rotation" task shows it (admin only)."""
     from app.features.admin.task_scheduler.backup_rotation import list_backups
     return jsonify(list_backups()), 200
+
+
+def _planned_launches(start, end, exclude_uuid=None):
+    """Planned launches of every workflow's time-triggered first tasks between start and end (aware
+    datetimes, from now on) — the calendar's events, and what the per-day limit counts."""
+    import datetime
+    from app.core.db_class.task_scheduler import AdminWorkflow
+    from app.features.admin.task_scheduler.scheduler_engine import build_trigger, workflow_root_tasks
+    now = datetime.datetime.now(datetime.timezone.utc)
+    events = []
+    for wf in AdminWorkflow.query.all():
+        if exclude_uuid and wf.uuid == exclude_uuid:
+            continue
+        for root in workflow_root_tasks(wf):
+            if root.trigger_mode == 'after_task':
+                continue
+            base = {'kind': 'planned', 'workflow_uuid': wf.uuid, 'title': wf.title, 'task': root.title,
+                    'days_of_week': root.days_of_week_list() if root.trigger_mode == 'weekly' else None,
+                    'day_of_month': root.day_of_month if root.trigger_mode == 'monthly' else None,
+                    'mode': root.trigger_mode, 'active': bool(wf.is_active and root.is_active)}
+            if root.trigger_mode == 'once':
+                if root.run_once_at:
+                    at = root.run_once_at if root.run_once_at.tzinfo else root.run_once_at.replace(tzinfo=datetime.timezone.utc)
+                    if max(start, now) <= at <= end:
+                        events.append({**base, 'start': at.isoformat()})
+                continue
+            try:
+                trig, cur = build_trigger(root), max(start, now)
+                for _ in range(400):
+                    nxt = trig.get_next_fire_time(None, cur)
+                    if not nxt or nxt > end:
+                        break
+                    events.append({**base, 'start': nxt.astimezone(datetime.timezone.utc).isoformat()})
+                    cur = nxt + datetime.timedelta(seconds=1)
+            except Exception:
+                continue
+    return events
+
+
+@task_scheduler_blueprint.route('/calendar', methods=['GET'])
+def workflows_calendar():
+    """Launches of every workflow between ?start= and ?end= (ISO dates) — for the calendar view.
+    Planned: one event per launch of a time-triggered first task (once / daily / weekly / monthly /
+    cron), from now on. Past: the launches that happened (with how they ended)."""
+    import datetime
+
+    def parse(v, default):
+        try:
+            d = datetime.datetime.fromisoformat((v or '').replace('Z', '+00:00'))
+            return d if d.tzinfo else d.replace(tzinfo=datetime.timezone.utc)
+        except ValueError:
+            return default
+    now = datetime.datetime.now(datetime.timezone.utc)
+    start = parse(request.args.get('start'), now - datetime.timedelta(days=7))
+    end = min(parse(request.args.get('end'), now + datetime.timedelta(days=35)), start + datetime.timedelta(days=100))
+    events = _planned_launches(start, end)
+    # launches that happened in the range
+    from app.core.db_class.task_scheduler import AdminWorkflowRun
+    from app.features.admin.task_scheduler.workflow_notes import _launch_status
+    naive = lambda d: d.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    runs = (AdminWorkflowRun.query.filter(AdminWorkflowRun.started_at >= naive(start),
+                                          AdminWorkflowRun.started_at <= naive(min(end, now)))
+            .order_by(AdminWorkflowRun.started_at).limit(500).all())
+    for run in runs:
+        if not run.workflow:
+            continue
+        events.append({'kind': 'past', 'workflow_uuid': run.workflow.uuid, 'title': run.workflow.title,
+                       'status': _launch_status(run), 'run_uuid': run.uuid, 'active': True,
+                       'start': run.started_at.replace(tzinfo=datetime.timezone.utc).isoformat()})
+    return jsonify({'events': events}), 200
+
+
+@task_scheduler_blueprint.route('/workflows/<uuid>/launch', methods=['POST'])
+def set_workflow_launch(uuid):
+    """Only the launch date / recurrence of a workflow (its first task) — the calendar's
+    drag and drop, nothing else of the workflow changes. Body: {"launch": {trigger_mode, …}}."""
+    from app import db
+    workflow = _workflow_or_none(uuid)
+    if not workflow:
+        return _err('Workflow not found.', 404)
+    launch = (request.get_json(silent=True) or {}).get('launch')
+    if not isinstance(launch, dict):
+        return _err('No launch given.')
+    err = TaskSchedulerModel._set_workflow_launch(workflow, launch)
+    if err:
+        db.session.rollback()
+        return _err(err)
+    # At most N launches a day (setting workflows.calendar_max_per_day) over the next 5 weeks, this one included
+    import datetime
+    from collections import Counter
+    from app.core.utils.app_settings import get_setting
+    try:
+        limit = int(get_setting('workflows.calendar_max_per_day') or 5)
+    except (KeyError, TypeError, ValueError):
+        limit = 5
+    db.session.flush()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    per_day = Counter(e['start'][:10] for e in _planned_launches(now, now + datetime.timedelta(days=35)))
+    full = sorted(d for d, n in per_day.items() if n > limit)
+    if full:
+        db.session.rollback()
+        return _err(f'More than {limit} workflow launches on {full[0]}' + (f' (and {len(full) - 1} other day(s))' if len(full) > 1 else '')
+                    + ' — pick another day or time. The limit is the setting workflows.calendar_max_per_day.')
+    db.session.commit()
+    log_activity('admin.workflow_updated', f"Launch of workflow '{workflow.title}' set from the calendar "
+                 f"({launch.get('trigger_mode')})", target_type='admin_workflow', target_uuid=workflow.uuid,
+                 icon='fa-regular fa-calendar')
+    return jsonify({'message': 'Launch saved.', 'toast_class': 'success-subtle', 'workflow': workflow.to_json()}), 200

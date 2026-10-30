@@ -1,0 +1,7 @@
+{
+  "label": "Workflow launches per day (calendar)",
+  "category": "Workflows",
+  "description": "At most this many workflow launches on the same day (UTC), checked when a launch is set from the workflows calendar — keeps the nights from piling up heavy jobs.",
+  "public": true,
+  "value": 5
+}

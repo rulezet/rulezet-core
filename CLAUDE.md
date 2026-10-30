@@ -88,6 +88,7 @@ Shared components in `app/static/js/components/` (ES modules, each has matching 
 `CodeViewer` — read-only syntax-highlighted code display, props: `code`, `language`, `filename`. Used everywhere a rule is shown.
 `DiffViewer` — side-by-side diff, props: `old_content`, `new_content`. Used on edit proposals and rule history.
 `ChartViewer` — ECharts wrapper, chart types: line/area/bar/bar-h/pie/donut/scatter. Used on stats/analytics pages.
+`CalendarView` — FullCalendar wrapper (month/week/day/list, drag & drop, external draggables), from `components/calendar-view.js`; props `events`, `editable`, `selectable`, `droppable`; emits `range`, `select`, `event-click`, `event-drop`, `drop`. Used on the workflows calendar (`/admin/tasks/?view=calendar`).
 `Timeline` — vertical event list, prop: `events [{date, label, icon, color}]`. Used in connector history, activity feeds.
 `AnsiTerminal` — renders ANSI color codes, prop: `content`. Used in job logs.
 `FileTree` — recursive tree, prop: `node`, emits `select`. Used in bundle structure.

@@ -1,0 +1,42 @@
+/* calendar-view.js — FullCalendar themed with Rulezet's variables (light / dark) */
+.calendar-view {
+    --fc-border-color: var(--border-color);
+    --fc-page-bg-color: var(--card-bg-color);
+    --fc-neutral-bg-color: var(--light-bg-color);
+    --fc-list-event-hover-bg-color: var(--light-bg-color);
+    --fc-today-bg-color: rgba(13, 110, 253, .07);
+    --fc-now-indicator-color: #dc3545;
+    --fc-button-bg-color: var(--card-bg-color);
+    --fc-button-border-color: var(--border-color);
+    --fc-button-text-color: var(--text-color);
+    --fc-button-hover-bg-color: var(--light-bg-color);
+    --fc-button-hover-border-color: var(--border-color);
+    --fc-button-active-bg-color: #0d6efd;
+    --fc-button-active-border-color: #0d6efd;
+    --fc-event-border-color: transparent;
+    --fc-highlight-color: rgba(13, 110, 253, .12);
+    color: var(--text-color);
+    font-size: .85rem;
+}
+.calendar-view .fc .fc-toolbar-title { font-size: 1.1rem; font-weight: 700; }
+.calendar-view .fc .fc-button { font-size: .8rem; text-transform: capitalize; box-shadow: none !important; padding: .3rem .7rem; }
+.calendar-view .fc .fc-button-primary:not(:disabled).fc-button-active { color: #fff; }
+.calendar-view .fc .fc-col-header-cell-cushion,
+.calendar-view .fc .fc-daygrid-day-number { color: var(--text-color); text-decoration: none; }
+.calendar-view .fc .fc-daygrid-day-number { font-size: .78rem; }
+.calendar-view .fc .fc-event { cursor: pointer; font-size: .76rem; border-radius: 6px; padding: 1px 3px; }
+.calendar-view .fc .fc-daygrid-event-dot { display: none; }
+.calendar-view .fc .fc-list-event-title a { color: var(--text-color); text-decoration: none; }
+.calendar-view__error { font-size: .85rem; color: #dc3545; padding: .75rem; border: 1px dashed rgba(220,53,69,.4); border-radius: 10px; }
+@media (max-width: 640px) {
+    .calendar-view .fc .fc-toolbar { flex-direction: column; gap: .5rem; }
+}
+
+/* Drag in progress: the cell / column under the pointer ("it will go here") */
+.calendar-view .fc .cv-drop-target { outline: 2px solid #0d6efd; outline-offset: -2px; background: rgba(13, 110, 253, .1) !important; position: relative; }
+.calendar-view .fc .fc-daygrid-day.cv-drop-target::after {
+    content: "Add here"; position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%);
+    font-size: .68rem; font-weight: 700; color: #fff; background: #0d6efd; border-radius: 999px; padding: .05rem .5rem; pointer-events: none; white-space: nowrap;
+}
+.calendar-view .fc .cv-drop-slot { background: rgba(13, 110, 253, .22) !important; box-shadow: inset 0 0 0 1px #0d6efd; }
+.calendar-view .fc .fc-event-dragging, .calendar-view .fc .fc-event-mirror { box-shadow: 0 6px 18px rgba(13, 110, 253, .35); }

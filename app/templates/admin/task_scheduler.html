@@ -9,6 +9,8 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/taskCanvas.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/taskForm.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/workflowNotebook.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/calendar-view.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/workflowCalendar.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/workflowRunTrace.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/jobs/jobs.css') }}">
@@ -84,7 +86,117 @@
                 </a>
             </div>
         </div>
-        <div class="card border-0 shadow-sm rounded-3">
+        <!-- List / Calendar of the workflows -->
+        <nav class="dr-nav mb-3" role="tablist">
+            <a href="#" class="dr-nav__item" :class="{ active: listView === 'list' }" @click.prevent="setListView('list')">
+                <i class="fa-solid fa-list"></i><span>List</span></a>
+            <a href="#" class="dr-nav__item" :class="{ active: listView === 'calendar' }" @click.prevent="setListView('calendar')">
+                <i class="fa-regular fa-calendar"></i><span>Calendar</span></a>
+        </nav>
+
+        <!-- Calendar: every workflow's launches, planned and past; drag a workflow on a day to schedule it -->
+        <div v-if="listView === 'calendar'" class="wcal">
+            <aside class="wcal-side">
+                <div class="wcal-side__head">
+                    <span><i class="fa-solid fa-diagram-project me-1"></i>Workflows</span>
+                    <button type="button" class="wcal-link" @click="calSelected = calSelected.length ? [] : calWorkflows.map(w => w.uuid)">
+                        [[ calSelected.length ? 'None' : 'All' ]]</button>
+                </div>
+                <p class="wcal-hint">Drag a workflow onto a day or an hour — the checked ones go with it. Or click a day.</p>
+                <div ref="calSide" class="wcal-list">
+                    <div v-for="w in calWorkflows" :key="w.uuid" class="wcal-wf" :class="{ 'is-paused': !w.is_active, 'is-checked': calSelected.includes(w.uuid) }"
+                         :data-uuid="w.uuid" :data-title="calSelected.includes(w.uuid) && calSelected.length > 1 ? calSelected.length + ' workflows' : w.title"
+                         :style="{ '--wf-color': wfColor(w.uuid) }">
+                        <input type="checkbox" :value="w.uuid" v-model="calSelected" @mousedown.stop aria-label="Select">
+                        <span class="wcal-wf__dot"></span>
+                        <span class="wcal-wf__body">
+                            <span class="wcal-wf__title">[[ w.title ]]</span>
+                            <span class="wcal-wf__sub">[[ w.first_task && w.first_task.trigger_mode !== 'after_task' ? triggerSummary(w.first_task) : 'no launch date' ]][[ w.is_active ? '' : ' · paused' ]]</span>
+                        </span>
+                        <i class="fa-solid fa-grip-vertical wcal-wf__grip"></i>
+                    </div>
+                    <p v-if="!calWorkflows.length" class="wcal-hint">No workflow yet.</p>
+                </div>
+                <button v-if="calSelected.length" type="button" class="btn btn-sm btn-primary rounded-pill w-100 mt-2" @click="openSchedule(null, calSelected)">
+                    <i class="fa-regular fa-calendar-plus me-1"></i>Schedule the [[ calSelected.length ]] checked</button>
+                <div class="wcal-legend">
+                    <span><i class="wcal-legend__swatch" style="background:#0d6efd"></i>planned</span>
+                    <span><i class="wcal-legend__swatch" style="background:#198754"></i>done</span>
+                    <span><i class="wcal-legend__swatch" style="background:#dc3545"></i>failed</span>
+                    <span><i class="wcal-legend__swatch wcal-legend__swatch--paused"></i>paused</span>
+                </div>
+            </aside>
+            <div class="wcal-main">
+                <calendar-view ref="calendarRef" :events="calEvents" :editable="true" :selectable="true" :droppable="true"
+                               @range="onCalRange" @select="onCalSelect" @drop="onCalDrop" @event-drop="onCalEventDrop" @event-click="onCalEventClick"></calendar-view>
+            </div>
+        </div>
+
+        <!-- Schedule: when the chosen workflows launch -->
+        <div v-if="schedule.open" class="wcal-modal" @click.self="schedule.open = false">
+            <div class="wcal-modal__box" role="dialog" aria-modal="true">
+                <h5 class="fw-bold mb-1"><i class="fa-regular fa-calendar-plus me-2 text-primary"></i>Schedule [[ schedule.rows.length > 1 ? schedule.rows.length + ' workflows' : 'a workflow' ]]</h5>
+                <p class="text-muted small mb-3">Replaces the launch date of each one (its first task) — your time zone, [[ userTz ]].</p>
+                <!-- One row per workflow, one after the other -->
+                <div v-if="schedule.rows.length > 1" class="wcal-spread mb-2">
+                    <span class="small text-muted">One after the other, every</span>
+                    <select class="form-select form-select-sm" style="width:auto" v-model.number="schedule.spacing" @change="spreadRows()">
+                        <option :value="0">same time</option><option :value="15">15 min</option><option :value="30">30 min</option>
+                        <option :value="60">1 hour</option><option :value="120">2 hours</option><option :value="1440">1 day</option>
+                    </select>
+                    <span class="small text-muted">from the first one</span>
+                </div>
+                <div class="wcal-rows mb-3">
+                    <div v-for="(r, i) in schedule.rows" :key="r.uuid" class="wcal-row" :class="{ 'is-full': dayIsFull(r, i) }" :style="{ '--wf-color': wfColor(r.uuid) }">
+                        <span class="wcal-row__n">[[ i + 1 ]]</span>
+                        <span class="wcal-wf__dot"></span>
+                        <span class="wcal-row__title">[[ wfTitle(r.uuid) ]]</span>
+                        <input type="date" class="form-control form-control-sm" v-model="r.date" @change="i === 0 && spreadRows()">
+                        <input type="time" class="form-control form-control-sm" v-model="r.time" @change="i === 0 && spreadRows()">
+                        <button v-if="schedule.rows.length > 1" type="button" class="wcal-row__x" title="Leave it out" @click="schedule.rows.splice(i, 1); spreadRows()">×</button>
+                        <span v-if="dayIsFull(r, i)" class="wcal-row__full">[[ dayCount(r, i) ]] launches that day — [[ calMaxPerDay ]] max</span>
+                    </div>
+                </div>
+                <div class="tf-segment mb-3 flex-wrap">
+                    <button type="button" :class="{ 'is-on': schedule.repeat === 'once' }" @click="schedule.repeat = 'once'">Once</button>
+                    <button type="button" :class="{ 'is-on': schedule.repeat === 'daily' }" @click="schedule.repeat = 'daily'">Every day</button>
+                    <button type="button" :class="{ 'is-on': schedule.repeat === 'weekly' }" @click="schedule.repeat = 'weekly'">Every week (that weekday)</button>
+                    <button type="button" :class="{ 'is-on': schedule.repeat === 'monthly' }" @click="schedule.repeat = 'monthly'">Every month (that day)</button>
+                </div>
+                <label class="tf-switch mb-3">
+                    <input type="checkbox" v-model="schedule.resume">
+                    <span class="tf-switch__track"><span class="tf-switch__thumb"></span></span>
+                    <span>Also resume the paused ones</span>
+                </label>
+                <p class="small text-muted mb-0"><i class="fa-solid fa-circle-info me-1"></i>[[ scheduleSentence ]]</p>
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <button type="button" class="btn btn-light rounded-pill" @click="schedule.open = false">Cancel</button>
+                    <button type="button" class="btn btn-primary rounded-pill px-4" :disabled="schedule.saving || !schedule.rows.length || schedule.rows.some(r => !r.date || !r.time) || schedule.rows.some((r, i) => dayIsFull(r, i))" @click="saveSchedule()">
+                        <span v-if="schedule.saving" class="spinner-border spinner-border-sm me-1"></span>Save</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- A calendar event: what it is, what to do with it -->
+        <div v-if="calPick" class="wcal-modal" @click.self="calPick = null">
+            <div class="wcal-modal__box" role="dialog" aria-modal="true" style="max-width:420px">
+                <h5 class="fw-bold mb-1">[[ calPick.title ]]</h5>
+                <p class="small text-muted mb-3">
+                    [[ new Date(calPick.start).toLocaleString() ]] ·
+                    <template v-if="calPick.extendedProps.kind === 'past'">launch [[ calPick.extendedProps.status ]]</template>
+                    <template v-else>[[ modeLabel(calPick.extendedProps.mode) ]][[ calPick.extendedProps.active ? '' : ' · paused' ]]</template>
+                </p>
+                <div class="d-flex flex-wrap gap-2">
+                    <a :href="'/admin/tasks/' + calPick.extendedProps.workflow_uuid" class="btn btn-sm btn-outline-primary rounded-pill"><i class="fa-solid fa-arrow-right me-1"></i>Open the workflow</a>
+                    <button type="button" class="btn btn-sm btn-outline-success rounded-pill" @click="calRunNow(calPick.extendedProps.workflow_uuid)"><i class="fa-solid fa-play me-1"></i>Run now</button>
+                    <button v-if="calPick.extendedProps.kind !== 'past'" type="button" class="btn btn-sm btn-outline-secondary rounded-pill"
+                            @click="openSchedule(new Date(calPick.start), [calPick.extendedProps.workflow_uuid], calPick.extendedProps.mode); calPick = null">
+                        <i class="fa-regular fa-calendar me-1"></i>Reschedule</button>
+                </div>
+            </div>
+        </div>
+
+        <div v-show="listView === 'list'" class="card border-0 shadow-sm rounded-3">
             <div class="card-body p-3 p-md-4">
                 <div class="dt-toolbar mb-3">
                     <div class="dt-toolbar-left">
@@ -1471,6 +1583,7 @@
     import WorkflowRunTrace, { formatDuration } from '/static/js/admin/workflowRunTrace.js';
     import JobTracker from '/static/js/jobs/JobTracker.js';
     import WorkflowNotebook, { PinnedNotes } from '/static/js/admin/workflowNotebook.js';
+    import CalendarView from '/static/js/components/calendar-view.js';
     import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js';
     import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
 
@@ -1490,6 +1603,7 @@
             'workflow-run-trace': WorkflowRunTrace,
             'job-tracker': JobTracker,
             'workflow-notebook': WorkflowNotebook,
+            'calendar-view': CalendarView,
             'pinned-notes': PinnedNotes,
             'tags-displays-list': TagsDisplaysList,
             'vulnerability-displays-list': VulnerabilityDisplaysList,
@@ -1522,6 +1636,176 @@
                 const keep = Math.max(3, parseInt(form.extra_options.keep, 10) || 10);
                 const auto = backupsInfo.value.files.filter(x => x.rotated);      // newest first
                 return auto.indexOf(f) >= keep - 1;
+            }
+
+            // ── Calendar of the workflows (components/calendar-view.js) ─────────────────
+            const userTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+            const listView = ref(new URLSearchParams(location.search).get('view') === 'calendar' ? 'calendar' : 'list');
+            const calWorkflows = ref([]);
+            const calSelected = ref([]);
+            const calEvents = ref([]);
+            const calRange = ref(null);
+            const calPick = ref(null);
+            const calendarRef = ref(null);
+            const calSide = ref(null);
+            const PALETTE = ['#0d6efd', '#6f42c1', '#d63384', '#fd7e14', '#20c997', '#0dcaf0', '#6610f2', '#198754', '#e35d6a', '#b08800'];
+            function wfColor(uuid) {
+                let h = 0;
+                for (const c of uuid || '') h = (h * 31 + c.charCodeAt(0)) >>> 0;
+                return PALETTE[h % PALETTE.length];
+            }
+            const wfTitle = (uuid) => (calWorkflows.value.find(w => w.uuid === uuid) || {}).title || 'Workflow';
+            const STATUS_COLOR = { done: '#198754', failed: '#dc3545', running: '#0d6efd', pending: '#0d6efd', cancelled: '#6c757d' };
+            const modeLabel = (m) => ({ once: 'once', daily: 'every day', weekly: 'every week', monthly: 'every month', cron: 'cron' }[m] || m);
+
+            function setListView(v) {
+                listView.value = v;
+                const url = new URL(location.href);
+                if (v === 'calendar') url.searchParams.set('view', 'calendar'); else url.searchParams.delete('view');
+                history.replaceState(history.state, '', url);
+                if (v === 'calendar') initCalendar();
+            }
+            async function loadCalWorkflows() {
+                const res = await fetch('/admin/tasks/workflows?per_page=100');
+                if (res.ok) calWorkflows.value = (await res.json()).workflows || [];
+            }
+            async function loadCalEvents() {
+                if (!calRange.value) return;
+                const p = new URLSearchParams({ start: calRange.value.start.toISOString(), end: calRange.value.end.toISOString() });
+                const res = await fetch('/admin/tasks/calendar?' + p);
+                if (!res.ok) return;
+                calEvents.value = ((await res.json()).events || []).map((e, i) => {
+                    const past = e.kind === 'past';
+                    const color = past ? (STATUS_COLOR[e.status] || '#6c757d') : (e.active ? wfColor(e.workflow_uuid) : '#adb5bd');
+                    return { id: (past ? 'r' : 'p') + i, title: (past ? (e.status === 'done' ? '✓ ' : e.status === 'failed' ? '✗ ' : '• ') : '▶ ') + e.title,
+                             start: e.start, color, editable: !past && e.mode !== 'cron', classNames: past ? ['is-past'] : (e.active ? [] : ['is-paused']),
+                             extendedProps: e };
+                });
+            }
+            async function initCalendar() {
+                await loadCalWorkflows();
+                await nextTick();
+                if (calendarRef.value && calSide.value) calendarRef.value.makeDraggable(calSide.value, '.wcal-wf');
+            }
+            function onCalRange(r) { calRange.value = r; loadCalEvents(); }
+
+            // Schedule dialog
+            const pad = (n) => String(n).padStart(2, '0');
+            const toDateInput = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            const schedule = reactive({ open: false, rows: [], repeat: 'once', spacing: 30, resume: true, saving: false });
+            const calMaxPerDay = ref(5);
+            fetch('/api/config/settings/workflows.calendar_max_per_day').then(r => r.ok ? r.json() : null)
+                .then(d => { if (d && d.value) calMaxPerDay.value = Number(d.value) || 5; }).catch(() => {});
+            function openSchedule(date, uuids, repeat) {
+                const d = date || new Date(Date.now() + 3600e3);
+                const hasTime = date && (date.getHours() || date.getMinutes());
+                const time = hasTime ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : '03:00';
+                Object.assign(schedule, { open: true, saving: false, resume: true,
+                    repeat: repeat && repeat !== 'cron' ? repeat : 'once',
+                    rows: [...new Set(uuids)].filter(Boolean).map(uuid => ({ uuid, date: toDateInput(d), time })) });
+                spreadRows();
+            }
+            // Rows after the first: the first one's date / time + spacing × position
+            function spreadRows() {
+                const first = schedule.rows[0];
+                if (!first || !first.date || !first.time) return;
+                const t0 = new Date(`${first.date}T${first.time}`);
+                schedule.rows.forEach((r, i) => {
+                    if (!i) return;
+                    const t = new Date(t0.getTime() + i * schedule.spacing * 60000);
+                    r.date = toDateInput(t);
+                    r.time = `${pad(t.getHours())}:${pad(t.getMinutes())}`;
+                });
+            }
+            // Launches already planned that day (other workflows than the ones being scheduled) + the rows on it
+            function dayCount(r, i) {
+                const moving = new Set(schedule.rows.map(x => x.uuid));
+                const planned = calEvents.value.filter(e => e.extendedProps.kind === 'planned' && !moving.has(e.extendedProps.workflow_uuid)
+                                                          && toDateInput(new Date(e.start)) === r.date).length;
+                return planned + schedule.rows.filter(x => x.date === r.date).length;
+            }
+            const dayIsFull = (r, i) => !!r.date && dayCount(r, i) > calMaxPerDay.value;
+            const weekdayName = (ds) => ds ? new Date(ds + 'T12:00').toLocaleDateString('en-GB', { weekday: 'long' }) : 'week';
+            const dayOfMonth = (ds) => { const n = ds ? new Date(ds + 'T12:00').getDate() : 1; return n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'); };
+            const scheduleSentence = computed(() => {
+                const r = schedule.rows[0];
+                if (!r) return '';
+                const at = r.time || '--:--', more = schedule.rows.length > 1 ? `, the others after it as listed` : '';
+                return { once: `Runs once, on ${r.date} at ${at}${more}.`, daily: `Runs every day at ${at}${more}.`,
+                         weekly: `Runs every ${weekdayName(r.date)} at ${at}${more}.`,
+                         monthly: `Runs on the ${dayOfMonth(r.date)} of every month at ${at}${more}.` }[schedule.repeat];
+            });
+            function launchFrom(date, repeat) {
+                const [h, m] = [date.getHours(), date.getMinutes()];
+                if (repeat === 'once') return { trigger_mode: 'once', run_once_at: date.toISOString() };
+                const base = { trigger_mode: repeat, hour: h, minute: m, timezone: userTz };
+                if (repeat === 'weekly') base.days_of_week = [(date.getDay() + 6) % 7];      // 0 = Monday
+                if (repeat === 'monthly') base.day_of_month = date.getDate();
+                return base;
+            }
+            async function saveLaunch(uuid, launch) {
+                const res = await fetch(`/admin/tasks/workflows/${uuid}/launch`, { method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }, body: JSON.stringify({ launch }) });
+                const data = await res.json().catch(() => ({}));
+                return res.ok ? null : (data.message || 'Failed.');
+            }
+            async function saveSchedule() {
+                schedule.saving = true;
+                const errors = [];
+                let saved = 0;
+                try {
+                    for (const r of schedule.rows) {
+                        const err = await saveLaunch(r.uuid, launchFrom(new Date(`${r.date}T${r.time}`), schedule.repeat));
+                        if (err) { errors.push(`${wfTitle(r.uuid)}: ${err}`); continue; }
+                        saved++;
+                        const wf = calWorkflows.value.find(w => w.uuid === r.uuid);
+                        if (schedule.resume && wf && !wf.is_active) {
+                            await fetch(`/admin/tasks/workflows/${r.uuid}/set_active`, { method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }, body: JSON.stringify({ is_active: true }) });
+                        }
+                    }
+                    if (errors.length) create_message(errors.join(' · '), 'danger-subtle');
+                    if (saved) create_message(`${saved} workflow(s) scheduled — ${scheduleSentence.value}`, 'success-subtle');
+                    if (!errors.length) { schedule.open = false; calSelected.value = []; }
+                    await Promise.all([loadCalWorkflows(), loadCalEvents()]);
+                    fetchWorkflows(workflowsPage.value);
+                } finally {
+                    schedule.saving = false;
+                }
+            }
+            function onCalSelect({ start }) { openSchedule(start, calSelected.value); }
+            function onCalDrop({ date, el }) {
+                const dragged = el && el.dataset ? el.dataset.uuid : null;
+                openSchedule(date, [dragged, ...(calSelected.value.includes(dragged) ? calSelected.value : [])]);
+            }
+            async function onCalEventDrop({ event, start, revert }) {
+                const e = event.extendedProps;
+                const was = new Date(e.start);
+                let launch;
+                if (e.mode === 'once') {
+                    launch = launchFrom(start, 'once');
+                } else {
+                    const when = start.toLocaleString([], { weekday: e.mode === 'weekly' ? 'long' : undefined, day: e.mode === 'monthly' ? 'numeric' : undefined, hour: '2-digit', minute: '2-digit' });
+                    if (!window.confirm(`Move every ${modeLabel(e.mode).replace('every ', '')} launch of "${e.title}" to ${when}?`)) { revert(); return; }
+                    launch = launchFrom(start, e.mode);
+                    if (e.mode === 'weekly' && Array.isArray(e.days_of_week) && e.days_of_week.length > 1) {
+                        // several days a week: only the dragged day moves
+                        const oldDow = (was.getDay() + 6) % 7, newDow = (start.getDay() + 6) % 7;
+                        launch.days_of_week = [...new Set(e.days_of_week.map(d => d === oldDow ? newDow : d))].sort();
+                    }
+                }
+                const err = await saveLaunch(e.workflow_uuid, launch);
+                if (err) { revert(); create_message(err, 'danger-subtle'); return; }
+                create_message(`"${e.title}" rescheduled.`, 'success-subtle');
+                await Promise.all([loadCalWorkflows(), loadCalEvents()]);
+            }
+            function onCalEventClick({ event }) { calPick.value = event; }
+            async function calRunNow(uuid) {
+                const res = await fetch(`/admin/tasks/workflows/${uuid}/run_now`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                const data = await res.json().catch(() => ({}));
+                create_message(data.message || (res.ok ? 'Launched.' : 'Failed.'), res.ok ? 'success-subtle' : 'danger-subtle');
+                calPick.value = null;
+                if (res.ok) setTimeout(loadCalEvents, 1500);
             }
 
             const health = ref(null);
@@ -2875,13 +3159,17 @@
                     openWorkflow(initialWorkflow);
                 } else {
                     fetchWorkflows(1);
+                    if (listView.value === 'calendar') initCalendar();
                 }
             });
 
             onUnmounted(() => stopLivePolling());
 
             return {
-                truncate, health, backupsInfo, loadBackupsInfo, fmtBytes, willBeDeleted, exportWorkflow, alertTaskCount, retryTaskCount, autoPausedCount, linkAlert, saveLinkAlert, taskAlert, ALERT_POINTS, notebook, noteOnRun, pinnedNotes, showPinned, share, openShare, shareAction, copyShare,
+                truncate, health, listView, setListView, calWorkflows, calSelected, calEvents, calPick, calendarRef, calSide, wfColor, wfTitle,
+                modeLabel, userTz, onCalRange, schedule, openSchedule, weekdayName, dayOfMonth, scheduleSentence, saveSchedule,
+                spreadRows, dayCount, dayIsFull, calMaxPerDay,
+                onCalSelect, onCalDrop, onCalEventDrop, onCalEventClick, calRunNow, backupsInfo, loadBackupsInfo, fmtBytes, willBeDeleted, exportWorkflow, alertTaskCount, retryTaskCount, autoPausedCount, linkAlert, saveLinkAlert, taskAlert, ALERT_POINTS, notebook, noteOnRun, pinnedNotes, showPinned, share, openShare, shareAction, copyShare,
                 route, activeWorkflow, openWorkflow, backToWorkflows, runWorkflowNow,
                 runPreview, runPreviewLoading, askRunWorkflow, confirmRunWorkflow,
                 dashboard, loadDashboard, barHeight, toggleWorkflowActive, runFromHere, setTaskActive,

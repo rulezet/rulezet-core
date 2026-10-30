@@ -1,0 +1,11 @@
+/* "Written with" AI badge — rule page (author line) and bundle page (from its description); data from rule/ai_writers.py */
+.ai-writer-badge { display: inline-flex; align-items: center; gap: .35rem; padding: .12rem .55rem .12rem .25rem; border-radius: 999px;
+                   border: 1px solid color-mix(in srgb, var(--ai-color) 40%, transparent);
+                   background: color-mix(in srgb, var(--ai-color) 10%, transparent); font-size: .74rem; cursor: help; }
+.ai-writer-badge--human { padding-left: .5rem; }
+.ai-writer-badge__logo { width: 16px; height: 16px; border-radius: 50%; background: #fff; padding: 2px; object-fit: contain; }
+.ai-writer-badge__initial { width: 16px; height: 16px; border-radius: 50%; background: var(--ai-color); color: #fff; font-size: .62rem; font-weight: 800;
+                            display: inline-flex; align-items: center; justify-content: center; }
+.ai-writer-badge__name { font-weight: 700; color: var(--text-color); }
+.ai-writer-badge__model { color: var(--subtle-text-color); font-family: var(--bs-font-monospace); font-size: .68rem; }
+.ai-writer-badge i { color: var(--ai-color); font-size: .7rem; }

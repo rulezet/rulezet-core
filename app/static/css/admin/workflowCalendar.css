@@ -1,0 +1,42 @@
+/* Workflows calendar view (/admin/tasks/?view=calendar) — components/calendar-view.js underneath */
+.wcal { display: grid; grid-template-columns: 270px 1fr; gap: 1rem; align-items: start; }
+@media (max-width: 900px) { .wcal { grid-template-columns: 1fr; } }
+.wcal-side, .wcal-main { background: var(--card-bg-color); border: 1px solid var(--border-color); border-radius: 14px; padding: .9rem; box-shadow: 0 2px 10px rgba(13,40,90,.04); }
+.wcal-side { position: sticky; top: 1rem; }
+.wcal-side__head { display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: .85rem; color: var(--text-color); }
+.wcal-link { border: 0; background: none; color: #0d6efd; font-size: .76rem; font-weight: 600; padding: 0; }
+.wcal-hint { font-size: .74rem; color: var(--subtle-text-color); margin: .35rem 0 .6rem; }
+.wcal-list { display: flex; flex-direction: column; gap: .35rem; max-height: 60vh; overflow-y: auto; }
+.wcal-wf { display: flex; align-items: center; gap: .5rem; padding: .45rem .55rem; border: 1px solid var(--border-color); border-left: 3px solid var(--wf-color, #0d6efd);
+           border-radius: 9px; background: var(--light-bg-color); cursor: grab; user-select: none; }
+.wcal-wf:hover { border-color: var(--wf-color, #0d6efd); }
+.wcal-wf.is-checked { background: rgba(13,110,253,.08); }
+.wcal-wf.is-paused { opacity: .65; }
+.wcal-wf__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--wf-color, #0d6efd); flex-shrink: 0; display: inline-block; }
+.wcal-wf__body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.wcal-wf__title { font-size: .82rem; font-weight: 600; color: var(--text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wcal-wf__sub { font-size: .7rem; color: var(--subtle-text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wcal-wf__grip { color: var(--subtle-text-color); font-size: .75rem; }
+.wcal-legend { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .8rem; font-size: .7rem; color: var(--subtle-text-color); }
+.wcal-legend span { display: inline-flex; align-items: center; gap: .3rem; }
+.wcal-legend__swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.wcal-legend__swatch--paused { background: #adb5bd; }
+.wcal-main .fc .fc-event.is-paused { opacity: .55; }
+.wcal-main .fc .fc-event.is-past { opacity: .85; }
+.wcal-modal { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 2050; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.wcal-modal__box { background: var(--card-bg-color); color: var(--text-color); border-radius: 16px; padding: 1.3rem; width: 100%; max-width: 560px; box-shadow: 0 20px 60px rgba(0,0,0,.25); max-height: calc(100vh - 32px); overflow-y: auto; }
+.wcal-chips { display: flex; flex-wrap: wrap; gap: .35rem; }
+.wcal-chip { display: inline-flex; align-items: center; gap: .35rem; font-size: .78rem; font-weight: 600; padding: .2rem .6rem; border-radius: 999px;
+             border: 1px solid var(--border-color); background: var(--light-bg-color); }
+.wcal-chip button { border: 0; background: none; color: var(--subtle-text-color); padding: 0 .1rem; line-height: 1; }
+.wcal-spread { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.wcal-rows { display: flex; flex-direction: column; gap: .4rem; }
+.wcal-row { display: grid; grid-template-columns: 1.4rem 10px 1fr 150px 100px 1.4rem; align-items: center; gap: .45rem; padding: .4rem .55rem;
+            border: 1px solid var(--border-color); border-left: 3px solid var(--wf-color, #0d6efd); border-radius: 9px; background: var(--light-bg-color); }
+.wcal-row.is-full { border-color: #dc3545; background: rgba(220,53,69,.06); }
+.wcal-row__n { font-size: .72rem; font-weight: 800; color: var(--subtle-text-color); text-align: center; }
+.wcal-row__title { font-size: .82rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wcal-row__x { border: 0; background: none; color: var(--subtle-text-color); font-size: 1rem; line-height: 1; }
+.wcal-row__x:hover { color: #dc3545; }
+.wcal-row__full { grid-column: 3 / -1; font-size: .72rem; font-weight: 600; color: #dc3545; }
+@media (max-width: 560px) { .wcal-row { grid-template-columns: 1.4rem 10px 1fr; } .wcal-row input { grid-column: 3; } }
