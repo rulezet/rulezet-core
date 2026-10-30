@@ -1,0 +1,14 @@
+{
+  "label": "Tag icons offered",
+  "category": "Tags",
+  "description": "The icons the tag create / edit windows offer, by group (Font Awesome 7 names without the fa- prefix; brand icons work too). Any other Font Awesome name can still be typed.",
+  "public": true,
+  "value": [
+    {"group": "Threats & security", "icons": ["bug", "virus", "virus-covid", "biohazard", "skull-crossbones", "skull", "user-secret", "mask", "user-ninja", "spider", "shield-halved", "shield-virus", "lock", "unlock", "key", "fingerprint", "user-shield", "triangle-exclamation", "radiation", "bomb", "fire", "eye", "eye-slash", "crosshairs", "bullseye", "magnifying-glass", "flag", "ban"]},
+    {"group": "Systems & files", "icons": ["windows", "linux", "apple", "android", "ubuntu", "debian", "redhat", "centos", "fedora", "freebsd", "terminal", "code", "file-code", "file", "file-zipper", "file-pdf", "file-word", "file-excel", "microchip", "memory", "hard-drive", "server", "desktop", "laptop", "mobile-screen", "database", "box-archive", "gears"]},
+    {"group": "Network & web", "icons": ["network-wired", "wifi", "globe", "cloud", "envelope", "at", "link", "route", "tower-broadcast", "satellite-dish", "ethernet", "plug", "chrome", "firefox-browser", "edge", "safari", "wordpress", "php", "node-js", "js", "python", "java", "rust", "golang"]},
+    {"group": "AI", "icons": ["claude", "openai", "copilot", "meta", "hugging-face", "google", "microsoft", "robot", "brain", "wand-magic-sparkles"]},
+    {"group": "Cloud & tools", "icons": ["aws", "google", "microsoft", "docker", "github", "gitlab", "git-alt", "bitbucket", "jenkins", "slack", "discord", "telegram", "whatsapp", "jira", "confluence", "atlassian", "npm", "yarn", "cloudflare", "digital-ocean", "kickstarter", "steam", "x-twitter", "linkedin", "youtube"]},
+    {"group": "General", "icons": ["tag", "tags", "bookmark", "star", "heart", "user", "users", "folder", "box", "bell", "bolt", "building", "industry", "landmark", "briefcase", "house", "gear", "wrench", "hammer", "pen", "check-double", "circle-info", "leaf", "location-dot", "map-pin", "graduation-cap", "flask", "chart-line", "clock", "calendar", "language", "money-bill", "credit-card", "cart-shopping"]}
+  ]
+}
