@@ -17,6 +17,7 @@ import { renderSafeMarkdown } from '/static/js/bundle/bundleFileTypes.js'
 import { MASCOT_ENABLED } from '/static/js/components/mascot.js'
 import AIThinkingSteps from '/static/js/components/ai-thinking-steps.js'
 import AIAnalysisRequest from '/static/js/components/ai-analysis-request.js'
+import AiWriterBadge from '/static/js/components/ai-writer-badge.js'
 
 // What a visitor who can't launch a review may request (one type for bundles)
 const REQUEST_SCRIPTS = [{ key: 'full', label: 'Full bundle review', icon: 'fa-layer-group',
@@ -55,7 +56,7 @@ function splitSections(md) {
 
 export default {
     name: 'BundleAIAnalysisPanel',
-    components: { 'ai-thinking-steps': AIThinkingSteps, 'ai-analysis-request': AIAnalysisRequest },
+    components: { 'ai-thinking-steps': AIThinkingSteps, 'ai-analysis-request': AIAnalysisRequest, 'ai-writer-badge': AiWriterBadge },
     props: {
         bundleId:  { type: [Number, String], required: true },
         csrfToken: { type: String, default: '' },
@@ -312,6 +313,7 @@ export default {
                         {{ fmtDate(selected.created_at) }}<span v-if="selected.username"> · for {{ selected.username }}</span>
                         · {{ wordCount(selected.content).toLocaleString() }} words
                     </span>
+                    <ai-writer-badge v-if="selected.model" :text="selected.model"></ai-writer-badge>
                     <span v-if="!selected.is_public" class="bai-pill bai-pill--private">Private</span>
                     <span v-if="selected !== latest" class="bai-pill">Older version</span>
                 </div>
