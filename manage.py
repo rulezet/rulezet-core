@@ -307,6 +307,8 @@ def _relay(proc, tag: str) -> None:
                 _say(f"  {_ts()} \033[0;90m{tag} │\033[0m {line}")
                 continue
             method, path, code, secs = m.group(1), m.group(2), int(m.group(3)), float(m.group(4))
+            if path.startswith("/static/") and code < 400:
+                continue                                        # JS / CSS / images: noise (failed ones still show)
             color = "32" if code < 300 else "36" if code < 400 else "33" if code < 500 else "31"
             # the client's address, its own column: "web │ 203.0.113.7     │ 200 GET /…"
             ip = line.split()[1] if len(line.split()) > 1 else "-"
