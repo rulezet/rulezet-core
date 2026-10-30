@@ -1324,3 +1324,40 @@ def notify_blog_published(post):
     except Exception as e:
         db.session.rollback()
         print(f'[notification_core] notify_blog_published error: {e}')
+
+
+def notify_favorite_rule_updated(rule, actor_id=None, history_id=None):
+    """Tell the users who favorited a rule that its content changed (issue #84).
+    Only real content changes (callers pass those), never the author of the change, honours
+    pref_favorite_rule_update. One unread notification per rule and user: a second change before
+    it is read updates that one instead of piling up (bulk updates, several edits in a row)."""
+    from app.core.db_class.rule import RuleFavoriteUser
+    try:
+        user_ids = [uid for (uid,) in db.session.query(RuleFavoriteUser.user_id)
+                    .filter(RuleFavoriteUser.rule_id == rule.id).distinct().all() if uid and uid != actor_id]
+        if not user_ids:
+            return 0
+        link = f'/rule/detail_rule/{rule.id}/history' + (f'?history={history_id}' if history_id else '')
+        title = f'A favorite rule was updated: {rule.title[:120]}'
+        sent = 0
+        for uid in user_ids:
+            if not _get_pref(uid).pref_favorite_rule_update:
+                continue
+            existing = (Notification.query.filter_by(user_id=uid, notif_type='favorite_rule_update', is_read=False)
+                        .filter(Notification.link.like(f'/rule/detail_rule/{rule.id}/history%')).first())
+            if existing:
+                existing.title, existing.link = title, link
+                existing.body = 'Its content changed again — see the history for the diff.'
+                existing.created_at = datetime.datetime.utcnow()
+            else:
+                db.session.add(Notification(user_id=uid, notif_type='favorite_rule_update', title=title,
+                                            body='Its content changed — see the history for the diff.', link=link,
+                                            icon=_TYPE_ICON.get('favorite_rule_update'), is_read=False,
+                                            created_at=datetime.datetime.utcnow()))
+            sent += 1
+        db.session.commit()
+        return sent
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] notify_favorite_rule_updated error: {e}")
+        return 0

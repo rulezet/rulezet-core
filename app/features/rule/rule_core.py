@@ -3098,6 +3098,16 @@ def create_rule_history(data: dict) -> bool:
         db.session.add(history_entry)
         db.session.commit()
 
+        # Users who favorited it: only when the content really changed (issue #84)
+        if success and (old_content or '') != (new_content or '') and change_type not in ("created", "metadata", "ownership"):
+            try:
+                from app.features.notification.notification_core import notify_favorite_rule_updated
+                rule = _active().filter(Rule.id == rule_id).first()
+                if rule:
+                    notify_favorite_rule_updated(rule, actor_id=user_id, history_id=history_entry.id)
+            except Exception:
+                pass
+
         return history_entry.id
 
     except Exception as e:

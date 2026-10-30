@@ -110,3 +110,29 @@ class RemoveRuleFavorite(Resource):
             return {"success": True, "message": "Rule deleted!"}
         return {"success": False, "message": "Access denied"}, 403
     
+
+
+@account_private_ns.route("/notification_preferences")
+@account_private_ns.doc(description="""
+Read (GET) or change (POST, JSON `{"<key>": true|false, …}`) the authenticated user's notification
+preferences — the same toggles as the Notifications › Preferences page, e.g. `favorite_rule_update`
+(a rule you favorited had its content changed). Unknown keys are ignored.
+""")
+class NotificationPreferences(Resource):
+    @api_required
+    def get(self):
+        """The authenticated user's notification preferences"""
+        from app.features.notification.notification_core import get_preference
+        return {"preferences": get_preference(current_user.id).to_json()}, 200
+
+    @api_required
+    def post(self):
+        """Change some notification preferences"""
+        from app.features.notification.notification_core import update_preference
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return {"message": "Send a JSON object of preference keys and booleans."}, 400
+        pref = update_preference(current_user.id, {k: v for k, v in data.items() if isinstance(v, bool)})
+        if pref is None:
+            return {"message": "Preferences could not be saved."}, 500
+        return {"preferences": pref.to_json()}, 200

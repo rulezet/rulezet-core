@@ -1033,9 +1033,10 @@ def _rule_history_count(rule_id):
     return RuleUpdateHistory.query.filter_by(rule_id=rule_id).count()
 
 
-def _rule_proposal_count(rule_id):
+def _rule_proposal_count(rule_id, pending=False):
     from app.core.db_class.rule_proposal import RuleEditProposal
-    return RuleEditProposal.query.filter_by(rule_id=rule_id).count()
+    q = RuleEditProposal.query.filter_by(rule_id=rule_id)
+    return (q.filter_by(status='pending') if pending else q).count()
 
 
 def _rule_scope_count(rule_id):
@@ -1073,6 +1074,7 @@ def _nav_counts(rule_id):
         'similarity_count':    _rule_similarity_count(rule_id),
         'history_count':       _rule_history_count(rule_id),
         'proposal_count':      _rule_proposal_count(rule_id),
+        'proposal_pending_count': _rule_proposal_count(rule_id, pending=True),
         'scope_count':         _rule_scope_count(rule_id),
         'test_count':          _rule_test_count(rule_id),
         'ai_analysis_count':   _rule_ai_analysis_count(rule_id),

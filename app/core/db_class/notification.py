@@ -111,6 +111,9 @@ class NotificationPreference(db.Model):
     # once; each alert still has its own email mode (Alert.email_mode).
     pref_alerts = db.Column(db.Boolean, nullable=False, default=True)
 
+    # A rule I favorited had its content changed (issue #84)
+    pref_favorite_rule_update = db.Column(db.Boolean, nullable=False, default=True)
+
     user = db.relationship('User', backref=db.backref(
         'notification_preference', uselist=False, cascade='all, delete-orphan'))
 
@@ -132,4 +135,5 @@ class NotificationPreference(db.Model):
             'sync_run_finished':  self.pref_sync_run_finished,
             'workflow_runs':      self.pref_workflow_runs,
             'alerts':             self.pref_alerts,
+            'favorite_rule_update': self.pref_favorite_rule_update,
         }

@@ -55,7 +55,7 @@
     <div class="dr-nav mb-3">
         <button type="button" class="dr-nav__item" :class="{ active: viewMode==='requests' }" @click="viewMode='requests'">
             <i class="fa-solid fa-inbox"></i><span>Requests</span>
-            <span v-if="pendingTotal > 0" class="dr-nav__badge">[[ pendingTotal ]]</span>
+            <span v-if="pendingTotal > 0" class="dr-nav__badge dr-nav__badge--alert">[[ pendingTotal ]]</span>
         </button>
         <button v-if="isAdmin" type="button" class="dr-nav__item" :class="{ active: viewMode==='manual' }" @click="viewMode='manual'">
             <i class="fa-solid fa-user-shield"></i><span>Manual Ownership</span>
