@@ -1231,3 +1231,16 @@ body.dark-mode .rz-role-chip { color: color-mix(in srgb, var(--role) 70%, #fff);
 .rz-org-rule-badge--click { cursor: pointer; text-decoration: none; transition: box-shadow .15s, transform .15s; }
 .rz-org-rule-badge--click:hover { box-shadow: 0 2px 6px rgba(0, 0, 0, .15); transform: translateY(-1px); color: #000; }
 .rl-id-uuid { display: block; font-family: var(--bs-font-monospace); font-size: .68rem; color: var(--subtle-text-color); word-break: break-all; line-height: 1.25; margin-top: .1rem; }
+
+/* Lifecycle status menu (show-status: My Rules, workspaces) — issue #86 */
+.rl-status-pick .rl-status-badge { display: inline-flex; align-items: center; gap: .3rem; }
+.rl-status-caret { font-size: .6rem; opacity: .7; }
+.rl-status-menu { min-width: 220px; padding: .3rem; border-radius: 10px; font-size: .82rem; }
+.rl-status-menu .dropdown-item { display: flex; align-items: flex-start; gap: .55rem; border-radius: 7px; padding: .4rem .55rem; white-space: normal; }
+.rl-status-menu .dropdown-item small { display: block; color: var(--subtle-text-color); font-size: .72rem; }
+.rl-status-menu .dropdown-item.active { background: var(--light-bg-color); color: var(--text-color); }
+.rl-status-menu__icon { margin-top: .2rem; width: 1rem; text-align: center; }
+.rl-status-menu__icon[data-status="draft"] { color: #6c757d; }
+.rl-status-menu__icon[data-status="testing"] { color: #fd7e14; }
+.rl-status-menu__icon[data-status="production"] { color: #198754; }
+.rl-status-menu__icon[data-status="deprecated"] { color: #dc3545; }

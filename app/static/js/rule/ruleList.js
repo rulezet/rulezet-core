@@ -789,6 +789,24 @@ export default {
                           data-rz-pop-icon="fa-code" data-rz-pop-color="#dc3545">
                         <span class="rz-role-chip__icon"><i class="fa-solid fa-code"></i></span>Code
                     </span>
+                    <span v-if="showStatus"><div class="dropdown d-inline-block rl-status-pick" @click.stop>
+                        <button type="button" class="rl-status-badge" :class="'rl-status--' + (rule.status || 'draft')"
+                                :data-bs-toggle="canChangeStatus(rule) ? 'dropdown' : null" aria-expanded="false"
+                                :title="canChangeStatus(rule) ? 'Lifecycle status — click to change' : 'Lifecycle status: ' + statusLabel(rule.status || 'draft')"
+                                :aria-label="'Status: ' + statusLabel(rule.status || 'draft')">
+                            <i :class="statusIcon(rule.status || 'draft')"></i>
+                            {{ statusLabel(rule.status || 'draft') }}
+                            <i v-if="canChangeStatus(rule)" class="fa-solid fa-caret-down rl-status-caret"></i>
+                        </button>
+                        <ul v-if="canChangeStatus(rule)" class="dropdown-menu rl-status-menu">
+                            <li v-for="st in STATUS_ORDER" :key="st">
+                                <button type="button" class="dropdown-item" :class="{ active: (rule.status || 'draft') === st }" @click="setStatus(rule, st)">
+                                    <i :class="statusIcon(st)" class="rl-status-menu__icon" :data-status="st"></i>
+                                    <span><b>{{ statusLabel(st) }}</b><small>{{ STATUS_HINTS[st] }}</small></span>
+                                </button>
+                            </li>
+                        </ul>
+                    </div></span>
                     <format-chip :format="rule.format" :can-filter="!isFilterHidden('format')"
                                  :active="ruleType === rule.format" @filter="filterByFormat"></format-chip>
                     <span v-if="showRelationType && relationLabels[rule.id]" class="badge rounded-pill shadow-sm pt-1"
@@ -1234,13 +1252,24 @@ export default {
                             </td>
 
                             <td v-if="showStatus" class="dt-td" @click.stop>
-                                <button class="rl-status-badge"
-                                        :class="'rl-status--' + (rule.status || 'draft')"
-                                        :title="canChangeStatus(rule) ? 'Click to cycle status' : statusLabel(rule.status || \'draft\')"
-                                        @click="canChangeStatus(rule) && cycleStatus(rule)">
-                                    <i :class="statusIcon(rule.status || 'draft')"></i>
-                                    {{ statusLabel(rule.status || 'draft') }}
-                                </button>
+<div class="dropdown d-inline-block rl-status-pick" @click.stop>
+                                    <button type="button" class="rl-status-badge" :class="'rl-status--' + (rule.status || 'draft')"
+                                            :data-bs-toggle="canChangeStatus(rule) ? 'dropdown' : null" aria-expanded="false"
+                                            :title="canChangeStatus(rule) ? 'Lifecycle status — click to change' : 'Lifecycle status: ' + statusLabel(rule.status || 'draft')"
+                                            :aria-label="'Status: ' + statusLabel(rule.status || 'draft')">
+                                        <i :class="statusIcon(rule.status || 'draft')"></i>
+                                        {{ statusLabel(rule.status || 'draft') }}
+                                        <i v-if="canChangeStatus(rule)" class="fa-solid fa-caret-down rl-status-caret"></i>
+                                    </button>
+                                    <ul v-if="canChangeStatus(rule)" class="dropdown-menu rl-status-menu">
+                                        <li v-for="st in STATUS_ORDER" :key="st">
+                                            <button type="button" class="dropdown-item" :class="{ active: (rule.status || 'draft') === st }" @click="setStatus(rule, st)">
+                                                <i :class="statusIcon(st)" class="rl-status-menu__icon" :data-status="st"></i>
+                                                <span><b>{{ statusLabel(st) }}</b><small>{{ STATUS_HINTS[st] }}</small></span>
+                                            </button>
+                                        </li>
+                                    </ul>
+                                </div>
                             </td>
 
                             <td class="dt-td" style="max-width:200px;word-break:break-word;">
@@ -2630,18 +2659,29 @@ export default {
                    (numericCurrentUserId.value === rule.user_id || props.currentUserIsAdmin)
         }
 
-        async function cycleStatus(rule) {
-            const cur  = rule.status || 'draft'
-            const next = STATUS_ORDER[(STATUS_ORDER.indexOf(cur) + 1) % STATUS_ORDER.length]
+        // What each lifecycle status means — shown in the status menu (card and table)
+        const STATUS_HINTS = { draft: 'Being written', testing: 'Being tried out', production: 'Deployed and in use',
+                               deprecated: 'No longer used' }
+
+        // Lifecycle status of the rule itself (PATCH /rule/<id>/status: owner or admin) — the same value
+        // everywhere: My Rules, workspaces, any list with show-status
+        async function setStatus(rule, next) {
+            if ((rule.status || 'draft') === next) return
             try {
                 const res  = await fetch(`/rule/${rule.id}/status`, {
                     method:  'PATCH',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
                     body:    JSON.stringify({ status: next }),
                 })
-                const data = await res.json()
-                if (data.success) { rule.status = next; emit('status-change', { ruleId: rule.id, status: next }) }
-            } catch { /* ignore */ }
+                const data = await res.json().catch(() => ({}))
+                if (res.ok && data.success) {
+                    rule.status = next
+                    emit('status-change', { ruleId: rule.id, status: next })
+                    create_message(`Status: ${statusLabel(next)}`, 'success-subtle')
+                } else {
+                    create_message(data.message || 'The status could not be changed.', 'danger-subtle')
+                }
+            } catch { create_message('The status could not be changed.', 'danger-subtle') }
         }
 
         // ── Footer info ───────────────────────────────────────────────────
@@ -2899,7 +2939,7 @@ export default {
             emitBulkAction, emitSend,
             fromNow, formatDate, qualityBadgeClass, highlight, githubLink, matchedHighlightTerms, matchedStringCount,
             // Status
-            statusIcon, statusLabel, canChangeStatus, cycleStatus,
+            statusIcon, statusLabel, canChangeStatus, setStatus, STATUS_ORDER, STATUS_HINTS,
             // Export
             hasActiveFilters, alertUrl, exportRuleIds, exportFilterQuery, showExportBar, exportTotalRules, facetContextParams,
             exportActionView,
