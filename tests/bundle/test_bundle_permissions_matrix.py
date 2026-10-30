@@ -81,6 +81,7 @@ ALLOWED_WRITES_ON_PUBLIC = {
     ("POST", "/bundle/add_reaction"),
     ("POST", "/bundle/favorite/<int:bundle_id>"),       # star it (the user's own favorites list)
     ("POST", "/bundle/<int:bundle_id>/ai_analysis/request"),  # ask the AI managers for a review
+    ("POST", "/bundle/<int:bundle_id>/fork"),           # make your own copy (bundle_fork_routes.py) — the original is untouched
 }
 
 
