@@ -3767,11 +3767,13 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
     if circl_only:
         query = query.filter(circl_badge_expr())
 
-    if sort in ('url', 'author', 'rule_count', 'cve_count'):
+    if sort in ('url', 'author', 'rule_count', 'cve_count', 'quality_score'):
         sort_column = getattr(GithubRepo, sort)
     else:
         sort_column = GithubRepo.url
     order_expr = sort_column.desc() if sort_dir == 'desc' else sort_column.asc()
+    if sort == 'quality_score':
+        order_expr = order_expr.nullslast()       # never scored at the end, either way
     query = query.order_by(order_expr)
 
     pagination = query.paginate(page=page, per_page=20)
@@ -3829,6 +3831,8 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
             "licenses": sorted((repo.license_counts or {}).keys()),
             "branches": branch_names,
             "cve_count": repo.cve_count,
+            "quality_score": repo.quality_score,
+            "quality_computed_at": repo.quality_computed_at.strftime('%Y-%m-%d %H:%M') if repo.quality_computed_at else None,
             "has_conflicts": repo.conflict_count > 0,
             "circl": has_circl_badge(repo),
             "circl_badge": repo.circl_badge,

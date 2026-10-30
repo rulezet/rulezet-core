@@ -806,6 +806,32 @@ def handle_github_sync_schedule_launch(job, app):
     return handle_github_sync_schedule_run(job, app)
 
 
+@register_handler('compute_repo_quality')
+def handle_compute_repo_quality(job, app):
+    """Quality score of the Git sources (github_repo_quality.py) — all, or the CIRCL ones."""
+    from app.core.db_class.git import GithubRepo
+    from app.features.rule.github_repo_quality import recompute
+    scope = (job.payload or {}).get('scope') or 'all'
+    query = GithubRepo.query
+    if scope == 'circl':
+        query = query.filter(GithubRepo.circl_badge.is_(True))
+    repos = query.order_by(GithubRepo.id).all()
+    job.total = len(repos)
+    db.session.commit()
+    log_job(job, f'Scoring {len(repos)} Git source(s)…', level='info', event='started')
+    for i, repo in enumerate(repos, 1):
+        try:
+            score = recompute(repo)
+            if i <= 50 or i % 50 == 0:
+                log_job(job, f'{repo.url} — {score if score is not None else "no rule"}', level='info')
+        except Exception as e:
+            db.session.rollback()
+            log_job(job, f'{repo.url} failed: {e}', level='warning')
+        job.done = i
+        db.session.commit()
+    log_job(job, f'{len(repos)} Git source(s) scored.', level='success', event='done')
+
+
 @register_handler('clear_caches')
 def handle_clear_caches(job, app):
     """A Workflows task, typically last: empty the caches (home figures, stats, cached pages,

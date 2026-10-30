@@ -1,0 +1,17 @@
+{
+  "label": "Scope criteria",
+  "category": "Rules",
+  "description": "The criteria a user can give when declaring where a rule works (Scope tab of a rule, and the scope dialog of a review): key, label, and the values offered (null = free text).",
+  "public": true,
+  "value": [
+    {"key": "os",                "label": "Operating system", "options": ["windows", "linux", "macos", "freebsd", "android", "ios", "any"]},
+    {"key": "os::arch",          "label": "Architecture",     "options": ["x86_64", "aarch64", "i386", "arm32", "any"]},
+    {"key": "os::version",       "label": "OS version",       "options": null},
+    {"key": "protocol",          "label": "Protocol",         "options": ["http", "https", "smb", "ssh", "dns", "ftp", "rdp", "ldap", "kerberos", "ntlm", "tls", "any"]},
+    {"key": "protocol::version", "label": "Protocol version", "options": null},
+    {"key": "network",           "label": "Network",          "options": ["lan", "wan", "cloud", "on-premise", "hybrid", "any"]},
+    {"key": "environment",       "label": "Environment",      "options": ["production", "staging", "development", "testing", "any"]},
+    {"key": "software",          "label": "Software",         "options": null},
+    {"key": "software::version", "label": "Software version", "options": null}
+  ]
+}

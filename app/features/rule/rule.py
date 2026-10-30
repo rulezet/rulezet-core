@@ -907,6 +907,10 @@ def get_current_rule() -> jsonify:
     rule_id = request.args.get('rule_id', 1, type=int)
     rule = RuleModel.get_rule(rule_id)
     if rule:
+        # Score kept as is unless something it reads changed since (or never scored): then it is
+        # recomputed here, so rules refresh themselves as people open them.
+        from app.features.rule.rule_quality.quality_score_core import ensure_fresh_quality
+        ensure_fresh_quality(rule)
         return {"rule": rule.to_json()}
     return {"message": "No Rule"}, 404
 
@@ -981,6 +985,7 @@ def detail_rule_by_uuid(rule_uuid):
                                current_user_vote=current_user_vote, rule_risk=rule_risk,
                                mirror_github_urls=get_mirror_github_urls(rule),
                                sample_result=SampleTests.latest_result(rule) if SampleTests.can_use_tests(current_user) else None,
+                               can_use_tests=SampleTests.can_use_tests(current_user),
                                rule_metadata=display_metadata(rule.extra_metadata),
                                **_nav_counts(rule.id))
     return render_template("404.html")
@@ -1114,6 +1119,7 @@ def detail_rule(rule_id)-> render_template:
                                current_user_vote=current_user_vote, rule_risk=rule_risk,
                                mirror_github_urls=get_mirror_github_urls(rule),
                                sample_result=SampleTests.latest_result(rule) if SampleTests.can_use_tests(current_user) else None,
+                               can_use_tests=SampleTests.can_use_tests(current_user),
                                rule_metadata=display_metadata(rule.extra_metadata),
                                **_nav_counts(rule.id))
     return render_template("404.html")
@@ -1591,6 +1597,9 @@ def rule_history_data(rule_id):
         'rule.version_bump':      ('Content updated',    'success', 'fa-solid fa-tag'),
         'rule.quick_meta':        ('Tags/vulnerabilities updated', 'info', 'fa-solid fa-tags'),
         'rule.ownership_transfer': ('Ownership changed', 'warning', 'fa-solid fa-user-shield'),
+        'rule.review':            ('Reviewed',           'success', 'fa-solid fa-user-check'),
+        'rule.review_removed':    ('Review removed',     'warning', 'fa-solid fa-user-xmark'),
+        'rule.written_with':      ('How it was written', 'info',    'fa-solid fa-robot'),
     }
 
     for log in logs:
@@ -5376,9 +5385,13 @@ def github_detail():
     if url.endswith(".git"):
         url = url[:-4]
 
+    from app.core.db_class.git import GithubRepo
+    repo_row = GithubRepo.query.filter_by(url=url).first()
     return render_template(
         "rule/url_github/detail_url_github.html",
-        url=url
+        url=url,
+        repo_quality=(repo_row.quality_breakdown if repo_row and repo_row.quality_score is not None else None),
+        repo_quality_at=(repo_row.quality_computed_at.strftime('%Y-%m-%d %H:%M') if repo_row and repo_row.quality_computed_at else None),
     )
 
 def _csv_arg(name, args=None):

@@ -45,6 +45,16 @@ TASK_TYPES = {
         'job_type': 'compute_rule_quality_score',
         'target_picker': 'rule_list_select',
     },
+    'repo_quality': {
+        'label': 'Git Sources — quality score',
+        'icon': 'fa-solid fa-ranking-star',
+        'job_type': 'compute_repo_quality',
+        'target_picker': 'none',
+        'extra_options': [
+            {'key': 'scope', 'type': 'select', 'label': 'Repositories', 'default': 'all',
+             'options': [{'value': 'all', 'label': 'Every Git source'}, {'value': 'circl', 'label': 'CIRCL repositories only'}]},
+        ],
+    },
     'attack_parser': {
         'label': 'ATT&CK Auto-parse',
         'icon': 'fa-solid fa-crosshairs',
@@ -446,6 +456,7 @@ _DESCRIPTIONS = {
     'action_log': 'Writes a line in the activity log (Admin → Logs) — e.g. "went well" after the last task; the text takes {variables}.',
     'action_webhook': 'POSTs a JSON message ({"text": …}) to a public https URL: a Slack / Mattermost / Teams incoming webhook or any service. Private and local addresses are refused.',
     'action_check': 'A gate: counts a figure of the instance (bad rules, rules created today, failed jobs…) and succeeds only if the condition holds. Chain "If it succeeds" for one road and "If it fails" for the other — e.g. bad rules > 50 → Bad rules retry, else nothing.',
+    'repo_quality': 'Scores every Git source 0-100 from its rules: their average quality score, imports that failed (bad rules), valid and licensed rules, last sync, conflicts. Shown in Git Sources and on each source. Run it after Rule Quality Score.',
     'clear_caches': 'Empties the caches (home figures, ATT&CK / CVE stats, cached pages, leaderboard) so what the workflow changed shows right away. Put it last.',
     'ai_rule_analysis': 'Asks the AI agent to write an analysis report for rules that have none (a batch per run), published or kept private.',
 }

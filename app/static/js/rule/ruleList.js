@@ -1155,7 +1155,7 @@ export default {
                         <th v-if="linkedShown" class="dt-th" style="width:90px;">Linked</th>
                         <th v-if="showValidationRisk" class="dt-th" style="width:130px;">Risk</th>
                         <th v-if="showValidationRisk" class="dt-th" style="width:180px;">Fired on</th>
-                        <th v-show="colVisible.id" class="dt-th" style="width:90px;">ID</th>
+                        <th v-show="colVisible.id" class="dt-th" :style="{ width: (searchIdKind === 'uuid' || searchField === 'uuid') ? '200px' : '90px' }">ID</th>
                         <th v-show="colVisible.format"
                             class="dt-th dt-th--sortable" style="width:80px;"
                             :class="{ 'dt-th--sorted': sortKey === 'format' }"
@@ -1310,8 +1310,10 @@ export default {
                                 </span>
                             </td>
 
-                            <td v-show="colVisible.id" class="dt-td" :title="'Rule id: ' + rule.id">
+                            <td v-show="colVisible.id" class="dt-td" :title="'Rule id: ' + rule.id + (rule.uuid ? ' · uuid ' + rule.uuid : '')">
                                 <span v-html="highlight('' + rule.id)"></span>
+                                <span v-if="searchIdKind === 'uuid' || searchField === 'uuid'" class="rl-id-uuid"
+                                      v-html="highlight((rule.original_uuid && rule.original_uuid.toLowerCase().includes(search.trim().toLowerCase())) ? rule.original_uuid : (rule.uuid || ''))"></span>
                             </td>
 
                             <td v-show="colVisible.format" class="dt-td">
@@ -1946,9 +1948,18 @@ export default {
         const colVisible = Vue.reactive(Object.fromEntries(TOGGLEABLE_COLS.map(c =>
             [c.key, !props.hiddenColumns.includes(c.key) && !HIDDEN_BY_DEFAULT.includes(c.key)])))
         function toggleColumn(key) { colVisible[key] = !colVisible[key] }
+        // What the search box holds looks like a rule id (a number) or a UUID (hex groups, even partial):
+        // the ID column shows, with the matching UUID under the id.
+        const searchIdKind = computed(() => {
+            const q = (search.value || '').trim()
+            if (!q) return null
+            if (/^\d{1,10}$/.test(q)) return 'id'
+            if (/^[0-9a-f]{8}(-[0-9a-f]{0,12}){0,4}$/i.test(q) || /^[0-9a-f-]{8,36}$/i.test(q) && q.includes('-')) return 'uuid'
+            return null
+        })
         function revealUsedColumns() {
             if (sortKey.value === 'creation_date' && !props.hiddenColumns.includes('created')) colVisible.created = true
-            if (((searchField.value === 'uuid' && search.value.trim()) || props.ids)
+            if (((searchField.value === 'uuid' && search.value.trim()) || searchIdKind.value || props.ids)
                 && !props.hiddenColumns.includes('id')) colVisible.id = true
         }
         revealUsedColumns()
@@ -2839,6 +2850,7 @@ export default {
         })
 
         return {
+            searchIdKind,
             orgOwners, hasOrgBadge, filterByOrgBadge,
             contentSearch, ruleHref, filterByPlatform, linkedShown,
             // Data

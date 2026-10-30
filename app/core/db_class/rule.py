@@ -77,6 +77,8 @@ class Rule(db.Model):
     quality_score             = db.Column(db.Float, nullable=True, index=True)
     quality_score_breakdown   = db.Column(db.JSON, nullable=True)
     quality_score_computed_at = db.Column(db.DateTime, nullable=True)
+    # How the rule was written, declared by its owner / an admin: 'human' | 'ai' | 'human_ai' (NULL = not said)
+    written_with              = db.Column(db.String(16), nullable=True)
 
     # Read from the rule's own text (app/features/rule/rule_metadata_core.py), kept in sync by the
     # `set` events below: references (list of strings) and every other metadata key the rule
@@ -155,6 +157,7 @@ class Rule(db.Model):
             "quality_score": self.quality_score,
             "quality_score_breakdown": self.quality_score_breakdown,
             "quality_score_computed_at": self.quality_score_computed_at.strftime('%Y-%m-%d %H:%M') if self.quality_score_computed_at else None,
+            "written_with": self.written_with,
             "references": self.all_references,
             "references_from_rule": self.rule_references or [],
             "references_manual": self.manual_references or [],
@@ -727,3 +730,39 @@ from app.core.db_class.comment import Comment  # noqa: E402
 from app.core.db_class.rule_proposal import RuleEditProposal  # noqa: E402
 from app.core.db_class.similarity import RuleSimilarity  # noqa: E402
 from app.core.db_class.user import User  # noqa: E402
+
+
+class RuleReview(db.Model):
+    """A signed-in user read the rule and says it is good ('approved') or that it needs work
+    ('changes_requested'), with a 1-5 rating and how they see it written (human / AI / both). Tied to the content reviewed (content_hash): an edit makes
+    a review 'about an older version' — still shown, no longer counted as reviewing the current one.
+    One review per user per rule (a new one replaces theirs). Feeds the quality score."""
+    __tablename__ = 'rule_review'
+
+    id           = db.Column(db.Integer, primary_key=True)
+    uuid         = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    rule_id      = db.Column(db.Integer, db.ForeignKey('rule.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id      = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    verdict      = db.Column(db.String(20), nullable=False)          # approved | changes_requested
+    comment      = db.Column(db.Text, nullable=True)
+    rating       = db.Column(db.Integer, nullable=True)              # 1-5
+    written_with = db.Column(db.String(16), nullable=True)           # human | ai | human_ai
+    # a scope ("works for me, there") its author declared on this rule — never someone else's
+    scope_id     = db.Column(db.Integer, db.ForeignKey('rule_scope.id', ondelete='SET NULL'), nullable=True)
+    content_hash = db.Column(db.String(64), nullable=False)
+    created_at   = db.Column(db.DateTime, default=lambda: datetime.datetime.now(tz=datetime.timezone.utc))
+
+    user = db.relationship('User')
+    scope = db.relationship('RuleScope')
+
+    def to_json(self, current_hash=None):
+        return {
+            'scope': {'id': self.scope.id, 'works': self.scope.works, 'entries': self.scope.entries or []}
+                     if self.scope else None,
+            'uuid': self.uuid, 'verdict': self.verdict, 'comment': self.comment,
+            'rating': self.rating, 'written_with': self.written_with,
+            'current_version': current_hash is None or current_hash == self.content_hash,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
+            'user': {'id': self.user.id, 'name': self.user.get_username(),
+                     'avatar': self.user.get_avatar_url()} if self.user else None,
+        }

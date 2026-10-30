@@ -596,6 +596,11 @@ class GithubRepo(db.Model):
     # Organisation badge (setting git.org_badge, CIRCL by default) set by an admin: True = always, False = never, None = automatic
     # (the url or author contains a keyword of the setting git.org_badge).
     circl_badge = db.Column(db.Boolean, nullable=True, default=None)
+    # Quality of the repository as a source (github_repo_quality.py), computed by the
+    # 'repo_quality' workflow task — NULL until computed.
+    quality_score       = db.Column(db.Float, nullable=True, index=True)
+    quality_breakdown   = db.Column(db.JSON, nullable=True)
+    quality_computed_at = db.Column(db.DateTime, nullable=True)
 
     def to_json(self):
         return {
@@ -610,6 +615,8 @@ class GithubRepo(db.Model):
             'branches':   sorted(b for b in (self.branch_counts or {}).keys() if b),
             'cve_count':  self.cve_count,
             'has_conflicts': self.conflict_count > 0,
+            'quality_score': self.quality_score,
+            'quality_computed_at': self.quality_computed_at.strftime('%Y-%m-%d %H:%M') if self.quality_computed_at else None,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M') if self.updated_at else None,
         }

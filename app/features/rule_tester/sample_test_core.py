@@ -84,6 +84,13 @@ def record_rule_results(run, rules):
         db.session.add(RuleSampleResult(rule_id=rule.id, run_id=row.id, content_hash=content_hash(rule.to_string),
                                         rule_text=rule.to_string, sets=sets, **rule_counts(run, name)))
     db.session.commit()
+    # Tested on samples: the quality score now counts its Testing category (detections, false positives)
+    from app.features.rule.rule_quality.quality_score_core import recompute_rule_quality_score
+    for _, rule in rules:
+        try:
+            recompute_rule_quality_score(rule)
+        except Exception:
+            db.session.rollback()
     return len(rules)
 
 

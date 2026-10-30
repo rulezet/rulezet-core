@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Git Repository Dashboard — Rulezet{% endblock %}
 {% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/github/repoQuality.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
@@ -236,6 +237,72 @@
                     </span>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- ── Quality of this source (github_repo_quality.py, workflow task "Git Sources — quality score") ── -->
+    <div class="card border-0 shadow-sm mb-4 repo-q" style="background:var(--card-bg-color);">
+        <div class="card-body p-4">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <div style="width:3px; height:14px; background:#0d6efd; border-radius:2px;"></div>
+                <span class="fw-bold" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.07em; color:var(--subtle-text-color);">
+                    <i class="fa-solid fa-ranking-star me-1"></i>Source quality</span>
+                {% if repo_quality_at %}<span class="text-muted small ms-auto">computed {{ repo_quality_at }}</span>{% endif %}
+            </div>
+            {% if repo_quality %}
+            {% set sc = repo_quality.score %}
+            <div class="repo-q-top">
+                <div class="repo-q-score {{ 'is-excellent' if sc >= 80 else ('is-good' if sc >= 60 else ('is-fair' if sc >= 40 else 'is-poor')) }}">
+                    <strong>{{ sc | round | int }}</strong><small>/ 100</small></div>
+                <div class="repo-q-facts">
+                    {% set f = repo_quality.facts %}
+                    <span><i class="fa-solid fa-shield-halved"></i>{{ f.rules }} rules{% if f.average_rule_score is not none %} · average quality {{ f.average_rule_score }}{% endif %}</span>
+                    <span><i class="fa-solid fa-triangle-exclamation"></i>{{ f.bad_rules }} failed import{{ '' if f.bad_rules == 1 else 's' }}</span>
+                    <span><i class="fa-solid fa-user-check"></i>{{ f.approved_rules }} approved in review · <i class="fa-solid fa-vial ms-1"></i>{{ f.tested_rules }} tested</span>
+                    <span><i class="fa-regular fa-clock"></i>{% if f.last_synced_days is not none %}synced {{ f.last_synced_days }} day{{ '' if f.last_synced_days == 1 else 's' }} ago{% else %}never fully synced{% endif %}</span>
+                </div>
+            </div>
+            <div class="repo-q-rows">
+                {% set pts = repo_quality.points.get('rules_quality', 0) %}{% set mx = repo_quality.weights.get('rules_quality', 1) %}
+                <div class="repo-q-row" title="Average quality score of its rules">
+                    <span class="repo-q-row__name">Rules quality</span>
+                    <span class="repo-q-row__bar"><span class="{{ 'is-good' if pts / mx >= 0.8 else ('is-mid' if pts / mx >= 0.5 else 'is-low') }}" style="width:{{ (100 * pts / mx) | round | int }}%"></span></span>
+                    <span class="repo-q-row__pts">{{ pts }}/{{ mx }}</span>
+                </div>
+                {% set pts = repo_quality.points.get('import_health', 0) %}{% set mx = repo_quality.weights.get('import_health', 1) %}
+                <div class="repo-q-row" title="Share of its files that imported (not left as bad rules)">
+                    <span class="repo-q-row__name">Import health</span>
+                    <span class="repo-q-row__bar"><span class="{{ 'is-good' if pts / mx >= 0.8 else ('is-mid' if pts / mx >= 0.5 else 'is-low') }}" style="width:{{ (100 * pts / mx) | round | int }}%"></span></span>
+                    <span class="repo-q-row__pts">{{ pts }}/{{ mx }}</span>
+                </div>
+                {% set pts = repo_quality.points.get('valid_rules', 0) %}{% set mx = repo_quality.weights.get('valid_rules', 1) %}
+                <div class="repo-q-row" title="Share of its rules passing Rulezet's syntax check">
+                    <span class="repo-q-row__name">Valid rules</span>
+                    <span class="repo-q-row__bar"><span class="{{ 'is-good' if pts / mx >= 0.8 else ('is-mid' if pts / mx >= 0.5 else 'is-low') }}" style="width:{{ (100 * pts / mx) | round | int }}%"></span></span>
+                    <span class="repo-q-row__pts">{{ pts }}/{{ mx }}</span>
+                </div>
+                {% set pts = repo_quality.points.get('licensed', 0) %}{% set mx = repo_quality.weights.get('licensed', 1) %}
+                <div class="repo-q-row" title="Share of its rules with a license">
+                    <span class="repo-q-row__name">Licensed</span>
+                    <span class="repo-q-row__bar"><span class="{{ 'is-good' if pts / mx >= 0.8 else ('is-mid' if pts / mx >= 0.5 else 'is-low') }}" style="width:{{ (100 * pts / mx) | round | int }}%"></span></span>
+                    <span class="repo-q-row__pts">{{ pts }}/{{ mx }}</span>
+                </div>
+                {% set pts = repo_quality.points.get('kept_up_to_date', 0) %}{% set mx = repo_quality.weights.get('kept_up_to_date', 1) %}
+                <div class="repo-q-row" title="Synced in the last 30 days (half in the last 90)">
+                    <span class="repo-q-row__name">Kept up to date</span>
+                    <span class="repo-q-row__bar"><span class="{{ 'is-good' if pts / mx >= 0.8 else ('is-mid' if pts / mx >= 0.5 else 'is-low') }}" style="width:{{ (100 * pts / mx) | round | int }}%"></span></span>
+                    <span class="repo-q-row__pts">{{ pts }}/{{ mx }}</span>
+                </div>
+                {% set pts = repo_quality.points.get('no_conflicts', 0) %}{% set mx = repo_quality.weights.get('no_conflicts', 1) %}
+                <div class="repo-q-row" title="No rule in conflict with another source">
+                    <span class="repo-q-row__name">No conflicts</span>
+                    <span class="repo-q-row__bar"><span class="{{ 'is-good' if pts / mx >= 0.8 else ('is-mid' if pts / mx >= 0.5 else 'is-low') }}" style="width:{{ (100 * pts / mx) | round | int }}%"></span></span>
+                    <span class="repo-q-row__pts">{{ pts }}/{{ mx }}</span>
+                </div>
+            </div>
+            {% else %}
+            <p class="text-muted small mb-0">Not computed yet — run the workflow task <strong>Git Sources — quality score</strong> (or the "Quality scores refresh" template) in Admin › Workflows.</p>
+            {% endif %}
         </div>
     </div>
 

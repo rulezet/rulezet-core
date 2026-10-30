@@ -1,0 +1,19 @@
+/* Quality of a Git source (github_repo_quality.py) — Git Sources table and source page */
+.repo-quality { display: inline-block; min-width: 2.4rem; font-weight: 800; font-size: .8rem; border-radius: 999px; padding: .1rem .55rem; color: #fff; }
+.repo-quality.is-excellent { background: #198754; } .repo-quality.is-good { background: #0d6efd; }
+.repo-quality.is-fair { background: #fd7e14; } .repo-quality.is-poor { background: #dc3545; }
+.repo-q-top { display: flex; gap: 1.2rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
+.repo-q-score { width: 92px; height: 92px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 7px solid var(--border-color); line-height: 1; flex-shrink: 0; }
+.repo-q-score strong { font-size: 1.7rem; font-weight: 800; color: var(--text-color); }
+.repo-q-score small { font-size: .7rem; color: var(--subtle-text-color); }
+.repo-q-score.is-excellent { border-color: #198754; } .repo-q-score.is-good { border-color: #0d6efd; }
+.repo-q-score.is-fair { border-color: #fd7e14; } .repo-q-score.is-poor { border-color: #dc3545; }
+.repo-q-facts { display: flex; flex-direction: column; gap: .3rem; font-size: .82rem; color: var(--text-color); }
+.repo-q-facts i { color: #0d6efd; width: 1.1rem; }
+.repo-q-rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: .45rem 1.5rem; }
+.repo-q-row { display: flex; align-items: center; gap: .6rem; font-size: .8rem; }
+.repo-q-row__name { width: 8.5rem; flex-shrink: 0; color: var(--text-color); font-weight: 600; }
+.repo-q-row__bar { flex: 1; height: 6px; border-radius: 999px; background: var(--border-color); overflow: hidden; }
+.repo-q-row__bar span { display: block; height: 100%; }
+.repo-q-row__bar .is-good { background: #198754; } .repo-q-row__bar .is-mid { background: #fd7e14; } .repo-q-row__bar .is-low { background: #dc3545; }
+.repo-q-row__pts { width: 3.5rem; text-align: right; color: var(--subtle-text-color); font-size: .74rem; }

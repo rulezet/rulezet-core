@@ -129,10 +129,16 @@
                         </div>
                         <p v-if="!scopeForm.entries.length" class="sc-muted mb-0">No criterion yet — OS, protocol, software, version…</p>
                     </div>
-                    <button type="button" @click="scopeForm.entries.push({ key: 'os', value: '' })"
-                            class="btn btn-sm btn-outline-primary rounded-pill px-3 mb-4" :disabled="scopeForm.entries.length >= 20">
-                        <i class="fa-solid fa-plus me-1"></i>Add a criterion
-                    </button>
+                    <div class="d-flex flex-wrap gap-2 mb-4">
+                        <button type="button" @click="scopeForm.entries.push({ key: 'os', value: '' })"
+                                class="btn btn-sm btn-outline-primary rounded-pill px-3" :disabled="scopeForm.entries.length >= 20">
+                            <i class="fa-solid fa-plus me-1"></i>Add a criterion
+                        </button>
+                        <button type="button" @click="fillMyMachine()" class="btn btn-sm btn-outline-secondary rounded-pill px-3"
+                                title="Fill the operating system, architecture and version of this computer (asks first)">
+                            <i class="fa-solid fa-laptop me-1"></i>My machine
+                        </button>
+                    </div>
 
                     <label class="sc-label">Notes <span class="sc-muted fw-normal">— optional, Markdown supported</span></label>
                     <markdown-composer v-model="scopeForm.comment" :rows="5"
@@ -274,6 +280,7 @@
     import UserChip from '/static/js/components/UserChip.js';
     import PaginationComponent from '/static/js/rule/paginationComponent.js';
     import { MarkdownComposer } from '/static/js/components/comments/comment-thread.js';
+    import { askAndDetect, mergeEntries } from '/static/js/rule/scopeMachine.js';
     import { renderMarkdown, hardenUserHtml } from '/static/js/sanitize.js';
     import { create_message } from '/static/js/toaster.js';
 
@@ -288,17 +295,10 @@
         delimiters: ['[[', ']]'],
         components: { 'user-chip': UserChip, 'markdown-composer': MarkdownComposer, 'pagination-component': PaginationComponent },
         setup() {
-            const SCOPE_KEYS = [
-                { key: 'os',                label: 'Operating system', options: ['windows', 'linux', 'macos', 'freebsd', 'android', 'ios', 'any'] },
-                { key: 'os::arch',          label: 'Architecture',     options: ['x86_64', 'aarch64', 'i386', 'arm32', 'any'] },
-                { key: 'os::version',       label: 'OS version',       options: null },
-                { key: 'protocol',          label: 'Protocol',         options: ['http', 'https', 'smb', 'ssh', 'dns', 'ftp', 'rdp', 'ldap', 'kerberos', 'ntlm', 'tls', 'any'] },
-                { key: 'protocol::version', label: 'Protocol version', options: null },
-                { key: 'network',           label: 'Network',          options: ['lan', 'wan', 'cloud', 'on-premise', 'hybrid', 'any'] },
-                { key: 'environment',       label: 'Environment',      options: ['production', 'staging', 'development', 'testing', 'any'] },
-                { key: 'software',          label: 'Software',         options: null },
-                { key: 'software::version', label: 'Software version', options: null },
-            ];
+            // Criteria: setting rule.scope_keys (app/config/rule.scope_keys.json), shared with the review dialog
+            const SCOPE_KEYS = ref([]);
+            fetch('/api/config/settings/rule.scope_keys').then(r => (r.ok ? r.json() : null))
+                .then(d => { SCOPE_KEYS.value = (d && d.value) || []; }).catch(() => {});
 
             const scopeList        = ref([]);
             const myScopes         = ref([]);       // all of the current user's declarations
@@ -333,13 +333,19 @@
                 { key: 'ko',  label: "Doesn't work",  count: () => scopeNworksCount.value },
             ];
 
-            const keyLabel = (key) => SCOPE_KEYS.find(k => k.key === key)?.label || key;
-            const scopeKeyOptions = (key) => SCOPE_KEYS.find(k => k.key === key)?.options || null;
+            async function fillMyMachine() {
+                const found = await askAndDetect();
+                if (!found.length) return;
+                scopeForm.value.entries = mergeEntries(scopeForm.value.entries, found);
+                create_message(`Filled from this computer: ${found.map(f => f.value).join(', ')}`, 'success-subtle');
+            }
+            const keyLabel = (key) => SCOPE_KEYS.value.find(k => k.key === key)?.label || key;
+            const scopeKeyOptions = (key) => SCOPE_KEYS.value.find(k => k.key === key)?.options || null;
 
             // Reported environments (computed by the server over every declaration),
             // criteria in the order of SCOPE_KEYS.
             const environments = computed(() => {
-                const order = SCOPE_KEYS.map(k => k.key);
+                const order = SCOPE_KEYS.value.map(k => k.key);
                 return serverEnvs.value
                     .map(g => ({ ...g, label: keyLabel(g.key) }))
                     .sort((a, b) => (order.indexOf(a.key) + 1 || 99) - (order.indexOf(b.key) + 1 || 99));
@@ -553,7 +559,7 @@
                 scopeLoading, showScopeForm, saving, scopeForm, filter, rendered, environments,
                 page, totalPages, total, q, crit, notesOnly, sort, hasFilters, authors, author, mineOnly,
                 critKey, critValue, valuesFor, resetFilters,
-                keyLabel, scopeKeyOptions, openForm, editScope, submitScope, deleteScope, setCriterion, goToPage,
+                keyLabel, scopeKeyOptions, fillMyMachine, openForm, editScope, submitScope, deleteScope, setCriterion, goToPage,
                 highlightText, nameMatches, overflowing, expanded,
             };
         }
