@@ -1,0 +1,16 @@
+/* Tag icon picker (js/tags/utils/iconPicker.js) — loaded by the component itself */
+.icon-picker-panel { background: var(--card-bg-color); }
+.icon-picker-head { background: var(--card-bg-color); }
+.icon-picker-groups { display: flex; flex-wrap: wrap; gap: 4px; }
+.icon-picker-groups button { border: 1px solid var(--border-color); background: var(--light-bg-color); color: var(--subtle-text-color);
+                             font-size: .7rem; font-weight: 600; border-radius: 999px; padding: .1rem .55rem; }
+.icon-picker-groups button.is-on { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+.icon-picker-group-name { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--subtle-text-color); margin: .2rem 0 .3rem; }
+.icon-picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 4px; }
+.icon-picker-btn { border: 1px solid transparent; background: var(--light-bg-color); color: var(--text-color); border-radius: 8px; height: 36px; font-size: 1rem; }
+.icon-picker-btn:hover { border-color: #0d6efd; color: #0d6efd; }
+.icon-picker-btn.is-on { background: #0d6efd; color: #fff; }
+.icon-picker-typed { display: flex; align-items: center; gap: .5rem; width: 100%; border: 1px dashed #0d6efd; background: rgba(13,110,253,.06);
+                     color: var(--text-color); border-radius: 8px; padding: .4rem .6rem; margin-bottom: .5rem; font-size: .8rem; flex-wrap: wrap; }
+.icon-picker-typed i { color: #0d6efd; font-size: 1.1rem; }
+.icon-picker-typed small { color: var(--subtle-text-color); margin-left: auto; }

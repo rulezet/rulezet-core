@@ -3378,3 +3378,7 @@ body.rz-first-setup .main-navbar .dropdown-menu a:not([href*="logout"]) { pointe
 body.rz-first-setup .rz-setup-field { position: relative; border-radius: 12px; padding: .75rem; margin: 0 0 .75rem;
     background: rgba(255, 193, 7, .12); box-shadow: 0 0 0 2px rgba(255, 193, 7, .75); }
 body.rz-first-setup .rz-setup-field input { border-color: #f0ad00; }
+
+/* Font Awesome 7 makes every icon fixed-width (1.25em) by default; Rulezet was designed with
+   Font Awesome 6's natural widths. :where() has no specificity, so .fa-fw / .fa-width-fixed still win. */
+:where(.fa, .fas, .far, .fab, .fa-solid, .fa-regular, .fa-brands, .fa-classic) { --fa-width: auto; }
