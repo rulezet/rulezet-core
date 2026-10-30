@@ -2928,9 +2928,9 @@ body.dark-mode .table .opacity-50 {
   width: max-content;
   max-width: 260px;
   pointer-events: none;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity .15s ease;
+  /* Out of the layout while hidden: an invisible bubble still counted in its containers' scrollable
+     overflow and gave them scrollbars (issue #90). Shown on hover / keyboard focus with a fade-in. */
+  display: none;
   z-index: 500;
 }
 .rulezy-say__bubble::before,
@@ -2946,8 +2946,13 @@ body.dark-mode .table .opacity-50 {
 .rulezy-say:hover .rulezy-say__bubble,
 .rulezy-say:focus .rulezy-say__bubble,
 .rulezy-say:focus-within .rulezy-say__bubble {
-  opacity: 1;
-  visibility: visible;
+  display: block;
+  animation: rulezy-bubble-in .15s ease;
+}
+@keyframes rulezy-bubble-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .rulezy-say:hover .rulezy-say__bubble, .rulezy-say:focus .rulezy-say__bubble,
+  .rulezy-say:focus-within .rulezy-say__bubble { animation: none; }
 }
 /* Avatar sitting at the right edge of its row (e.g. level with a section
    title) — the default rightward-opening bubble would run off the card's

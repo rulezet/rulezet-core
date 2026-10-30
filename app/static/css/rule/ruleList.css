@@ -236,17 +236,20 @@
 }
 
 /* ── Toolbar ── */
+/* No scrolling here (issue #90): a scroll container made Rulezy's speech bubble — absolutely
+   positioned, overflowing even while hidden — show scrollbars, and would clip it once shown.
+   When space runs out (narrow window, 150–200 % zoom) the groups and their controls wrap instead. */
 .rl-toolbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: .6rem;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     margin-bottom: .85rem;
-    overflow-x: auto;
 }
 .rl-toolbar-left,
-.rl-toolbar-right { display: flex; gap: .45rem; align-items: center; flex-wrap: nowrap; flex-shrink: 0; }
+.rl-toolbar-right { display: flex; gap: .45rem; align-items: center; flex-wrap: wrap; min-width: 0; }
+.rl-toolbar-right { margin-left: auto; }
 
 /* Search reuses dt-search styles */
 
