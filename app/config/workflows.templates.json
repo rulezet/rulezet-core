@@ -216,20 +216,23 @@
     "nightly_backup": {
       "label": "Nightly backup",
       "icon": "fa-solid fa-database",
-      "description": "Every night at 01:00 UTC: a backup of the database.",
+      "description": "Every night: a new database backup, checked, then the oldest automatic backups are deleted so the last 10 remain (never fewer than 3). If it fails, nothing is deleted and admins are alerted.",
       "spec": {
         "title": "Nightly backup",
         "description": "A database backup every night at 01:00 UTC.",
         "tasks": [
           {
             "ref": "backup",
-            "title": "Database backup",
-            "task_type": "db_backup",
+            "title": "Backup + keep the last 10",
+            "task_type": "db_backup_rotate",
             "trigger": {
               "trigger_mode": "daily",
               "hour": 1,
               "minute": 0,
               "timezone": "UTC"
+            },
+            "target_payload": {
+              "keep": "10"
             }
           }
         ]

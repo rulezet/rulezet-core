@@ -325,3 +325,17 @@
 .tf-var { border: 1px solid rgba(13, 110, 253, .3); background: rgba(13, 110, 253, .06); color: #0d6efd; border-radius: 6px;
     padding: .05rem .45rem; font-family: var(--bs-font-monospace, monospace); font-size: .72rem; }
 .tf-var:hover { background: rgba(13, 110, 253, .14); }
+
+/* Database backup + rotation: the backup folder */
+.tf-backups { border: 1px solid var(--border-color); border-radius: 12px; padding: .7rem .85rem; background: var(--light-bg-color); }
+.tf-backups__head { display: flex; align-items: center; gap: .5rem; font-size: .82rem; margin-bottom: .4rem; flex-wrap: wrap; }
+.tf-backups__head > i { color: #0d6efd; }
+.tf-backups__head code { font-size: .76rem; overflow-wrap: anywhere; }
+.tf-backups__list { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.tf-backups__row { display: flex; align-items: center; gap: .5rem; font-size: .76rem; padding: .2rem .35rem; border-radius: 6px; }
+.tf-backups__row > i { width: 1rem; text-align: center; color: var(--subtle-text-color); }
+.tf-backups__row.is-manual > i { color: #198754; }
+.tf-backups__row.is-goes { background: rgba(220,53,69,.07); }
+.tf-backups__name { font-family: var(--bs-font-monospace); flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tf-backups__tag { font-size: .66rem; font-weight: 700; border-radius: 999px; padding: 0 .45rem; background: rgba(25,135,84,.12); color: #198754; }
+.tf-backups__tag.is-goes { background: rgba(220,53,69,.12); color: #dc3545; }

@@ -91,6 +91,16 @@ TASK_TYPES = {
         'job_type': 'db_backup',
         'target_picker': 'none',
     },
+    'db_backup_rotate': {
+        'label': 'Database backup + rotation (keep the last N)',
+        'icon': 'fa-solid fa-box-archive',
+        'job_type': 'db_backup_rotate',
+        'target_picker': 'none',
+        'extra_options': [
+            {'key': 'keep', 'type': 'text', 'label': 'Backups to keep (3 minimum)', 'default': '10'},
+        ],
+        'required_options': ['keep'],
+    },
     'rule_validation_run': {
         'label': 'Rule Validation (false-positive gate)',
         'icon': 'fa-solid fa-vial-circle-check',   # fa-shield-check is Font Awesome Pro, not in the bundled free set
@@ -456,6 +466,7 @@ _DESCRIPTIONS = {
     'action_log': 'Writes a line in the activity log (Admin → Logs) — e.g. "went well" after the last task; the text takes {variables}.',
     'action_webhook': 'POSTs a JSON message ({"text": …}) to a public https URL: a Slack / Mattermost / Teams incoming webhook or any service. Private and local addresses are refused.',
     'action_check': 'A gate: counts a figure of the instance (bad rules, rules created today, failed jobs…) and succeeds only if the condition holds. Chain "If it succeeds" for one road and "If it fails" for the other — e.g. bad rules > 50 → Bad rules retry, else nothing.',
+    'db_backup_rotate': 'Makes a new backup, checks it (pg_restore can read it), then deletes the oldest automatic backups (rulezet_<date>.dump) so N remain — never fewer than 3, never the new one, never a dump named by hand. If anything fails, nothing is deleted and every admin is alerted.',
     'repo_quality': 'Scores every Git source 0-100 from its rules: their average quality score, imports that failed (bad rules), valid and licensed rules, last sync, conflicts. Shown in Git Sources and on each source. Run it after Rule Quality Score.',
     'clear_caches': 'Empties the caches (home figures, ATT&CK / CVE stats, cached pages, leaderboard) so what the workflow changed shows right away. Put it last.',
     'ai_rule_analysis': 'Asks the AI agent to write an analysis report for rules that have none (a batch per run), published or kept private.',

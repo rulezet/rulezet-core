@@ -343,6 +343,9 @@ def _validate_target_payload(task_type, payload):
     err = validate_alert((payload or {}).get('_alert'))
     if err:
         return err
+    if task_type == 'db_backup_rotate':
+        if not re.fullmatch(r'\d{1,3}', str((payload or {}).get('keep', '')).strip()) or int(str(payload['keep']).strip()) < 3:
+            return 'Backups to keep: a whole number, 3 or more.'
     if task_type == 'action_check':
         from app.features.admin.task_scheduler.actions import FIGURES, OPERATORS
         p = payload or {}

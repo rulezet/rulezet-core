@@ -5335,6 +5335,60 @@ def handle_db_backup(job, app):
     log_job(job, 'Backup complete — see /admin/get_backups to download it.', level='success', event='done')
 
 
+@register_handler('db_backup_rotate')
+def handle_db_backup_rotate(job, app):
+    """New backup → checked → oldest automatic backups deleted to keep N (backup_rotation.py).
+    On any problem nothing is deleted, the job fails and every admin is alerted."""
+    from app.features.admin.task_scheduler import backup_rotation as BR
+    keep = (job.payload or {}).get('keep') or BR.DEFAULT_KEEP
+    try:
+        keep = max(BR.MIN_KEEP, min(365, int(keep)))
+    except (TypeError, ValueError):
+        keep = BR.DEFAULT_KEEP
+    job.total, job.done = 3, 0
+    db.session.commit()
+
+    def log(msg, level='info'):
+        log_job(job, msg, level=level, event='output')
+
+    def fail(reason):
+        log_job(job, f'Backup failed: {reason} — no old backup was deleted.', level='error', event='error')
+        job.status, job.error = 'failed', reason[:500]
+        db.session.commit()
+        try:
+            from app.features.notification.notification_core import _get_all_admin_ids, create_notification
+            for admin_id in _get_all_admin_ids():
+                create_notification(user_id=admin_id, notif_type='backup_failed',
+                                    title='Database backup FAILED', body=f'{reason[:250]} — no old backup was deleted.',
+                                    link=f'/jobs/detail/{job.uuid}', icon='fa-solid fa-triangle-exclamation')
+        except Exception:
+            pass
+
+    log_job(job, f'Backup into {BR.backup_dir()} — keeping the {keep} newest automatic backups.', level='info', event='start')
+    path, err = BR.make_backup(log)
+    if err:
+        return fail(err)
+    job.done = 1
+    db.session.commit()
+
+    problem = BR.check_dump(path)
+    if problem:
+        if path and os.path.isfile(path):
+            os.replace(path, path + '.failed')            # kept for a look, out of the rotation
+            log(f'Bad file kept as {os.path.basename(path)}.failed', 'warning')
+        return fail(problem)
+    log_job(job, f'New backup checked: {os.path.basename(path)} ({os.path.getsize(path) / 1048576:.1f} MB)',
+            level='success', event='output')
+    job.done = 2
+    db.session.commit()
+
+    result = BR.rotate(keep, path, log)
+    job.done = 3
+    db.session.commit()
+    log_job(job, f"Done — {result['kept']} automatic backup(s) kept, {len(result['deleted'])} deleted "
+                 f"({result['freed'] / 1048576:.1f} MB freed).", level='success', event='done')
+
+
 # ─── rule_validation_run ───────────────────────────────────────────────────────
 
 RULE_VALIDATION_MIRROR_DIR = ROOT_DIR / 'data' / 'rulezet_validation'

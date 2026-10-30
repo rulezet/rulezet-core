@@ -806,3 +806,10 @@ def set_task_alert(uuid):
         message = 'Alert saved.' if alert.get('on') else 'Alert removed.'
     return jsonify({"message": message, "toast_class": "success-subtle",
                     "schedule": schedule.to_json()}), 200
+
+
+@task_scheduler_blueprint.route('/backups', methods=['GET'])
+def backups_folder():
+    """The backup folder as the "Database backup + rotation" task shows it (admin only)."""
+    from app.features.admin.task_scheduler.backup_rotation import list_backups
+    return jsonify(list_backups()), 200

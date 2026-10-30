@@ -1061,6 +1061,31 @@
                             <div><strong>When it runs:</strong> [[ selectedTaskDef.description ]]</div>
                         </div>
 
+                        <!-- Database backup + rotation: the folder and what is in it (backup_rotation.py) -->
+                        <div v-if="form.task_type === 'db_backup_rotate'" class="tf-backups mb-3">
+                            <div class="tf-backups__head">
+                                <i class="fa-solid fa-folder-open"></i><code>[[ backupsInfo ? backupsInfo.folder : '…' ]]</code>
+                                <a href="/admin/get_backups" target="_blank" class="ms-auto small">Download a backup</a>
+                            </div>
+                            <template v-if="backupsInfo">
+                                <div class="small text-muted mb-2">
+                                    [[ backupsInfo.files.filter(f => f.rotated).length ]] automatic backup(s) ·
+                                    [[ backupsInfo.files.filter(f => !f.rotated).length ]] named by hand (never deleted) ·
+                                    [[ fmtBytes(backupsInfo.total) ]] in all<template v-if="backupsInfo.disk_free !== null"> · [[ fmtBytes(backupsInfo.disk_free) ]] free on the disk</template>
+                                </div>
+                                <div class="tf-backups__list">
+                                    <div v-for="(f, i) in backupsInfo.files" :key="f.name" class="tf-backups__row"
+                                         :class="{ 'is-manual': !f.rotated, 'is-goes': f.rotated && willBeDeleted(f) }">
+                                        <i :class="f.rotated ? 'fa-solid fa-clock-rotate-left' : 'fa-solid fa-lock'"></i>
+                                        <span class="tf-backups__name">[[ f.name ]]</span>
+                                        <span class="text-muted">[[ fmtBytes(f.size) ]]</span>
+                                        <span v-if="!f.rotated" class="tf-backups__tag">kept (named by hand)</span>
+                                        <span v-else-if="willBeDeleted(f)" class="tf-backups__tag is-goes">deleted at the next run</span>
+                                    </div>
+                                    <div v-if="!backupsInfo.files.length" class="text-muted small">No backup yet.</div>
+                                </div>
+                            </template>
+                        </div>
                         <div v-if="selectedTaskDef && selectedTaskDef.extra_options.length" class="tf-options">
                             <div v-for="opt in selectedTaskDef.extra_options" :key="opt.key" class="tf-option">
                                 <label v-if="opt.type === 'bool'" class="tf-switch">
@@ -1482,6 +1507,22 @@
             const workflowsTotalPages = ref(1);
             const totalWorkflows = ref(0);
             let workflowSearchDebounce = null;
+
+            // Database backup + rotation task: the backup folder (GET /admin/tasks/backups)
+            const backupsInfo = ref(null);
+            async function loadBackupsInfo() {
+                const res = await fetch('/admin/tasks/backups');
+                if (res.ok) backupsInfo.value = await res.json();
+            }
+            const fmtBytes = (b) => b == null ? '?' : b >= 1073741824 ? (b / 1073741824).toFixed(1) + ' GB'
+                : b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.round(b / 1024) + ' KB';
+            // With a new backup coming, the oldest automatic ones beyond "keep" go (never below 3)
+            function willBeDeleted(f) {
+                if (!backupsInfo.value) return false;
+                const keep = Math.max(3, parseInt(form.extra_options.keep, 10) || 10);
+                const auto = backupsInfo.value.files.filter(x => x.rotated);      // newest first
+                return auto.indexOf(f) >= keep - 1;
+            }
 
             const health = ref(null);
             async function loadHealth() {
@@ -2477,6 +2518,7 @@
                 if (form.task_type === key) return;
                 form.task_type = key;
                 onTaskTypeChange();
+                if (key === 'db_backup_rotate') loadBackupsInfo();
             }
 
             function onTaskTypeChange() {
@@ -2564,6 +2606,7 @@
             }
 
             function openEdit(s) {
+                if (s.task_type === 'db_backup_rotate') loadBackupsInfo();
                 bootstrap.Modal.getOrCreateInstance(document.getElementById('taskModal')).show();
                 formInstance.value++;
                 editingSchedule.value = s;
@@ -2838,7 +2881,7 @@
             onUnmounted(() => stopLivePolling());
 
             return {
-                truncate, health, exportWorkflow, alertTaskCount, retryTaskCount, autoPausedCount, linkAlert, saveLinkAlert, taskAlert, ALERT_POINTS, notebook, noteOnRun, pinnedNotes, showPinned, share, openShare, shareAction, copyShare,
+                truncate, health, backupsInfo, loadBackupsInfo, fmtBytes, willBeDeleted, exportWorkflow, alertTaskCount, retryTaskCount, autoPausedCount, linkAlert, saveLinkAlert, taskAlert, ALERT_POINTS, notebook, noteOnRun, pinnedNotes, showPinned, share, openShare, shareAction, copyShare,
                 route, activeWorkflow, openWorkflow, backToWorkflows, runWorkflowNow,
                 runPreview, runPreviewLoading, askRunWorkflow, confirmRunWorkflow,
                 dashboard, loadDashboard, barHeight, toggleWorkflowActive, runFromHere, setTaskActive,
