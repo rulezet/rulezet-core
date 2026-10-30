@@ -609,6 +609,38 @@
                                 </div>
                             </div>
 
+                            <!-- MalwareBazaar API key (CVE pages: samples tagged with the CVE) -->
+                            <div class="config-row">
+                                <div class="config-row__key">MalwareBazaar API key</div>
+                                <div class="config-row__value">
+                                    <span class="config-secret">[[ config.app.malwarebazaar_key_preview ]]</span>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill ms-2 px-2 py-0" @click="editingMbKey = !editingMbKey" style="font-size:.72rem;">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div v-if="editingMbKey" class="pb-2">
+                                <div class="env-edit-form flex-wrap gap-2">
+                                    <input type="password" v-model="mbKeyNew" class="form-control form-control-sm rounded-pill flex-grow-1"
+                                           placeholder="Auth-Key from auth.abuse.ch" autocomplete="off" style="font-family:monospace;font-size:.78rem;">
+                                    <button class="btn btn-sm btn-success rounded-pill px-3"
+                                            @click="saveEnvKey('MALWAREBAZAAR_API_KEY', mbKeyNew)" :disabled="!mbKeyNew">
+                                        <i class="fa-solid fa-check me-1"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary rounded-pill px-2"
+                                            @click="editingMbKey=false; mbKeyNew=''">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                                <div class="text-muted small mt-1">
+                                    <i class="fa-solid fa-circle-info me-1"></i>
+                                    Lets the CVE pages list the samples tagged with the CVE on MalwareBazaar (abuse.ch), as material to write a
+                                    YARA rule from. Free: sign in on <a href="https://auth.abuse.ch/" target="_blank" rel="noopener noreferrer">auth.abuse.ch</a>
+                                    and copy your Auth-Key. Stays on the server, applied at once — a CVE page already opened shows the samples
+                                    after its 6 h cache (or after Clear all caches).
+                                </div>
+                            </div>
+
                             <!-- GitHub Host -->
                             <div class="config-row">
                                 <div class="config-row__key">GitHub Host</div>
@@ -1338,6 +1370,8 @@ createApp({
         const editingMailPort   = ref(false)
         const mailPortNew       = ref('')
         const editingGithubToken = ref(false)
+        const editingMbKey       = ref(false)
+        const mbKeyNew           = ref('')
         const githubTokenNew     = ref('')
         const editingGithubHost  = ref(false)
         const githubHostNew      = ref('')
@@ -1587,6 +1621,7 @@ createApp({
                 if (key === 'MAIL_USERNAME') { editingMailUser.value = false; mailUserNew.value = '' }
                 if (key === 'MAIL_PORT')     { editingMailPort.value = false; mailPortNew.value = '' }
                 if (key === 'GITHUB_TOKEN')  { editingGithubToken.value = false; githubTokenNew.value = '' }
+                if (key === 'MALWAREBAZAAR_API_KEY') { editingMbKey.value = false; mbKeyNew.value = '' }
                 if (key === 'GITHUB_HOST')   { editingGithubHost.value = false; githubHostNew.value = '' }
                 if (key === 'GIT_HOSTS')       { editingGitHosts.value = false; gitHostsNew.value = '' }
                 if (key === 'GIT_HOST_TOKENS') { editingGitTokens.value = false; gitTokensNew.value = '' }
@@ -1759,7 +1794,7 @@ createApp({
             editingMailServer, mailServerNew,
             editingMailUser, mailUserNew,
             editingMailPort, mailPortNew,
-            editingGithubToken, githubTokenNew,
+            editingGithubToken, githubTokenNew, editingMbKey, mbKeyNew,
             editingGithubHost, githubHostNew,
             editingGitHosts, gitHostsNew, editingGitTokens, gitTokensNew,
             editingSso, ssoSaving, ssoTesting, ssoTestResult, ssoSecretNew, sso, toggleSsoEdit, testSso, saveSso,

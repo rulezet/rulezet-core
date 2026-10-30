@@ -255,6 +255,7 @@ def get_app_config() -> dict:
             'github_token_set': bool(github_token),
             'github_token_preview': '••••••••••••' if github_token else 'not set',
             'github_host': github_host,
+            'malwarebazaar_key_preview': '••••••••••••' if os.environ.get('MALWAREBAZAAR_API_KEY') else 'not set',
             'git_hosts': os.environ.get('GIT_HOSTS') or '',
             # Hosts only — never the tokens themselves.
             'git_token_hosts': sorted(git_tokens),
@@ -300,6 +301,7 @@ _ENV_ALLOWED = {
     'FLASK_URL', 'FLASK_PORT',
     'GITHUB_TOKEN', 'GITHUB_HOST', 'GIT_HOSTS', 'GIT_HOST_TOKENS',
     'SURICATA_BINARY_PATH',
+    'MALWAREBAZAAR_API_KEY',
 }
 
 
