@@ -339,3 +339,25 @@
     line-height: 1.6;
 }
 .bl-fmt--more { color: #0d6efd; border-color: rgba(13, 110, 253, .3); background: rgba(13, 110, 253, .06); font-weight: 700; }
+
+
+/* ── Phone: bundle cards as clean as on a computer, nothing overlaps ── */
+@media (max-width: 640px) {
+    .bl-wrapper .dt-view-toggle { display: none; }
+    .bl-toolbar, .bl-toolbar-left, .bl-toolbar-right { flex-wrap: wrap; min-width: 0; }
+    .bl-toolbar-left { width: 100%; }
+    .bl-toolbar-left .dt-search { flex: 1 1 100%; }
+    .bl-bundle-card .card-body { padding: 1.1rem !important; }
+    .bl-bundle-card .card-watermark-list { display: none; }
+    /* chips leave the top-right corner and sit above the title, wrapping */
+    .bl-bundle-card > .bl-chips { position: static !important; margin: .9rem 1.1rem 0 !important;
+        display: flex; flex-wrap: wrap; gap: .35rem; }
+    .bl-bundle-card .mb-3.pe-5 { padding-right: 0 !important; margin-bottom: .6rem !important; }
+    .bl-bundle-card h5, .bl-bundle-card h5 a { font-size: 1rem; overflow-wrap: anywhere; }
+    .bl-bundle-card .card-body > * { min-width: 0; max-width: 100%; }
+    .bl-bundle-card .border-top.mt-auto { flex-wrap: wrap; row-gap: .5rem; column-gap: .5rem; padding-top: .6rem !important; }
+    .bl-bundle-card .border-top.mt-auto > .d-flex { flex-wrap: wrap; margin-left: auto; }
+    .bl-rule-row-main { flex-wrap: wrap; }
+    .bl-rule-title { min-width: 0; overflow-wrap: anywhere; }
+    .bl-rule-code, .bl-bundle-card pre { max-width: 100%; overflow-x: auto; }
+}

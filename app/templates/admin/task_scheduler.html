@@ -108,7 +108,7 @@
                          :data-uuid="w.uuid" :data-title="calSelected.includes(w.uuid) && calSelected.length > 1 ? calSelected.length + ' workflows' : w.title"
                          :style="{ '--wf-color': wfColor(w.uuid) }">
                         <input type="checkbox" :value="w.uuid" v-model="calSelected" @mousedown.stop aria-label="Select">
-                        <span class="wcal-wf__dot"></span>
+                        <span class="wcal-wf__icon"><i class="fa-solid" :class="wfIcon(w.uuid)"></i></span>
                         <span class="wcal-wf__body">
                             <span class="wcal-wf__title">[[ w.title ]]</span>
                             <span class="wcal-wf__sub">[[ w.first_task && w.first_task.trigger_mode !== 'after_task' ? triggerSummary(w.first_task) : 'no launch date' ]][[ w.is_active ? '' : ' · paused' ]]</span>
@@ -261,7 +261,8 @@
                         <tbody>
                             <tr v-for="w in workflows" :key="w.uuid" class="dt-row" style="cursor:pointer;" @click="openWorkflow(w)">
                                 <td class="dt-td">
-                                    <div class="fw-bold">[[ w.title ]]</div>
+                                    <div class="fw-bold d-flex align-items-center gap-2">
+                                        <span class="wcal-wf__icon" :style="{ '--wf-color': wfColor(w.uuid) }"><i class="fa-solid" :class="wfIcon(w.uuid)"></i></span>[[ w.title ]]</div>
                                     <div class="text-muted" style="font-size:.78rem;" v-if="w.description">[[ w.description ]]</div>
                                 </td>
                                 <td class="dt-td text-center">[[ w.active_task_count ]] / [[ w.task_count ]]</td>
@@ -328,7 +329,7 @@
         <div class="wfd-hero mb-3" v-if="activeWorkflow">
             <i class="wfd-hero__watermark fa-solid fa-diagram-project"></i>
             <div class="wfd-hero__top">
-                <div class="wfd-hero__icon"><i class="fa-solid fa-diagram-project"></i></div>
+                <div class="wfd-hero__icon" :style="activeWorkflow.color ? { background: activeWorkflow.color, color: '#fff' } : null"><i class="fa-solid" :class="activeWorkflow.icon || 'fa-diagram-project'"></i></div>
                 <div class="wfd-hero__text">
                     <div class="d-flex align-items-center gap-2 flex-wrap">
                         <h4 class="wfd-hero__title">[[ activeWorkflow.title ]]</h4>
@@ -962,6 +963,29 @@
                                 <div class="form-check form-switch mb-0">
                                     <input class="form-check-input" type="checkbox" id="workflowActiveToggle" v-model="workflowForm.is_active">
                                     <label class="form-check-label" for="workflowActiveToggle">Active</label>
+                                </div>
+                            </div>
+                            <!-- How it looks in the list and the calendar -->
+                            <div class="col-12">
+                                <label class="form-label fw-bold mb-1">Colour and icon <span class="text-muted fw-normal small">— to spot it at a glance in the calendar</span></label>
+                                <div class="wf-look">
+                                    <div class="wf-look__preview" :style="{ '--wf-color': workflowForm.color || '#0d6efd' }">
+                                        <i class="fa-solid" :class="workflowForm.icon || 'fa-diagram-project'"></i>
+                                        <span>[[ workflowForm.title || 'Workflow' ]]</span>
+                                    </div>
+                                    <div class="wf-look__colors">
+                                        <button v-for="c in PALETTE" :key="c" type="button" class="wf-look__swatch" :class="{ 'is-on': workflowForm.color === c }"
+                                                :style="{ background: c }" :title="c" @click="workflowForm.color = c"></button>
+                                        <label class="wf-look__swatch wf-look__swatch--custom" title="Any colour">
+                                            <input type="color" :value="workflowForm.color || '#0d6efd'" @input="workflowForm.color = $event.target.value">
+                                            <i class="fa-solid fa-eye-dropper"></i>
+                                        </label>
+                                        <button type="button" class="wf-look__reset" @click="workflowForm.color = ''" title="Automatic colour">Auto</button>
+                                    </div>
+                                    <div class="wf-look__icons">
+                                        <button v-for="ic in WF_ICONS" :key="ic" type="button" class="wf-look__icon" :class="{ 'is-on': workflowForm.icon === ic }"
+                                                :title="ic" @click="workflowForm.icon = ic"><i class="fa-solid" :class="ic"></i></button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1649,7 +1673,14 @@
             const calendarRef = ref(null);
             const calSide = ref(null);
             const PALETTE = ['#0d6efd', '#6f42c1', '#d63384', '#fd7e14', '#20c997', '#0dcaf0', '#6610f2', '#198754', '#e35d6a', '#b08800'];
+            // Icons offered for a workflow (any Font Awesome name works server side)
+            const WF_ICONS = ['fa-diagram-project', 'fa-database', 'fa-rotate', 'fa-cloud-arrow-down', 'fa-code-branch', 'fa-broom',
+                              'fa-shield-halved', 'fa-bug', 'fa-tags', 'fa-chart-line', 'fa-envelope', 'fa-box-archive',
+                              'fa-robot', 'fa-magnifying-glass', 'fa-bolt', 'fa-clock', 'fa-server', 'fa-flask', 'fa-star', 'fa-fire'];
+            const wfOf = (uuid) => calWorkflows.value.find(w => w.uuid === uuid) || (workflows.value || []).find(w => w.uuid === uuid) || {};
+            const wfIcon = (uuid) => wfOf(uuid).icon || 'fa-diagram-project';
             function wfColor(uuid) {
+                if (wfOf(uuid).color) return wfOf(uuid).color;
                 let h = 0;
                 for (const c of uuid || '') h = (h * 31 + c.charCodeAt(0)) >>> 0;
                 return PALETTE[h % PALETTE.length];
@@ -1679,7 +1710,7 @@
                     const color = past ? (STATUS_COLOR[e.status] || '#6c757d') : (e.active ? wfColor(e.workflow_uuid) : '#adb5bd');
                     return { id: (past ? 'r' : 'p') + i, title: (past ? (e.status === 'done' ? '✓ ' : e.status === 'failed' ? '✗ ' : '• ') : '▶ ') + e.title,
                              start: e.start, color, editable: !past && e.mode !== 'cron', classNames: past ? ['is-past'] : (e.active ? [] : ['is-paused']),
-                             extendedProps: e };
+                             extendedProps: { ...e, icon: wfIcon(e.workflow_uuid) } };
                 });
             }
             async function initCalendar() {
@@ -2100,7 +2131,7 @@
             const workflowForm = reactive({
                 uuid: null, title: '', description: '', is_active: true,
                 notify_on_failure: true, notify_on_success: false, notify_emails_text: '',
-                first_task: null, launch_initial: {},
+                first_task: null, launch_initial: {}, color: '', icon: '',
             });
             const workflowFormInstance = ref(0);
             // The picker emits once on mount (= the current trigger): only a
@@ -2143,7 +2174,7 @@
                 Object.assign(workflowForm, {
                     uuid: null, title: '', description: '', is_active: true,
                     notify_on_failure: true, notify_on_success: false, notify_emails_text: '',
-                    first_task: null, launch_initial: {},
+                    first_task: null, launch_initial: {}, color: '', icon: '',
                 });
                 workflowLaunch = null;
             }
@@ -2154,6 +2185,7 @@
                     notify_on_failure: w.notify_on_failure, notify_on_success: w.notify_on_success,
                     notify_emails_text: (w.notify_emails || []).join(', '),
                     first_task: w.first_task || null, launch_initial: launchInitialFrom(w.first_task),
+                    color: w.color || '', icon: w.icon || '',
                 });
                 workflowLaunchBaseline = null;
                 workflowLaunch = null;
@@ -2186,6 +2218,7 @@
                             title: workflowForm.title, description: workflowForm.description, is_active: workflowForm.is_active,
                             notify_on_failure: workflowForm.notify_on_failure, notify_on_success: workflowForm.notify_on_success,
                             notify_emails: notifyEmails,
+                            color: workflowForm.color || '', icon: workflowForm.icon || '',
                             ...(launch ? { launch } : {}),
                         }),
                     });
@@ -3166,7 +3199,7 @@
             onUnmounted(() => stopLivePolling());
 
             return {
-                truncate, health, listView, setListView, calWorkflows, calSelected, calEvents, calPick, calendarRef, calSide, wfColor, wfTitle,
+                truncate, health, listView, setListView, calWorkflows, calSelected, calEvents, calPick, calendarRef, calSide, wfColor, wfTitle, wfIcon, WF_ICONS, PALETTE,
                 modeLabel, userTz, onCalRange, schedule, openSchedule, weekdayName, dayOfMonth, scheduleSentence, saveSchedule,
                 spreadRows, dayCount, dayIsFull, calMaxPerDay,
                 onCalSelect, onCalDrop, onCalEventDrop, onCalEventClick, calRunNow, backupsInfo, loadBackupsInfo, fmtBytes, willBeDeleted, exportWorkflow, alertTaskCount, retryTaskCount, autoPausedCount, linkAlert, saveLinkAlert, taskAlert, ALERT_POINTS, notebook, noteOnRun, pinnedNotes, showPinned, share, openShare, shareAction, copyShare,

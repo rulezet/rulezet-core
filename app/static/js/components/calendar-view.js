@@ -113,6 +113,15 @@ export default {
                 eventDrop: (info) => emit('event-drop', { event: plain(info.event), start: info.event.start,
                                                           delta: info.delta, revert: info.revert }),
                 drop: (info) => { clearMark(); emit('drop', { date: info.date, allDay: info.allDay, el: info.draggedEl }); },
+                // An event may carry an icon (extendedProps.icon, Font Awesome "fa-…"): drawn before its title
+                eventDidMount: (info) => {
+                    const icon = info.event.extendedProps && info.event.extendedProps.icon;
+                    const title = info.el.querySelector('.fc-event-title, .fc-list-event-title a, .fc-list-event-title');
+                    if (!icon || !title || !/^fa-[a-z0-9-]+$/.test(icon)) return;
+                    const i = document.createElement('i');
+                    i.className = 'fa-solid ' + icon + ' cv-event-icon';
+                    title.prepend(i);
+                },
                 eventDragStart: () => startTracking(),
                 eventDragStop: () => stopTracking(),
             });

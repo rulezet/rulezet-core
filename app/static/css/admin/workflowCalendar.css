@@ -40,3 +40,30 @@
 .wcal-row__x:hover { color: #dc3545; }
 .wcal-row__full { grid-column: 3 / -1; font-size: .72rem; font-weight: 600; color: #dc3545; }
 @media (max-width: 560px) { .wcal-row { grid-template-columns: 1.4rem 10px 1fr; } .wcal-row input { grid-column: 3; } }
+
+/* Workflow icon in its colour (calendar side list, workflows list) */
+.wcal-wf__icon { width: 24px; height: 24px; border-radius: 7px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+    font-size: .72rem; color: #fff; background: var(--wf-color, #0d6efd); }
+
+/* Colour and icon picker of the workflow window */
+.wf-look { display: flex; flex-direction: column; gap: .6rem; padding: .75rem; border: 1px solid var(--border-color); border-radius: 10px; background: var(--light-bg-color); }
+.wf-look__preview { display: inline-flex; align-items: center; gap: .5rem; align-self: flex-start; max-width: 100%; padding: .3rem .75rem .3rem .3rem;
+    border-radius: 999px; font-weight: 600; font-size: .85rem; color: var(--text-color);
+    background: color-mix(in srgb, var(--wf-color) 14%, transparent); border: 1px solid color-mix(in srgb, var(--wf-color) 45%, transparent); }
+.wf-look__preview i { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    background: var(--wf-color); color: #fff; font-size: .75rem; flex-shrink: 0; }
+.wf-look__preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-look__colors, .wf-look__icons { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.wf-look__swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; padding: 0; cursor: pointer;
+    box-shadow: 0 0 0 1px var(--border-color); transition: transform .12s; }
+.wf-look__swatch:hover { transform: scale(1.12); }
+.wf-look__swatch.is-on { border-color: var(--card-bg-color); box-shadow: 0 0 0 2px var(--text-color); }
+.wf-look__swatch--custom { position: relative; display: inline-flex; align-items: center; justify-content: center; background: var(--card-bg-color);
+    color: var(--subtle-text-color); font-size: .7rem; overflow: hidden; }
+.wf-look__swatch--custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.wf-look__reset { border: 1px solid var(--border-color); background: var(--card-bg-color); color: var(--subtle-text-color);
+    border-radius: 999px; font-size: .72rem; padding: .15rem .6rem; }
+.wf-look__icon { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--card-bg-color);
+    color: var(--subtle-text-color); display: inline-flex; align-items: center; justify-content: center; font-size: .85rem; }
+.wf-look__icon:hover { color: var(--text-color); border-color: #0d6efd; }
+.wf-look__icon.is-on { background: #0d6efd; border-color: #0d6efd; color: #fff; }

@@ -1099,7 +1099,9 @@ export default {
         const page     = ref(Number(_p('page', '1')) || 1)
         const sortKey  = ref(_p('sort', ''))
         const sortDir  = ref(_p('dir', 'desc'))
-        const viewMode = ref(_p('view', props.defaultView))
+        // Phone: cards only (a table does not fit — the view toggle is hidden there, see bundleList.css)
+        const _isPhone = window.matchMedia && window.matchMedia('(max-width: 640px)').matches
+        const viewMode = ref(_isPhone ? 'card' : _p('view', props.defaultView))
 
         // per_page is view-specific: restore for whichever view was active at reload
         const _urlPP      = Number(_p('per_page', '')) || 0
