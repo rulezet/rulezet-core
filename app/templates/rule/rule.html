@@ -975,7 +975,12 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                         history.replaceState(history.state, '', url);
                   });
 
-                  const manualContent = ref(window.__manual_content || '');
+                  // A draft handed over by the CVE page ("Open the draft", vulnerability/cveKit.js)
+                  let handedDraft = null;
+                  if (pageParams.get('draft')) {
+                        try { handedDraft = JSON.parse(sessionStorage.getItem('rz-rule-draft') || 'null'); sessionStorage.removeItem('rz-rule-draft'); } catch {}
+                  }
+                  const manualContent = ref(window.__manual_content || (handedDraft && handedDraft.content) || '');
                   const manualFormat  = ref(window.__manual_format  || (pageParams.get('format') || '').toLowerCase());
                   const manualLicense = ref(window.__manual_license || '');
                   const parseContent  = ref('');

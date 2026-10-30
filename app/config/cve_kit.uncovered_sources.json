@@ -1,0 +1,10 @@
+{
+  "label": "Vulnerabilities to cover — sources",
+  "category": "CVE response kit",
+  "description": "Lists the CVE index checks for vulnerabilities no Rulezet rule covers yet: the CISA Known Exploited Vulnerabilities catalog, and the latest vulnerabilities published on the Vulnerability-Lookup instance (cve_kit.vulnerability_lookup_url). recent_number = how many recent ones are read.",
+  "public": false,
+  "value": {
+    "kev_url": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+    "recent_number": 200
+  }
+}

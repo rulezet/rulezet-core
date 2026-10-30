@@ -1,0 +1,16 @@
+{
+  "label": "Detection material sources",
+  "category": "CVE response kit",
+  "description": "Where the CVE page looks for material to write a rule from: public PoCs (nomi-sec PoC-in-GitHub), the ProjectDiscovery Nuclei template of the CVE (paths tried in order, {year} and {id} replaced), samples tagged with the CVE on MalwareBazaar (needs MALWAREBAZAAR_API_KEY in .env, otherwise only a link is shown).",
+  "public": false,
+  "value": {
+    "poc_in_github": "https://raw.githubusercontent.com/nomi-sec/PoC-in-GitHub/master/{year}/{id}.json",
+    "nuclei_raw": "https://raw.githubusercontent.com/projectdiscovery/nuclei-templates/main/",
+    "nuclei_paths": ["http/cves/{year}/{id}.yaml", "network/cves/{year}/{id}.yaml", "javascript/cves/{year}/{id}.yaml", "file/cves/{year}/{id}.yaml"],
+    "nuclei_page": "https://github.com/projectdiscovery/nuclei-templates/blob/main/",
+    "malwarebazaar_api": "https://mb-api.abuse.ch/api/v1/",
+    "malwarebazaar_browse": "https://bazaar.abuse.ch/browse/tag/{id}/",
+    "exploit_hosts": ["exploit-db.com", "packetstormsecurity.com", "github.com", "gitlab.com", "gist.github.com", "seclists.org"],
+    "timeout_seconds": 8
+  }
+}
