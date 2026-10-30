@@ -13,6 +13,8 @@ Rulezet.
 
 **→ The YARA editor (first format of the Rule Workbench): [yara_editor.md](yara_editor.md).**
 
+**→ Next big thing: bundle forks, merge requests with conflicts, contributors — [bundle_forks.md](bundle_forks.md).**
+
 This folder collects that direction: one file per rule format, describing how
 a Rulezet **connector** could link the format's real tooling to Rulezet and
 what value it adds. Nothing here is built yet unless its status says so.
