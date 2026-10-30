@@ -39,6 +39,9 @@ def _unavailable_message(target: str, error: Exception) -> str:
     if field:
         return (f"This rule uses the field '{field.group(1)}', which {label} doesn't have for this "
                 f"rule's log source — conversion isn't available for this rule.")
+    if 'hash algo' in text.lower():
+        return (f"This rule's hashes use an algorithm {label} doesn't support (MD5, SHA1, SHA256 only) — "
+                f"conversion isn't available for this rule.")
     if 'Unable to determine table name' in text:
         return (f"This rule's logsource isn't mapped to a {label} table yet — "
                 f"conversion isn't available for this rule.")
@@ -71,7 +74,12 @@ def convert_sigma_rule(rule, target: str) -> str:
     try:
         collection = SigmaCollection.from_yaml(rule.to_string)
         queries = _backend_for(target).convert(collection)
-    except SigmaError as e:
+    except Exception as e:
+        # Errors of pySigma and of its backends / pipelines (some don't derive from SigmaError, e.g.
+        # the Kusto pipelines' InvalidHashAlgorithmError) mean "this rule can't be converted for this
+        # target" — shown to the visitor, never logged as an application error. Anything else is a bug.
+        if not (isinstance(e, SigmaError) or type(e).__module__.split('.')[0] == 'sigma'):
+            raise
         # pySigma refusing a rule for a target is expected — e.g. the Sentinel
         # ASIM pipeline only knows the fields of its tables and only maps some
         # logsources to a table; it raises rather than guessing, and so do we:

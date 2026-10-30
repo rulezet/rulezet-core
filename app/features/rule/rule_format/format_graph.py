@@ -54,6 +54,7 @@ OUTPUT_URLS = {
     'sigma-splunk': 'https://www.splunk.com/',
     'sigma-elastic': 'https://www.elastic.co/security',
     'sigma-sentinel': 'https://learn.microsoft.com/en-us/azure/sentinel/',
+    'sigma-xdr': 'https://learn.microsoft.com/en-us/defender-xdr/advanced-hunting-overview',
     'sigma-sumologic': 'https://www.sumologic.com/',
     'sigma-secops': 'https://cloud.google.com/security/products/security-operations',
     'sigma-loki': 'https://grafana.com/oss/loki/',
@@ -62,7 +63,7 @@ OUTPUT_URLS = {
 
 SIGMA_TARGET_ICONS = {
     'splunk': 'custom-icon/splunk.png', 'elastic': 'custom-icon/elastic.svg',
-    'sentinel': 'custom-icon/sentinel.svg', 'sumologic': 'custom-icon/sumologic.svg',
+    'sentinel': 'custom-icon/sentinel.svg', 'xdr': 'custom-icon/xdr.svg', 'sumologic': 'custom-icon/sumologic.svg',
     'secops': 'custom-icon/secops.svg', 'loki': 'custom-icon/loki.svg',
 }
 
