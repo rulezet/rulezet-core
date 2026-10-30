@@ -115,6 +115,16 @@ def test_well_documented_sigma_rule_scores_high(app):
         db.session.commit()
         db.session.add(RuleAttackAssociation(uuid=str(uuid.uuid4()), rule_id=rule.id,
                                               technique_id="T1059", source="manual"))
+        # says how it was written, and two people approved this version in a review
+        from app.core.db_class.rule import RuleReview
+        from app.features.rule.rule_quality.quality_score_core import _content_hash
+        rule.written_with = "human"
+        second = User(first_name="r", last_name="r", email="r@r.r", password="x", api_key="review-key")
+        db.session.add(second)
+        db.session.commit()
+        for reviewer in (editor, second):
+            db.session.add(RuleReview(uuid=str(uuid.uuid4()), rule_id=rule.id, user_id=reviewer.id,
+                                      verdict="approved", content_hash=_content_hash(rule.to_string)))
         db.session.commit()
 
         score, breakdown = compute_quality_score(rule)
