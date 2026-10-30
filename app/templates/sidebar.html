@@ -154,11 +154,11 @@
                               </a>
                               <a href="/requests" class="dr-nav__item {% if request.path == '/requests' %}active{% endif %}">
                                  <i class="fa-solid fa-envelope"></i><span>Ownerships</span>
-                                 <span v-if="requests_to_validate > 0" class="dr-nav__badge">[[ requests_to_validate ]]</span>
+                                 <span v-if="requests_to_validate > 0" class="dr-nav__badge dr-nav__badge--alert">[[ requests_to_validate ]]</span>
                               </a>
                               <a href="/report/admin" class="dr-nav__item {% if request.path.startswith('/report/admin') %}active{% endif %}">
                                  <i class="fa-solid fa-triangle-exclamation"></i><span>Reports</span>
-                                 <span v-if="reports_to_check > 0" class="dr-nav__badge">[[ reports_to_check ]]</span>
+                                 <span v-if="reports_to_check > 0" class="dr-nav__badge dr-nav__badge--alert">[[ reports_to_check ]]</span>
                               </a>
                               <a href="/blog/admin/" class="dr-nav__item {% if request.path.startswith('/blog/admin') %}active{% endif %}">
                                  <i class="fa-solid fa-newspaper"></i><span>Blog</span>
@@ -168,7 +168,7 @@
                               </a>
                               <a href="/ai/admin/overview" class="dr-nav__item {% if request.path.startswith('/ai/admin') %}active{% endif %}">
                                  <i class="fa-solid fa-robot"></i><span>AI</span>
-                                 {% if ai_pending_requests() %}<span class="dr-nav__badge" title="AI analysis requests waiting">{{ ai_pending_requests() }}</span>{% endif %}
+                                 {% if ai_pending_requests() %}<span class="dr-nav__badge dr-nav__badge--alert" title="AI analysis requests waiting">{{ ai_pending_requests() }}</span>{% endif %}
                               </a>
                               <a href="/admin/roles/list" class="dr-nav__item {% if request.path.startswith('/admin/roles') %}active{% endif %}">
                                  <i class="fa-solid fa-user-shield"></i><span>Roles &amp; Permissions</span>

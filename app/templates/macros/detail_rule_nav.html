@@ -15,7 +15,8 @@
         <i class="fa-solid fa-code-pull-request"></i>
         <span>Proposals</span>
         {% if proposal_count > 0 %}
-        <span class="dr-nav__badge">{{ proposal_count }}</span>
+        <span class="dr-nav__badge{% if (proposal_pending_count|default(0)) > 0 %} dr-nav__badge--alert{% endif %}"
+              title="{{ proposal_count }} proposal(s){% if (proposal_pending_count|default(0)) > 0 %}, {{ proposal_pending_count }} waiting for review{% endif %}">{{ proposal_count }}</span>
         {% endif %}
     </a>
     <a href="/rule/detail_rule/{{ rule.id }}/scope"

@@ -341,7 +341,7 @@
                 type="button" role="tab" aria-controls="github-pane" aria-selected="true">
                 <i class="fa-solid fa-list-check"></i>
                 <span>Rule Status</span>
-                <span v-if="rulesLoaded && updatesAvailable > 0" class="dr-nav__badge">[[ updatesAvailable ]]</span>
+                <span v-if="rulesLoaded && updatesAvailable > 0" class="dr-nav__badge dr-nav__badge--alert">[[ updatesAvailable ]]</span>
             </button>
             <button class="dr-nav__item" id="rule-tab" data-bs-toggle="tab" data-bs-target="#rule-pane"
                 type="button" role="tab" aria-controls="rule-pane" aria-selected="false">

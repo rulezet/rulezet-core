@@ -26,7 +26,7 @@
         <i class="fa-solid fa-envelope"></i>
         <span>Requests</span>
         {% if requests_count > 0 %}
-        <span class="dr-nav__badge">{{ requests_count }}</span>
+        <span class="dr-nav__badge dr-nav__badge--alert">{{ requests_count }}</span>
         {% endif %}
     </a>
 
@@ -35,7 +35,7 @@
         <i class="fa-solid fa-triangle-exclamation"></i>
         <span>Reports</span>
         {% if reports_count > 0 %}
-        <span class="dr-nav__badge">{{ reports_count }}</span>
+        <span class="dr-nav__badge dr-nav__badge--alert">{{ reports_count }}</span>
         {% endif %}
     </a>
 
@@ -56,7 +56,7 @@
         <i class="fa-solid fa-robot"></i>
         <span>AI</span>
         {% if ai_pending_requests() %}
-        <span class="dr-nav__badge" title="AI analysis requests waiting">{{ ai_pending_requests() }}</span>
+        <span class="dr-nav__badge dr-nav__badge--alert" title="AI analysis requests waiting">{{ ai_pending_requests() }}</span>
         {% endif %}
     </a>
 

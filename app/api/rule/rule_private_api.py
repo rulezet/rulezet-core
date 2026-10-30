@@ -350,12 +350,33 @@ class FavoriteRule(Resource):
         existing = AccountModel.is_rule_favorited_by_user(rule_id=rule_id, user_id=user.id)
         if existing:
             AccountModel.remove_favorite(rule_id=rule_id, user_id=user.id)
-            return {"success": True, "message": "Rule removed from favorites"}, 200
+            return {"success": True, "message": "Rule removed from favorites", "is_favorited": False}, 200
         else:
             if not RuleModel.get_rule(rule_id):
                 return {"success": False, "message": "Rule not found"}, 404
             AccountModel.add_favorite(rule_id=rule_id, user_id=user.id)
-            return {"success": True, "message": "Rule added to favorites"}, 200
+            return {"success": True, "message": "Rule added to favorites", "is_favorited": True}, 200
+
+
+@rule_private_ns.route('/favorite_status/<int:rule_id>')
+@rule_private_ns.doc(description="""
+Whether the authenticated user has this rule in their favorites (without changing it).
+Favorited rules notify their users when their content changes — preference `favorite_rule_update`,
+see `GET /api/account/private/notification_preferences`.
+
+**Response:** `{"rule_id": 4, "is_favorited": true}` — **404** if the rule does not exist.
+""")
+class FavoriteRuleStatus(Resource):
+    @api_required
+    def get(self, rule_id):
+        """Is this rule in the authenticated user's favorites?"""
+        user = utils.get_user_from_api(request.headers)
+        if not user:
+            return {"success": False, "message": "Unauthorized"}, 403
+        if not RuleModel.get_rule(rule_id):
+            return {"success": False, "message": "Rule not found"}, 404
+        return {"rule_id": rule_id,
+                "is_favorited": bool(AccountModel.is_rule_favorited_by_user(rule_id=rule_id, user_id=user.id))}, 200
 
 ###################################
 #   Import rules from a github    #

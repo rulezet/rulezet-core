@@ -58,11 +58,19 @@
     border-radius: 9px;
     font-size: .67rem;
     font-weight: 700;
+    background: var(--light-bg-color);
+    color: var(--subtle-text-color);
+    border: 1px solid var(--border-color);
+    margin-left: 2px;
+}
+/* Red only for what needs attention (to review, unread, pending) — a plain count stays neutral (issue #85) */
+.dr-nav__badge--alert {
     background: #dc3545;
     color: #fff;
-    margin-left: 2px;
+    border-color: #dc3545;
     box-shadow: 0 1px 4px rgba(220,53,69,.4);
 }
+.dr-nav__item.active .dr-nav__badge:not(.dr-nav__badge--alert) { background: rgba(255,255,255,.22); color: #fff; border-color: transparent; }
 
 .dr-nav__sep {
     width: 1px;
