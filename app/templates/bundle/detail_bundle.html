@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/comment-thread.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/file-tree.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-files.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-export.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/timeline.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/meta-change-list.css') }}">
@@ -162,6 +163,29 @@
                     </span>
                 </div>
 
+                <!-- After "Export to another Rulezet": how to import it there -->
+                <teleport to="body">
+                    <div v-if="exportHelp" class="bd-export-modal" @click.self="exportHelp = false">
+                        <div class="bd-export-modal__box" role="dialog" aria-modal="true">
+                            <h5 class="fw-bold mb-1"><i class="fa-solid fa-right-left me-2 text-primary"></i>Export to another Rulezet</h5>
+                            <p class="text-muted small mb-3">The file <code>[[ exportFileName ]]</code> is downloading. It holds every rule with its metadata
+                                (author, license, version, UUID, tags, ATT&amp;CK, how it was written), the folders and the files of the bundle.</p>
+                            <ol class="bd-export-steps">
+                                <li>On the other Rulezet, sign in as an <strong>admin</strong>.</li>
+                                <li>Open <strong>Create bundle</strong> and its <strong>Import from JSON</strong> section.</li>
+                                <li>Choose the file: a preview shows the rules it creates, updates or finds already there.</li>
+                                <li>Confirm — the bundle and its rules are created there, owned by you.</li>
+                            </ol>
+                            <p class="small text-muted mb-0"><i class="fa-solid fa-circle-info me-1"></i>Rules already on that instance (same UUID) are reused, not duplicated.
+                                ATT&amp;CK techniques attach when that instance has the MITRE data.</p>
+                            <div class="d-flex justify-content-end gap-2 mt-3">
+                                <button type="button" class="btn btn-light rounded-pill" @click="exportToRulezet(true)"><i class="fa-solid fa-download me-1"></i>Download again</button>
+                                <button type="button" class="btn btn-primary rounded-pill px-4" @click="exportHelp = false">OK</button>
+                            </div>
+                        </div>
+                    </div>
+                </teleport>
+
                 <!-- Description (markdown, collapsed when long) -->
                 <div data-tour="bundle-description" v-if="viewRelease ? releaseData.bundle.description : bundle.description" class="bd-desc" :class="{ 'bd-desc--collapsed': descOverflows && !showFullDesc }">
                     <div class="bd-desc-tools">
@@ -227,6 +251,11 @@
                     </div>
 
                     <div class="bd-actions">
+                        <!-- Export to another Rulezet: the .bundle.json its "Import from JSON" reads (bundle_portable.py) -->
+                        <button type="button" class="bd-btn" @click="exportToRulezet()"
+                                title="Download this bundle as a file another Rulezet instance can import — rules, metadata, folders and files">
+                            <i class="fa-solid fa-right-left"></i><span>Export to another Rulezet</span>
+                        </button>
                         <div class="dropdown" data-tour="bundle-download">
                             <button type="button" class="bd-btn bd-btn--primary" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i class="fa-solid fa-download"></i><span>Download</span><i class="fa-solid fa-chevron-down bd-caret"></i>
@@ -243,6 +272,8 @@
                                     <i class="fa-solid fa-file-lines"></i><div><strong>Files &amp; documents</strong><small>[[ docFiles.length ]] non-rule files (ZIP)</small></div></button></li>
                                 <li><button type="button" class="dropdown-item" @click="DownloadMISP">
                                     <i class="fa-solid fa-diagram-project"></i><div><strong>MISP event</strong><small>JSON</small></div></button></li>
+                                <li><button type="button" class="dropdown-item" @click="exportToRulezet()">
+                                    <i class="fa-solid fa-right-left"></i><div><strong>For another Rulezet</strong><small>.bundle.json — Create bundle › Import from JSON</small></div></button></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li class="bd-dl-warn">
                                     <i class="fa-solid fa-triangle-exclamation"></i>
@@ -1172,6 +1203,22 @@
             //     create_message(data.message, data.toast_class);
             // }
 
+            // Export to another Rulezet: GET /bundle/<id>/export_json, then the "how to import it" dialog
+            const exportHelp = ref(false);
+            const exportFileName = ref('');
+            function exportToRulezet(again = false) {
+                const id = bundle.value && bundle.value.id;
+                if (!id) return;
+                exportFileName.value = ((bundle.value.name || 'bundle').replace(/[^A-Za-z0-9_.-]+/g, '_').slice(0, 80)) + '.bundle.json';
+                const a = document.createElement('a');
+                a.href = `/bundle/${id}/export_json`;
+                a.download = exportFileName.value;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                if (!again) exportHelp.value = true;
+            }
+
             async function DownloadMISP() {
                 if (viewRelease.value) {
                     create_message('The MISP event is built from the current bundle — switch back to "Current" to download it', 'warning-subtle');
@@ -2030,7 +2077,7 @@
                 // tags
                 displayTags, loadingDisplayTags, fetchBundleTags, loadingDisplayVulnerabilities, displayVulnerabilities, fetchBundleVulnerabilities,
 
-                currentPage, totalPages, changePage, visiblePages, DownloadMISP,
+                currentPage, totalPages, changePage, visiblePages, DownloadMISP, exportToRulezet, exportHelp, exportFileName,
 
                 attackCoverage, attackLoading, attackStats,
 
