@@ -276,17 +276,21 @@
       <!-- ===== External links ===== -->
       <div class="edit-section-label"><i class="fa-solid fa-link"></i>External links</div>
       <div class="row g-3 mb-2">
-        <div class="col-md-4">
-          <label class="form-label" style="font-size:.85rem;"><i class="fa-solid fa-globe me-1"></i>Website</label>
+        <div class="col-md-6">
+          <label for="{{ form.website_url.id }}" class="form-label" style="font-size:.85rem;"><i class="fa-solid fa-globe me-1"></i>Website</label>
           {{ form.website_url(class_="form-control", placeholder="https://example.com") }}
         </div>
-        <div class="col-md-4">
-          <label class="form-label" style="font-size:.85rem;"><i class="fa-brands fa-git-alt me-1"></i>GitHub / GitLab / Git profile</label>
+        <div class="col-md-6">
+          <label for="{{ form.github_url.id }}" class="form-label" style="font-size:.85rem;"><i class="fa-brands fa-git-alt me-1"></i>GitHub / GitLab / Git profile</label>
           {{ form.github_url(class_="form-control", placeholder="https://github.com/you, https://gitlab.com/you…") }}
         </div>
-        <div class="col-md-4">
-          <label class="form-label" style="font-size:.85rem;"><i class="fa-brands fa-x-twitter me-1"></i>Twitter / X</label>
+        <div class="col-md-6">
+          <label for="{{ form.twitter_url.id }}" class="form-label" style="font-size:.85rem;"><i class="fa-brands fa-x-twitter me-1"></i>Twitter / X</label>
           {{ form.twitter_url(class_="form-control", placeholder="https://x.com/you") }}
+        </div>
+        <div class="col-md-6">
+          <label for="{{ form.mastodon_url.id }}" class="form-label" style="font-size:.85rem;"><i class="fa-brands fa-mastodon me-1"></i>Mastodon</label>
+          {{ form.mastodon_url(class_="form-control", placeholder="https://infosec.exchange/@username") }}
         </div>
       </div>
 

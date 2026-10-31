@@ -76,6 +76,10 @@ class EditUserForm(FlaskForm):
         'Twitter / X',
         validators=[Optional(), Length(max=256), web_address]
     )
+    mastodon_url = StringField(
+        'Mastodon',
+        validators=[Optional(), Length(max=256), web_address]
+    )
     # --- END NEW FIELDS ---
 
     submit = SubmitField('Save changes')

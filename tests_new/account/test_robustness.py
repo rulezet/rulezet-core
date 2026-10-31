@@ -178,7 +178,7 @@ def test_forgot_password_with_a_hostile_email_never_errors(email, browser, users
 
 # ── Edit the profile ──────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("field", ["website_url", "github_url", "twitter_url"])
+@pytest.mark.parametrize("field", ["website_url", "github_url", "twitter_url", "mastodon_url"])
 @pytest.mark.parametrize("url", ["javascript:alert(document.cookie)", "JavaScript:alert(1)",
                                  " javascript:alert(1)", "data:text/html,<script>alert(1)</script>",
                                  "vbscript:msgbox(1)", "not a url"])
@@ -192,6 +192,7 @@ def test_profile_links_must_be_web_addresses(field, url, clients, users):
 @pytest.mark.parametrize("field, value", [("first_name", "A" * 65), ("last_name", TOO_LONG), ("first_name", BLANK),
                                           ("bio", "B" * 501), ("location", "L" * 129), ("username", "ab"),
                                           ("website_url", "https://x.example/" + "a" * 300),
+                                          ("mastodon_url", "https://social.example/@" + "a" * 233),
                                           ("username", "bad name!"), ("username", "u" * 65)])
 def test_edit_profile_with_an_out_of_limits_value_changes_nothing(field, value, clients, users):
     form = profile_form(users.owner, location="Changed")

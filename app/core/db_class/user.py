@@ -75,6 +75,7 @@ class User(UserMixin, db.Model):
     website_url = db.Column(db.String(256), nullable=True)
     github_url = db.Column(db.String(256), nullable=True)
     twitter_url = db.Column(db.String(256), nullable=True)
+    mastodon_url = db.Column(db.String(256), nullable=True)
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, nullable=True)
@@ -168,6 +169,7 @@ class User(UserMixin, db.Model):
             "website_url": self.website_url,
             "github_url": self.github_url,
             "twitter_url": self.twitter_url,
+            "mastodon_url": self.mastodon_url,
             "created_at": self.created_at.strftime('%Y-%m-%d') if self.created_at else None,
             "last_seen": self.last_seen.strftime('%Y-%m-%d %H:%M') if self.last_seen else None,
             "auth_provider": self.auth_provider,

@@ -11,6 +11,7 @@ import itertools
 import re
 import uuid
 from contextlib import contextmanager
+from html.parser import HTMLParser
 from unittest.mock import patch
 
 from app import db, mail
@@ -100,7 +101,7 @@ def profile_form(user, **changes):
         first_name=user.first_name, last_name=user.last_name, email=user.email,
         username=user.username or "", bio=user.bio or "", location=user.location or "",
         website_url=user.website_url or "", github_url=user.github_url or "",
-        twitter_url=user.twitter_url or "",
+        twitter_url=user.twitter_url or "", mastodon_url=user.mastodon_url or "",
     )
     form.update(changes)
     return form
@@ -182,3 +183,20 @@ def enable_oidc(app, monkeypatch, *, role="editor", **claims):
     from app import oauth
     monkeypatch.setattr(oauth, "oidc", fake, raising=False)
     return fake
+
+
+def profile_links(page):
+    """Link attributes keyed by href, for checking the server-rendered profiles."""
+    class Links(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.links = {}
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == "a" and "href" in attrs:
+                self.links[attrs["href"]] = attrs
+
+    parser = Links()
+    parser.feed(page)
+    return parser.links

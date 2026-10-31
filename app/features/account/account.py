@@ -752,6 +752,9 @@ def edit_user():
     was_first_setup = current_user.must_change_password
     if not first_setup_errors and form.validate_on_submit():
         form_dict     = form_to_dict(form)
+        # An omitted field keeps its value; a submitted empty field clears it.
+        if "mastodon_url" not in request.form:
+            form_dict.pop("mastodon_url", None)
         avatar_file   = form.profile_picture.data
         remove_avatar = request.form.get("remove_avatar") == "1"
         built_avatar = None
@@ -807,6 +810,7 @@ def edit_user():
         form.website_url.data = current_user.website_url
         form.github_url.data  = current_user.github_url
         form.twitter_url.data = current_user.twitter_url
+        form.mastodon_url.data = current_user.mastodon_url
 
     return render_template("account/edit_user.html", form=form, is_sso=is_sso,
                            rulezy_poses=AccountModel.get_rulezy_poses(),
