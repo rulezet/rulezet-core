@@ -1226,6 +1226,8 @@ def handle_github_import(job, app):
         return _fail(f'Could not read the repository metadata: {e}')
     if branch:
         info['branch'] = branch
+    if payload.get('force_format'):
+        info['force_format'] = str(payload['force_format']).strip().lower()   # checked by the import (#9)
 
     session = SessionModel.Session_class(repo_dir, user, info)
     log_job(job, 'Scanning the repository for rules…', level='info', event='scan')

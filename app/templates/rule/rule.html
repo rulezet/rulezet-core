@@ -539,6 +539,17 @@
             <license-input v-model="selectedLicense"></license-input>
           </div>
 
+          <div class="mb-4">
+            <div class="d-flex align-items-center gap-1 mb-1">
+              <label class="form-label-styled mb-0" for="import-force-format">Format for files without a known extension<span class="opt-badge">optional</span></label>
+              <i class="rf-label-hint" data-tip="Files whose extension no format recognises (none, .conf, .sig…) are read in this format. Docs, images, archives and code files are never read as rules. Leave empty: such files are skipped.">?</i>
+            </div>
+            <select id="import-force-format" class="form-select" v-model="forceFormat">
+              <option value="">Skip them (default)</option>
+              <option v-for="f in importFormats" :key="f.key" :value="f.key">[[ f.title ]]</option>
+            </select>
+          </div>
+
           <!-- Inline error -->
           <div v-if="importError" class="alert alert-danger d-flex align-items-start gap-2 py-2 px-3 mb-3 rounded-3" style="font-size:.85rem;">
             <i class="fa-solid fa-circle-exclamation mt-1 flex-shrink-0"></i>
@@ -705,6 +716,17 @@
 
           <div class="mb-4">
             <license-input v-model="selectedLicenseZip"></license-input>
+          </div>
+
+          <div class="mb-4">
+            <div class="d-flex align-items-center gap-1 mb-1">
+              <label class="form-label-styled mb-0" for="zip-force-format">Format for files without a known extension<span class="opt-badge">optional</span></label>
+              <i class="rf-label-hint" data-tip="Files whose extension no format recognises (none, .conf, .sig…) are read in this format. Docs, images, archives and code files are never read as rules. Leave empty: such files are skipped.">?</i>
+            </div>
+            <select id="zip-force-format" class="form-select" v-model="forceFormatZip">
+              <option value="">Skip them (default)</option>
+              <option v-for="f in importFormats" :key="f.key" :value="f.key">[[ f.title ]]</option>
+            </select>
           </div>
 
           <div class="d-flex justify-content-end">
@@ -1226,7 +1248,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                               const res  = await fetch('/rule/import_rules_from_github', {
                                     headers: { "X-CSRFToken": $("#csrf_token").val(), "Content-Type": "application/json" },
                                     method:  "POST",
-                                    body:    JSON.stringify({ "url": url.value, "license": selectedLicense.value, "branch": branch.value.trim() || null, "is_generic_source": isGenericSource.value })
+                                    body:    JSON.stringify({ "url": url.value, "license": selectedLicense.value, "branch": branch.value.trim() || null, "is_generic_source": isGenericSource.value, "force_format": forceFormat.value || null })
                               });
                               const data = await res.json();
                               if (res.status === 201) {
@@ -1244,6 +1266,13 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
 
                   const fileZip = ref(null)
                   const selectedLicenseZip = ref("")
+                  // Format forced for files without a known extension (issue #9) — the formats this instance knows
+                  const forceFormat = ref("");
+                  const forceFormatZip = ref("");
+                  const importFormats = ref([]);
+                  fetch('/api/config/formats').then(r => r.ok ? r.json() : null)
+                        .then(d => { importFormats.value = ((d && d.formats) || []).filter(f => f.key && f.key !== 'no format'); })
+                        .catch(() => {});
                   const is_loading_zip = ref(false)
                   const isDraggingZip = ref(false)
                   const zipFileError = ref("")
@@ -1289,6 +1318,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                         let formData = new FormData();
                         formData.append("zipfile", fileZip.value);
                         formData.append("license", selectedLicenseZip.value);
+                        if (forceFormatZip.value) formData.append("force_format", forceFormatZip.value);
 
                         const res = await fetch('/rule/import_rules_from_zip', {
                               method: "POST",
@@ -1538,6 +1568,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
                         cancelMyProposal,
 
                         ruleDescription,
+                        forceFormat, forceFormatZip, importFormats,
                         aiGenDescription,
                         aiGenSample,
                         aiGenBusy,

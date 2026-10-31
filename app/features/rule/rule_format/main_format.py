@@ -137,6 +137,26 @@ def Process_rules_by_format(format_files: list, format_rule: dict, info: dict, f
     return bad_rules, imported, skipped
 
 
+# Files a forced format never claims (issue #9: "the file has no / an unknown extension") — docs,
+# images, archives, code: never rule files, whatever format is forced.
+NOT_RULE_EXTENSIONS = {'.md', '.rst', '.html', '.htm', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.pdf',
+                       '.zip', '.gz', '.tgz', '.tar', '.7z', '.lock', '.toml', '.cfg', '.ini', '.py', '.sh', '.js',
+                       '.css', '.go', '.c', '.h', '.java', '.rb', '.pl', '.exe', '.dll', '.bin', '.pcap', '.pcapng'}
+
+
+def forced_format_instance(name, rule_instances):
+    """The rule format chosen at import for files no format claims by their extension (issue #9), or None."""
+    name = (name or '').strip().lower()
+    if not name:
+        return None
+    return next((ri for ri in rule_instances if (getattr(ri, 'format', '') or '').lower() == name), None)
+
+
+def forced_format_claims(filename: str) -> bool:
+    """Whether a forced format may read this file: not a doc / image / archive / code file."""
+    return os.path.splitext(filename)[1].lower() not in NOT_RULE_EXTENSIONS
+
+
 async def extract_rule_from_repo(repo_dir: str, info: dict, user: User):
     """
     Test all rules in a repo for all formats, returns results .
@@ -164,6 +184,7 @@ async def extract_rule_from_repo(repo_dir: str, info: dict, user: User):
     # calling it directly with repo_dir here used to silently return False
     # and crash Process_rules_by_format trying to iterate over it.
     safe_files = list(_safe_repo_files(repo_dir))
+    forced = forced_format_instance((info or {}).get('force_format'), rule_instances)
 
     # Several formats share the same extension (Sigma/ATR/Splunk all claim
     # .yml/.yaml) — resolve each file to exactly ONE format instead of
@@ -175,6 +196,8 @@ async def extract_rule_from_repo(repo_dir: str, info: dict, user: User):
     for filepath in safe_files:
         basename = os.path.basename(filepath)
         candidates = [ri for ri in rule_instances if ri.get_rule_files(basename)]
+        if not candidates and forced and forced_format_claims(basename):
+            candidates = [forced]            # no / unknown extension: the format chosen at import
         if not candidates:
             continue
         if len(candidates) > 1:

@@ -128,6 +128,8 @@ class Session_class:
         that cost is only ever paid for files that are actually rules.
         """
         repo_real = os.path.realpath(self.repo_dir)
+        from app.features.rule.rule_format.main_format import forced_format_claims, forced_format_instance
+        forced = forced_format_instance((self.info or {}).get('force_format'), rule_instances)
         self.scanned_paths = set()   # every rule-candidate file, for _drop_stale_bad_rules
         try:
             self._bad_rule_id_floor = db.session.query(db.func.max(InvalidRuleModel.id)).scalar() or 0
@@ -235,6 +237,8 @@ class Session_class:
                 # the islink/realpath resolution) for the files that make up
                 # the bulk of any repo but are never rule candidates anyway.
                 candidates = [ri for ri in rule_instances if ri.get_rule_files(file)]
+                if not candidates and forced and forced_format_claims(file):
+                    candidates = [forced]    # no / unknown extension: the format chosen at import (#9)
                 if not candidates:
                     continue
 

@@ -4312,6 +4312,19 @@ def get_repo_branches():
     return jsonify({'success': True, 'branches': branches}), 200
 
 
+def _import_force_format(value):
+    """A rule format name chosen at import for files no format recognises by their extension (issue #9) —
+    only a format this instance knows, else None."""
+    from app.features.rule.rule_format.main_format import load_all_rule_formats
+    from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType
+    value = (value or '').strip().lower() if isinstance(value, str) else ''
+    if not value:
+        return None
+    load_all_rule_formats()
+    known = {(cls().format or '').lower() for cls in RuleType.__subclasses__()}
+    return value if value in known else None
+
+
 @rule_blueprint.route("/import_rules_from_github", methods=['POST'])
 @login_required
 def import_rules_from_github():
@@ -4342,6 +4355,9 @@ def import_rules_from_github():
         info = {"origin": "github", "url": repo_url, "repo_url": repo_url}
         if branch:
             info['branch'] = branch
+        force_format = _import_force_format(data.get('force_format'))
+        if force_format:
+            info['force_format'] = force_format      # files with no / an unknown extension (#9)
 
         session_th = SessionModel.Session_class(None, current_user, info)
         SessionModel.sessions.append(session_th)
@@ -4459,6 +4475,9 @@ def import_rules_from_zip():
             "url": "zip_upload",
             "repo_url": source
         }
+        force_format = _import_force_format(request.form.get('force_format'))
+        if force_format:
+            info['force_format'] = force_format      # files with no / an unknown extension (#9)
 
         session_th = SessionModel.Session_class(repo_dir, current_user, info)
         # Append before start(): start() spawns the background thread
