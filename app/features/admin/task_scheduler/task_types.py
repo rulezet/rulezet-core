@@ -197,6 +197,20 @@ TASK_TYPES = {
              'default': 'https://rules.emergingthreats.net/open/suricata-7.0/emerging-all.rules'},
         ],
     },
+    'purge_unverified_users': {
+        'label': 'Unverified accounts — delete the never-used ones (bots, abandoned sign-ups)',
+        'icon': 'fa-solid fa-user-xmark',
+        'job_type': 'purge_unverified_users',
+        'target_picker': 'none',
+        # Only local accounts that never verified their email, have no role / admin / identity check,
+        # are older than the grace period and left no trace in any table nor in the activity log
+        # (unverified_cleanup_core.py). Their sign-up logs become private first. Over max_per_run: nothing deleted.
+        'extra_options': [
+            {'key': 'dry_run', 'type': 'bool', 'label': 'Dry run — only report what would be deleted', 'default': True},
+            {'key': 'grace_hours', 'type': 'number', 'label': 'Keep accounts younger than (hours)', 'default': 24},
+            {'key': 'max_per_run', 'type': 'number', 'label': 'Stop without deleting above this many accounts', 'default': 200},
+        ],
+    },
     'reparse_rule_metadata': {
         'label': 'References & metadata — read them again from every rule (platforms, TLP / PAP…)',
         'icon': 'fa-solid fa-book-open',

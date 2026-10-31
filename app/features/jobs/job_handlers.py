@@ -6220,3 +6220,42 @@ def _set_request_execution(request_id, status, generation_id=None, only_if_open=
         db.session.commit()
     except Exception:
         db.session.rollback()
+
+
+@register_handler('purge_unverified_users')
+def handle_purge_unverified_users(job, app):
+    """Delete accounts that never verified their email and never used Rulezet — only when every safety
+    condition of app/features/account/unverified_cleanup_core.py holds. Their sign-up log entries become
+    private first. Payload: grace_hours (default 24), max_per_run (default 200), dry_run (default true)."""
+    from app.features.account.unverified_cleanup_core import purge
+    payload = job.payload or {}
+    dry_run = payload.get('dry_run', True) not in (False, 'false', 0)
+    try:
+        grace = max(int(payload.get('grace_hours') or 24), 1)
+        cap = max(int(payload.get('max_per_run') or 200), 1)
+    except (TypeError, ValueError):
+        grace, cap = 24, 200
+    log_job(job, f"{'Dry run — nothing will be deleted. ' if dry_run else ''}Unverified accounts older than "
+                 f"{grace} h, never used…", level='info', event='started')
+    report = purge(grace, cap, dry_run, log=lambda m: log_job(job, m))
+    for example in report['examples']:
+        log_job(job, f"  {'would delete' if dry_run or report['aborted'] else 'deleted'}: {example}")
+    job.total = job.done = max(report['candidates'], 1)
+    db.session.commit()
+    if report['aborted']:
+        try:
+            from app.features.notification.notification_core import create_notification, _get_all_admin_ids
+            for uid in _get_all_admin_ids():
+                create_notification(uid, 'job_failed', 'Unverified accounts clean-up stopped',
+                                    f"{report['candidates']} accounts matched, more than the limit of {cap} — "
+                                    f"nothing was deleted. Check them before raising the limit.", link=f'/jobs/detail/{job.uuid}')
+        except Exception:
+            db.session.rollback()
+        log_job(job, 'Stopped: too many accounts at once — nothing deleted, admins notified.', level='warning', event='done')
+        return
+    if not dry_run and report['deleted']:
+        log_activity('user.purge_unverified', f"{report['deleted']} unverified, never used account(s) deleted",
+                     target_type='user', extra={'count': report['deleted']}, is_public=False)
+    log_job(job, (f"{report['candidates']} account(s) would be deleted." if dry_run else
+                  f"{report['deleted']} account(s) deleted, {report['logs_private']} log entr(ies) made private.")
+            + f" {report['kept_used']} unverified account(s) kept: they were used.", level='success', event='done')
