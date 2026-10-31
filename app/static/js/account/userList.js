@@ -320,12 +320,15 @@ export default {
                 </div>
 
                 <!-- Links -->
-                <div v-if="user.github_url || user.twitter_url || user.website_url" class="ul-card-links">
+                <div v-if="user.github_url || user.twitter_url || user.website_url || user.mastodon_url" class="ul-card-links">
                     <a v-if="user.github_url"  :href="user.github_url"  class="ul-link-btn" target="_blank" rel="noopener">
                         <i :class="gitProviderIcon(user.github_url)"></i>
                     </a>
                     <a v-if="user.twitter_url" :href="user.twitter_url" class="ul-link-btn" target="_blank" rel="noopener">
                         <i class="fab fa-twitter"></i>
+                    </a>
+                    <a v-if="user.mastodon_url" :href="user.mastodon_url" class="ul-link-btn" target="_blank" rel="noopener noreferrer" aria-label="Mastodon">
+                        <i class="fa-brands fa-mastodon"></i>
                     </a>
                     <a v-if="user.website_url" :href="user.website_url" class="ul-link-btn" target="_blank" rel="noopener">
                         <i class="fas fa-globe"></i>
