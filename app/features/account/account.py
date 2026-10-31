@@ -229,6 +229,7 @@ def user_mini(user_id):
         "is_admin":  user.is_admin() if viewer_may_see_admin else False,
         "organisations": [o.to_json() for o in user.organisations],
         "identity_verified": bool(user.identity_verified),
+        "links":     user.profile_links(),        # profile links with their icon (setting user.social_links)
     })
 
 
@@ -749,12 +750,24 @@ def edit_user():
         for message in first_setup_errors:
             flash(message, 'danger')
 
+    # The other profile links (LinkedIn, Bluesky…, setting user.social_links) — fields social_<key>
+    from app.features.account import social_links_core as SocialLinks
+    social_cleaned, social_errors = {}, {}
+    if request.method == 'POST':
+        social_cleaned, social_errors = SocialLinks.clean_links(
+            {n['key']: request.form[f"social_{n['key']}"] for n in SocialLinks.networks()
+             if n['key'] not in SocialLinks.COLUMNS and f"social_{n['key']}" in request.form})
+        for message in social_errors.values():
+            flash(message, 'danger')
+
     was_first_setup = current_user.must_change_password
-    if not first_setup_errors and form.validate_on_submit():
+    if not first_setup_errors and not social_errors and form.validate_on_submit():
         form_dict     = form_to_dict(form)
-        # An omitted field keeps its value; a submitted empty field clears it.
-        if "mastodon_url" not in request.form:
-            form_dict.pop("mastodon_url", None)
+        # An omitted field keeps its value; a submitted empty field clears it (a link field is not shown
+        # when its network was taken out of the setting user.social_links).
+        for column in ("website_url", "github_url", "twitter_url", "mastodon_url"):
+            if column not in request.form:
+                form_dict.pop(column, None)
         avatar_file   = form.profile_picture.data
         remove_avatar = request.form.get("remove_avatar") == "1"
         built_avatar = None
@@ -775,6 +788,9 @@ def edit_user():
             is_sso=is_sso,
             built_avatar=built_avatar,
         )
+        if success and social_cleaned:
+            SocialLinks.save_links(current_user, social_cleaned)
+            db.session.commit()
         if success:
             log_activity("user.edit_profile", "Updated profile",
                          target_type="user", target_id=current_user.id)
@@ -812,7 +828,14 @@ def edit_user():
         form.twitter_url.data = current_user.twitter_url
         form.mastodon_url.data = current_user.mastodon_url
 
+    social_networks = SocialLinks.networks()
+    social_values = SocialLinks.form_values(current_user)
+    if request.method == 'POST':           # what was typed stays in the form after an error
+        social_values.update({k: request.form.get(f"social_{k}", '') for k in social_values
+                              if f"social_{k}" in request.form})
     return render_template("account/edit_user.html", form=form, is_sso=is_sso,
+                           social_networks=social_networks, social_values=social_values,
+                           social_columns=SocialLinks.COLUMNS,
                            rulezy_poses=AccountModel.get_rulezy_poses(),
                            avatar_icons=AccountModel.get_avatar_icons(),
                            avatar_backgrounds=AccountModel.AVATAR_BACKGROUNDS,

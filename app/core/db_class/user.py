@@ -76,6 +76,9 @@ class User(UserMixin, db.Model):
     github_url = db.Column(db.String(256), nullable=True)
     twitter_url = db.Column(db.String(256), nullable=True)
     mastodon_url = db.Column(db.String(256), nullable=True)
+    # The other profile links (setting user.social_links): {"linkedin": url, …} as JSON text — Text, not
+    # JSON: a JSON column breaks SELECT DISTINCT on users under PostgreSQL. Read with social_links_core.
+    social_links = db.Column(db.Text, nullable=True)
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, nullable=True)
@@ -142,6 +145,11 @@ class User(UserMixin, db.Model):
     def is_anonymous(self):
         return False
 
+    def profile_links(self):
+        """Every profile link, in the setting's order: [{key, label, icon, url}] (social_links_core)."""
+        from app.features.account.social_links_core import user_links
+        return user_links(self)
+
     def to_json(self, include_private=True):
         """Serialize the user object to JSON.
 
@@ -170,6 +178,7 @@ class User(UserMixin, db.Model):
             "github_url": self.github_url,
             "twitter_url": self.twitter_url,
             "mastodon_url": self.mastodon_url,
+            "links": self.profile_links(),
             "created_at": self.created_at.strftime('%Y-%m-%d') if self.created_at else None,
             "last_seen": self.last_seen.strftime('%Y-%m-%d %H:%M') if self.last_seen else None,
             "auth_provider": self.auth_provider,

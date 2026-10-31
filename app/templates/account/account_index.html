@@ -177,6 +177,7 @@
 </style>
 {% endblock %}
 
+{% import 'macros/user_links.html' as ul %}
 {% block content %}
 <div class="container my-5" id="page-app" v-cloak>
 
@@ -242,35 +243,7 @@
                 {% endif %}
 
                 <!-- Social links -->
-                {% if current_user.website_url or current_user.github_url or current_user.twitter_url or current_user.mastodon_url or current_user.location %}
-                <div class="ud-profile-links">
-                    {% if current_user.location %}
-                    <span class="ud-profile-link">
-                        <i class="fas fa-location-dot"></i>[[ user.location ]]
-                    </span>
-                    {% endif %}
-                    {% if current_user.website_url %}
-                    <a href="{{ current_user.website_url }}" target="_blank" rel="noopener" class="ud-profile-link ud-profile-link--clickable">
-                        <i class="fas fa-globe"></i>[[ user.website_url ]]
-                    </a>
-                    {% endif %}
-                    {% if current_user.github_url %}
-                    <a href="{{ current_user.github_url }}" target="_blank" rel="noopener" class="ud-profile-link ud-profile-link--clickable">
-                        <i class="{{ git_provider_icon(current_user.github_url) }}"></i>[[ user.github_url ]]
-                    </a>
-                    {% endif %}
-                    {% if current_user.twitter_url %}
-                    <a href="{{ current_user.twitter_url }}" target="_blank" rel="noopener" class="ud-profile-link ud-profile-link--clickable">
-                        <i class="fab fa-x-twitter"></i>[[ user.twitter_url ]]
-                    </a>
-                    {% endif %}
-                    {% if current_user.mastodon_url %}
-                    <a href="{{ current_user.mastodon_url }}" target="_blank" rel="me noopener noreferrer" class="ud-profile-link ud-profile-link--clickable">
-                        <i class="fa-brands fa-mastodon"></i>[[ user.mastodon_url ]]
-                    </a>
-                    {% endif %}
-                </div>
-                {% endif %}
+                {{ ul.profile_links(current_user.profile_links(), current_user.location) }}
             </div>
 
             <!-- Edit Profile: same slot the Follow button occupies on someone else's profile -->

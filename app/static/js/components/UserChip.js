@@ -220,6 +220,11 @@ const UserChip = defineComponent({
         </div>
 
         <!-- Bio -->
+        <!-- profile links: one icon each (setting user.social_links) -->
+        <div v-if="tooltipData && tooltipData.links && tooltipData.links.length" class="uc-links">
+          <a v-for="l in tooltipData.links" :key="l.key" :href="l.url" target="_blank" rel="me noopener noreferrer"
+             class="uc-link" :title="l.label" :aria-label="l.label" @click.stop><i :class="l.icon"></i></a>
+        </div>
         <p v-if="tooltipData && tooltipData.bio"
            class="mb-2 text-muted"
            style="font-size:.78rem;line-height:1.4;max-height:52px;overflow:hidden;">

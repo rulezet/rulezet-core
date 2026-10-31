@@ -1,0 +1,20 @@
+{
+    "label": "Profile links",
+    "category": "Accounts",
+    "description": "The links a user can show on their profile, in this order (profile pages, user list, the card shown when hovering a user). key: stored name; label; icon: Font Awesome classes; placeholder: example in the form; hosts: the only web hosts accepted (null = any host, e.g. Mastodon instances, personal sites). website, git, twitter and mastodon are stored in their own columns, the others together.",
+    "public": true,
+    "value": [
+        {"key": "website",   "label": "Website",            "icon": "fa-solid fa-globe",          "placeholder": "https://example.com",                      "hosts": null},
+        {"key": "git",       "label": "GitHub / GitLab / Git", "icon": "fa-brands fa-git-alt",   "placeholder": "https://github.com/you",                   "hosts": null},
+        {"key": "linkedin",  "label": "LinkedIn",           "icon": "fa-brands fa-linkedin",      "placeholder": "https://www.linkedin.com/in/you",          "hosts": ["linkedin.com"]},
+        {"key": "mastodon",  "label": "Mastodon",           "icon": "fa-brands fa-mastodon",      "placeholder": "https://infosec.exchange/@you",            "hosts": null},
+        {"key": "bluesky",   "label": "Bluesky",            "icon": "fa-brands fa-bluesky",       "placeholder": "https://bsky.app/profile/you.bsky.social", "hosts": ["bsky.app"]},
+        {"key": "twitter",   "label": "X / Twitter",        "icon": "fa-brands fa-x-twitter",     "placeholder": "https://x.com/you",                        "hosts": ["x.com", "twitter.com"]},
+        {"key": "youtube",   "label": "YouTube",            "icon": "fa-brands fa-youtube",       "placeholder": "https://www.youtube.com/@you",             "hosts": ["youtube.com", "youtu.be"]},
+        {"key": "medium",    "label": "Medium / blog",      "icon": "fa-solid fa-pen-nib",        "placeholder": "https://medium.com/@you",                  "hosts": null},
+        {"key": "hackerone", "label": "HackerOne",          "icon": "fa-solid fa-bug",            "placeholder": "https://hackerone.com/you",                "hosts": ["hackerone.com"]},
+        {"key": "keybase",   "label": "Keybase",            "icon": "fa-brands fa-keybase",       "placeholder": "https://keybase.io/you",                   "hosts": ["keybase.io"]},
+        {"key": "orcid",     "label": "ORCID",              "icon": "fa-brands fa-orcid",         "placeholder": "https://orcid.org/0000-0000-0000-0000",    "hosts": ["orcid.org"]},
+        {"key": "matrix",    "label": "Matrix",             "icon": "fa-solid fa-comments",       "placeholder": "https://matrix.to/#/@you:matrix.org",      "hosts": ["matrix.to"]}
+    ]
+}

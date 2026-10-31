@@ -3422,3 +3422,10 @@ body.rz-first-setup .rz-setup-field input { border-color: #f0ad00; }
 /* Font Awesome 7 makes every icon fixed-width (1.25em) by default; Rulezet was designed with
    Font Awesome 6's natural widths. :where() has no specificity, so .fa-fw / .fa-width-fixed still win. */
 :where(.fa, .fas, .far, .fab, .fa-solid, .fa-regular, .fa-brands, .fa-classic) { --fa-width: auto; }
+
+/* UserChip card: the user's profile links, one icon each (setting user.social_links) */
+.uc-links { display: flex; flex-wrap: wrap; gap: .35rem; margin: .1rem 0 .55rem; }
+.uc-link { width: 28px; height: 28px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: .85rem; color: var(--subtle-text-color); background: var(--light-bg-color); border: 1px solid var(--border-color);
+  text-decoration: none; transition: color .12s, border-color .12s; }
+.uc-link:hover { color: #0d6efd; border-color: #0d6efd; }

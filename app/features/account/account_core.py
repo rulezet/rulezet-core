@@ -435,6 +435,12 @@ def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False, is_sso=
     for field in ("username", "bio", "location", "website_url", "github_url", "twitter_url", "mastodon_url"):
         if field in form_dict:
             setattr(user, field, form_dict[field] or None)
+    # The other profile links, sent as {"social_links": {"linkedin": url, …}} (API) — checked like the form;
+    # an invalid one is left unchanged
+    if isinstance(form_dict.get("social_links"), dict):
+        from app.features.account.social_links_core import clean_links, save_links
+        cleaned, _errors = clean_links({k: v for k, v in form_dict["social_links"].items() if isinstance(v, str)})
+        save_links(user, cleaned)
 
     if remove_avatar and user.profile_picture:
         _delete_avatar_file(user.profile_picture)

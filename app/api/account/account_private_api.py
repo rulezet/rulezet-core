@@ -74,6 +74,15 @@ class EditUser(Resource):
                 "last_name": last_name
             }
 
+        # Profile links (setting user.social_links): {"social_links": {"linkedin": "https://…", "bluesky": ""}}
+        # — "" removes one, a key not sent is unchanged
+        if isinstance(data.get("social_links"), dict):
+            from app.features.account.social_links_core import clean_links
+            _, errors = clean_links(data["social_links"])
+            if errors:
+                return {"message": " ".join(errors.values())}, 400
+            form_dict["social_links"] = data["social_links"]
+
         is_sso = (current_user.auth_provider or 'local') != 'local'
         _, pending_email = AccountModel.edit_user_core(form_dict, current_user.id, is_sso=is_sso)
         if pending_email:

@@ -1,0 +1,22 @@
+{#
+  Profile links of a user (setting user.social_links, social_links_core.user_links): location, then every
+  link with its network's icon, shown short (no https://, no trailing slash). v-pre: the values come from
+  the user — Vue must never read them as a template (a "[[ … ]]" in a URL would run).
+  rel="me": lets Mastodon & co. verify the profile link.
+#}
+{% macro profile_links(links, location=None) %}
+{% if links or location %}
+<div class="ud-profile-links" v-pre>
+    {% if location %}
+    <span class="ud-profile-link"><i class="fas fa-location-dot"></i>{{ location }}</span>
+    {% endif %}
+    {% for l in links %}
+    {% set short = l.url.split('://', 1)[-1].rstrip('/') %}
+    <a href="{{ l.url }}" target="_blank" rel="me noopener noreferrer" class="ud-profile-link ud-profile-link--clickable"
+       title="{{ l.label }} — {{ l.url }}">
+        <i class="{{ l.icon }}"></i>{% if short|length > 42 %}{{ short[:42] }}…{% else %}{{ short }}{% endif %}
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}

@@ -275,23 +275,23 @@
 
       <!-- ===== External links ===== -->
       <div class="edit-section-label"><i class="fa-solid fa-link"></i>External links</div>
+      <p class="text-muted small mb-2">Shown on your profile and on your card wherever your name appears. Leave empty what you don't use.</p>
       <div class="row g-3 mb-2">
+        {# every network of the setting user.social_links, in its order (social_links_core.py) #}
+        {% for n in social_networks %}
         <div class="col-md-6">
-          <label for="{{ form.website_url.id }}" class="form-label" style="font-size:.85rem;"><i class="fa-solid fa-globe me-1"></i>Website</label>
-          {{ form.website_url(class_="form-control", placeholder="https://example.com") }}
+          {% if n.key in social_columns %}
+          {% set field = form[social_columns[n.key]] %}
+          <label for="{{ field.id }}" class="form-label" style="font-size:.85rem;"><i class="{{ n.icon }} me-1"></i>{{ n.label }}</label>
+          {{ field(class_="form-control", placeholder=n.placeholder) }}
+          {% else %}
+          <label for="social_{{ n.key }}" class="form-label" style="font-size:.85rem;"><i class="{{ n.icon }} me-1"></i>{{ n.label }}</label>
+          <input type="url" id="social_{{ n.key }}" name="social_{{ n.key }}" class="form-control" maxlength="256"
+                 value="{{ social_values.get(n.key, '') }}" placeholder="{{ n.placeholder }}">
+          {% endif %}
         </div>
-        <div class="col-md-6">
-          <label for="{{ form.github_url.id }}" class="form-label" style="font-size:.85rem;"><i class="fa-brands fa-git-alt me-1"></i>GitHub / GitLab / Git profile</label>
-          {{ form.github_url(class_="form-control", placeholder="https://github.com/you, https://gitlab.com/you…") }}
-        </div>
-        <div class="col-md-6">
-          <label for="{{ form.twitter_url.id }}" class="form-label" style="font-size:.85rem;"><i class="fa-brands fa-x-twitter me-1"></i>Twitter / X</label>
-          {{ form.twitter_url(class_="form-control", placeholder="https://x.com/you") }}
-        </div>
-        <div class="col-md-6">
-          <label for="{{ form.mastodon_url.id }}" class="form-label" style="font-size:.85rem;"><i class="fa-brands fa-mastodon me-1"></i>Mastodon</label>
-          {{ form.mastodon_url(class_="form-control", placeholder="https://infosec.exchange/@username") }}
-        </div>
+        {% endfor %}
+      </div>
       </div>
 
       <hr class="edit-section-divider">
