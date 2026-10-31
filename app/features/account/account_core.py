@@ -1363,9 +1363,13 @@ def get_leaderboard_paginated(page: int, per_page: int, sort_by: str = 'total_po
     col = _LEADERBOARD_SORT_COLUMNS.get(sort_by, Gamification.total_points)
     order_expr = col.desc() if direction == 'desc' else col.asc()
 
+    # Competition ranking (issue #91): equal scores share a rank and leave a gap — 1, 2, 2, 4.
+    # The window orders by the score only (a tie-breaker there would erase the ties); the page
+    # itself adds Gamification.id so tied contributors always come in the same order and no one
+    # is shown twice or skipped from one page to the next.
     ranked = db.session.query(
         Gamification.id.label('gid'),
-        func.row_number().over(order_by=order_expr).label('rank'),
+        func.rank().over(order_by=order_expr).label('rank'),
     ).subquery()
 
     query = (
@@ -1384,7 +1388,7 @@ def get_leaderboard_paginated(page: int, per_page: int, sort_by: str = 'total_po
         cutoff = datetime.datetime.utcnow() - timedelta(days=_ACTIVE_SINCE_DAYS[active_since])
         query = query.filter(Gamification.last_contribution_date >= cutoff)
 
-    query = query.order_by(order_expr)
+    query = query.order_by(order_expr, Gamification.id.asc())
 
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
