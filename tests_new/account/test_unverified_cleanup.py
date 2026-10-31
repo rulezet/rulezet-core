@@ -77,5 +77,7 @@ def test_job_and_template(app, users):
     assert db.session.get(User, bot.id) is None
     from app.core.utils.app_settings import get_setting
     spec = get_setting("workflows.templates")["unverified_accounts_cleanup"]["spec"]
-    assert spec["tasks"][0]["task_type"] == "purge_unverified_users"
-    assert spec["tasks"][0]["target_payload"]["max_per_run"] == 200
+    backup, purge_task = spec["tasks"]
+    assert backup["task_type"] == "db_backup_rotate"                                  # a checked backup first,
+    assert purge_task["trigger"] == {"after": "backup", "condition": "success"}       # the purge only if it worked
+    assert purge_task["task_type"] == "purge_unverified_users" and purge_task["target_payload"]["max_per_run"] == 200
