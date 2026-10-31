@@ -16,11 +16,11 @@ from app.core.db_class.user import User
 from app.features.account import account_core
 from tests_new.helpers.account import (
     NEW_PASSWORD, captured_mails, cookie, drop_cookie, enable_oidc, give_email_change_token, give_reset_token, link_token,
-    logged_in_user_id, login, make_pending_user, make_sso_user, password_change, profile_form, register_form,
+    logged_in_user_id, login, make_pending_user, make_sso_user, password_change, profile_form, profile_links, register_form,
 )
 from tests_new.helpers.db import count, reload
 from tests_new.helpers.rules import make_rule
-from tests_new.helpers.users import PASSWORD
+from tests_new.helpers.users import PASSWORD, api_headers
 
 
 @pytest.fixture
@@ -342,7 +342,7 @@ def test_edit_profile_stores_every_field(clients, users):
     form = profile_form(users.owner, first_name="Ada", last_name="Lovelace", username="ada.l",
                         bio="Detection engineer", location="Luxembourg",
                         website_url="https://ada.example", github_url="https://github.com/ada",
-                        twitter_url="https://x.com/ada")
+                        twitter_url="https://x.com/ada", mastodon_url="https://infosec.exchange/@ada")
 
     response = clients["owner"].post("/account/edit", data=form)
 
@@ -352,6 +352,8 @@ def test_edit_profile_stores_every_field(clients, users):
     assert (owner.bio, owner.location) == ("Detection engineer", "Luxembourg")
     assert (owner.website_url, owner.github_url, owner.twitter_url) == (
         "https://ada.example", "https://github.com/ada", "https://x.com/ada")
+    assert owner.mastodon_url == "https://infosec.exchange/@ada"
+    assert owner.to_json()["mastodon_url"] == owner.mastodon_url
 
 
 def test_edit_profile_with_empty_optional_fields_clears_them(clients, users):
@@ -362,6 +364,127 @@ def test_edit_profile_with_empty_optional_fields_clears_them(clients, users):
 
     owner = reload(users.owner)
     assert owner.bio is None and owner.location is None
+
+
+@pytest.mark.parametrize("value", ["https://social.example.org/@new", ""])
+def test_edit_profile_updates_or_clears_mastodon(value, clients, users):
+    users.owner.mastodon_url = "https://infosec.exchange/@old"
+    db.session.commit()
+
+    response = clients["owner"].post("/account/edit", data=profile_form(users.owner, mastodon_url=value))
+
+    assert response.status_code == 302
+    assert reload(users.owner).mastodon_url == (value or None)
+
+
+def test_edit_profile_prepopulates_mastodon(clients, users):
+    users.owner.mastodon_url = "https://infosec.exchange/@owner"
+    db.session.commit()
+
+    page = clients["owner"].get("/account/edit").get_data(as_text=True)
+
+    assert 'value="https://infosec.exchange/@owner"' in page
+
+
+@pytest.mark.parametrize("via_api", [False, True])
+def test_partial_profile_update_preserves_mastodon(via_api, clients, users):
+    users.owner.mastodon_url = "https://infosec.exchange/@owner"
+    db.session.commit()
+    payload = dict(first_name="Renamed", last_name=users.owner.last_name, email=users.owner.email)
+
+    if via_api:
+        response = clients["owner"].post("/api/account/private/edit", json=payload,
+                                         headers=api_headers(users.owner))
+    else:
+        response = clients["owner"].post("/account/edit", data=payload)
+
+    assert response.status_code in (200, 302)
+    owner = reload(users.owner)
+    assert owner.first_name == "Renamed" and owner.mastodon_url == "https://infosec.exchange/@owner"
+
+
+@pytest.mark.parametrize("public", [False, True])
+def test_profile_renders_mastodon_and_existing_links(public, clients, users):
+    form = profile_form(users.owner, website_url="https://owner.example", github_url="https://gitlab.com/owner",
+                        twitter_url="https://x.com/owner", mastodon_url="https://infosec.exchange/@owner")
+    clients["owner"].post("/account/edit", data=form)
+    client = clients["user"] if public else clients["owner"]
+    url = f"/account/detail_user/{users.owner.id}" if public else "/account/"
+
+    response = client.get(url)
+    links = profile_links(response.get_data(as_text=True))
+
+    assert response.status_code == 200
+    for field in ("website_url", "github_url", "twitter_url", "mastodon_url"):
+        assert form[field] in links
+    mastodon = links[form["mastodon_url"]]
+    assert mastodon["target"] == "_blank"
+    assert {"me", "noopener", "noreferrer"} <= set(mastodon["rel"].split())
+    assert "fa-brands fa-mastodon" in response.get_data(as_text=True)
+
+
+@pytest.mark.parametrize("public", [False, True])
+def test_profile_omits_empty_mastodon_link(public, clients, users):
+    client = clients["user"] if public else clients["owner"]
+    url = f"/account/detail_user/{users.owner.id}" if public else "/account/"
+
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert "fa-mastodon" not in response.get_data(as_text=True)
+    assert reload(users.owner).to_json()["mastodon_url"] is None
+
+
+@pytest.mark.parametrize("scheme", ["https", "http"])
+def test_mastodon_accepts_a_web_address_at_the_length_limit(scheme, clients, users):
+    prefix = f"{scheme}://social.example.org/@"
+    url = prefix + "a" * (256 - len(prefix))
+
+    response = clients["owner"].post("/account/edit", data=profile_form(users.owner, mastodon_url=url))
+
+    assert response.status_code == 302
+    assert reload(users.owner).mastodon_url == url
+
+
+def test_mastodon_migration_preserves_existing_accounts():
+    """Exercise the new revision on the previous user schema, including rollback."""
+    from pathlib import Path
+
+    import sqlalchemy as sa
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from alembic.script import ScriptDirectory
+
+    migration = ScriptDirectory(str(Path(__file__).resolve().parents[2] / "migrations")).get_revision(
+        "a6d8e2f4b9c1").module
+    engine = sa.create_engine("sqlite://")
+    with engine.begin() as connection:
+        User.__table__.create(connection)
+        connection.exec_driver_sql('ALTER TABLE "user" DROP COLUMN mastodon_url')
+        legacy = sa.Table("user", sa.MetaData(), autoload_with=connection)
+        connection.execute(legacy.insert().values(
+            id=1, first_name="Existing", email="existing@tests.rulezet", bio="My bio",
+            website_url="https://owner.example", github_url="https://gitlab.com/owner",
+            twitter_url="https://x.com/owner"))
+        before = dict(connection.execute(sa.select(legacy)).mappings().one())
+
+        with Operations.context(MigrationContext.configure(connection, opts={"render_as_batch": True})):
+            migration.upgrade()
+            upgraded = sa.Table("user", sa.MetaData(), autoload_with=connection)
+            row = dict(connection.execute(sa.select(upgraded)).mappings().one())
+            column = upgraded.c.mastodon_url
+            assert row.pop("mastodon_url") is None and row == before
+            assert column.nullable and column.type.length == 256
+            connection.execute(upgraded.update().values(mastodon_url="https://infosec.exchange/@owner"))
+            assert connection.execute(sa.select(upgraded.c.mastodon_url)).scalar_one() == (
+                "https://infosec.exchange/@owner")
+
+            migration.downgrade()
+
+        restored = sa.Table("user", sa.MetaData(), autoload_with=connection)
+        assert "mastodon_url" not in restored.c
+        assert dict(connection.execute(sa.select(restored)).mappings().one()) == before
+    engine.dispose()
 
 
 def test_edit_profile_with_a_username_already_taken_changes_nothing(clients, users):

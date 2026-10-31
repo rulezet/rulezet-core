@@ -432,7 +432,7 @@ def edit_user_core(form_dict, id, avatar_file=None, remove_avatar=False, is_sso=
             user.must_change_password = False
 
     # Profile fields: only those sent are changed (the API edit sends none).
-    for field in ("username", "bio", "location", "website_url", "github_url", "twitter_url"):
+    for field in ("username", "bio", "location", "website_url", "github_url", "twitter_url", "mastodon_url"):
         if field in form_dict:
             setattr(user, field, form_dict[field] or None)
 

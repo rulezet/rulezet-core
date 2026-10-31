@@ -242,7 +242,7 @@
                 {% endif %}
 
                 <!-- Social links -->
-                {% if current_user.website_url or current_user.github_url or current_user.twitter_url or current_user.location %}
+                {% if current_user.website_url or current_user.github_url or current_user.twitter_url or current_user.mastodon_url or current_user.location %}
                 <div class="ud-profile-links">
                     {% if current_user.location %}
                     <span class="ud-profile-link">
@@ -262,6 +262,11 @@
                     {% if current_user.twitter_url %}
                     <a href="{{ current_user.twitter_url }}" target="_blank" rel="noopener" class="ud-profile-link ud-profile-link--clickable">
                         <i class="fab fa-x-twitter"></i>[[ user.twitter_url ]]
+                    </a>
+                    {% endif %}
+                    {% if current_user.mastodon_url %}
+                    <a href="{{ current_user.mastodon_url }}" target="_blank" rel="me noopener noreferrer" class="ud-profile-link ud-profile-link--clickable">
+                        <i class="fa-brands fa-mastodon"></i>[[ user.mastodon_url ]]
                     </a>
                     {% endif %}
                 </div>

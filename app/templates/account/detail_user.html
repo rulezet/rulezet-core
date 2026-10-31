@@ -121,7 +121,7 @@
                             {% endif %}
 
                             <!-- Social links -->
-                            {% if user.website_url or user.github_url or user.twitter_url or user.location %}
+                            {% if user.website_url or user.github_url or user.twitter_url or user.mastodon_url or user.location %}
                             <div class="ud-profile-links">
                                 {% if user.location %}
                                 <span class="ud-profile-link">
@@ -141,6 +141,11 @@
                                 {% if user.twitter_url %}
                                 <a href="{{ user.twitter_url }}" target="_blank" rel="noopener" class="ud-profile-link ud-profile-link--clickable">
                                     <i class="fab fa-x-twitter"></i>[[ user.twitter_url ]]
+                                </a>
+                                {% endif %}
+                                {% if user.mastodon_url %}
+                                <a href="{{ user.mastodon_url }}" target="_blank" rel="me noopener noreferrer" class="ud-profile-link ud-profile-link--clickable">
+                                    <i class="fa-brands fa-mastodon"></i>[[ user.mastodon_url ]]
                                 </a>
                                 {% endif %}
                             </div>
