@@ -2,8 +2,9 @@
 from a rule's / bundle's AI Analysis section; the AI managers accept (the
 analysis job is queued) or reject it on the admin pages.
 
-Roles: "user" can't launch anything (requests), "admin" can launch and
-reviews the requests.
+Roles: "owner" owns the rule / bundle and can't launch anything (requests — by default only owners
+and AI-permission holders may request, setting ai.request_policy), "user" is someone else,
+"admin" can launch and reviews the requests.
 """
 from app.core.db_class.ai import AIAnalysisRequest
 from app.core.db_class.job import BackgroundJob
@@ -21,10 +22,10 @@ def _request_rule(client, rule, script="standard", message="no description"):
 def test_a_user_who_cant_launch_may_request_and_admins_are_notified(clients, users):
     rule = make_rule(users.owner)
 
-    state = clients["user"].get(f"/rule/detail_rule/{rule.id}/ai_analysis/request").get_json()
+    state = clients["owner"].get(f"/rule/detail_rule/{rule.id}/ai_analysis/request").get_json()
     assert (state["can_launch"], state["can_request"]) == (False, True)
 
-    response = _request_rule(clients["user"], rule, script="deep")
+    response = _request_rule(clients["owner"], rule, script="deep")
 
     assert response.status_code == 201
     req = AIAnalysisRequest.query.one()
@@ -34,7 +35,7 @@ def test_a_user_who_cant_launch_may_request_and_admins_are_notified(clients, use
 
 def test_the_same_request_is_never_duplicated(clients, users):
     rule = make_rule(users.owner)
-    _request_rule(clients["user"], rule)
+    _request_rule(clients["owner"], rule)
 
     again = _request_rule(clients["owner"], rule)
 
@@ -54,16 +55,16 @@ def test_anonymous_and_launchers_cannot_request(clients, users):
 def test_bad_script_and_message_are_refused(clients, users):
     rule = make_rule(users.owner)
 
-    assert _request_rule(clients["user"], rule, script="full").status_code == 400
-    assert _request_rule(clients["user"], rule, message="x" * 1001).status_code == 400
+    assert _request_rule(clients["owner"], rule, script="full").status_code == 400
+    assert _request_rule(clients["owner"], rule, message="x" * 1001).status_code == 400
     assert count(AIAnalysisRequest) == 0
 
 
 def test_accepting_queues_one_job_per_script_and_notifies(clients, users):
     rules = [make_rule(users.owner) for _ in range(3)]
-    _request_rule(clients["user"], rules[0])
-    _request_rule(clients["user"], rules[1])
-    _request_rule(clients["user"], rules[2], script="deep")
+    _request_rule(clients["owner"], rules[0])
+    _request_rule(clients["owner"], rules[1])
+    _request_rule(clients["owner"], rules[2], script="deep")
 
     response = clients["admin"].post("/ai/admin/requests/rule/decide",
                                      json={"action": "accept", "all": True, "note": "on it"})
@@ -73,12 +74,12 @@ def test_accepting_queues_one_job_per_script_and_notifies(clients, users):
     assert sorted((j.payload["script"], sorted(j.payload["rule_ids"])) for j in jobs) == [
         ("deep", [rules[2].id]), ("standard", sorted([rules[0].id, rules[1].id]))]
     assert {r.status for r in AIAnalysisRequest.query.all()} == {"accepted"}
-    assert count(Notification, user_id=users.user.id, notif_type="ai_analysis_accepted") == 3
+    assert count(Notification, user_id=users.owner.id, notif_type="ai_analysis_accepted") == 3
 
 
 def test_rejecting_selected_requests(clients, users):
     rule = make_rule(users.owner)
-    _request_rule(clients["user"], rule)
+    _request_rule(clients["owner"], rule)
     req = AIAnalysisRequest.query.one()
 
     response = clients["admin"].post("/ai/admin/requests/rule/decide",
@@ -97,7 +98,7 @@ def test_only_ai_managers_review_requests(clients, users):
 def test_bundle_request_and_accept(clients, users):
     bundle = make_bundle(users.owner)
 
-    response = clients["user"].post(f"/bundle/{bundle.id}/ai_analysis/request", json={"message": "please"})
+    response = clients["owner"].post(f"/bundle/{bundle.id}/ai_analysis/request", json={"message": "please"})
     assert response.status_code == 201
 
     clients["admin"].post("/ai/admin/requests/bundle/decide", json={"action": "accept", "all": True})
