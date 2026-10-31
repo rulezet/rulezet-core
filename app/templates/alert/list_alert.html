@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/mailbox_nav.html' as mbx %}
 {% block title %}My alerts — Rulezet{% endblock %}
 
 {% block head %}
@@ -34,6 +35,7 @@
       or a GitHub repo — and get notified the moment matching rules or bundles are published.
     </p>
   </div>
+  {{ mbx.mailbox_nav('alerts') }}
 
   <div v-if="loading" class="d-flex justify-content-center py-5">
     <div class="spinner-border text-primary" role="status"></div>

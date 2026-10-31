@@ -8,6 +8,7 @@ from app.features.notification.notification_core import (
     get_follower_count, get_following_count,
     get_preference, update_preference,
 )
+from app.core.db_class.notification import Notification
 from app.core.db_class.user import User, UserFollow
 
 notification_blueprint = Blueprint('notification', __name__)
@@ -191,4 +192,81 @@ def api_update_preferences():
 @notification_blueprint.get('/')
 @login_required
 def page_notifications():
-    return render_template('notification/notifications.html')
+    tab = 'prefs' if request.args.get('tab') == 'prefs' else 'inbox'
+    return render_template('notification/notifications.html', active_tab=tab)
+
+
+# ── Inbox API (inbox_core.py): folders, labels, bulk actions ─────────────────
+
+@notification_blueprint.get('/inbox')
+@login_required
+def api_inbox():
+    """One page of a folder / label / categories / search, with the counts of every folder and label."""
+    from app.features.notification import inbox_core as Inbox
+    Inbox.auto_archive(current_user.id)
+    folder = request.args.get('folder', 'inbox')
+    if folder not in Inbox.FOLDERS:
+        folder = 'inbox'
+    types = [t for t in (request.args.get('types') or '').split(',') if t.strip()]
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = min(max(request.args.get('per_page', 25, type=int), 5), 100)
+    q = Inbox.query(current_user.id, folder, request.args.get('label', type=int), types,
+                    request.args.get('search'), request.args.get('date_from'), request.args.get('date_to'))
+    pagination = q.order_by(Notification.created_at.desc(), Notification.id.desc()).paginate(
+        page=page, per_page=per_page, error_out=False)
+    return jsonify({
+        'notifications': [n.to_json() for n in pagination.items],
+        'total': pagination.total, 'pages': pagination.pages, 'page': pagination.page,
+        'counts': Inbox.counts(current_user.id),
+        'matching_ids': [i for (i,) in q.with_entities(Notification.id).limit(5000).all()]
+                        if request.args.get('with_ids') else None,
+    })
+
+
+@notification_blueprint.post('/bulk')
+@login_required
+def api_bulk():
+    """{ids: [...], action: read|unread|star|unstar|archive|unarchive|delete|label_add|label_remove, label_id}"""
+    from app.features.notification import inbox_core as Inbox
+    data = request.get_json(silent=True) or {}
+    n, err = Inbox.bulk(current_user.id, data.get('ids'), data.get('action'), data.get('label_id'))
+    if err:
+        return jsonify({'ok': False, 'message': err}), 400
+    return jsonify({'ok': True, 'changed': n, 'counts': Inbox.counts(current_user.id)})
+
+
+@notification_blueprint.get('/labels')
+@login_required
+def api_labels():
+    from app.features.notification import inbox_core as Inbox
+    return jsonify({'labels': [l.to_json() for l in Inbox.list_labels(current_user.id)]})
+
+
+@notification_blueprint.post('/labels')
+@login_required
+def api_label_create():
+    from app.features.notification import inbox_core as Inbox
+    data = request.get_json(silent=True) or {}
+    label, err = Inbox.create_label(current_user.id, data.get('name'), data.get('color'))
+    if err:
+        return jsonify({'ok': False, 'message': err}), 400
+    return jsonify({'ok': True, 'label': label.to_json()}), 201
+
+
+@notification_blueprint.post('/labels/<int:label_id>')
+@login_required
+def api_label_update(label_id):
+    from app.features.notification import inbox_core as Inbox
+    data = request.get_json(silent=True) or {}
+    label, err = Inbox.update_label(current_user.id, label_id, data.get('name'), data.get('color'))
+    if err:
+        return jsonify({'ok': False, 'message': err}), (404 if label is None and 'not found' in err else 400)
+    return jsonify({'ok': True, 'label': label.to_json()})
+
+
+@notification_blueprint.delete('/labels/<int:label_id>')
+@login_required
+def api_label_delete(label_id):
+    from app.features.notification import inbox_core as Inbox
+    ok = Inbox.delete_label(current_user.id, label_id)
+    return jsonify({'ok': ok}), (200 if ok else 404)

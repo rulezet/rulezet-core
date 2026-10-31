@@ -1,204 +1,19 @@
 {% extends 'base.html' %}
+{% import 'macros/mailbox_nav.html' as mbx %}
 
 {% block title %}Notifications — Rulezet{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/notification/notification.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
-<style>
-/* ── Type-filter dropdown tags ──────────────────────────────────────────── */
-.notif-type-wrap {
-    position: relative;
-}
-.notif-type-trigger {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 7px 14px;
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    background: var(--card-bg-color);
-    color: var(--text-color);
-    font-size: .83rem;
-    font-weight: 500;
-    cursor: pointer;
-    user-select: none;
-    transition: border-color .14s, box-shadow .14s;
-    min-width: 160px;
-}
-.notif-type-trigger:hover {
-    border-color: #0d6efd;
-    box-shadow: 0 0 0 3px rgba(13,110,253,.08);
-}
-.notif-type-trigger .chevron {
-    margin-left: auto;
-    font-size: .7rem;
-    opacity: .55;
-    transition: transform .18s;
-}
-.notif-type-trigger.open .chevron { transform: rotate(180deg); }
-
-.notif-type-dropdown {
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    z-index: 200;
-    background: var(--card-bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    box-shadow: 0 6px 24px rgba(0,0,0,.12);
-    padding: 8px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    min-width: 320px;
-    max-width: 420px;
-}
-.notif-type-option {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 11px;
-    border-radius: 20px;
-    font-size: .78rem;
-    font-weight: 500;
-    cursor: pointer;
-    border: 1px solid var(--border-color);
-    background: var(--card-bg-color);
-    color: var(--subtle-text-color);
-    transition: background .12s, border-color .12s, color .12s;
-    white-space: nowrap;
-    user-select: none;
-}
-.notif-type-option:hover { background: var(--light-bg-color); color: var(--text-color); }
-.notif-type-option.active {
-    background: linear-gradient(135deg, #0d6efd, #0a58ca);
-    border-color: transparent;
-    color: #fff;
-}
-
-/* Active type tags shown inline next to trigger */
-.notif-active-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    align-items: center;
-}
-.notif-active-tag {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: .76rem;
-    font-weight: 600;
-    background: linear-gradient(135deg, #0d6efd, #0a58ca);
-    color: #fff;
-    cursor: default;
-}
-.notif-active-tag-rm {
-    background: none;
-    border: none;
-    color: #fff;
-    padding: 0;
-    cursor: pointer;
-    font-size: .7rem;
-    opacity: .75;
-    transition: opacity .12s;
-    line-height: 1;
-    display: flex;
-    align-items: center;
-}
-.notif-active-tag-rm:hover { opacity: 1; }
-
-/* ── Search box ─────────────────────────────────────────────────────────── */
-.notif-search-wrap {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 7px 12px;
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    background: var(--card-bg-color);
-    min-width: 220px;
-}
-.notif-search-wrap i.fa-magnifying-glass { color: var(--subtle-text-color); font-size: .78rem; }
-.notif-search-wrap input {
-    border: none;
-    outline: none;
-    background: transparent;
-    color: var(--text-color);
-    font-size: .83rem;
-    flex: 1;
-    min-width: 0;
-}
-.notif-search-wrap .notif-search-clear {
-    border: none;
-    background: none;
-    color: var(--subtle-text-color);
-    padding: 0;
-    font-size: .72rem;
-    cursor: pointer;
-}
-.notif-search-wrap .notif-search-clear:hover { color: var(--text-color); }
-
-/* ── Date range ─────────────────────────────────────────────────────────── */
-.notif-date-wrap {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 10px;
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    background: var(--card-bg-color);
-}
-.notif-date-wrap input[type="date"] {
-    border: none;
-    outline: none;
-    background: transparent;
-    color: var(--text-color);
-    font-size: .78rem;
-    max-width: 128px;
-}
-
-/* ── Group headers ──────────────────────────────────────────────────────── */
-.notif-group-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    font-size: .72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .04em;
-    color: var(--subtle-text-color);
-    background: var(--light-bg-color);
-    border-bottom: 1px solid var(--border-color);
-}
-.notif-group-header .notif-group-count {
-    margin-left: auto;
-    font-weight: 600;
-    text-transform: none;
-    letter-spacing: normal;
-}
-
-/* ── Search hit highlight ───────────────────────────────────────────────── */
-mark.notif-search-hit {
-    background: #ffb020;
-    color: #1a1a1a;
-    padding: 0 2px;
-    border-radius: 3px;
-    font-weight: 700;
-}
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/notification/inbox.css') }}">
 {% endblock %}
 
 {% block content %}
-<div id="notif-page-app" v-cloak>
+<div id="notif-page-app" class="container-fluid px-lg-4" v-cloak>
 
     <!-- Banner -->
     <div class="explorer-banner mb-4">
-        <i class="fa-solid fa-bell banner-watermark"></i>
+        <i class="fa-solid fa-inbox banner-watermark"></i>
         <div class="d-flex align-items-center gap-3 mb-3">
             <div class="banner-icon"><i class="fa-solid fa-bell"></i></div>
             <div>
@@ -206,247 +21,247 @@ mark.notif-search-hit {
                 <div class="banner-accent"></div>
             </div>
         </div>
-        <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
-            Track activity on your rules, bundles, proposals, and the people you follow.
+        <p class="text-muted mb-0" style="max-width:640px;font-size:.95rem;">
+            Your inbox: activity on your rules, bundles, proposals and the people you follow. Star what matters,
+            archive what is done, sort with your own labels.
         </p>
     </div>
 
-    <!-- dr-nav style tabs -->
-    <nav class="dr-nav mb-4">
-        <a href="#" :class="['dr-nav__item', mainTab === 'notifs' ? 'active' : '']"
-           @click.prevent="mainTab = 'notifs'">
-            <i class="fa-solid fa-bell"></i>
-            <span>Notifications</span>
-            <span v-if="unreadCount > 0" class="dr-nav__badge dr-nav__badge--alert">[[ unreadCount ]]</span>
-        </a>
-        <a href="#" :class="['dr-nav__item', mainTab === 'prefs' ? 'active' : '']"
-           @click.prevent="mainTab = 'prefs'; loadPrefs()">
-            <i class="fa-solid fa-sliders"></i>
-            <span>Preferences</span>
-        </a>
-    </nav>
+    {{ mbx.mailbox_nav(active_tab) }}
 
-    <!-- ── NOTIFICATIONS TAB ── -->
-    <div v-if="mainTab === 'notifs'">
+    <!-- ══════════════════════ INBOX ══════════════════════ -->
+    <div v-show="mainTab === 'inbox'" class="ibx" :class="{ 'ibx--reading': opened }">
 
-        <!-- Toolbar row -->
-        <div data-tour="notif-toolbar" class="d-flex flex-wrap align-items-start gap-3 mb-3">
-
-            <!-- Search -->
-            <div class="notif-search-wrap">
-                <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" v-model="searchQuery" @input="onSearchInput"
-                       placeholder="Search notifications…">
-                <button v-if="searchQuery" class="notif-search-clear" title="Clear search"
-                        @click="searchQuery = ''; loadPage(1)">
-                    <i class="fa-solid fa-xmark"></i>
+        <!-- ── Left: folders, categories, labels ── -->
+        <aside class="ibx-side" :class="{ 'is-open': sideOpen }">
+            <div class="ibx-side__group">
+                <button v-for="f in FOLDERS" :key="f.key" type="button" class="ibx-folder"
+                        :class="{ 'is-on': folder === f.key && !labelId && !category }" @click="openFolder(f.key)">
+                    <i :class="f.icon"></i><span>[[ f.label ]]</span>
+                    <b v-if="folderCount(f.key)" :class="{ 'is-unread': f.key === 'inbox' || f.key === 'unread' }">[[ folderCount(f.key) ]]</b>
                 </button>
             </div>
 
-            <!-- Type filter dropdown -->
-            <div data-tour="notif-types" class="notif-type-wrap" v-click-outside="closeDropdown">
-                <div :class="['notif-type-trigger', dropdownOpen ? 'open' : '']"
-                     @click="dropdownOpen = !dropdownOpen">
-                    <i class="fa-solid fa-filter" style="font-size:.78rem;color:#0d6efd;"></i>
-                    <span>Filter by type</span>
-                    <i class="fa-solid fa-chevron-down chevron"></i>
+            <div class="ibx-side__title">
+                <span>Labels</span>
+                <button type="button" class="ibx-icon-btn" title="New label" @click="startLabel()"><i class="fa-solid fa-plus"></i></button>
+            </div>
+            <div v-if="labelForm.open" class="ibx-label-form">
+                <input class="form-control form-control-sm" v-model="labelForm.name" maxlength="40" placeholder="Label name"
+                       @keydown.enter.prevent="saveLabel()" @keydown.esc="labelForm.open = false" ref="labelInput">
+                <div class="ibx-swatches">
+                    <button v-for="c in LABEL_COLORS" :key="c" type="button" class="ibx-swatch" :style="{ background: c }"
+                            :class="{ 'is-on': labelForm.color === c }" @click="labelForm.color = c" :title="c"></button>
                 </div>
-                <div v-if="dropdownOpen" class="notif-type-dropdown">
-                    <div v-for="opt in TYPE_OPTIONS" :key="opt.key"
-                         :class="['notif-type-option', activeTypes.includes(opt.key) ? 'active' : '']"
-                         @click="toggleType(opt.key)">
-                        <i :class="opt.icon"></i>[[ opt.label ]]
-                    </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" @click="saveLabel()">[[ labelForm.id ? 'Save' : 'Create' ]]</button>
+                    <button type="button" class="btn btn-sm btn-light rounded-pill" @click="labelForm.open = false">Cancel</button>
+                    <button v-if="labelForm.id" type="button" class="btn btn-sm btn-link text-danger ms-auto px-0" @click="deleteLabel(labelForm.id)">Delete</button>
                 </div>
             </div>
-
-            <!-- Date range -->
-            <div class="notif-date-wrap">
-                <i class="fa-regular fa-calendar" style="font-size:.75rem;color:var(--subtle-text-color);"></i>
-                <input type="date" v-model="dateFrom" :max="dateTo || undefined" @change="loadPage(1)" title="From date">
-                <span style="color:var(--subtle-text-color);font-size:.75rem;">→</span>
-                <input type="date" v-model="dateTo" :min="dateFrom || undefined" @change="loadPage(1)" title="To date">
-            </div>
-
-            <!-- Group by type -->
-            <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
-                <input class="form-check-input" type="checkbox" id="groupSwitch"
-                       v-model="groupByType" style="cursor:pointer;">
-                <label class="form-check-label small fw-semibold" for="groupSwitch">Group by type</label>
-            </div>
-
-            <button class="btn btn-sm btn-outline-secondary" @click="clearFilters" v-if="hasActiveFilters">
-                <i class="fa-solid fa-filter-circle-xmark me-1"></i>Clear filters
-            </button>
-
-            <!-- Active type chips -->
-            <div v-if="activeTypes.length" class="notif-active-tags">
-                <div v-for="key in activeTypes" :key="key" class="notif-active-tag">
-                    <i :class="typeIcon(key)" style="font-size:.72rem;"></i>
-                    [[ typeLabel(key) ]]
-                    <button class="notif-active-tag-rm" @click="removeType(key)" title="Remove">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
+            <div v-if="!counts.labels.length && !labelForm.open" class="ibx-side__hint">Create labels to sort your notifications — e.g. "To review", "Team".</div>
+            <div class="ibx-side__group">
+                <div v-for="l in counts.labels" :key="l.id" class="ibx-folder ibx-folder--label" :class="{ 'is-on': labelId === l.id }"
+                     role="button" tabindex="0" @click="openLabel(l.id)" @keydown.enter="openLabel(l.id)">
+                    <span class="ibx-dot" :style="{ background: l.color }"></span><span>[[ l.name ]]</span>
+                    <b v-if="l.count" class="is-unread">[[ l.count ]]</b>
+                    <button type="button" class="ibx-icon-btn ibx-folder__edit" title="Rename / colour" @click.stop="startLabel(l)"><i class="fa-solid fa-pen"></i></button>
                 </div>
             </div>
 
-            <!-- Right side controls -->
-            <div class="ms-auto d-flex gap-2 align-items-center flex-wrap">
-                <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
-                    <input class="form-check-input" type="checkbox" id="unreadSwitch"
-                           v-model="unreadOnly" @change="loadPage(1)" style="cursor:pointer;">
-                    <label class="form-check-label small fw-semibold" for="unreadSwitch">Unread only</label>
-                </div>
-                <button class="btn btn-sm btn-outline-success" @click="markAllRead" v-if="unreadCount > 0">
-                    <i class="fa-solid fa-check-double me-1"></i>Mark all read
+            <div class="ibx-side__title"><span>Categories</span></div>
+            <div class="ibx-side__group">
+                <button v-for="c in categoriesWithItems" :key="c.key" type="button" class="ibx-folder ibx-folder--cat"
+                        :class="{ 'is-on': category === c.key }" @click="openCategory(c.key)">
+                    <i :class="c.icon"></i><span>[[ c.label ]]</span>
+                    <b v-if="c.unread" class="is-unread">[[ c.unread ]]</b>
                 </button>
-                <button class="btn btn-sm btn-outline-danger" @click="deleteAll"
-                        v-if="totalCount > 0" title="Delete all notifications">
-                    <i class="fa-solid fa-trash me-1"></i>Delete all
+                <button type="button" class="ibx-folder ibx-folder--more" @click="showAllCats = !showAllCats">
+                    <i class="fa-solid" :class="showAllCats ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                    <span>[[ showAllCats ? 'Fewer categories' : 'All categories' ]]</span>
                 </button>
             </div>
-        </div>
+        </aside>
 
-        <!-- List card -->
-        <div class="notif-page-card">
-
-            <!-- Loading -->
-            <template v-if="loading">
-                <div v-for="i in 6" :key="i" class="notif-skeleton" style="border-bottom:1px solid var(--border-color);">
-                    <div class="notif-skeleton__bubble"></div>
-                    <div class="notif-skeleton__lines">
-                        <div class="notif-skeleton__line"></div>
-                        <div class="notif-skeleton__line"></div>
+        <!-- ── Middle: toolbar + list ── -->
+        <section class="ibx-main">
+            <div class="ibx-toolbar">
+                <button type="button" class="ibx-icon-btn d-lg-none" @click="sideOpen = !sideOpen" title="Folders"><i class="fa-solid fa-bars"></i></button>
+                <label class="ibx-check" :title="allSelected ? 'Select none' : 'Select all on this page'">
+                    <input type="checkbox" :checked="allSelected" :indeterminate.prop="someSelected && !allSelected" @change="toggleAll">
+                </label>
+                <template v-if="selected.size">
+                    <span class="ibx-selcount">[[ selected.size ]] selected</span>
+                    <button type="button" class="ibx-tool" title="Mark as read (Shift+I)" @click="bulk('read')"><i class="fa-regular fa-envelope-open"></i></button>
+                    <button type="button" class="ibx-tool" title="Mark as unread (Shift+U)" @click="bulk('unread')"><i class="fa-solid fa-envelope"></i></button>
+                    <button type="button" class="ibx-tool" title="Star (S)" @click="bulk('star')"><i class="fa-solid fa-star"></i></button>
+                    <button type="button" class="ibx-tool" :title="folder === 'archived' ? 'Move to inbox' : 'Archive (E)'"
+                            @click="bulk(folder === 'archived' ? 'unarchive' : 'archive')">
+                        <i class="fa-solid" :class="folder === 'archived' ? 'fa-inbox' : 'fa-box-archive'"></i></button>
+                    <div class="dropdown">
+                        <button type="button" class="ibx-tool" data-bs-toggle="dropdown" title="Labels"><i class="fa-solid fa-tag"></i></button>
+                        <ul class="dropdown-menu ibx-menu">
+                            <li v-if="!counts.labels.length" class="px-3 py-2 small text-muted">No label yet — create one on the left.</li>
+                            <li v-for="l in counts.labels" :key="l.id">
+                                <button type="button" class="dropdown-item" @click="toggleLabelOnSelection(l)">
+                                    <i class="fa-solid me-2" :class="selectionHasLabel(l) ? 'fa-square-check' : 'fa-square'" :style="{ color: l.color }"></i>[[ l.name ]]
+                                </button>
+                            </li>
+                        </ul>
                     </div>
-                </div>
-            </template>
-
-            <!-- Empty -->
-            <template v-else-if="notifications.length === 0">
-                <div class="notif-empty" style="padding:80px 24px;">
-                    <div class="notif-empty__icon"><i class="fa-solid fa-bell-slash"></i></div>
-                    <div class="notif-empty__title">No notifications</div>
-                    <div class="notif-empty__sub">Nothing here yet — follow some users to get started!</div>
-                </div>
-            </template>
-
-            <!-- Notifications -->
-            <template v-else>
-                <template v-for="entry in displayList" :key="entry.notif.id">
-                    <div v-if="entry.header" class="notif-group-header">
-                        <i :class="entry.header.icon"></i>
-                        <span>[[ entry.header.label ]]</span>
-                        <span class="notif-group-count">[[ entry.header.count ]]</span>
-                    </div>
-                    <div :class="['notif-page-item', !entry.notif.is_read ? 'unread' : '']">
-
-                        <!-- Icon bubble -->
-                        <div :class="['notif-icon-bubble', `notif-icon-bubble--${entry.notif.notif_type}`]"
-                             style="width:42px;height:42px;flex-shrink:0;">
-                            <i :class="entry.notif.icon || 'fa-solid fa-bell'"></i>
-                        </div>
-
-                        <!-- Content -->
-                        <div class="flex-grow-1 min-width-0">
-                            <div class="d-flex align-items-start gap-2">
-                                <span class="notif-page-title" v-html="highlightText(entry.notif.title)"></span>
-                                <span v-if="!entry.notif.is_read"
-                                      class="badge rounded-pill ms-auto flex-shrink-0"
-                                      style="background:#0d6efd;font-size:.6rem;padding:3px 7px;">NEW</span>
-                            </div>
-                            <div class="notif-page-body" v-if="entry.notif.body" v-html="highlightText(entry.notif.body)"></div>
-
-                            <!-- Job progress -->
-                            <template v-if="entry.notif.notif_type?.startsWith('job')">
-                                <div class="notif-progress mt-2" style="max-width:320px;">
-                                    <div :class="['notif-progress__fill', progressFillClass(entry.notif)]"
-                                         :style="progressWidth(entry.notif) ? `width:${progressWidth(entry.notif)}` : ''">
-                                    </div>
-                                </div>
-                                <div style="font-size:.73rem;color:var(--subtle-text-color);margin-top:4px;">
-                                    <span v-if="entry.notif.job_status === 'done'" class="text-success fw-semibold">
-                                        <i class="fa-solid fa-circle-check me-1"></i>Completed — 100%
-                                    </span>
-                                    <span v-else-if="entry.notif.job_status === 'failed'" class="text-danger fw-semibold">
-                                        <i class="fa-solid fa-circle-xmark me-1"></i>Failed
-                                    </span>
-                                    <span v-else-if="entry.notif.job_status === 'cancelled'" class="text-muted">
-                                        <i class="fa-solid fa-ban me-1"></i>Cancelled
-                                    </span>
-                                    <span v-else class="text-primary">
-                                        <i class="fa-solid fa-circle-notch fa-spin me-1"></i>
-                                        [[ entry.notif.job_progress ? entry.notif.job_progress + '%' : 'Running…' ]]
-                                    </span>
-                                </div>
-                            </template>
-
-                            <div class="notif-page-time">
-                                <i class="fa-regular fa-clock me-1"></i>[[ relativeTime(entry.notif.created_at) ]]
-                            </div>
-                        </div>
-
-                        <!-- Actions -->
-                        <div class="notif-page-actions">
-                            <a v-if="entry.notif.link" :href="entry.notif.link"
-                               class="btn btn-sm btn-outline-primary"
-                               style="font-size:.75rem;border-radius:8px;"
-                               @click="markRead(entry.notif)">
-                                <i class="fa-solid fa-arrow-right"></i>
-                            </a>
-                            <button v-if="!entry.notif.is_read"
-                                    class="btn btn-sm btn-outline-success"
-                                    style="font-size:.75rem;border-radius:8px;"
-                                    title="Mark as read"
-                                    @click="markRead(entry.notif)">
-                                <i class="fa-solid fa-check"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger"
-                                    style="font-size:.75rem;border-radius:8px;"
-                                    title="Delete"
-                                    @click="deleteNotif(entry.notif)">
-                                <i class="fa-solid fa-xmark"></i>
-                            </button>
-                        </div>
-                    </div>
+                    <button type="button" class="ibx-tool ibx-tool--danger" title="Delete (#)" @click="bulk('delete')"><i class="fa-solid fa-trash"></i></button>
+                    <button v-if="allSelected && total > notifications.length && !allMatching" type="button" class="ibx-link" @click="selectAllMatching">
+                        Select all [[ total ]]</button>
+                    <span v-if="allMatching" class="ibx-selcount">all [[ total ]] matching</span>
                 </template>
-            </template>
-        </div>
+                <template v-else>
+                    <button type="button" class="ibx-tool" title="Refresh" @click="load(page)"><i class="fa-solid fa-rotate"></i></button>
+                    <button type="button" class="ibx-tool" title="Mark everything here as read" @click="markFolderRead"><i class="fa-solid fa-check-double"></i></button>
+                </template>
+                <div class="ibx-search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input v-model="search" @input="onSearch" placeholder="Search notifications  ( / )" ref="searchInput" aria-label="Search">
+                    <button v-if="search" type="button" class="ibx-icon-btn" @click="search = ''; load(1)" title="Clear"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
 
-        <!-- Pagination (Rulezet native) -->
-        <div v-if="totalPages > 1" class="d-flex justify-content-center mt-4">
-            <rz-pagination
-                :current-page="currentPage"
-                :total-pages="totalPages"
-                @change-page="loadPage">
-            </rz-pagination>
-        </div>
+            <div class="ibx-where">
+                <span><b>[[ whereLabel ]]</b> · [[ total ]] notification[[ total === 1 ? '' : 's' ]]</span>
+                <span class="ibx-keys" title="Keyboard: j / k move, Enter open, x select, s star, e archive, # delete, Shift+U unread, / search">
+                    <i class="fa-regular fa-keyboard"></i> j k x s e #</span>
+            </div>
 
-    </div><!-- end #notifs tab -->
+            <div class="ibx-list" role="list">
+                <div v-if="loading" class="ibx-empty"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
+                <div v-else-if="!notifications.length" class="ibx-empty">
+                    <i class="fa-regular fa-envelope-open"></i>
+                    <div>[[ search ? 'Nothing matches “' + search + '”.' : (folder === 'inbox' && !labelId && !category ? 'Inbox zero — nothing new.' : 'Nothing here.') ]]</div>
+                </div>
+                <div v-for="(n, i) in notifications" :key="n.id" role="listitem" class="ibx-row"
+                     :class="{ 'is-unread': !n.is_read, 'is-selected': selected.has(n.id), 'is-open': opened && opened.id === n.id, 'is-cursor': cursor === i }"
+                     @click="open(n, i)">
+                    <label class="ibx-check" @click.stop>
+                        <input type="checkbox" :checked="selected.has(n.id)" @change="toggle(n.id)">
+                    </label>
+                    <button type="button" class="ibx-star" :class="{ 'is-on': n.is_starred }" @click.stop="act([n], n.is_starred ? 'unstar' : 'star')"
+                            :title="n.is_starred ? 'Unstar' : 'Star'"><i :class="n.is_starred ? 'fa-solid fa-star' : 'fa-regular fa-star'"></i></button>
+                    <span class="ibx-row__icon" :class="'ibx-cat--' + catKey(n)"><i :class="n.icon || catIcon(n)"></i></span>
+                    <div class="ibx-row__body">
+                        <div class="ibx-row__top">
+                            <span class="ibx-row__cat">[[ catLabel(n) ]]</span>
+                            <span v-for="l in n.labels" :key="l.id" class="ibx-chip" :style="{ '--c': l.color }">[[ l.name ]]</span>
+                        </div>
+                        <div class="ibx-row__title" v-html="highlight(n.title)"></div>
+                        <div v-if="n.body" class="ibx-row__snippet" v-html="highlight(n.body)"></div>
+                        <div v-if="n.job_uuid && n.is_job_active" class="notif-progress mt-1">
+                            <div class="notif-progress__fill" :class="progressFillClass(n)" :style="{ width: progressWidth(n) }"></div>
+                        </div>
+                    </div>
+                    <div class="ibx-row__end">
+                        <time :title="fullDate(n.created_at)">[[ shortDate(n.created_at) ]]</time>
+                        <div class="ibx-row__hover" @click.stop>
+                            <button type="button" class="ibx-icon-btn" :title="n.is_read ? 'Mark unread' : 'Mark read'" @click="act([n], n.is_read ? 'unread' : 'read')">
+                                <i :class="n.is_read ? 'fa-solid fa-envelope' : 'fa-regular fa-envelope-open'"></i></button>
+                            <button type="button" class="ibx-icon-btn" :title="n.is_archived ? 'Move to inbox' : 'Archive'" @click="act([n], n.is_archived ? 'unarchive' : 'archive')">
+                                <i class="fa-solid" :class="n.is_archived ? 'fa-inbox' : 'fa-box-archive'"></i></button>
+                            <button type="button" class="ibx-icon-btn ibx-icon-btn--danger" title="Delete" @click="act([n], 'delete')"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-    <!-- ── PREFERENCES TAB ── -->
-    <div v-if="mainTab === 'prefs'">
-        <div class="notif-page-card" style="max-width:680px;">
+            <div v-if="pages > 1" class="ibx-pager">
+                <button type="button" class="ibx-tool" :disabled="page <= 1" @click="load(page - 1)"><i class="fa-solid fa-chevron-left"></i></button>
+                <span>[[ (page - 1) * perPage + 1 ]]–[[ Math.min(page * perPage, total) ]] of [[ total ]]</span>
+                <button type="button" class="ibx-tool" :disabled="page >= pages" @click="load(page + 1)"><i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+        </section>
 
-            <!-- Header with reset button -->
-            <div class="d-flex align-items-center justify-content-between px-4 py-3"
-                 style="border-bottom:1px solid var(--border-color);">
+        <!-- ── Right: reading pane ── -->
+        <section class="ibx-read" v-if="opened">
+            <div class="ibx-read__bar">
+                <button type="button" class="ibx-tool" title="Close (Esc)" @click="opened = null"><i class="fa-solid fa-xmark"></i></button>
+                <button type="button" class="ibx-tool" :class="{ 'is-on': opened.is_starred }" @click="act([opened], opened.is_starred ? 'unstar' : 'star')" title="Star">
+                    <i :class="opened.is_starred ? 'fa-solid fa-star' : 'fa-regular fa-star'"></i></button>
+                <button type="button" class="ibx-tool" @click="act([opened], 'unread')" title="Mark unread"><i class="fa-solid fa-envelope"></i></button>
+                <button type="button" class="ibx-tool" @click="act([opened], opened.is_archived ? 'unarchive' : 'archive')" :title="opened.is_archived ? 'Move to inbox' : 'Archive'">
+                    <i class="fa-solid" :class="opened.is_archived ? 'fa-inbox' : 'fa-box-archive'"></i></button>
+                <div class="dropdown">
+                    <button type="button" class="ibx-tool" data-bs-toggle="dropdown" title="Labels"><i class="fa-solid fa-tag"></i></button>
+                    <ul class="dropdown-menu ibx-menu">
+                        <li v-if="!counts.labels.length" class="px-3 py-2 small text-muted">No label yet — create one on the left.</li>
+                        <li v-for="l in counts.labels" :key="l.id">
+                            <button type="button" class="dropdown-item" @click="toggleLabel(opened, l)">
+                                <i class="fa-solid me-2" :class="hasLabel(opened, l) ? 'fa-square-check' : 'fa-square'" :style="{ color: l.color }"></i>[[ l.name ]]
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+                <button type="button" class="ibx-tool ibx-tool--danger ms-auto" @click="act([opened], 'delete')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+            </div>
+            <div class="ibx-read__body">
+                <div class="ibx-read__cat"><span class="ibx-row__icon" :class="'ibx-cat--' + catKey(opened)"><i :class="opened.icon || catIcon(opened)"></i></span>[[ catLabel(opened) ]]</div>
+                <h3 class="ibx-read__title">[[ opened.title ]]</h3>
+                <div class="ibx-read__meta"><i class="fa-regular fa-clock me-1"></i>[[ fullDate(opened.created_at) ]]</div>
+                <div v-if="opened.labels.length" class="ibx-read__labels">
+                    <span v-for="l in opened.labels" :key="l.id" class="ibx-chip" :style="{ '--c': l.color }">
+                        [[ l.name ]] <button type="button" @click="toggleLabel(opened, l)" title="Remove">×</button></span>
+                </div>
+                <p v-if="opened.body" class="ibx-read__text">[[ opened.body ]]</p>
+                <div v-if="opened.job_uuid" class="ibx-read__job">
+                    Job: <b>[[ opened.job_status || 'pending' ]]</b><template v-if="opened.job_progress"> · [[ opened.job_progress ]]%</template>
+                    <div v-if="opened.is_job_active" class="notif-progress mt-2">
+                        <div class="notif-progress__fill" :class="progressFillClass(opened)" :style="{ width: progressWidth(opened) }"></div>
+                    </div>
+                </div>
+                <a v-if="opened.link" :href="opened.link" class="btn btn-primary rounded-pill px-4 mt-3"><i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Open</a>
+            </div>
+        </section>
+    </div>
+
+    <!-- ══════════════════════ PREFERENCES ══════════════════════ -->
+    <div v-if="mainTab === 'prefs'" class="ibx-prefs">
+        <div class="notif-page-card">
+            <div class="d-flex align-items-center justify-content-between px-4 py-3" style="border-bottom:1px solid var(--border-color);">
                 <div>
                     <div class="fw-semibold" style="font-size:.9rem;">Notification preferences</div>
-                    <div class="text-muted" style="font-size:.77rem;">Choose which events trigger a notification</div>
+                    <div class="text-muted" style="font-size:.77rem;">Which events notify you, and how your inbox tidies itself</div>
                 </div>
-                <button class="btn btn-sm btn-outline-secondary" @click="resetPrefs"
-                        title="Reset all preferences to defaults">
+                <button class="btn btn-sm btn-outline-secondary" @click="resetPrefs" title="Reset all preferences to defaults">
                     <i class="fa-solid fa-rotate-left me-1"></i>Reset to default
                 </button>
             </div>
-
             <template v-if="prefsLoading">
-                <div class="p-4 text-center text-muted">
-                    <i class="fa-solid fa-circle-notch fa-spin me-2"></i>Loading…
-                </div>
+                <div class="p-4 text-center text-muted"><i class="fa-solid fa-circle-notch fa-spin me-2"></i>Loading…</div>
             </template>
-
             <template v-else>
+                <!-- Inbox housekeeping -->
+                <div class="notif-prefs-section">
+                    <div class="notif-prefs-section-header"><i class="fa-solid fa-box-archive me-2" style="color:#6f42c1;"></i>Inbox</div>
+                    <div class="notif-prefs-item" style="border-bottom:none;">
+                        <div class="notif-prefs-item-info">
+                            <div class="notif-prefs-item-label"><i class="fa-solid fa-broom me-1" style="color:#6f42c1;"></i>Archive read notifications automatically</div>
+                            <div class="notif-prefs-item-sub">Read, not starred notifications older than this leave the inbox (still in Archive and search)</div>
+                        </div>
+                        <select class="form-select form-select-sm" style="width:auto;" v-model.number="prefs.auto_archive_days" @change="savePrefs">
+                            <option :value="0">Never</option><option :value="7">After 7 days</option><option :value="14">After 14 days</option>
+                            <option :value="30">After 30 days</option><option :value="90">After 90 days</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Per type: every kind of notification, on / off -->
+                <div class="notif-prefs-section">
+                    <div class="notif-prefs-section-header"><i class="fa-solid fa-list-check me-2" style="color:#0d6efd;"></i>Every kind of notification</div>
+                    <p class="text-muted px-4 mb-2" style="font-size:.78rem;">Turn off exactly what you don't want — the toggles below the list cover whole groups.</p>
+                    <div class="ibx-mute-grid px-4 pb-3">
+                        <label v-for="o in TYPE_OPTIONS" :key="o.key" class="ibx-mute" :class="{ 'is-off': isMuted(o) }">
+                            <input type="checkbox" class="form-check-input" :checked="!isMuted(o)" @change="toggleMute(o)">
+                            <i :class="o.icon"></i><span>[[ o.label ]]</span>
+                        </label>
+                    </div>
+                </div>
+
                 <!-- Section: Follow-based -->
                 <div class="notif-prefs-section">
                     <div class="notif-prefs-section-header">
@@ -735,52 +550,31 @@ mark.notif-search-hit {
                         </div>
                     </div>
                 </div>
-
-                <!-- Save feedback -->
-                <div v-if="prefsSaved" class="px-4 py-2 text-success"
-                     style="font-size:.82rem;border-top:1px solid var(--border-color);">
+                <div v-if="prefsSaved" class="px-4 py-2 text-success" style="font-size:.82rem;border-top:1px solid var(--border-color);">
                     <i class="fa-solid fa-circle-check me-1"></i>Preferences saved
                 </div>
             </template>
         </div>
-    </div><!-- end #prefs tab -->
-
+    </div>
 </div>
 {% endblock %}
 
 {% block script %}
 <script type="module">
-import RzPagination from '/static/js/rule/paginationComponent.js'
 import { create_message } from '/static/js/toaster.js'
 
-const { createApp, ref, computed, onMounted } = Vue
+const { createApp, ref, reactive, computed, onMounted, onUnmounted, nextTick } = Vue
 const IS_ADMIN = {{ current_user.is_admin() | tojson }}
 
 function csrf() { return document.getElementById('csrf_token')?.value || '' }
-
-async function apiFetch(url, opts = {}) {
-    const headers = { 'X-CSRFToken': csrf(), ...(opts.headers || {}) }
-    const res = await fetch(url, { ...opts, headers })
-    if (!res.ok) return null
-    return res.json()
+async function api(url, opts = {}) {
+    const res = await fetch(url, { ...opts, headers: { 'X-CSRFToken': csrf(), 'Content-Type': 'application/json', ...(opts.headers || {}) } })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) { create_message((data && data.message) || 'Something went wrong.', 'danger-subtle'); return null }
+    return data
 }
 
-function relativeTime(isoStr) {
-    if (!isoStr) return ''
-    try {
-        if (window.dayjs) return dayjs.utc(isoStr).fromNow()
-        const diff = Math.floor((Date.now() - new Date(isoStr + 'Z').getTime()) / 1000)
-        if (diff < 60)    return 'just now'
-        if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`
-        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-        return `${Math.floor(diff / 86400)}d ago`
-    } catch { return '' }
-}
-
-// Each option is a logical category mapped to every backend `notif_type` string
-// it covers — notifications that get rewritten in place on completion (jobs,
-// sessions, workflow runs) must list every state, otherwise they silently drop
-// out of the filtered view as soon as their status changes.
+// Each category maps to every backend notif_type it covers (jobs, sessions… are rewritten in place)
 const TYPE_OPTIONS = [
     { key: 'new_rule',            label: 'New Rules',              icon: 'fa-solid fa-shield-halved',     types: ['new_rule'] },
     { key: 'follow_new_bundle',   label: 'New Bundles',            icon: 'fa-solid fa-layer-group',       types: ['follow_new_bundle'] },
@@ -810,7 +604,6 @@ const TYPE_OPTIONS = [
     { key: 'workflows',           label: 'Workflows',              icon: 'fa-solid fa-diagram-project',   types: ['workflow_run_started', 'workflow_run_finished', 'workflow_run_failed'] },
     { key: 'report_submitted',    label: 'Reports',                icon: 'fa-solid fa-triangle-exclamation', types: ['report_submitted'] },
 ]
-
 const DEFAULT_PREFS = {
     follow_new_rule: true, follow_new_bundle: true, follow_new_comment: false,
     rule_comment: true, bundle_comment: true, comment_reply: true,
@@ -818,248 +611,272 @@ const DEFAULT_PREFS = {
     proposal_comment: true, proposal_accepted: true,
     blog_published: true, sync_run_finished: true, background_jobs: true,
     workflow_runs: true, alerts: true, favorite_rule_update: true, bundle_fork: true,
+    muted_types: [], auto_archive_days: 0,
 }
+const FOLDERS = [
+    { key: 'inbox', label: 'Inbox', icon: 'fa-solid fa-inbox' },
+    { key: 'unread', label: 'Unread', icon: 'fa-solid fa-envelope' },
+    { key: 'starred', label: 'Starred', icon: 'fa-solid fa-star' },
+    { key: 'archived', label: 'Archive', icon: 'fa-solid fa-box-archive' },
+    { key: 'all', label: 'All notifications', icon: 'fa-solid fa-layer-group' },
+]
+const LABEL_COLORS = ['#0d6efd', '#6f42c1', '#d63384', '#dc3545', '#fd7e14', '#ffc107', '#198754', '#20c997', '#0dcaf0', '#6c757d']
 
 createApp({
     delimiters: ['[[', ']]'],
-    components: { RzPagination },
-    directives: {
-        clickOutside: {
-            mounted(el, binding) {
-                el._clickOutsideHandler = e => { if (!el.contains(e.target)) binding.value(e) }
-                document.addEventListener('click', el._clickOutsideHandler)
-            },
-            unmounted(el) { document.removeEventListener('click', el._clickOutsideHandler) },
-        },
-    },
     setup() {
-        const notifications = ref([])
-        const loading       = ref(true)
-        const currentPage   = ref(1)
-        const totalPages    = ref(1)
-        const totalCount    = ref(0)
-        const unreadCount   = ref(0)
-        const unreadOnly    = ref(false)
-        const activeTypes   = ref([])    // multi-select
-        const dropdownOpen  = ref(false)
-        const searchQuery   = ref('')
-        const dateFrom      = ref('')
-        const dateTo        = ref('')
-        const groupByType   = ref(false)
-        let   searchTimer   = null
+        const mainTab = ref('inbox')
+        const folder = ref('inbox'), labelId = ref(null), category = ref(null)
+        const notifications = ref([]), loading = ref(true)
+        const page = ref(1), pages = ref(1), total = ref(0), perPage = 25
+        const counts = ref({ inbox: 0, unread: 0, starred: 0, archived: 0, all: 0, unread_by_type: {}, labels: [] })
+        const search = ref(''), sideOpen = ref(false), showAllCats = ref(false)
+        const selected = ref(new Set()), allMatching = ref(false), matchingIds = ref([])
+        const opened = ref(null), cursor = ref(-1)
+        const labelForm = reactive({ open: false, id: null, name: '', color: LABEL_COLORS[0] })
+        const labelInput = ref(null), searchInput = ref(null)
+        let searchTimer = null
 
-        const mainTab      = ref('notifs')
-        const isAdmin      = ref(IS_ADMIN)
-        const prefs        = ref({ ...DEFAULT_PREFS })
-        const prefsLoading = ref(false)
-        const prefsSaved   = ref(false)
-        let   prefsSaveTimer = null
-
-        // ── Type filter helpers ──────────────────────────────────────────────
-        function typeIcon(key)  { return TYPE_OPTIONS.find(o => o.key === key)?.icon || '' }
-        function typeLabel(key) { return TYPE_OPTIONS.find(o => o.key === key)?.label || key }
-
-        function toggleType(key) {
-            const idx = activeTypes.value.indexOf(key)
-            if (idx === -1) activeTypes.value.push(key)
-            else activeTypes.value.splice(idx, 1)
-            loadPage(1)
-        }
-        function removeType(key) {
-            activeTypes.value = activeTypes.value.filter(k => k !== key)
-            loadPage(1)
-        }
-        function closeDropdown() { dropdownOpen.value = false }
-
-        // ── Search / date / group helpers ──────────────────────────────────────
-        function onSearchInput() {
-            clearTimeout(searchTimer)
-            searchTimer = setTimeout(() => loadPage(1), 400)
-        }
-
-        function escapeHtml(str) {
-            return String(str).replace(/[&<>"']/g, c => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-            }[c]))
-        }
-        function escapeRegExp(str) {
-            return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        }
-        // Escapes the text first, then wraps matches of the (also escaped)
-        // query in <mark> — safe against injection since every character that
-        // reaches the DOM either came through escapeHtml or is a literal tag
-        // we wrote ourselves.
-        function highlightText(text) {
-            const safe = escapeHtml(text || '')
-            const q = searchQuery.value.trim()
-            if (!q) return safe
-            const re = new RegExp(escapeRegExp(escapeHtml(q)), 'gi')
-            return safe.replace(re, m => `<mark class="notif-search-hit">${m}</mark>`)
-        }
-
-        const hasActiveFilters = computed(() =>
-            activeTypes.value.length > 0 || unreadOnly.value ||
-            !!searchQuery.value || !!dateFrom.value || !!dateTo.value
-        )
-
-        function clearFilters() {
-            activeTypes.value = []
-            unreadOnly.value  = false
-            searchQuery.value = ''
-            dateFrom.value    = ''
-            dateTo.value      = ''
-            loadPage(1)
-        }
-
-        // Flattens `notifications` into { notif, header } entries — `header` is
-        // set only on the first item of each type-category when groupByType is
-        // on, so the template can render one v-for with inline section headers
-        // instead of a nested loop.
-        const displayList = computed(() => {
-            if (!groupByType.value) return notifications.value.map(n => ({ notif: n, header: null }))
-            const counts = {}
-            for (const n of notifications.value) {
-                const key = TYPE_OPTIONS.find(o => o.types.includes(n.notif_type))?.key || n.notif_type
-                counts[key] = (counts[key] || 0) + 1
-            }
-            const seen = new Set()
-            return notifications.value.map(n => {
-                const opt = TYPE_OPTIONS.find(o => o.types.includes(n.notif_type))
-                const key = opt?.key || n.notif_type
-                let header = null
-                if (!seen.has(key)) {
-                    seen.add(key)
-                    header = { label: opt?.label || n.notif_type, icon: opt?.icon || 'fa-solid fa-bell', count: counts[key] }
-                }
-                return { notif: n, header }
-            })
+        // ── categories ──
+        const optOf = n => TYPE_OPTIONS.find(o => o.types.includes(n.notif_type))
+        const catKey = n => (optOf(n) || {}).key || 'other'
+        const catLabel = n => (optOf(n) || {}).label || 'Notification'
+        const catIcon = n => (optOf(n) || {}).icon || 'fa-solid fa-bell'
+        const categoriesWithItems = computed(() => {
+            const byType = counts.value.unread_by_type || {}
+            const list = TYPE_OPTIONS.map(o => ({ ...o, unread: o.types.reduce((s, t) => s + (byType[t] || 0), 0) }))
+            return showAllCats.value ? list : list.filter(c => c.unread || category.value === c.key)
         })
+        const whereLabel = computed(() => {
+            if (labelId.value) return (counts.value.labels.find(l => l.id === labelId.value) || {}).name || 'Label'
+            if (category.value) return (TYPE_OPTIONS.find(o => o.key === category.value) || {}).label || 'Category'
+            return (FOLDERS.find(f => f.key === folder.value) || {}).label
+        })
+        const folderCount = key => key === 'inbox' ? counts.value.unread : key === 'unread' ? counts.value.unread
+            : key === 'starred' ? counts.value.starred : 0
 
-        // ── Data loading ─────────────────────────────────────────────────────
-        async function loadPage(page = 1) {
+        // ── loading ──
+        function params(p, withIds = false) {
+            const q = new URLSearchParams({ folder: category.value ? 'all' : folder.value, page: p, per_page: perPage })
+            if (labelId.value) q.set('label', labelId.value)
+            if (category.value) q.set('types', (TYPE_OPTIONS.find(o => o.key === category.value) || { types: [] }).types.join(','))
+            if (search.value.trim()) q.set('search', search.value.trim())
+            if (withIds) q.set('with_ids', '1')
+            return q
+        }
+        async function load(p = 1, keepSelection = false) {
             loading.value = true
-            currentPage.value = page
-            const params = new URLSearchParams({ page, per_page: 20, unread_only: unreadOnly.value })
-            // Each selected category can map to several backend notif_type values
-            // (e.g. "Jobs" -> job_created/job_finished/job_failed) — flatten them
-            // all into the single comma-separated `type` param the backend expects.
-            const notifTypes = activeTypes.value.flatMap(key => TYPE_OPTIONS.find(o => o.key === key)?.types || [])
-            if (notifTypes.length) params.set('type', notifTypes.join(','))
-            if (searchQuery.value.trim()) params.set('search', searchQuery.value.trim())
-            if (dateFrom.value) params.set('date_from', dateFrom.value)
-            if (dateTo.value)   params.set('date_to', dateTo.value)
-            const data = await apiFetch(`/notifications/list?${params}`)
-            if (data) {
-                notifications.value = data.notifications
-                totalPages.value    = data.pages
-                totalCount.value    = data.total
-                unreadCount.value   = data.unread_count
-            }
+            const data = await api(`/notifications/inbox?${params(p)}`)
             loading.value = false
+            if (!data) return
+            notifications.value = data.notifications
+            page.value = data.page; pages.value = data.pages || 1; total.value = data.total
+            counts.value = data.counts
+            if (!keepSelection) { selected.value = new Set(); allMatching.value = false }
+            if (opened.value) opened.value = notifications.value.find(n => n.id === opened.value.id) || opened.value
+            cursor.value = Math.min(cursor.value, notifications.value.length - 1)
+        }
+        function reset() { opened.value = null; cursor.value = -1; sideOpen.value = false; load(1) }
+        function openFolder(f) { folder.value = f; labelId.value = null; category.value = null; reset() }
+        function openLabel(id) { labelId.value = id; category.value = null; folder.value = 'all'; reset() }
+        function openCategory(key) { category.value = category.value === key ? null : key; labelId.value = null; reset() }
+        function onSearch() { clearTimeout(searchTimer); searchTimer = setTimeout(() => load(1), 350) }
+
+        // ── selection ──
+        const allSelected = computed(() => notifications.value.length > 0 && notifications.value.every(n => selected.value.has(n.id)))
+        const someSelected = computed(() => selected.value.size > 0)
+        function toggle(id) { const s = new Set(selected.value); s.has(id) ? s.delete(id) : s.add(id); selected.value = s; allMatching.value = false }
+        function toggleAll() {
+            selected.value = allSelected.value ? new Set() : new Set(notifications.value.map(n => n.id))
+            allMatching.value = false
+        }
+        async function selectAllMatching() {
+            const data = await api(`/notifications/inbox?${params(1, true)}`)
+            if (data && data.matching_ids) { selected.value = new Set(data.matching_ids); allMatching.value = true }
         }
 
-        // ── Actions ──────────────────────────────────────────────────────────
-        async function markRead(notif) {
-            if (notif.is_read) return
-            await apiFetch(`/notifications/${notif.id}/read`, { method: 'POST' })
-            notif.is_read = true
-            if (unreadCount.value > 0) unreadCount.value--
+        // ── actions ──
+        const UNDO_LABEL = { archive: 'Archived', delete: 'Deleted', read: 'Marked read', unread: 'Marked unread',
+                             star: 'Starred', unstar: 'Unstarred', unarchive: 'Moved to inbox' }
+        async function run(ids, action, label_id) {
+            if (!ids.length) return false
+            if (action === 'delete' && ids.length > 1 && !confirm(`Delete ${ids.length} notifications? This cannot be undone.`)) return false
+            const data = await api('/notifications/bulk', { method: 'POST', body: JSON.stringify({ ids, action, label_id }) })
+            if (!data) return false
+            counts.value = data.counts
+            if (UNDO_LABEL[action] && ids.length > 1) create_message(`${UNDO_LABEL[action]}: ${data.changed}`, 'success-subtle')
+            return true
+        }
+        async function act(list, action) {
+            const ok = await run(list.map(n => n.id), action)
+            if (!ok) return
+            const leaves = (action === 'archive' && folder.value !== 'archived' && folder.value !== 'all')
+                || (action === 'unarchive' && folder.value === 'archived') || action === 'delete'
+                || (action === 'read' && folder.value === 'unread') || (action === 'unstar' && folder.value === 'starred')
+            for (const n of list) {
+                if (action === 'read') n.is_read = true
+                if (action === 'unread') n.is_read = false
+                if (action === 'star') n.is_starred = true
+                if (action === 'unstar') n.is_starred = false
+                if (action === 'archive') { n.is_archived = true; n.is_read = true }
+                if (action === 'unarchive') n.is_archived = false
+            }
+            if (leaves) {
+                const gone = new Set(list.map(n => n.id))
+                notifications.value = notifications.value.filter(n => !gone.has(n.id))
+                total.value = Math.max(0, total.value - gone.size)
+                if (opened.value && gone.has(opened.value.id)) opened.value = null
+                if (!notifications.value.length && page.value > 1) load(page.value - 1)
+            }
+        }
+        async function bulk(action) {
+            const ids = [...selected.value]
+            if (allMatching.value || ids.some(id => !notifications.value.find(n => n.id === id))) {
+                if (await run(ids, action)) load(page.value)
+                return
+            }
+            await act(notifications.value.filter(n => selected.value.has(n.id)), action)
+            selected.value = new Set()
+        }
+        async function markFolderRead() {
+            const data = await api(`/notifications/inbox?${params(1, true)}`)
+            if (data && data.matching_ids && data.matching_ids.length && await run(data.matching_ids, 'read')) load(page.value)
+        }
+        function open(n, i) {
+            opened.value = n; cursor.value = i
+            if (!n.is_read) act([n], 'read')
         }
 
-        async function markAllRead() {
-            await apiFetch('/notifications/read_all', { method: 'POST' })
-            notifications.value.forEach(n => { n.is_read = true })
-            unreadCount.value = 0
-            create_message('All notifications marked as read.', 'success-subtle')
+        // ── labels ──
+        const hasLabel = (n, l) => !!(n && n.labels.find(x => x.id === l.id))
+        async function toggleLabel(n, l) {
+            const add = !hasLabel(n, l)
+            if (await run([n.id], add ? 'label_add' : 'label_remove', l.id)) {
+                n.labels = add ? [...n.labels, { id: l.id, name: l.name, color: l.color }].sort((a, b) => a.name.localeCompare(b.name))
+                               : n.labels.filter(x => x.id !== l.id)
+            }
         }
-
-        async function deleteNotif(notif) {
-            await apiFetch(`/notifications/${notif.id}`, { method: 'DELETE' })
-            notifications.value = notifications.value.filter(n => n.id !== notif.id)
-            if (!notif.is_read && unreadCount.value > 0) unreadCount.value--
-            totalCount.value = Math.max(0, totalCount.value - 1)
+        const selectionHasLabel = l => [...selected.value].length > 0 &&
+            notifications.value.filter(n => selected.value.has(n.id)).every(n => hasLabel(n, l))
+        async function toggleLabelOnSelection(l) {
+            const add = !selectionHasLabel(l)
+            if (await run([...selected.value], add ? 'label_add' : 'label_remove', l.id)) load(page.value, true)
         }
-
-        async function deleteAll() {
-            if (!confirm('Delete all your notifications? This cannot be undone.')) return
-            const ok = await apiFetch('/notifications/delete_all', { method: 'DELETE' })
-            if (ok) {
-                notifications.value = []
-                totalCount.value  = 0
-                unreadCount.value = 0
-                totalPages.value  = 1
-                currentPage.value = 1
-                create_message('All notifications deleted.', 'success-subtle')
-            } else {
-                create_message('Failed to delete notifications.', 'danger-subtle')
+        async function startLabel(l) {
+            Object.assign(labelForm, l ? { open: true, id: l.id, name: l.name, color: l.color }
+                                         : { open: true, id: null, name: '', color: LABEL_COLORS[counts.value.labels.length % LABEL_COLORS.length] })
+            await nextTick(); labelInput.value && labelInput.value.focus()
+        }
+        async function saveLabel() {
+            const body = JSON.stringify({ name: labelForm.name, color: labelForm.color })
+            const data = labelForm.id ? await api(`/notifications/labels/${labelForm.id}`, { method: 'POST', body })
+                                      : await api('/notifications/labels', { method: 'POST', body })
+            if (data) { labelForm.open = false; load(page.value, true) }
+        }
+        async function deleteLabel(id) {
+            if (!confirm('Delete this label? The notifications stay, only the label goes.')) return
+            if (await api(`/notifications/labels/${id}`, { method: 'DELETE' })) {
+                labelForm.open = false
+                if (labelId.value === id) openFolder('inbox'); else load(page.value, true)
             }
         }
 
-        // ── Progress helpers ─────────────────────────────────────────────────
-        function progressFillClass(notif) {
-            if (notif.job_status === 'done')   return 'notif-progress__fill--done'
-            if (notif.job_status === 'failed') return 'notif-progress__fill--failed'
-            if (!notif.job_progress)           return 'notif-progress__fill--indeterminate'
-            return ''
+        // ── display helpers ──
+        const esc = s => String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+        function highlight(text) {
+            const safe = esc(text), q = search.value.trim()
+            if (!q) return safe
+            return safe.replace(new RegExp(esc(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), m => `<mark class="notif-search-hit">${m}</mark>`)
         }
-        function progressWidth(notif) {
-            if (notif.job_status === 'done') return '100%'
-            if (!notif.job_progress)         return null
-            return `${notif.job_progress}%`
+        const asDate = iso => new Date(/Z$|[+-]\d\d:\d\d$/.test(iso || '') ? iso : (iso || '') + 'Z')
+        function shortDate(iso) {
+            const d = asDate(iso), now = new Date()
+            if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+            if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+            return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+        }
+        const fullDate = iso => asDate(iso).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })
+        function progressFillClass(n) {
+            if (n.job_status === 'done') return 'notif-progress__fill--done'
+            if (n.job_status === 'failed') return 'notif-progress__fill--failed'
+            return n.job_progress ? '' : 'notif-progress__fill--indeterminate'
+        }
+        const progressWidth = n => n.job_status === 'done' ? '100%' : (n.job_progress ? `${n.job_progress}%` : null)
+
+        // ── keyboard, like a mail client ──
+        function onKey(e) {
+            if (mainTab.value !== 'inbox' || e.target.closest('input, textarea, select, [contenteditable]')) return
+            const list = notifications.value, cur = list[cursor.value]
+            if (e.key === 'j') { cursor.value = Math.min(cursor.value + 1, list.length - 1) }
+            else if (e.key === 'k') { cursor.value = Math.max(cursor.value - 1, 0) }
+            else if (e.key === 'Enter' && cur) { open(cur, cursor.value) }
+            else if (e.key === 'x' && cur) { toggle(cur.id) }
+            else if (e.key === 's' && cur) { act([cur], cur.is_starred ? 'unstar' : 'star') }
+            else if (e.key === 'e') { selected.value.size ? bulk(folder.value === 'archived' ? 'unarchive' : 'archive') : cur && act([cur], cur.is_archived ? 'unarchive' : 'archive') }
+            else if (e.key === '#') { selected.value.size ? bulk('delete') : cur && act([cur], 'delete') }
+            else if (e.key === 'U' && e.shiftKey) { selected.value.size ? bulk('unread') : cur && act([cur], 'unread') }
+            else if (e.key === 'I' && e.shiftKey) { selected.value.size ? bulk('read') : cur && act([cur], 'read') }
+            else if (e.key === '/') { e.preventDefault(); searchInput.value && searchInput.value.focus() }
+            else if (e.key === 'Escape') { opened.value = null }
+            else return
+            e.preventDefault()
         }
 
-        // ── Preferences ──────────────────────────────────────────────────────
+        // ── preferences ──
+        const prefs = ref({ ...DEFAULT_PREFS }), prefsLoading = ref(false), prefsSaved = ref(false)
+        let prefsTimer = null
         async function loadPrefs() {
-            if (prefsLoading.value) return
             prefsLoading.value = true
-            const data = await apiFetch('/notifications/preferences')
+            const data = await api('/notifications/preferences')
             if (data) prefs.value = { ...DEFAULT_PREFS, ...data }
             prefsLoading.value = false
         }
-
-        async function savePrefs() {
-            clearTimeout(prefsSaveTimer)
-            prefsSaveTimer = setTimeout(async () => {
-                const data = await apiFetch('/notifications/preferences', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
-                    body: JSON.stringify(prefs.value),
-                })
-                if (data?.ok) {
-                    prefsSaved.value = true
-                    setTimeout(() => { prefsSaved.value = false }, 2500)
-                    create_message('Preferences saved.', 'success-subtle')
-                }
-            }, 400)
+        function savePrefs() {
+            clearTimeout(prefsTimer)
+            prefsTimer = setTimeout(async () => {
+                const data = await api('/notifications/preferences', { method: 'POST', body: JSON.stringify(prefs.value) })
+                if (data && data.ok) { prefsSaved.value = true; setTimeout(() => { prefsSaved.value = false }, 2500) }
+            }, 350)
         }
-
         async function resetPrefs() {
             if (!confirm('Reset all notification preferences to their default values?')) return
             prefs.value = { ...DEFAULT_PREFS }
-            clearTimeout(prefsSaveTimer)
-            const data = await apiFetch('/notifications/preferences', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
-                body: JSON.stringify(prefs.value),
-            })
-            if (data?.ok) {
-                create_message('Preferences reset to default.', 'success-subtle')
-            } else {
-                create_message('Failed to reset preferences.', 'danger-subtle')
-            }
+            const data = await api('/notifications/preferences', { method: 'POST', body: JSON.stringify(prefs.value) })
+            if (data && data.ok) create_message('Preferences reset to default.', 'success-subtle')
+        }
+        const isMuted = o => o.types.every(t => (prefs.value.muted_types || []).includes(t))
+        function toggleMute(o) {
+            const muted = new Set(prefs.value.muted_types || [])
+            if (isMuted(o)) o.types.forEach(t => muted.delete(t)); else o.types.forEach(t => muted.add(t))
+            prefs.value.muted_types = [...muted]
+            savePrefs()
         }
 
-        onMounted(() => loadPage(1))
+        onMounted(() => {
+            // The shared menu (macros/mailbox_nav.html): Inbox / Preferences switch here without a reload
+            const showTab = tab => {
+                mainTab.value = tab
+                if (tab === 'prefs') loadPrefs()
+                document.querySelectorAll('[data-mailbox-tab]').forEach(a => a.classList.toggle('active', a.dataset.mailboxTab === tab))
+            }
+            document.querySelectorAll('[data-mailbox-tab]').forEach(a => a.addEventListener('click', e => {
+                e.preventDefault(); showTab(a.dataset.mailboxTab); history.replaceState(null, '', a.href)
+            }))
+            showTab({{ active_tab | default('inbox') | tojson }})
+            load(1)
+            document.addEventListener('keydown', onKey)
+        })
+        onUnmounted(() => document.removeEventListener('keydown', onKey))
 
         return {
-            notifications, loading, currentPage, totalPages, totalCount,
-            unreadCount, unreadOnly, activeTypes, dropdownOpen,
-            searchQuery, dateFrom, dateTo, groupByType, displayList, hasActiveFilters,
-            TYPE_OPTIONS, mainTab, isAdmin, prefs, prefsLoading, prefsSaved,
-            loadPage, markRead, markAllRead, deleteNotif, deleteAll,
-            loadPrefs, savePrefs, resetPrefs, onSearchInput, clearFilters, highlightText,
-            progressFillClass, progressWidth, relativeTime,
-            toggleType, removeType, closeDropdown, typeIcon, typeLabel,
+            mainTab, FOLDERS, LABEL_COLORS, TYPE_OPTIONS, folder, labelId, category, notifications, loading,
+            page, pages, total, perPage, counts, search, sideOpen, showAllCats, selected, allMatching, opened, cursor,
+            labelForm, labelInput, searchInput, categoriesWithItems, whereLabel, folderCount, allSelected, someSelected,
+            load, openFolder, openLabel, openCategory, onSearch, toggle, toggleAll, selectAllMatching, act, bulk,
+            markFolderRead, open, hasLabel, toggleLabel, selectionHasLabel, toggleLabelOnSelection, startLabel,
+            saveLabel, deleteLabel, catKey, catLabel, catIcon, highlight, shortDate, fullDate,
+            progressFillClass, progressWidth, isAdmin: ref(IS_ADMIN),
+            prefs, prefsLoading, prefsSaved, loadPrefs, savePrefs, resetPrefs, isMuted, toggleMute,
         }
     },
 }).mount('#notif-page-app')

@@ -1,0 +1,13 @@
+{# One menu for the notifications inbox, the alerts and the notification preferences
+   (notification/notifications.html, alert/*.html) — active: 'inbox' | 'alerts' | 'prefs' #}
+{% macro mailbox_nav(active) %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<nav class="dr-nav mb-4" aria-label="Notifications and alerts">
+    <a href="{{ url_for('notification.page_notifications') }}" class="dr-nav__item{% if active == 'inbox' %} active{% endif %}" data-mailbox-tab="inbox">
+        <i class="fa-solid fa-inbox"></i><span>Inbox</span></a>
+    <a href="{{ url_for('alert.list_alerts') }}" class="dr-nav__item{% if active == 'alerts' %} active{% endif %}">
+        <i class="fa-solid fa-satellite-dish"></i><span>Alerts</span></a>
+    <a href="{{ url_for('notification.page_notifications', tab='prefs') }}" class="dr-nav__item{% if active == 'prefs' %} active{% endif %}" data-mailbox-tab="prefs">
+        <i class="fa-solid fa-sliders"></i><span>Preferences</span></a>
+</nav>
+{% endmacro %}

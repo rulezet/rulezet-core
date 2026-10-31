@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/mailbox_nav.html' as mbx %}
 {% set page_title = (alert.name if is_edit else 'New alert') %}
 {% block title %}{{ page_title }} — Alerts — Rulezet{% endblock %}
 
@@ -36,6 +37,7 @@
       {% if is_edit %}Refine what this alert watches and how it reaches you.{% else %}Choose what to watch — the preview on the right shows what it would have caught over the last 30 days.{% endif %}
     </p>
   </div>
+  {{ mbx.mailbox_nav('alerts') }}
 
   <alert-form
     :initial="initial"

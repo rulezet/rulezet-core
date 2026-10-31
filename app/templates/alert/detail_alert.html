@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/mailbox_nav.html' as mbx %}
 {% block title %}{{ alert.name }} — Alerts — Rulezet{% endblock %}
 
 {% block head %}
@@ -32,6 +33,7 @@
       Everything this alert caught, most recent first.
     </p>
   </div>
+  {{ mbx.mailbox_nav('alerts') }}
 
   <!-- Main card -->
   <div class="card h-100 border-0 card_detail border-top shadow-lg position-relative mb-4" style="border-radius:12px;">

@@ -28,6 +28,7 @@ Public surface:
 """
 
 import datetime
+import json
 
 from app import db
 from app.core.db_class.job import BackgroundJob
@@ -72,6 +73,16 @@ def update_preference(user_id, prefs_dict):
     try:
         pref = _get_pref(user_id)
         for key, val in prefs_dict.items():
+            if key == 'muted_types':            # notification types never created for this user
+                if isinstance(val, list):
+                    pref.muted_types = json.dumps(sorted({str(v)[:32] for v in val if isinstance(v, str)})[:200])
+                continue
+            if key == 'auto_archive_days':      # read notifications archived after N days, 0 = never
+                try:
+                    pref.auto_archive_days = max(0, min(int(val or 0), 3650))
+                except (TypeError, ValueError):
+                    pass
+                continue
             attr = f'pref_{key}'
             if hasattr(pref, attr):
                 setattr(pref, attr, bool(val))

@@ -2,6 +2,18 @@
 """
 from app import db
 import datetime
+import json
+
+from sqlalchemy import event
+from sqlalchemy.orm import Session
+
+
+# A notification can carry any of its owner's labels (the inbox's "Labels")
+notification_label_link = db.Table(
+    'notification_label_link',
+    db.Column('notification_id', db.Integer, db.ForeignKey('notification.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('label_id', db.Integer, db.ForeignKey('notification_label.id', ondelete='CASCADE'), primary_key=True),
+)
 
 
 ########################################
@@ -43,9 +55,14 @@ class Notification(db.Model):
     created_at  = db.Column(db.DateTime, nullable=False,
                             default=datetime.datetime.utcnow, index=True)
     read_at     = db.Column(db.DateTime, nullable=True)
+    # Inbox (like an email box): starred, archived (out of the inbox, still searchable), labels
+    is_starred  = db.Column(db.Boolean, nullable=False, default=False, server_default='false', index=True)
+    is_archived = db.Column(db.Boolean, nullable=False, default=False, server_default='false', index=True)
 
     user = db.relationship('User', backref=db.backref('notifications', lazy='dynamic',
                                                       cascade='all, delete-orphan'))
+    labels = db.relationship('NotificationLabel', secondary=notification_label_link, lazy='selectin',
+                             order_by='NotificationLabel.name')
 
     def is_job_active(self):
         return self.notif_type in ('job_created', 'job_finished') and \
@@ -63,6 +80,9 @@ class Notification(db.Model):
             'job_status':   self.job_status,
             'job_progress': self.job_progress,
             'is_read':      self.is_read,
+            'is_starred':   bool(self.is_starred),
+            'is_archived':  bool(self.is_archived),
+            'labels':       [{'id': l.id, 'name': l.name, 'color': l.color} for l in self.labels],
             'is_job_active': self.is_job_active(),
             'created_at':   self.created_at.strftime('%Y-%m-%dT%H:%M:%SZ'),
         }
@@ -117,6 +137,18 @@ class NotificationPreference(db.Model):
     # Bundle forks: my bundle was forked, merge requests on my bundles / from my forks
     pref_bundle_fork = db.Column(db.Boolean, nullable=False, default=True)
 
+    # Fine-grained: notification types never created for this user (JSON list of notif_type), and the
+    # read notifications archived automatically after N days (0 = never)
+    muted_types       = db.Column(db.Text, nullable=True)
+    auto_archive_days = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+
+    def muted(self) -> set:
+        try:
+            value = json.loads(self.muted_types or '[]')
+            return {str(v) for v in value} if isinstance(value, list) else set()
+        except (TypeError, ValueError):
+            return set()
+
     user = db.relationship('User', backref=db.backref(
         'notification_preference', uselist=False, cascade='all, delete-orphan'))
 
@@ -140,4 +172,41 @@ class NotificationPreference(db.Model):
             'alerts':             self.pref_alerts,
             'favorite_rule_update': self.pref_favorite_rule_update,
             'bundle_fork':        self.pref_bundle_fork,
+            'muted_types':        sorted(self.muted()),
+            'auto_archive_days':  self.auto_archive_days or 0,
         }
+
+
+
+class NotificationLabel(db.Model):
+    """A user's own label for their notifications (name + colour), like an email label."""
+    __tablename__ = 'notification_label'
+    __table_args__ = (db.UniqueConstraint('user_id', 'name', name='uq_notification_label_user_name'),)
+
+    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    name       = db.Column(db.String(40), nullable=False)
+    color      = db.Column(db.String(7), nullable=False, default='#0d6efd')
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    def to_json(self, count=None):
+        out = {'id': self.id, 'name': self.name, 'color': self.color}
+        if count is not None:
+            out['count'] = count
+        return out
+
+
+@event.listens_for(Session, 'before_flush')
+def _drop_muted_notifications(session, flush_context, instances):
+    """A notification of a type its user muted (Notifications › Preferences) is never created — from
+    every place that creates one, without changing each of them."""
+    new = [o for o in session.new if isinstance(o, Notification)]
+    if not new:
+        return
+    with session.no_autoflush:
+        ids = {n.user_id for n in new if n.user_id}
+        prefs = {p.user_id: p.muted() for p in session.query(NotificationPreference)
+                 .filter(NotificationPreference.user_id.in_(ids)).all()} if ids else {}
+    for n in new:
+        if n.notif_type in prefs.get(n.user_id, ()):
+            session.expunge(n)
