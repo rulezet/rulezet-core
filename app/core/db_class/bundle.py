@@ -2,6 +2,8 @@
 """
 from app import db
 import datetime
+
+from sqlalchemy.dialects.postgresql import JSONB
 import json
 
 
@@ -42,7 +44,8 @@ class Bundle(db.Model):
     # Forks (docs/future/bundle_forks.md, app/features/bundle/bundle_fork_core.py)
     forked_from_id     = db.Column(db.Integer, db.ForeignKey('bundle.id', ondelete='SET NULL'), nullable=True, index=True)
     forked_from_uuid   = db.Column(db.String(255), nullable=True, index=True)   # kept if the upstream disappears
-    fork_base_snapshot = db.Column(db.JSON, nullable=True)      # common ancestor with the upstream (hashes only)
+    # JSONB on PostgreSQL: plain JSON has no equality operator and breaks every SELECT DISTINCT on bundles
+    fork_base_snapshot = db.Column(db.JSON().with_variant(JSONB(), 'postgresql'), nullable=True)  # common ancestor (hashes)
     fork_base_at       = db.Column(db.DateTime, nullable=True)  # last fork / sync / merge with the upstream
     accepts_proposals  = db.Column(db.Boolean, nullable=False, default=True, server_default='1')  # merge requests open to others
 
