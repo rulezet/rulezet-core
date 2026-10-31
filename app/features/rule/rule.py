@@ -1293,9 +1293,12 @@ def detail_rule_ai_analysis_list(rule_id):
     if not (current_user.is_authenticated and (current_user.is_admin() or current_user.has_permission('ai.manage'))):
         q = q.filter_by(is_public=True)
     items = q.order_by(AIGeneration.created_at.desc()).limit(50).all()
+    from app.features.ai.ai_provenance import provenance
+    rule = RuleModel.get_rule(rule_id)
     out = []
     for a in items:
         row = a.to_json()
+        row['provenance'] = provenance(a, rule)        # who / what / which revision / outdated (#88)
         if not a.is_public:
             # to_json() blanks private entries — only AI managers get here
             # with private rows (filtered above), and they need the text.
@@ -1315,18 +1318,37 @@ def detail_rule_ai_analysis_request(rule_id):
     if not rule or rule.is_deleted:
         return jsonify({"message": "Rule not found."}), 404
     can_launch = AIRequest.can_launch(current_user, 'rule')
+    allowed, why_not = AIRequest.can_request(current_user, 'rule', rule)
     if request.method == 'GET':
+        from app.features.ai.ai_provenance import content_hash, effective_execution
         uid = current_user.id if current_user.is_authenticated else None
+        current = content_hash(rule.to_string)
+
+        def row(r):
+            j = r.to_json()
+            return {"uuid": r.uuid, "script": r.script, "created_at": j["created_at"], "mine": r.user_id == uid,
+                    "user_name": j["user_name"], "approval": {"pending": "pending", "accepted": "approved",
+                                                              "rejected": "declined"}.get(r.status, r.status),
+                    "decided_by_name": j["decided_by_name"], "decided_at": j["decided_at"],
+                    "execution": effective_execution(r), "job_uuid": r.job_uuid,
+                    "revision": (r.content_hash or '')[:12] or None,
+                    "current_revision": r.content_hash == current if r.content_hash else None,
+                    "generation_id": r.generation_id}
         return jsonify({
             "can_launch": can_launch,
-            "can_request": current_user.is_authenticated and not can_launch,
-            "pending": [{"script": r.script, "created_at": r.created_at.isoformat(), "mine": r.user_id == uid,
-                         "user_name": r.to_json()["user_name"]} for r in AIRequest.pending_for('rule', rule.id)],
+            "can_request": allowed and not can_launch,
+            "why_not": None if allowed else why_not,
+            "launch_needs": "the ai.use permission (or an admin)",
+            "revision": current[:12],
+            "pending": [row(r) for r in AIRequest.active_for('rule', rule.id)],
+            "recent": [row(r) for r in AIRequest.recent_for('rule', rule.id, 8)] if current_user.is_authenticated else [],
         })
     if not current_user.is_authenticated:
         return jsonify({"message": "Log in to request an analysis."}), 401
     if can_launch:
         return jsonify({"message": "You can launch the analysis yourself."}), 400
+    if not allowed:
+        return jsonify({"message": why_not, "toast_class": "danger"}), 403
     data = json_object()
     ok, result, created = AIRequest.create_request('rule', rule.id, current_user,
                                                    script=data.get('script'), message=data.get('message'))
@@ -1337,7 +1359,7 @@ def detail_rule_ai_analysis_request(rule_id):
                      target_type="rule", target_id=rule.id, target_uuid=rule.uuid, is_public=False)
     return jsonify({"success": True, "created": created, "request": result.to_json(),
                     "message": "Request sent — the AI managers have been notified." if created
-                               else "This analysis was already requested — it is waiting for an AI manager.",
+                               else "This analysis of this version of the rule was already requested — it is waiting or running.",
                     "toast_class": "success"}), 201 if created else 200
 
 

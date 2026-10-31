@@ -285,6 +285,15 @@ class AIAnalysisRequest(db.Model):
     decided_at    = db.Column(db.DateTime, nullable=True)
     decision_note = db.Column(db.Text, nullable=True)
     job_uuid      = db.Column(db.String(36), nullable=True)
+    # The exact input asked about (issues #88 / #89): the rule's content when the request was made and
+    # its hash — the job analyses THIS, never a newer version (ai_provenance.py).
+    input_content    = db.Column(db.Text, nullable=True)
+    content_hash     = db.Column(db.String(64), nullable=True, index=True)
+    # Execution, separate from the approval (status): not_started | queued | running | completed | failed
+    execution_status = db.Column(db.String(16), nullable=False, default='not_started', server_default='not_started')
+    executed_at      = db.Column(db.DateTime, nullable=True)
+    generation_id    = db.Column(db.Integer, db.ForeignKey('ai_generation.id', ondelete='SET NULL', use_alter=True,
+                                                       name='fk_ai_analysis_request_generation'), nullable=True)
 
     user       = db.relationship('User', foreign_keys=[user_id])
     decided_by = db.relationship('User', foreign_keys=[decided_by_id])
@@ -315,6 +324,10 @@ class AIAnalysisRequest(db.Model):
             'decided_at': self.decided_at.isoformat() if self.decided_at else None,
             'decision_note': self.decision_note,
             'job_uuid': self.job_uuid,
+            'content_hash': self.content_hash,
+            'execution_status': self.execution_status,
+            'executed_at': self.executed_at.isoformat() if self.executed_at else None,
+            'generation_id': self.generation_id,
         }
 
 
@@ -346,8 +359,20 @@ class AIGeneration(db.Model):
     model      = db.Column(db.String(128), nullable=True)
     is_public  = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+    # Provenance (issue #88) — NULL on reports made before it was recorded ("not recorded", never guessed):
+    # the hash of the exact rule content analysed, the request and job it came from, and who asked,
+    # approved and started it. user_id stays "who the job ran as" (the approver, for a request).
+    content_hash     = db.Column(db.String(64), nullable=True)
+    request_id       = db.Column(db.Integer, db.ForeignKey('ai_analysis_request.id', ondelete='SET NULL'), nullable=True)
+    job_uuid         = db.Column(db.String(36), nullable=True)
+    requested_by_id  = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+    approved_by_id   = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+    initiated_by_id  = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
 
     user = db.relationship('User', foreign_keys=[user_id])
+    requested_by = db.relationship('User', foreign_keys=[requested_by_id])
+    approved_by = db.relationship('User', foreign_keys=[approved_by_id])
+    initiated_by = db.relationship('User', foreign_keys=[initiated_by_id])
     rule = db.relationship('Rule', foreign_keys=[rule_id])
     bundle = db.relationship('Bundle', foreign_keys=[bundle_id],
                              backref=db.backref('ai_generations', cascade='all, delete-orphan', passive_deletes=True))

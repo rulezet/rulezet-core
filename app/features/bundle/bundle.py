@@ -2632,18 +2632,32 @@ def bundle_ai_analysis_request(bundle_id):
     if err:
         return err
     can_launch = AIRequest.can_launch(current_user, 'bundle')
+    allowed, why_not = AIRequest.can_request(current_user, 'bundle', bundle)
     if request.method == 'GET':
+        from app.features.ai.ai_provenance import effective_execution
         uid = current_user.id if current_user.is_authenticated else None
+
+        def row(r):
+            j = r.to_json()
+            return {"uuid": r.uuid, "script": r.script, "created_at": j["created_at"], "mine": r.user_id == uid,
+                    "user_name": j["user_name"], "approval": {"pending": "pending", "accepted": "approved",
+                                                              "rejected": "declined"}.get(r.status, r.status),
+                    "decided_by_name": j["decided_by_name"], "decided_at": j["decided_at"],
+                    "execution": effective_execution(r), "job_uuid": r.job_uuid}
         return jsonify({
             "can_launch": can_launch,
-            "can_request": current_user.is_authenticated and not can_launch,
-            "pending": [{"script": r.script, "created_at": r.created_at.isoformat(), "mine": r.user_id == uid,
-                         "user_name": r.to_json()["user_name"]} for r in AIRequest.pending_for('bundle', bundle.id)],
+            "can_request": allowed and not can_launch,
+            "why_not": None if allowed else why_not,
+            "launch_needs": "the ai.manage permission (or an admin)",
+            "pending": [row(r) for r in AIRequest.active_for('bundle', bundle.id)],
+            "recent": [row(r) for r in AIRequest.recent_for('bundle', bundle.id, 8)] if current_user.is_authenticated else [],
         })
     if not current_user.is_authenticated:
         return jsonify({"message": "Log in to request an analysis."}), 401
     if can_launch:
         return jsonify({"message": "You can launch the analysis yourself."}), 400
+    if not allowed:
+        return jsonify({"message": why_not, "toast_class": "danger"}), 403
     data = request.get_json(silent=True) or {}
     ok, result, created = AIRequest.create_request('bundle', bundle.id, current_user,
                                                    script='full', message=data.get('message'))

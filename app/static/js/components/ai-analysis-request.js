@@ -3,20 +3,28 @@ import { create_message } from '/static/js/toaster.js';
 const { ref, computed, onMounted } = Vue;
 
 /**
- * AIAnalysisRequest — "Request an analysis" box of an AI Analysis section
- * with no report yet, for viewers who can't launch one themselves. A
- * logged-in user picks the analysis type and sends the request to the AI
- * managers; anonymous visitors are invited to log in. Shows the requests
- * already waiting. Renders nothing for someone who can launch the analysis.
+ * AIAnalysisRequest — the "Request an analysis" box of an AI Analysis section, for viewers who can't
+ * launch one themselves (issues #88 / #89). Shown with or without an existing report ("Request a new
+ * analysis"). Lists the requests with their approval (pending / approved / declined) and, separately,
+ * their execution (queued / running / completed / failed) — approved is not done. Explains why the
+ * viewer can't launch it directly, and why they can't request it when the instance limits requests to
+ * owners. Anonymous visitors are invited to log in. Renders nothing for someone who can launch it.
  *
  * Used on the rule AI Analysis page and in the bundle AI Analysis panel.
  *
  * Props:
- *   endpoint    GET → { can_launch, can_request, pending }, POST { script, message }
+ *   endpoint    GET → { can_launch, can_request, why_not, launch_needs, pending, recent }, POST { script, message }
  *   csrf-token
  *   scripts     [{ key, label, icon, desc }] — one entry = no type choice
  *   noun        "rule" | "bundle"
+ *   has-report  a report already exists → "Request a new analysis"
  */
+const APPROVAL = { pending: ['Waiting for approval', 'fa-hourglass-half', 'wait'], approved: ['Approved', 'fa-check', 'ok'],
+                   declined: ['Declined', 'fa-xmark', 'bad'] };
+const EXECUTION = { not_started: ['Not started', 'fa-circle', 'muted'], queued: ['Queued', 'fa-clock', 'wait'],
+                    running: ['Running', 'fa-spinner fa-spin', 'run'], completed: ['Report ready', 'fa-file-circle-check', 'ok'],
+                    failed: ['Failed — can be requested again', 'fa-triangle-exclamation', 'bad'] };
+
 const AIAnalysisRequest = {
     name: 'AIAnalysisRequest',
     delimiters: ['[[', ']]'],
@@ -25,6 +33,7 @@ const AIAnalysisRequest = {
         csrfToken: { type: String, required: true },
         scripts:   { type: Array, required: true },
         noun:      { type: String, default: 'rule' },
+        hasReport: { type: Boolean, default: false },
     },
     emits: ['requested'],
     setup(props, { emit }) {
@@ -41,9 +50,15 @@ const AIAnalysisRequest = {
             } catch { /* box stays hidden */ }
         }
 
-        const pendingFor = key => (state.value?.pending || []).filter(p => p.script === key);
         const scriptLabel = key => props.scripts.find(s => s.key === key)?.label || key;
-        const alreadyRequested = computed(() => pendingFor(script.value).length > 0);
+        // the same analysis of the current version is still to come → no second request
+        const alreadyRequested = computed(() => (state.value?.pending || []).some(
+            p => p.script === script.value && p.current_revision !== false));
+        const shown = computed(() => {
+            const recent = state.value?.recent || [];
+            const pending = state.value?.pending || [];
+            return [...pending, ...recent.filter(r => !pending.some(p => p.uuid === r.uuid))].slice(0, 6);
+        });
 
         async function send() {
             sending.value = true;
@@ -68,39 +83,58 @@ const AIAnalysisRequest = {
             }
         }
 
-        const fmt = ts => (ts ? new Date(ts).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
+        // dates with the viewer's time zone, never an ambiguous bare timestamp
+        const fmt = ts => (ts ? new Date(ts.endsWith('Z') || /[+-]\d\d:\d\d$/.test(ts) ? ts : ts + 'Z').toLocaleString(undefined,
+            { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }) : '');
         const loginUrl = '/account/login?next=' + encodeURIComponent(location.pathname + location.hash);
 
         onMounted(load);
-        return { state, script, message, sending, showForm, pendingFor, scriptLabel, alreadyRequested, send, fmt, loginUrl };
+        return { state, script, message, sending, showForm, scriptLabel, alreadyRequested, shown, send, fmt, loginUrl,
+                 APPROVAL, EXECUTION };
     },
     template: `
     <div v-if="state && !state.can_launch" class="aiq">
-        <!-- Already waiting -->
-        <div v-if="state.pending.length" class="aiq-pending">
-            <i class="fa-solid fa-hourglass-half"></i>
-            <div>
-                <div v-for="p in state.pending" :key="p.script + p.created_at">
-                    <strong>[[ scriptLabel(p.script) ]]</strong> requested
-                    <template v-if="p.mine">by you</template><template v-else-if="p.user_name">by [[ p.user_name ]]</template>
-                    on [[ fmt(p.created_at) ]] — waiting for an AI manager.
+        <!-- The requests: approval and execution are two different things -->
+        <div v-if="shown.length" class="aiq-list">
+            <div class="aiq-list-title"><i class="fa-solid fa-list-check me-1"></i>Analysis requests</div>
+            <div v-for="p in shown" :key="p.uuid" class="aiq-req">
+                <div class="aiq-req-main">
+                    <strong>[[ scriptLabel(p.script) ]]</strong>
+                    <span class="text-muted"> — requested <template v-if="p.mine">by you</template><template v-else-if="p.user_name">by [[ p.user_name ]]</template>, [[ fmt(p.created_at) ]]</span>
+                    <span v-if="p.revision" class="aiq-rev" :title="'Revision analysed: ' + p.revision">
+                        rev. [[ p.revision ]]<template v-if="p.current_revision === false"> (older version)</template></span>
+                </div>
+                <div class="aiq-req-status">
+                    <span class="aiq-chip" :class="'is-' + APPROVAL[p.approval][2]"><i class="fa-solid" :class="APPROVAL[p.approval][1]"></i>[[ APPROVAL[p.approval][0] ]]<template v-if="p.decided_by_name"> by [[ p.decided_by_name ]]</template></span>
+                    <span v-if="p.approval === 'approved'" class="aiq-chip" :class="'is-' + EXECUTION[p.execution][2]"><i class="fa-solid" :class="EXECUTION[p.execution][1]"></i>[[ EXECUTION[p.execution][0] ]]</span>
+                    <a v-if="p.job_uuid" :href="'/jobs/detail/' + p.job_uuid" class="aiq-link" title="The background job running it">job</a>
                 </div>
             </div>
         </div>
 
+        <!-- Why not launch it directly -->
+        <p v-if="state.can_request || state.why_not" class="aiq-note">
+            <i class="fa-solid fa-circle-info me-1"></i>Generating an analysis directly needs [[ state.launch_needs ]].
+            <template v-if="state.can_request">You can ask the AI managers instead — the exact current version of this [[ noun ]] is what will be analysed.</template>
+        </p>
+
         <!-- Anonymous -->
-        <div v-if="!state.can_request" class="aiq-cta">
+        <div v-if="!state.can_request && !state.why_not" class="aiq-cta">
             <span><i class="fa-solid fa-robot me-1"></i>Want Rulezy to analyse this [[ noun ]]?</span>
             <a :href="loginUrl" class="btn btn-sm btn-outline-primary rounded-pill px-3">
                 <i class="fa-solid fa-right-to-bracket me-1"></i>Log in to request an analysis
             </a>
         </div>
+        <!-- Signed in, but requests are limited to owners on this instance -->
+        <div v-else-if="!state.can_request" class="aiq-cta aiq-cta--off">
+            <span><i class="fa-solid fa-lock me-1"></i>[[ state.why_not ]]</span>
+        </div>
 
         <template v-else>
             <div v-if="!showForm" class="aiq-cta">
-                <span><i class="fa-solid fa-robot me-1"></i>This [[ noun ]] needs an analysis? Ask the AI managers.</span>
+                <span><i class="fa-solid fa-robot me-1"></i>[[ hasReport ? 'This ' + noun + ' changed, or you want another type of analysis?' : 'This ' + noun + ' needs an analysis? Ask the AI managers.' ]]</span>
                 <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" @click="showForm = true">
-                    <i class="fa-solid fa-paper-plane me-1"></i>Request an analysis
+                    <i class="fa-solid fa-paper-plane me-1"></i>[[ hasReport ? 'Request a new analysis' : 'Request an analysis' ]]
                 </button>
             </div>
 
@@ -124,7 +158,7 @@ const AIAnalysisRequest = {
                         Request [[ scripts.length > 1 ? scriptLabel(script).toLowerCase() : 'an analysis' ]]
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" @click="showForm = false">Cancel</button>
-                    <span v-if="alreadyRequested" class="small text-muted">Already requested — waiting for an AI manager.</span>
+                    <span v-if="alreadyRequested" class="small text-muted">Already requested for this version — waiting or running.</span>
                     <span v-else class="small text-muted">The AI managers are notified and run it when they accept.</span>
                 </div>
             </div>

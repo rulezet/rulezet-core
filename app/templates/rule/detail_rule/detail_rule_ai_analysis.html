@@ -25,6 +25,17 @@
     padding: 1px 5px;
     font-size: .85em;
 }
+.ai-prov { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .5rem .9rem;
+    padding: .75rem .9rem; border-radius: 10px; border: 1px solid var(--border-color); background: var(--light-bg-color); }
+.ai-prov__cell { display: flex; flex-direction: column; min-width: 0; }
+.ai-prov__cell > span { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--subtle-text-color); }
+.ai-prov__cell > b { font-size: .82rem; font-weight: 600; overflow-wrap: anywhere; }
+.ai-prov__ids { display: flex; gap: .4rem; }
+.ai-outdated { display: inline-flex; align-items: center; padding: .12rem .55rem; border-radius: 999px; font-size: .7rem; font-weight: 700;
+    color: #b26100; background: rgba(253, 126, 20, .12); border: 1px solid rgba(253, 126, 20, .4); }
+.ai-scope { border: 1px solid var(--border-color); border-radius: 10px; padding: .55rem .85rem; font-size: .84rem; }
+.ai-scope summary { cursor: pointer; font-weight: 600; }
+.ai-scope__title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--subtle-text-color); margin-bottom: .3rem; }
 .ai-history-item {
     padding: .75rem 1rem;
     border-bottom: 1px solid var(--border-color);
@@ -209,6 +220,8 @@
                     <span class="h-card__title"><i class="fa-solid fa-robot me-1"></i>Latest analysis</span>
                     <span class="ai-badge ai-badge--script ms-2">[[ scriptLabel(latest) ]]</span>
                     <span v-if="!latest.is_public" class="ai-visibility-badge ai-visibility-badge--private ms-2">Private</span>
+                    <span v-if="prov(latest).outdated" class="ai-outdated ms-2" title="The rule changed since this report was written: it describes an older version">
+                        <i class="fa-solid fa-clock-rotate-left me-1"></i>Outdated</span>
                     <div class="ms-auto d-flex gap-2">
                         <button @click="copyAnalysis(latest)" class="btn btn-sm btn-outline-secondary rounded-pill px-3" title="Copy the Markdown report to clipboard">
                             <i class="fa-solid" :class="copied ? 'fa-check' : 'fa-copy'"></i>
@@ -244,10 +257,35 @@
                         {% else %}
                         <i class="fa-solid fa-magnifying-glass-chart" style="color:#0d6efd;"></i>
                         {% endif %}
-                        <p class="text-muted mb-0 fst-italic" style="font-size:.78rem;">
-                            "I went through this one on [[ latest.created_at ]]<span v-if="latest.username"> for [[ latest.username ]]</span> — here's what I found."
-                        </p>
+                        <p class="text-muted mb-0 fst-italic" style="font-size:.78rem;">"Here's what I found."</p>
                     </div>
+
+                    <!-- Provenance (issue #88): what, who, which version — always visible, no hover needed -->
+                    <div class="ai-prov mb-3">
+                        <div class="ai-prov__cell"><span>Model</span><b><code>[[ latest.model || 'not recorded' ]]</code></b></div>
+                        <div class="ai-prov__cell"><span>Analysis</span><b>[[ scriptLabel(latest) ]]</b></div>
+                        <div class="ai-prov__cell"><span>Written</span><b>[[ fmtDate(prov(latest).created_at || latest.created_at) ]]</b></div>
+                        <div class="ai-prov__cell"><span>Requested by</span><b>[[ who(prov(latest), 'requested_by', 'direct run, no request') ]]</b></div>
+                        <div class="ai-prov__cell"><span>Approved by</span><b>[[ who(prov(latest), 'approved_by', 'no approval needed') ]]</b></div>
+                        <div class="ai-prov__cell"><span>Started by</span><b>[[ who(prov(latest), 'initiated_by', '—') ]]</b></div>
+                        <div class="ai-prov__cell"><span>Rule version analysed</span>
+                            <b><code v-if="prov(latest).content_hash" :title="prov(latest).content_hash">[[ prov(latest).content_hash.slice(0, 12) ]]</code><template v-else>not recorded</template>
+                               <span v-if="prov(latest).content_hash" :class="prov(latest).outdated ? 'text-danger' : 'text-success'">
+                                   · [[ prov(latest).outdated ? 'older than the current rule' : 'the current rule' ]]</span></b></div>
+                        <div v-if="prov(latest).request_uuid || prov(latest).job_uuid" class="ai-prov__cell"><span>Request / job</span>
+                            <b class="ai-prov__ids"><code v-if="prov(latest).request_uuid" title="Request id">[[ prov(latest).request_uuid.slice(0, 8) ]]</code>
+                               <a v-if="prov(latest).job_uuid" :href="'/jobs/detail/' + prov(latest).job_uuid" title="Job id"><code>[[ prov(latest).job_uuid.slice(0, 8) ]]</code></a></b></div>
+                    </div>
+                    <details v-if="prov(latest).scope" class="ai-scope mb-3">
+                        <summary><i class="fa-solid fa-magnifying-glass me-1"></i>What the AI was given — and what it did not check</summary>
+                        <div class="row g-3 mt-1">
+                            <div class="col-md-6"><div class="ai-scope__title">Given to the model</div>
+                                <ul class="ai-bullet-list"><li v-for="x in prov(latest).scope.inputs" :key="x">[[ x ]]</li></ul></div>
+                            <div class="col-md-6"><div class="ai-scope__title">Not checked by this analysis</div>
+                                <ul class="ai-bullet-list"><li v-for="x in prov(latest).scope.not_checked" :key="x">[[ x ]]</li></ul>
+                                <a :href="'/rule/detail_rule/' + rule_id + '/samples'" class="small"><i class="fa-solid fa-vial me-1"></i>Tests of this rule on samples</a></div>
+                        </div>
+                    </details>
                     <!-- Structured "at a glance" panel — absent on old rows generated
                          before the structured schema, which just show the Markdown body. -->
                     <div v-if="latest.meta" class="ai-glance mb-4">
@@ -302,6 +340,9 @@
                     <div class="ai-summary-content" v-html="renderMarkdown(latest.content)"></div>
                 </div>
             </div>
+            <!-- Can't launch it? Ask for a new analysis — even with a report there (issue #89) -->
+            <ai-analysis-request :endpoint="'/rule/detail_rule/' + rule_id + '/ai_analysis/request'"
+                :csrf-token="csrf_token" :scripts="SCRIPTS" noun="rule" :has-report="true" class="mb-4"></ai-analysis-request>
         </template>
 
         <template v-else>
@@ -333,8 +374,9 @@
                     <div>
                         <span class="ai-badge ai-badge--script me-2" style="font-size:.62rem;padding:.15rem .5rem;">[[ scriptLabel(entry) ]]</span>
                         <code>[[ entry.model || 'unknown model' ]]</code>
-                        <span class="text-muted ms-2">[[ entry.created_at ]]</span>
-                        <span v-if="entry.username" class="text-muted">· [[ entry.username ]]</span>
+                        <span class="text-muted ms-2">[[ fmtDate(prov(entry).created_at || entry.created_at) ]]</span>
+                        <span v-if="prov(entry).content_hash" class="text-muted">· rev. <code>[[ prov(entry).content_hash.slice(0, 12) ]]</code></span>
+                        <span v-if="prov(entry).outdated" class="ai-outdated ms-1">Outdated</span>
                     </div>
                     <span :class="['ai-visibility-badge', entry.is_public ? 'ai-visibility-badge--public' : 'ai-visibility-badge--private']">
                         [[ entry.is_public ? 'Public' : 'Private' ]]
@@ -401,6 +443,20 @@
             const selectedModel  = ref('');
             const defaultPublic  = ref(true);
             const selectedScript = ref('standard');
+
+            // Provenance of a report (issue #88): server-made labels, "not recorded" for old reports
+            const prov = (entry) => (entry && entry.provenance) || {};
+            function who(p, key, none) {
+                if (!p.recorded) return 'not recorded';
+                return (p[key] && p[key].name) || none;
+            }
+            // date + time in the viewer's time zone, with the zone shown — never a bare timestamp
+            function fmtDate(ts) {
+                if (!ts) return '—';
+                const iso = /Z$|[+-]\d\d:\d\d$/.test(ts) ? ts : ts + 'Z';
+                return new Date(iso).toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
+            }
 
             function scriptLabel(entry) {
                 return (entry?.meta?.script === 'deep') ? 'In-depth report' : 'Standard';
@@ -528,7 +584,7 @@
                 RULE_TITLE_SHORT, rule_id, csrf_token, loading, history, latest, regenerating, copied,
                 featureEnabled, models, selectedModel, defaultPublic,
                 SCRIPTS, selectedScript, scriptLabel,
-                renderMarkdown, regenerate, toggleVisibility, deleteAnalysis,
+                renderMarkdown, regenerate, toggleVisibility, deleteAnalysis, prov, who, fmtDate,
                 copyAnalysis, downloadUrl,
             };
         }

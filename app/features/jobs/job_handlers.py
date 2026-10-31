@@ -5577,6 +5577,7 @@ def handle_rule_analysis(job, app):
     rule_ids       = filters.get('rule_ids', payload.get('rule_ids', 'ALL'))
     format_filter  = filters.get('format') or filters.get('rule_type') or payload.get('format_filter') or None
     regenerate     = bool(payload.get('regenerate_existing'))
+    pinned         = payload.get('pinned') or {}     # {rule_id: {content, hash, request_id, …}} — requests
     default_public = payload.get('default_public', True)
     model          = payload.get('model')
     # Which Rule Analysis script: 'standard' (compact structured breakdown,
@@ -5719,6 +5720,12 @@ def handle_rule_analysis(job, app):
                 return
 
             rule_id, title, fmt, description, to_string, cve_id_raw = row
+            # A request pinned the revision it asked about (#88 / #89): analyse THAT content, never a
+            # newer one; its request follows the run (running → completed / failed)
+            pin = pinned.get(str(rule_id))
+            if pin:
+                to_string = pin.get('content') or to_string
+                _set_request_execution(pin.get('request_id'), 'running')
             try:
                 cve_ids = json.loads(cve_id_raw) if cve_id_raw else []
                 if not isinstance(cve_ids, list):
@@ -5768,17 +5775,28 @@ def handle_rule_analysis(job, app):
                 )
 
             if result.ok:
+                from app.features.ai.ai_provenance import content_hash, scope_for
                 meta = dict(result.meta or {})
                 meta.pop('status', None)
                 meta['script'] = script
+                meta['scope'] = scope_for(script)
                 if snapshot:
                     meta['snapshot'] = snapshot
-                db.session.add(AIGeneration(
+                gen = AIGeneration(
                     uuid=str(uuid_mod.uuid4()), agent_key='rule_analysis', rule_id=rule_id,
                     user_id=job.created_by, content=result.content, meta=meta,
                     model=result.model_used, is_public=bool(default_public),
-                ))
+                    # provenance (#88): the revision analysed, where the run came from, who did what
+                    content_hash=(pin or {}).get('hash') or content_hash(to_string),
+                    request_id=(pin or {}).get('request_id'), job_uuid=job.uuid,
+                    requested_by_id=(pin or {}).get('requested_by_id'),
+                    approved_by_id=(pin or {}).get('approved_by_id'),
+                    initiated_by_id=job.created_by,
+                )
+                db.session.add(gen)
                 db.session.commit()
+                if pin:
+                    _set_request_execution(pin.get('request_id'), 'completed', generation_id=gen.id)
                 generated += 1
                 if log_each_rule:
                     log_job(job, f'Rule #{rule_id}: generated ({len(result.content or "")} chars, model {result.model_used}).',
@@ -5789,12 +5807,16 @@ def handle_rule_analysis(job, app):
                     # Systemic, not per-rule — every remaining rule would fail
                     # identically this run. Stop entirely; nothing to resume,
                     # the next scheduled run just tries again.
+                    for p in pinned.values():           # their requests won't run in this job
+                        _set_request_execution(p.get('request_id'), 'failed', only_if_open=True)
                     log_job(job, f'Stopping: {result.error}', level='error', event='error')
                     job.status = 'failed'
                     job.error  = result.error
                     db.session.commit()
                     return
                 failed += 1
+                if pin:
+                    _set_request_execution(pin.get('request_id'), 'failed')
                 log_job(job, f'Rule #{rule_id}: {result.error}', level='warning', event='rule_failed')
 
             processed += 1
@@ -5893,10 +5915,15 @@ def handle_bundle_analysis(job, app):
     meta = dict(result.meta or {})
     meta.pop('status', None)
     meta['snapshot'] = snapshot
+    from app.core.db_class.ai import AIAnalysisRequest
+    req = AIAnalysisRequest.query.filter_by(job_uuid=job.uuid).order_by(AIAnalysisRequest.created_at).first()
     gen = AIGeneration(
         uuid=str(uuid_mod.uuid4()), agent_key='bundle_analysis', bundle_id=bundle.id,
         user_id=job.created_by, content=result.content, meta=meta,
         model=result.model_used, is_public=is_public,
+        # provenance (#88): where the run came from and who did what
+        job_uuid=job.uuid, initiated_by_id=job.created_by, request_id=req.id if req else None,
+        requested_by_id=req.user_id if req else None, approved_by_id=req.decided_by_id if req else None,
     )
     db.session.add(gen)
     p = dict(job.payload or {})
@@ -6174,3 +6201,22 @@ def handle_disabled_upstream_rules(job, app):
                  target_type='rule', extra={'batch_uuid': batch, 'count': count}, is_public=False)
     log_job(job, f"{count} rule(s) sent to the trash (batch {batch} — Rules › Trash restores them together).",
             level='success', event='done')
+
+
+def _set_request_execution(request_id, status, generation_id=None, only_if_open=False):
+    """The execution status of an AI analysis request (issue #89), set by the job that runs it."""
+    if not request_id:
+        return
+    from app.core.db_class.ai import AIAnalysisRequest
+    try:
+        req = db.session.get(AIAnalysisRequest, request_id)
+        if not req or (only_if_open and req.execution_status in ('completed', 'failed')):
+            return
+        req.execution_status = status
+        if status in ('completed', 'failed'):
+            req.executed_at = datetime.datetime.now(datetime.timezone.utc)
+        if generation_id:
+            req.generation_id = generation_id
+        db.session.commit()
+    except Exception:
+        db.session.rollback()

@@ -34,3 +34,21 @@
 }
 .aiq-script-title { display: block; font-weight: 700; font-size: .82rem; }
 .aiq-script-desc { display: block; font-size: .74rem; color: var(--subtle-text-color); }
+
+/* Requests with their approval and execution, shown separately (issues #88 / #89) */
+.aiq-list { padding: .7rem .9rem; border-radius: 10px; border: 1px solid var(--border-color); background: var(--card-bg-color); }
+.aiq-list-title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--subtle-text-color); margin-bottom: .45rem; }
+.aiq-req { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .35rem .8rem;
+    padding: .4rem 0; border-top: 1px solid var(--border-color); font-size: .82rem; }
+.aiq-req:first-of-type { border-top: 0; }
+.aiq-req-status { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.aiq-rev { font-family: var(--bs-font-monospace); font-size: .72rem; color: var(--subtle-text-color); margin-left: .3rem; }
+.aiq-chip { display: inline-flex; align-items: center; gap: .3rem; padding: .1rem .55rem; border-radius: 999px; font-size: .72rem;
+    font-weight: 600; border: 1px solid var(--border-color); color: var(--subtle-text-color); }
+.aiq-chip.is-wait { color: #b26100; border-color: rgba(253, 126, 20, .4); background: rgba(253, 126, 20, .08); }
+.aiq-chip.is-run { color: #0d6efd; border-color: rgba(13, 110, 253, .4); background: rgba(13, 110, 253, .08); }
+.aiq-chip.is-ok { color: #198754; border-color: rgba(25, 135, 84, .4); background: rgba(25, 135, 84, .08); }
+.aiq-chip.is-bad { color: #dc3545; border-color: rgba(220, 53, 69, .4); background: rgba(220, 53, 69, .08); }
+.aiq-link { font-size: .72rem; }
+.aiq-note { font-size: .8rem; color: var(--subtle-text-color); margin: 0; }
+.aiq-cta--off { background: var(--light-bg-color); border-color: var(--border-color); }

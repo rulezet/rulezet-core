@@ -1,0 +1,7 @@
+{
+    "label": "Who may request an AI analysis",
+    "category": "AI",
+    "description": "Who may ask the AI managers for an analysis they can't launch themselves (issue #89): owner — the rule's / bundle's owner and users with an AI permission (default, keeps the review and compute load small); anyone — every signed-in user.",
+    "public": false,
+    "value": "owner"
+}

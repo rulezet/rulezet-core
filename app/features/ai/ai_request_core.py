@@ -39,6 +39,29 @@ def can_launch(user, target_type):
     return user.has_permission('ai.use' if target_type == 'rule' else 'ai.manage')
 
 
+def request_policy() -> str:
+    """'owner' (default) or 'anyone' — setting ai.request_policy."""
+    try:
+        from app.core.utils.app_settings import get_setting
+        value = get_setting('ai.request_policy')
+    except Exception:
+        value = None
+    return value if value in ('owner', 'anyone') else 'owner'
+
+
+def can_request(user, target_type, target) -> tuple[bool, str]:
+    """Who may ASK for an analysis (issue #89): the owner and users with an AI permission by default,
+    every signed-in user when the instance allows it. Returns (ok, why not)."""
+    if not user or not user.is_authenticated:
+        return False, 'Log in to request an analysis.'
+    if not target:
+        return False, 'Not found.'
+    if request_policy() == 'anyone' or user.is_admin() or getattr(target, 'user_id', None) == user.id \
+            or user.has_permission('ai.use') or user.has_permission('ai.manage'):
+        return True, ''
+    return False, f"Only the {target_type}'s owner can ask for an analysis on this instance."
+
+
 def _ai_manager_ids():
     """Admins and holders of ai.manage — the people who review requests."""
     ids = {u.id for u in User.query.filter_by(admin=True).all()}
@@ -62,9 +85,24 @@ def _target_filter(query, target_type, target_id):
 
 
 def pending_for(target_type, target_id):
-    """The open requests on a rule / bundle (oldest first)."""
+    """The requests waiting for an AI manager on a rule / bundle (oldest first)."""
     q = _target_filter(AIAnalysisRequest.query, target_type, target_id).filter_by(status='pending')
     return q.order_by(AIAnalysisRequest.created_at.asc()).all()
+
+
+def active_for(target_type, target_id):
+    """Requests whose analysis is still to come: waiting for approval, or approved and queued / running
+    (issue #89 — "approved" is not "done")."""
+    from app.features.ai.ai_provenance import effective_execution
+    q = _target_filter(AIAnalysisRequest.query, target_type, target_id).filter(
+        AIAnalysisRequest.status.in_(('pending', 'accepted')))
+    return [r for r in q.order_by(AIAnalysisRequest.created_at.asc()).all()
+            if r.status == 'pending' or effective_execution(r) in ('queued', 'running')]
+
+
+def recent_for(target_type, target_id, limit=10):
+    q = _target_filter(AIAnalysisRequest.query, target_type, target_id)
+    return q.order_by(AIAnalysisRequest.created_at.desc()).limit(limit).all()
 
 
 def create_request(target_type, target_id, user, script=None, message=None):
@@ -81,18 +119,31 @@ def create_request(target_type, target_id, user, script=None, message=None):
     message = (message or '').strip()
     if len(message) > MESSAGE_MAX:
         return False, f"The message is limited to {MESSAGE_MAX} characters.", False
-    target = _target(target_type, target_id)
-    if not target:
+    # Lock the target row: two simultaneous submissions for the same analysis can't both create one
+    # (PostgreSQL; a no-op on SQLite, where writes are serialised anyway)
+    model = Rule if target_type == 'rule' else Bundle
+    target = model.query.filter(model.id == target_id).with_for_update().first()
+    if not target or (target_type == 'rule' and target.is_deleted):
+        db.session.rollback()
         return False, "Not found.", False
 
-    existing = next((r for r in pending_for(target_type, target_id) if r.script == script), None)
+    # The exact revision asked about: the job analyses this, never a newer version (#88 / #89)
+    from app.features.ai.ai_provenance import content_hash
+    pinned = target.to_string if target_type == 'rule' else None
+    digest = content_hash(pinned) if target_type == 'rule' else None
+
+    # Same rule, same revision, same analysis, still to come (waiting, queued, running) → that request
+    existing = next((r for r in active_for(target_type, target_id)
+                     if r.script == script and (target_type != 'rule' or r.content_hash in (digest, None))), None)
     if existing:
+        db.session.rollback()
         return True, existing, False
 
     req = AIAnalysisRequest(
         target_type=target_type, script=script, message=message or None, user_id=user.id,
         rule_id=target_id if target_type == 'rule' else None,
         bundle_id=target_id if target_type == 'bundle' else None,
+        input_content=pinned, content_hash=digest, execution_status='not_started',
     )
     db.session.add(req)
     db.session.commit()
@@ -197,18 +248,30 @@ def decide(target_type, action, decider, *, ids=None, all_pending=False, q='',
     jobs = []
     if action == 'accept':
         if target_type == 'rule':
-            by_script = {}
+            # One job per script, a rule at most once per job: two requests on two revisions of the same
+            # rule go to two jobs (each analyses its own pinned revision; the AI runs one at a time)
+            batches = []
             for r in requests:
-                if r.rule and not r.rule.is_deleted:
-                    by_script.setdefault(r.script, []).append(r)
-            for script, reqs in by_script.items():
-                rule_ids = sorted({r.rule_id for r in reqs})
+                if not (r.rule and not r.rule.is_deleted):
+                    continue
+                batch = next((b for b in batches if b['script'] == r.script and r.rule_id not in b['rules']), None)
+                if batch is None:
+                    batch = {'script': r.script, 'rules': {}, 'reqs': []}
+                    batches.append(batch)
+                batch['rules'][r.rule_id] = r
+                batch['reqs'].append(r)
+            for batch in batches:
+                script, reqs = batch['script'], batch['reqs']
+                rule_ids = sorted(batch['rules'])
+                pinned = {str(rid): {'content': r.input_content, 'hash': r.content_hash, 'request_id': r.id,
+                                     'requested_by_id': r.user_id, 'approved_by_id': decider.id}
+                          for rid, r in batch['rules'].items() if r.input_content is not None}
                 job = JobsModel.create_job(
                     job_type='ai_generate',
                     payload={'agent_key': 'rule_analysis', 'script': script, 'rule_ids': rule_ids,
                              'regenerate_existing': True, 'default_public': bool(default_public),
                              'model': model or None, 'batch_size': len(rule_ids),
-                             'max_seconds': 300 * len(rule_ids)},
+                             'max_seconds': 300 * len(rule_ids), 'pinned': pinned},
                     label=f"AI Rule Analysis{' (in-depth)' if script == 'deep' else ''} — "
                           f"{len(rule_ids)} requested rule{'s' if len(rule_ids) > 1 else ''}",
                     created_by=decider.id,
@@ -239,6 +302,8 @@ def decide(target_type, action, decider, *, ids=None, all_pending=False, q='',
             continue          # its rule / bundle is gone, or the job could not be queued
         r.status = 'accepted' if action == 'accept' else 'rejected'
         r.decided_by_id, r.decided_at, r.decision_note = decider.id, now, note
+        if action == 'accept':
+            r.execution_status = 'queued'
         decided.append(r)
     db.session.commit()
     for r in decided:
