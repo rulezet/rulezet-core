@@ -1,14 +1,14 @@
 """add Mastodon profile URL to user
 
 Revision ID: a6d8e2f4b9c1
-Revises: f7c2a1d9e4b3
+Revises: b2e4c7a9d1f3
 Create Date: 2026-10-31
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = 'a6d8e2f4b9c1'
-down_revision = 'f7c2a1d9e4b3'
+down_revision = 'b2e4c7a9d1f3'  # after the AI provenance and JSONB migrations merged before it
 branch_labels = None
 depends_on = None
 
