@@ -6130,3 +6130,45 @@ def handle_reparse_rule_metadata(job, app):
 
     log_job(job, f'Done — {offset} rules read, {changed} updated; {with_refs} with references, '
                  f'{with_extra} with other metadata, {markings} with their TLP / PAP tag set from the text.', level='success', event='done')
+
+
+@register_handler('disabled_upstream_rules')
+def handle_disabled_upstream_rules(job, app):
+    """Suricata / Sagan rules commented out where they come from but imported as active (issue #62) —
+    see app/features/rule/disabled_upstream_core.py. dry_run (default true): report only; otherwise
+    the rules go to the trash in one batch (Rules › Trash, restorable together).
+
+    Payload: dry_run (bool), formats (list), source (optional repository URL / upload source),
+    reference_urls (list, default ET Open's emerging-all.rules), user_id (who trashes them).
+    """
+    from app.features.rule.disabled_upstream_core import ET_OPEN_URL, FORMATS, find_disabled_upstream
+    from app.features.rule.rule_core import soft_delete_rule_list
+    payload = job.payload or {}
+    dry_run = payload.get('dry_run', True) not in (False, 'false', 0)
+    formats = [f for f in (payload.get('formats') or FORMATS) if f in FORMATS] or list(FORMATS)
+    refs = payload.get('reference_urls')
+    if refs is None:
+        refs = [ET_OPEN_URL]
+    elif isinstance(refs, str):
+        refs = [u.strip() for u in refs.splitlines() if u.strip()]
+    log_job(job, f"{'Dry run — nothing will be changed. ' if dry_run else ''}Looking for {', '.join(formats)} rules "
+                 f"commented out upstream…", level='info', event='started')
+    found = find_disabled_upstream(formats, payload.get('source') or None, refs, log=lambda m: log_job(job, m))
+    ids = found['git'] + found['reference']
+    job.total, job.done = max(found['checked'], 1), max(found['checked'], 1)
+    db.session.commit()
+    log_job(job, f"{found['checked']} rule(s) checked, {found['unreadable_files']} source file(s) not readable — "
+                 f"{len(found['git'])} commented out in their git repository, {len(found['reference'])} in a reference "
+                 f"ruleset.", level='info')
+    for example in found['examples']:
+        log_job(job, f"  e.g. {example}")
+    if dry_run or not ids:
+        log_job(job, f"{len(ids)} rule(s) would go to the trash." if dry_run else "Nothing to do.",
+                level='success', event='done')
+        return
+    batch = str(uuid_mod.uuid4())
+    count = soft_delete_rule_list(ids, payload.get('user_id') or job.created_by, batch_uuid=batch)
+    log_activity('rule.trash_disabled_upstream', f'{count} rule(s) commented out upstream sent to the trash',
+                 target_type='rule', extra={'batch_uuid': batch, 'count': count}, is_public=False)
+    log_job(job, f"{count} rule(s) sent to the trash (batch {batch} — Rules › Trash restores them together).",
+            level='success', event='done')

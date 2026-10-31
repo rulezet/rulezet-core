@@ -179,6 +179,24 @@ TASK_TYPES = {
             {'key': 'source', 'type': 'text', 'label': 'Only bad rules from this repository URL (optional)', 'default': ''},
         ],
     },
+    'disabled_upstream_rules': {
+        'label': 'Suricata / Sagan — rules commented out upstream (to the trash)',
+        'icon': 'fa-solid fa-comment-slash',
+        'job_type': 'disabled_upstream_rules',
+        'target_picker': 'none',
+        # Issue #62: rules a ruleset ships disabled ("# alert …", e.g. ET Open's costly ones) but imported
+        # as active before the importers skipped them. Git rules: their file is read again; uploads
+        # (ZIP): compared with reference rulesets by sid + msg. Dry run by default; trash = restorable.
+        'extra_options': [
+            {'key': 'dry_run', 'type': 'bool', 'label': 'Dry run — only report what would go to the trash', 'default': True},
+            {'key': 'formats', 'type': 'multiselect', 'label': 'Formats',
+             'options': [{'value': 'suricata', 'label': 'Suricata'}, {'value': 'sagan', 'label': 'Sagan'}],
+             'default': ['suricata', 'sagan']},
+            {'key': 'source', 'type': 'text', 'label': 'Only rules from this source (optional)', 'default': ''},
+            {'key': 'reference_urls', 'type': 'textarea', 'label': 'Reference rulesets for uploaded rules (one URL a line)',
+             'default': 'https://rules.emergingthreats.net/open/suricata-7.0/emerging-all.rules'},
+        ],
+    },
     'reparse_rule_metadata': {
         'label': 'References & metadata — read them again from every rule (platforms, TLP / PAP…)',
         'icon': 'fa-solid fa-book-open',
