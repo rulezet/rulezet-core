@@ -6224,8 +6224,8 @@ def _set_request_execution(request_id, status, generation_id=None, only_if_open=
 
 @register_handler('purge_unverified_users')
 def handle_purge_unverified_users(job, app):
-    """Delete accounts that never verified their email and never used Rulezet — only when every safety
-    condition of app/features/account/unverified_cleanup_core.py holds. Their sign-up log entries become
+    """Delete the accounts whose email was never verified, older than the grace period — never an admin, a
+    system account (Rulezet Official) or the account running it (app/features/account/unverified_cleanup_core.py). Their sign-up log entries become
     private first. Payload: grace_hours (default 24), max_per_run (default 200), dry_run (default true)."""
     from app.features.account.unverified_cleanup_core import purge
     payload = job.payload or {}
@@ -6235,9 +6235,9 @@ def handle_purge_unverified_users(job, app):
         cap = max(int(payload.get('max_per_run') or 200), 1)
     except (TypeError, ValueError):
         grace, cap = 24, 200
-    log_job(job, f"{'Dry run — nothing will be deleted. ' if dry_run else ''}Unverified accounts older than "
-                 f"{grace} h, never used…", level='info', event='started')
-    report = purge(grace, cap, dry_run, log=lambda m: log_job(job, m))
+    log_job(job, f"{'Dry run — nothing will be deleted. ' if dry_run else ''}Accounts with an unverified email, "
+                 f"older than {grace} h…", level='info', event='started')
+    report = purge(grace, cap, dry_run, log=lambda m: log_job(job, m), protect_ids=[job.created_by])
     for example in report['examples']:
         log_job(job, f"  {'would delete' if dry_run or report['aborted'] else 'deleted'}: {example}")
     job.total = job.done = max(report['candidates'], 1)
@@ -6254,8 +6254,8 @@ def handle_purge_unverified_users(job, app):
         log_job(job, 'Stopped: too many accounts at once — nothing deleted, admins notified.', level='warning', event='done')
         return
     if not dry_run and report['deleted']:
-        log_activity('user.purge_unverified', f"{report['deleted']} unverified, never used account(s) deleted",
+        log_activity('user.purge_unverified', f"{report['deleted']} account(s) with an unverified email deleted",
                      target_type='user', extra={'count': report['deleted']}, is_public=False)
     log_job(job, (f"{report['candidates']} account(s) would be deleted." if dry_run else
                   f"{report['deleted']} account(s) deleted, {report['logs_private']} log entr(ies) made private.")
-            + f" {report['kept_used']} unverified account(s) kept: they were used.", level='success', event='done')
+            + f" {report['kept_protected']} kept (admin, system account or the account running this).", level='success', event='done')

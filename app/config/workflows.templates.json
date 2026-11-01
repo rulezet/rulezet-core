@@ -419,7 +419,7 @@
     "unverified_accounts_cleanup": {
       "label": "Unverified accounts clean-up",
       "icon": "fa-solid fa-user-xmark",
-      "description": "Every evening: a database backup first (checked), then — only if it succeeded — delete the accounts that never verified their email and never used Rulezet (sign-up bots, abandoned sign-ups): local sign-ups only, older than 24 h, no role, no content, no activity; never more than 200 at once. Their sign-up logs become private.",
+      "description": "Every evening: a database backup first (checked), then — only if it succeeded — delete the accounts whose email was never verified (sign-up bots, abandoned sign-ups): local sign-ups older than 24 h; never an admin, the Rulezet Official account or the account running it; never more than 200 at once. What they made goes to the admin; their sign-up logs become private.",
       "spec": {
         "title": "Unverified accounts clean-up",
         "description": "Sign-up bots and abandoned sign-ups, every evening at 23:30, after a backup. Run it once by hand with Dry run checked to see what it finds.",
@@ -440,7 +440,7 @@
           },
           {
             "ref": "purge",
-            "title": "Delete unverified, never-used accounts",
+            "title": "Delete the accounts with an unverified email",
             "task_type": "purge_unverified_users",
             "trigger": {
               "after": "backup",
