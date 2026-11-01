@@ -126,7 +126,7 @@
 .ibx-chip button { border: 0; background: none; color: inherit; padding: 0; line-height: 1; }
 
 /* Category colours (icon tile) */
-.ibx-cat--rule_comment, .ibx-cat--bundle_comment, .ibx-cat--comment_reply, .ibx-cat--follow_new_comment { background: rgba(32, 201, 151, .13); color: #13a37a; }
+.ibx-cat--messages, .ibx-cat--rule_comment, .ibx-cat--bundle_comment, .ibx-cat--comment_reply, .ibx-cat--follow_new_comment { background: rgba(32, 201, 151, .13); color: #13a37a; }
 .ibx-cat--favorite_rule_update, .ibx-cat--blog_published { background: rgba(245, 164, 0, .14); color: #d48d00; }
 .ibx-cat--proposal_submitted, .ibx-cat--proposal_comment, .ibx-cat--proposal_accepted, .ibx-cat--proposal_rejected, .ibx-cat--proposal_thread, .ibx-cat--bundle_fork, .ibx-cat--github_proposal { background: rgba(111, 66, 193, .12); color: #6f42c1; }
 .ibx-cat--alerts, .ibx-cat--report_submitted, .ibx-cat--github_token_invalid { background: rgba(220, 53, 69, .11); color: #dc3545; }

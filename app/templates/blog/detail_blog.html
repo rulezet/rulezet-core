@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/discuss.html' as rz_discuss with context %}
 {% block title %}{{ post.title if post else 'Post' }} — Rulezet{% endblock %}
 
 {% block head %}
@@ -62,6 +63,7 @@
     <div v-if="!isLoading" class="container py-5">
 
     <div :class="['explorer-banner mb-4', { 'blog-release-banner': isRelease }]">
+        <div class="position-absolute top-0 end-0 m-3 d-flex gap-2" style="z-index:2;">{{ rz_discuss.discuss_button('blog', post.uuid, author_id=post.user_id) }}</div>
         <i :class="['fa-solid banner-watermark', isRelease ? 'fa-rocket' : 'fa-newspaper']"></i>
         <nav aria-label="breadcrumb" class="mb-2">
             <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">

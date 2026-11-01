@@ -51,6 +51,9 @@
         "bundle_mr_merged": "fa-solid fa-code-merge",
         "bundle_mr_closed": "fa-solid fa-circle-xmark",
         "bundle_mr_updated": "fa-solid fa-rotate",
-        "bundle_mr_comment": "fa-solid fa-comment"
+        "bundle_mr_comment": "fa-solid fa-comment",
+        "message_direct": "fa-solid fa-envelope",
+        "message_mention": "fa-solid fa-at",
+        "message_invite": "fa-solid fa-user-plus"
     }
 }

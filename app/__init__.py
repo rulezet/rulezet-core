@@ -136,6 +136,7 @@ def create_app(start_worker=True):
     from app.features.tour.tour import tour_blueprint
     from app.features.rule.rule_from_github.git_settings.git_settings_routes import git_settings_blueprint
     from app.features.alert.alert import alert_blueprint
+    from app.features.messages.messages import messages_blueprint
     from app.features.editor.editor import editor_blueprint, editor_page_blueprint
 
     app.register_blueprint(home_blueprint, url_prefix="/")
@@ -176,6 +177,7 @@ def create_app(start_worker=True):
     app.register_blueprint(tour_blueprint)
     app.register_blueprint(git_settings_blueprint)
     app.register_blueprint(alert_blueprint, url_prefix='/alert')
+    app.register_blueprint(messages_blueprint, url_prefix='/messages')
     app.register_blueprint(editor_blueprint, url_prefix='/editor-api')
     app.register_blueprint(editor_page_blueprint, url_prefix='/editor')
 
@@ -538,7 +540,7 @@ def _start_telemetry(app):
 def _start_alert_sweeper(app):
     """Daemon thread: evaluate every active alert against what changed since
     the previous pass and send due alert emails (app/features/alert/
-    alert_core.py::run_sweep). Lives in the worker process with the other
+    alert_core.py::run_sweep), then the due "messages by email" (messages_core.send_due_emails). Lives in the worker process with the other
     loops; a failed pass is logged and simply retried next interval."""
     import threading
     import time
@@ -556,6 +558,11 @@ def _start_alert_sweeper(app):
                     if summary['matches'] or summary['emails_sent']:
                         print(f"[alerts] {summary['matches']} match(es) for {summary['alerts_triggered']} "
                               f"alert(s), {summary['emails_sent']} email(s) sent", flush=True)
+                    # Messages by email (features/messages/messages_core.py), same pass
+                    from app.features.messages.messages_core import send_due_emails as send_message_emails
+                    n = send_message_emails()
+                    if n:
+                        print(f"[messages] {n} email(s) sent", flush=True)
             except Exception as e:
                 try:
                     with app.app_context():

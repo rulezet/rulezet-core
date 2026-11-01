@@ -77,6 +77,10 @@ def update_preference(user_id, prefs_dict):
                 if isinstance(val, list):
                     pref.muted_types = json.dumps(sorted({str(v)[:32] for v in val if isinstance(v, str)})[:200])
                 continue
+            if key == 'email_messages':         # messages by email: off | direct | all
+                if val in ('off', 'direct', 'all'):
+                    pref.email_messages = val
+                continue
             if key == 'auto_archive_days':      # read notifications archived after N days, 0 = never
                 try:
                     pref.auto_archive_days = max(0, min(int(val or 0), 3650))

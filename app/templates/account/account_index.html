@@ -251,6 +251,9 @@
                 <a class="btn btn-sm btn-primary rounded-pill px-3" href="{{ url_for('account.edit_user') }}">
                     <i class="fas fa-pen me-2"></i>Edit Profile
                 </a>
+                <a class="btn btn-sm btn-outline-primary rounded-pill px-3" href="{{ url_for('messages.page_messages') }}">
+                    <i class="fa-solid fa-comments me-1"></i>Messages{% if (nav_state or {}).get('messages_unread') %} <span class="badge rounded-pill bg-primary">{{ nav_state.messages_unread }}</span>{% endif %}
+                </a>
                 <a class="ud-follow-count text-decoration-none" href="/account/detail_user/{{ current_user.id }}">
                     <i class="fas fa-chart-bar me-1"></i>Full stats
                 </a>
@@ -535,6 +538,11 @@
                                     </div>
                                 </div>
                                 <div class="follow-row-actions">
+                                    <a :href="`/messages/new?to=${u.id}`"
+                                       class="follow-row-btn follow-row-btn--view"
+                                       title="Send a message">
+                                        <i class="fa-solid fa-envelope"></i>
+                                    </a>
                                     <a :href="`/account/detail_user/${u.id}`"
                                        class="follow-row-btn follow-row-btn--view"
                                        title="View profile">
@@ -571,6 +579,11 @@
                                     </div>
                                 </div>
                                 <div class="follow-row-actions">
+                                    <a :href="`/messages/new?to=${u.id}`"
+                                       class="follow-row-btn follow-row-btn--view"
+                                       title="Send a message">
+                                        <i class="fa-solid fa-envelope"></i>
+                                    </a>
                                     <a :href="`/account/detail_user/${u.id}`"
                                        class="follow-row-btn follow-row-btn--view"
                                        title="View profile">

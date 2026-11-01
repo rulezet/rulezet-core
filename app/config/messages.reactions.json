@@ -1,0 +1,7 @@
+{
+    "label": "Message reactions",
+    "category": "Messages",
+    "description": "Emoji offered under each message on /messages/ (a reaction not in this list is refused).",
+    "public": true,
+    "value": ["👍", "❤️", "🎉", "😄", "🤔", "👀", "🚀", "✅", "❌", "🔥"]
+}

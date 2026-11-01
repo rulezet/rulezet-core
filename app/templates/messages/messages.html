@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% import 'macros/mailbox_nav.html' as mbx %}
+
+{% block title %}Messages — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/chat.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/messages/messages.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-lg-4">
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-comments banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Messages</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-comments"></i></div>
+            <div><h2 class="fw-bold mb-1">Messages</h2><div class="banner-accent"></div></div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:640px;font-size:.95rem;">
+            Private conversations and channels — public or private — about rules, bundles, CVEs, techniques… Mention
+            people with <code>@</code>, link anything in Rulezet with <code>#</code>.
+        </p>
+    </div>
+
+    {{ mbx.mailbox_nav('messages') }}
+    {% if invite_error %}<script type="module">import { create_message } from '/static/js/toaster.js'; create_message({{ invite_error | tojson }}, 'danger-subtle')</script>{% endif %}
+
+    <div id="messages-app"
+         data-user-id="{{ current_user.id }}"
+         data-is-admin="{{ 'true' if current_user.is_admin() else 'false' }}"
+         data-open="{{ open_uuid or '' }}"></div>
+    <script type="application/json" id="messages-start">{{ start | tojson }}</script>
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+import MessagesApp from '/static/js/messages/MessagesApp.js'
+
+const el = document.getElementById('messages-app')
+const start = JSON.parse(document.getElementById('messages-start').textContent || 'null')
+let reactions, maxLength
+try {
+    const { values } = await fetch('/api/config/settings?keys=messages.reactions,messages.limits').then(x => x.json())
+    reactions = values['messages.reactions']
+    maxLength = (values['messages.limits'] || {}).message_max_chars
+} catch { }
+
+Vue.createApp(MessagesApp, {
+    currentUserId: parseInt(el.dataset.userId),
+    isAdmin: el.dataset.isAdmin === 'true',
+    openUuid: el.dataset.open || null,
+    start,
+    ...(Array.isArray(reactions) ? { reactions } : {}),
+    ...(maxLength ? { maxLength } : {}),
+}).mount(el)
+</script>
+{% endblock %}

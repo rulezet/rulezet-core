@@ -117,6 +117,7 @@ const UserChip = defineComponent({
 
         // expose tooltip handler refs so the teleported tooltip can cancel hide
         return {
+            me: window.RZ_ME || null,
             tooltipData, tooltipVisible, tooltipStyle, chipRef,
             px, displayName, initials, verified,
             onMouseEnter, onMouseLeave, onTooltipEnter, onTooltipLeave,
@@ -242,13 +243,19 @@ const UserChip = defineComponent({
           <span class="user-chip-tooltip__skeleton" style="height:10px;width:65px;"></span>
         </div>
 
-        <!-- View profile link -->
-        <a :href="'/account/detail_user/' + userId"
-           class="btn btn-sm btn-outline-primary w-100 mt-1"
-           style="font-size:.75rem;padding:3px 0;"
-           @click.stop>
-          <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View profile
-        </a>
+        <!-- View profile · write to them (signed in, not yourself — features/messages/) -->
+        <div class="d-flex gap-1 mt-1">
+          <a :href="'/account/detail_user/' + userId"
+             class="btn btn-sm btn-outline-primary flex-fill"
+             style="font-size:.75rem;padding:3px 0;"
+             @click.stop>
+            <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View profile
+          </a>
+          <a v-if="me && me !== Number(userId)" :href="'/messages/new?to=' + userId"
+             class="btn btn-sm btn-outline-primary" style="font-size:.75rem;padding:3px 8px;" title="Send a message" @click.stop>
+            <i class="fa-solid fa-envelope"></i>
+          </a>
+        </div>
       </div>
     </div>
   </teleport>

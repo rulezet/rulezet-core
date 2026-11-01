@@ -3,7 +3,7 @@
     user, role, rule, rule_proposal, rule_relation, rule_tester, comment, report,
     tag, bundle, bundle_fork, git, attack, similarity, alert, notification, workspace, blog,
     connector, misp, velociraptor, ai, pivotick, gamification, job,
-    task_scheduler, activity_log, setting, starfield, nightshift, vulnerability — plus common (shared column types/helpers).
+    task_scheduler, activity_log, setting, starfield, nightshift, vulnerability, message — plus common (shared column types/helpers).
 
 Import a model from its module: `from app.core.db_class.rule import Rule`.
 Every module is loaded here so SQLAlchemy knows all models (relationships
@@ -13,5 +13,5 @@ from app.core.db_class import (  # noqa: F401
     common, user, role, rule, rule_proposal, rule_relation, rule_tester, comment, report,
     tag, bundle, bundle_fork, git, attack, similarity, alert, notification, workspace, blog,
     connector, misp, velociraptor, ai, pivotick, gamification, job, task_scheduler, activity_log,
-    setting, starfield, nightshift, vulnerability,
+    setting, starfield, nightshift, vulnerability, message,
 )

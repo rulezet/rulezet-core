@@ -20,6 +20,7 @@ def compute(user):
     from app.core.db_class.job import BackgroundJob
     from app.core.db_class.notification import Notification
     from app.features.account import account_core as AccountModel
+    from app.features.messages.messages_core import unread_total
     from app.features.rule import rule_core as RuleModel
     admin = user.is_admin()
     state = {
@@ -33,6 +34,7 @@ def compute(user):
                                    else RuleModel.get_total_change_to_check),
         'updates_to_check': _count(RuleModel.get_update_pending),
         'reports_to_check': 0,
+        'messages_unread': _count(lambda: unread_total(user)),
     }
     if admin:
         from app.features.report.report_core import count_pending

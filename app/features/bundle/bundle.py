@@ -196,7 +196,7 @@ def detail(bundle_id) :
         if resp is not None:
             return resp
         if _can_view_bundle(bundle):
-            return _no_referrer_leak(render_template("bundle/detail_bundle.html", bundle_id=bundle_id, bundle_name=bundle.name,
+            return _no_referrer_leak(render_template("bundle/detail_bundle.html", bundle_id=bundle_id, bundle_name=bundle.name, bundle_user_id=bundle.user_id,
                                    card=_bundle_card(bundle),
                                    via_share_link=not bundle.access and not _is_bundle_manager(bundle)))
         else:
@@ -213,7 +213,7 @@ def detail_uuid(bundle_uuid) :
         if resp is not None:
             return resp
         if _can_view_bundle(bundle):
-            return _no_referrer_leak(render_template("bundle/detail_bundle.html", bundle_id=bundle.id, bundle_name=bundle.name,
+            return _no_referrer_leak(render_template("bundle/detail_bundle.html", bundle_id=bundle.id, bundle_name=bundle.name, bundle_user_id=bundle.user_id,
                                    card=_bundle_card(bundle),
                                    via_share_link=not bundle.access and not _is_bundle_manager(bundle)))
         else:

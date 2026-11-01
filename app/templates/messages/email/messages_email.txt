@@ -1,0 +1,12 @@
+Hi {{ user.first_name or user.get_username() }},
+
+You have {{ total }} unread message{{ 's' if total > 1 else '' }} on Rulezet.
+{% for c in conversations %}
+— {{ c.name if c.kind == 'direct' else '#' ~ c.name }} —
+{% for m in c.messages %}{{ m.author }}: {{ m.text }}
+{% endfor %}{% if c.more %}…and {{ c.more }} more
+{% endif %}Reply: {{ c.url }}
+{% endfor %}{% if hidden %}
+And {{ hidden }} more conversation{{ 's' if hidden > 1 else '' }}: {{ messages_url }}
+{% endif %}
+You get these emails because you turned on "Messages by email". Change it: {{ prefs_url }}

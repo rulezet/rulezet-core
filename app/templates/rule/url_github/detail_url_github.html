@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/discuss.html' as rz_discuss with context %}
 {% block title %}Git Repository Dashboard — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/github/repoQuality.css') }}">
@@ -154,6 +155,7 @@
 
     <!-- ── Header banner ── -->
     <div class="explorer-banner mb-4">
+        <div class="position-absolute top-0 end-0 m-3 d-flex gap-2" style="z-index:2;">{% if repo_uuid %}{{ rz_discuss.discuss_button('repo', repo_uuid) }}{% endif %}</div>
         <i :class="providerIcon" class="banner-watermark"></i>
         <nav aria-label="breadcrumb" class="mb-3">
             <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
@@ -177,12 +179,12 @@
                 <i class="fa-solid fa-bell me-1"></i>Watch this repo
             </a>
             {% endif %}
-            <!-- Create issue: what went wrong importing it, as Markdown to post on the repository (admins) -->
+            <!-- Create a report: what went wrong importing it, as Markdown to post on the repository (admins) -->
             {% if current_user.is_admin() %}
             <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 flex-shrink-0"
                     @click="openIssueReport('/rule/github/issue_report?url=' + encodeURIComponent({{ url | tojson | forceescape }}))"
                     title="A Markdown report of this source — bad rules grouped by error, references that do not resolve, failed updates — to post as an issue on the repository">
-                <i class="fa-solid fa-bug me-1"></i>Create issue
+                <i class="fa-solid fa-file-lines me-1"></i>Create a report
             </button>
             <issue-report></issue-report>
             {% endif %}

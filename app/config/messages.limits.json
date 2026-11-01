@@ -1,0 +1,7 @@
+{
+    "label": "Messages limits",
+    "category": "Messages",
+    "description": "Message length, members per channel, channels a user can create per day.",
+    "public": true,
+    "value": {"message_max_chars": 8000, "members_max": 500, "channels_per_day": 20, "page_size": 50}
+}

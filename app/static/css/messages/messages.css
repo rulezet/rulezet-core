@@ -1,0 +1,2 @@
+/* Messages page (messages/messages.html) — the chat itself is styled by css/components/chat.css */
+#messages-app { min-height: 480px; }

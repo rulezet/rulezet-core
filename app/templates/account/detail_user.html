@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% import 'macros/discuss.html' as rz_discuss with context %}
 {% block title %}{{ user.username }} — Rulezet{% endblock %}
 {% block head %}
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
@@ -139,6 +140,7 @@
                                title="Get an alert when {{ user.username or user.first_name }} publishes a rule or bundle">
                                 <i class="fa-solid fa-bell me-1"></i>Watch
                             </a>
+                            {{ rz_discuss.message_user_button(user.id, 'btn btn-sm btn-outline-primary rounded-pill px-3 ms-1') }}
                         </div>
                         {% endif %}
 

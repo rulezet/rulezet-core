@@ -250,6 +250,22 @@
                     </div>
                 </div>
 
+                <!-- Messages by email (features/messages/messages_core.py::send_due_emails) -->
+                <div class="notif-prefs-section">
+                    <div class="notif-prefs-section-header"><i class="fa-solid fa-envelope me-2" style="color:#0d6efd;"></i>Messages by email</div>
+                    <div class="notif-prefs-item" style="border-bottom:none;">
+                        <div class="notif-prefs-item-info">
+                            <div class="notif-prefs-item-label"><i class="fa-solid fa-comments me-1" style="color:#0d6efd;"></i>Email me unread messages</div>
+                            <div class="notif-prefs-item-sub">Sent to {{ current_user.email }} when a message is still unread a few minutes after it arrived — several in one email, never for a muted conversation</div>
+                        </div>
+                        <select class="form-select form-select-sm" style="width:auto;" v-model="prefs.email_messages" @change="savePrefs" aria-label="Messages by email">
+                            <option value="off">Never</option>
+                            <option value="direct">Direct messages and mentions</option>
+                            <option value="all">Everything, channels included</option>
+                        </select>
+                    </div>
+                </div>
+
                 <!-- Per type: every kind of notification, on / off -->
                 <div class="notif-prefs-section">
                     <div class="notif-prefs-section-header"><i class="fa-solid fa-list-check me-2" style="color:#0d6efd;"></i>Every kind of notification</div>
@@ -598,6 +614,7 @@ const TYPE_OPTIONS = [
     { key: 'ownership',           label: 'Ownership',              icon: 'fa-solid fa-user-shield',       types: ['ownership_requested', 'ownership_approved', 'ownership_rejected'] },
     { key: 'roles',               label: 'Roles',                  icon: 'fa-solid fa-user-tag',          types: ['role_granted', 'role_removed'] },
     { key: 'blog_published',      label: 'Blog',                   icon: 'fa-solid fa-newspaper',         types: ['blog_published'] },
+    { key: 'messages',            label: 'Messages',               icon: 'fa-solid fa-comments',          types: ['message_direct', 'message_mention', 'message_invite'] },
     { key: 'bundle_fork',         label: 'Bundle forks',           icon: 'fa-solid fa-code-fork',         types: ['bundle_forked', 'bundle_mr_opened', 'bundle_mr_updated', 'bundle_mr_merged', 'bundle_mr_closed', 'bundle_mr_comment'] },
     { key: 'favorite_rule_update', label: 'Favorite rules',        icon: 'fa-solid fa-star',              types: ['favorite_rule_update'] },
     { key: 'alerts',              label: 'Alerts',                 icon: 'fa-solid fa-bell',              types: ['alert_match'] },
@@ -611,7 +628,7 @@ const DEFAULT_PREFS = {
     proposal_comment: true, proposal_accepted: true,
     blog_published: true, sync_run_finished: true, background_jobs: true,
     workflow_runs: true, alerts: true, favorite_rule_update: true, bundle_fork: true,
-    muted_types: [], auto_archive_days: 0,
+    muted_types: [], auto_archive_days: 0, email_messages: 'off',
 }
 const FOLDERS = [
     { key: 'inbox', label: 'Inbox', icon: 'fa-solid fa-inbox' },

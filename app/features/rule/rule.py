@@ -5450,6 +5450,7 @@ def github_detail():
     return render_template(
         "rule/url_github/detail_url_github.html",
         url=url,
+        repo_uuid=repo_row.uuid if repo_row else None,
         repo_quality=(repo_row.quality_breakdown if repo_row and repo_row.quality_score is not None else None),
         repo_quality_at=(repo_row.quality_computed_at.strftime('%Y-%m-%d %H:%M') if repo_row and repo_row.quality_computed_at else None),
     )

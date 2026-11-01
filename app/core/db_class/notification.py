@@ -141,6 +141,8 @@ class NotificationPreference(db.Model):
     # read notifications archived automatically after N days (0 = never)
     muted_types       = db.Column(db.Text, nullable=True)
     auto_archive_days = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    # Messages by email (features/messages/): off | direct (direct messages and mentions) | all
+    email_messages = db.Column(db.String(16), nullable=False, default='off', server_default='off')
 
     def muted(self) -> set:
         try:
@@ -174,6 +176,7 @@ class NotificationPreference(db.Model):
             'bundle_fork':        self.pref_bundle_fork,
             'muted_types':        sorted(self.muted()),
             'auto_archive_days':  self.auto_archive_days or 0,
+            'email_messages':     self.email_messages or 'off',
         }
 
 

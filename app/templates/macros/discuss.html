@@ -1,0 +1,31 @@
+{# "Discuss" — channels about this object (rule, bundle, blog, cve, attack, repo) and "New channel about it".
+   discuss_button('rule', rule.id, 'btn btn-sm rounded-pill px-3', author_id=rule.user_id) — the list is fetched only when opened
+   (js/components/chat/discuss-menu.js, loaded by base.html; routes in features/messages/). Signed-in users only. #}
+{% macro discuss_button(kind, key, btn_class='btn btn-sm btn-outline-primary rounded-pill px-3', label='Discuss', author_id=None) %}
+{% if current_user.is_authenticated %}
+<div class="dropdown d-inline-block discuss-menu" data-kind="{{ kind }}" data-key="{{ key }}">
+    <button type="button" class="{{ btn_class }} discuss-menu__btn" data-bs-toggle="dropdown" aria-expanded="false" title="Talk about it: write to the author, join or start a channel">
+        <i class="fa-solid fa-comments"></i><span>{{ label }}</span>
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end discuss-menu__list">
+        {% if author_id and author_id != current_user.id %}
+        <li><a class="dropdown-item" href="{{ url_for('messages.page_new', to=author_id, ref=kind ~ ':' ~ key) }}">
+            <i class="fa-solid fa-envelope"></i>Write to the author</a></li>
+        <li><hr class="dropdown-divider"></li>
+        {% endif %}
+        <li class="discuss-menu__slot"><span class="discuss-menu__note"><i class="fa-solid fa-circle-notch fa-spin me-1"></i>Loading channels…</span></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item" href="{{ url_for('messages.page_new', ref=kind ~ ':' ~ key) }}">
+            <i class="fa-solid fa-plus"></i>New channel about it</a></li>
+    </ul>
+</div>
+{% endif %}
+{% endmacro %}
+
+{# "Message" button to write privately to a user #}
+{% macro message_user_button(user_id, btn_class='btn btn-sm btn-outline-primary rounded-pill px-3') %}
+{% if current_user.is_authenticated and current_user.id != user_id %}
+<a href="{{ url_for('messages.page_new', to=user_id) }}" class="{{ btn_class }}" title="Write a private message">
+    <i class="fa-solid fa-envelope me-1"></i>Message</a>
+{% endif %}
+{% endmacro %}

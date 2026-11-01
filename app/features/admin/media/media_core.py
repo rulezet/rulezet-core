@@ -45,6 +45,8 @@ UPLOAD_CATEGORIES = {
     'workspace': ('Workspace files', 'fa-layer-group', ('uploads', 'workspace'), None),
     'pivotick':  ('Pivotick backgrounds', 'fa-diagram-project', ('static', 'uploads', 'pivotick_backgrounds'),
                   '/static/uploads/pivotick_backgrounds'),
+    'channels':  ('Channel pictures', 'fa-hashtag', ('static', 'uploads', 'channels'), '/static/uploads/channels'),
+    'messages':  ('Message images', 'fa-comments', ('uploads', 'messages'), None),
 }
 
 
@@ -477,6 +479,20 @@ def _owners(category):
     elif category == 'pivotick':
         for bg in PivotickBackground.query.all():
             owners[bg.filename] = {'label': f'Pivotick background "{getattr(bg, "name", bg.filename)}"', 'link': '/admin/pivotick'}
+    elif category == 'channels':
+        from app.core.db_class.message import Channel
+        for c in Channel.query.filter(Channel.avatar.isnot(None)).all():
+            owners[c.avatar] = {'label': f'Picture of #{c.name}', 'link': f'/messages/c/{c.uuid}'}
+    elif category == 'messages':
+        from app.core.db_class.message import Channel, ChannelMessage
+        for m in ChannelMessage.query.filter(ChannelMessage.content.like('%/messages/files/%'),
+                                             ChannelMessage.deleted_at.is_(None)).all():
+            c = m.channel
+            where = f'#{c.name}' if c.kind == 'channel' else 'a direct conversation'
+            who = m.author.get_username() if m.author else 'deleted user'
+            for rel in re.findall(r'/messages/files/([\w-]+/[0-9a-f]{32}\.(?:png|jpg))', m.content):
+                owners[rel] = {'label': f'Image by {who} in {where}',
+                               'link': f'/messages/c/{c.uuid}?m={m.id}' if c.kind == 'channel' else None}
     return owners
 
 
@@ -520,6 +536,15 @@ def delete_upload(category, rel):
             WorkspaceFile.query.filter_by(workspace_id=ws.id, stored_name=stored).delete()
     elif category == 'pivotick':
         PivotickBackground.query.filter_by(filename=rel).delete()
+    elif category == 'channels':
+        from app.core.db_class.message import Channel
+        for c in Channel.query.filter_by(avatar=rel).all():
+            c.avatar = None
+    elif category == 'messages':
+        from app.core.db_class.message import ChannelMessage
+        url = f'/messages/files/{rel}'
+        for m in ChannelMessage.query.filter(ChannelMessage.content.like(f'%{url}%')).all():
+            m.content = re.sub(r'!\[[^\]]*\]\(' + re.escape(url) + r'\)', '_[image removed by an admin]_', m.content)
     db.session.commit()
     os.remove(path)
 

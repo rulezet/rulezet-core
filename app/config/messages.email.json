@@ -1,0 +1,7 @@
+{
+    "label": "Messages by email",
+    "category": "Messages",
+    "description": "Who chose it in their preferences gets an email when a message is still unread this many minutes after it arrived — several messages in one email, at most this many conversations and messages each.",
+    "public": false,
+    "value": {"delay_minutes": 10, "max_conversations": 10, "max_messages_per_conversation": 3, "max_emails_per_pass": 200}
+}

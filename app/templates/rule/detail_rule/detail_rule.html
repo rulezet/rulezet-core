@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import 'macros/discuss.html' as rz_discuss with context %}
 {% block title %}{{ rule.title }} — Rulezet{% endblock %}
 {% block head %}
 <style>
@@ -848,13 +849,13 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                 </button>
                                 {% endif %}
 
-                                <!-- Create issue: a Markdown report of this rule to post on its repository (components/issue-report.js), admins -->
+                                <!-- Create a report: a Markdown report of this rule to post on its repository (components/issue-report.js), admins -->
                                 {% if current_user.is_authenticated and current_user.is_admin() %}
                                 <button type="button" class="btn btn-sm rounded-pill px-3"
                                         style="background:transparent; border:1px solid var(--border-color); color:var(--text-color);"
                                         @click="openIssueReport('/rule/' + currentRule.id + '/issue_report')"
                                         title="A Markdown report of this rule — evaluation, what is good, what is wrong — to post as an issue on its repository">
-                                    <i class="fa-solid fa-bug me-1"></i>Create issue
+                                    <i class="fa-solid fa-file-lines me-1"></i>Create a report
                                 </button>
                                 <issue-report></issue-report>
                                 {% endif %}
@@ -940,6 +941,9 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
                                     </ul>
                                 </div>
                                 {% endif %}
+
+                                <!-- Discuss: channels about this rule (features/messages/) -->
+                                {{ rz_discuss.discuss_button('rule', rule.id, 'btn btn-sm rounded-pill px-3 discuss-menu__btn--ghost', 'Discuss', rule.user_id) }}
 
                                 <!-- Report -->
                                 {% if current_user.is_authenticated %}

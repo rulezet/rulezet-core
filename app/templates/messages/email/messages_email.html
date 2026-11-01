@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:24px 12px;background:#f4f6fb;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;color:#212529;">
+  <div style="max-width:620px;margin:0 auto;">
+    <div style="background:linear-gradient(135deg,#0d6efd,#0a58ca);padding:26px 32px;border-radius:12px 12px 0 0;">
+      <div style="color:rgba(255,255,255,.75);font-size:12px;letter-spacing:.08em;text-transform:uppercase;">Rulezet messages</div>
+      <h1 style="color:#ffffff;margin:6px 0 0;font-size:22px;font-weight:700;">
+        {{ total }} unread message{{ 's' if total > 1 else '' }}
+      </h1>
+    </div>
+    <div style="background:#ffffff;border:1px solid #e3e8f0;border-top:0;padding:28px 32px;border-radius:0 0 12px 12px;">
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.6;">Hi {{ user.first_name or user.get_username() }}, here's what you haven't read yet.</p>
+      {% for c in conversations %}
+      <div style="border:1px solid #e3e8f0;border-radius:10px;margin-bottom:18px;overflow:hidden;">
+        <div style="background:#f7f9fc;padding:12px 16px;border-bottom:1px solid #e3e8f0;">
+          <a href="{{ c.url }}" style="color:#0d6efd;font-weight:700;font-size:15px;text-decoration:none;">
+            {% if c.kind == 'direct' %}&#9993; {{ c.name }}{% else %}# {{ c.name }}{% endif %}
+          </a>
+          <span style="float:right;color:#6c757d;font-size:12px;">{{ 'Direct message' if c.kind == 'direct' else 'Channel' }}</span>
+        </div>
+        {% for m in c.messages %}
+        <div style="padding:12px 16px;{% if not loop.last or c.more %}border-bottom:1px solid #f0f2f6;{% endif %}">
+          <div style="font-size:13px;font-weight:700;color:#212529;">{{ m.author }}
+            <span style="font-weight:400;color:#6c757d;font-size:12px;">· {{ m.at.strftime('%d %b %H:%M') }} UTC</span></div>
+          <div style="font-size:14px;line-height:1.5;color:#343a40;white-space:pre-wrap;margin-top:3px;">{{ m.text }}</div>
+        </div>
+        {% endfor %}
+        {% if c.more %}<div style="padding:10px 16px;color:#6c757d;font-size:13px;">…and {{ c.more }} more</div>{% endif %}
+        <div style="padding:10px 16px 14px;">
+          <a href="{{ c.url }}" style="display:inline-block;background:#0d6efd;color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;padding:7px 16px;border-radius:999px;">Reply</a>
+        </div>
+      </div>
+      {% endfor %}
+      {% if hidden %}<p style="font-size:14px;"><a href="{{ messages_url }}" style="color:#0d6efd;">And {{ hidden }} more conversation{{ 's' if hidden > 1 else '' }}</a></p>{% endif %}
+      <p style="margin:24px 0 0;font-size:12px;color:#6c757d;line-height:1.5;">
+        You get these emails because you turned on "Messages by email".
+        <a href="{{ prefs_url }}" style="color:#6c757d;">Change it</a> — or mute a conversation from its menu.
+      </p>
+    </div>
+    <p style="text-align:center;color:#adb5bd;font-size:11px;margin-top:14px;">Rulezet · {{ year }}</p>
+  </div>
+</body>
+</html>

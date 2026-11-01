@@ -58,6 +58,7 @@
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='fontawesome-7.3.1/css/brands.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='fontawesome-7.3.1/css/rulezet-brands-shim.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/external_library/jquery-ui.css') }}">
+    {% if current_user.is_authenticated %}<link rel="stylesheet" href="{{ url_for('static', filename='css/components/discuss-menu.css') }}">{% endif %}
     {# Design tokens must load before core.css so overrides cascade correctly #}
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/themes/variables.css') }}">
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/themes/theme.css') }}">
@@ -384,9 +385,10 @@
     {% if current_user.is_authenticated %}
     <div id="job-widget"></div>
     {# unread notifications / active jobs as of this page (nav_state.py): the bell and the job widget start from these, no request #}
-    <script>window.RZ_NAV = {{ (nav_state or {}) | tojson }};</script>
+    <script>window.RZ_NAV = {{ (nav_state or {}) | tojson }}; window.RZ_ME = {{ current_user.id }};</script>
     <script type="module" src="{{ url_for('static', filename='js/jobs/jobWidget.js') }}"></script>
     <script type="module" src="{{ url_for('static', filename='js/notification/notificationBell.js') }}"></script>
+    <script type="module" src="{{ url_for('static', filename='js/components/chat/discuss-menu.js') }}"></script>
     {% if badge_check_pending %}
     {# points just moved: check once for a newly unlocked badge (account.check_new_badges) #}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/account/badge_unlock.css') }}">

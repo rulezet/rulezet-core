@@ -1,13 +1,23 @@
-{# One menu for the notifications inbox, the alerts and the notification preferences
-   (notification/notifications.html, alert/*.html) — active: 'inbox' | 'alerts' | 'prefs' #}
+{# One menu for the notifications inbox, messages, alerts and the notification preferences
+   (notification/notifications.html, messages/messages.html, alert/*.html) — active: 'inbox' | 'messages' | 'alerts' | 'prefs' #}
 {% macro mailbox_nav(active) %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
-<nav class="dr-nav mb-4" aria-label="Notifications and alerts">
+<nav class="dr-nav mb-4" aria-label="Notifications, messages and alerts">
     <a href="{{ url_for('notification.page_notifications') }}" class="dr-nav__item{% if active == 'inbox' %} active{% endif %}" data-mailbox-tab="inbox">
         <i class="fa-solid fa-inbox"></i><span>Inbox</span></a>
+    <a href="{{ url_for('messages.page_messages') }}" class="dr-nav__item{% if active == 'messages' %} active{% endif %}">
+        <i class="fa-solid fa-comments"></i><span>Messages</span><span class="dr-nav__badge dr-nav__badge--alert d-none" id="mailbox-msg-count"></span></a>
     <a href="{{ url_for('alert.list_alerts') }}" class="dr-nav__item{% if active == 'alerts' %} active{% endif %}">
         <i class="fa-solid fa-satellite-dish"></i><span>Alerts</span></a>
     <a href="{{ url_for('notification.page_notifications', tab='prefs') }}" class="dr-nav__item{% if active == 'prefs' %} active{% endif %}" data-mailbox-tab="prefs">
         <i class="fa-solid fa-sliders"></i><span>Preferences</span></a>
 </nav>
+{% if active != 'messages' %}
+<script type="module">
+fetch('/messages/api/unread').then(r => r.ok ? r.json() : null).then(d => {
+    const el = document.getElementById('mailbox-msg-count')
+    if (el && d && d.unread) { el.textContent = d.unread > 99 ? '99+' : d.unread; el.classList.remove('d-none') }
+}).catch(() => {})
+</script>
+{% endif %}
 {% endmacro %}
