@@ -244,3 +244,6 @@ a.bf-node:hover, .bf-node.is-link:hover { border-color: #6f42c1; }
 .bf-propose-card__kind { display: inline-block; min-width: 7.5rem; font-size: .72rem; font-weight: 800; text-transform: uppercase;
     letter-spacing: .03em; color: #0d6efd; }
 @media (max-width: 640px) { .bf-propose-card { flex-direction: column; padding: 1.1rem; } .bf-propose-card__kind { min-width: 0; margin-right: .4rem; } }
+/* a conflict once decided (take theirs / keep mine) is no longer shown as one */
+.bcl__resolved { display: inline-flex; align-items: center; gap: .3rem; font-size: .76rem; font-weight: 700; color: #198754; }
+.bcl__item.is-resolved { border-color: rgba(25, 135, 84, .3); }

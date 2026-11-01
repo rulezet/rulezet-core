@@ -44,9 +44,10 @@ export default {
         const hasDiff = (it) => (it.source && it.source.content !== undefined) || (it.target && it.target.content !== undefined)
         const kind = (it) => it.kind.split('_')[1]
         const decide = (item, decision, rule_mode) => emit('decide', { item, decision, rule_mode })
+        const resolved = (it) => !!it.conflict && (it.decision === 'source' || it.decision === 'target')
         const allOpen = computed(() => props.items.filter(hasDiff).every(i => open[i.id]))
         const toggleAll = () => { const v = !allOpen.value; props.items.filter(hasDiff).forEach(i => { open[i.id] = v }) }
-        return { open, groups, hasDiff, kind, decide, allOpen, toggleAll, KIND, CONFLICT }
+        return { open, groups, hasDiff, kind, decide, resolved, allOpen, toggleAll, KIND, CONFLICT }
     },
     template: `
     <div class="bcl">
@@ -57,13 +58,15 @@ export default {
         <section v-for="g in groups" :key="g.key" class="bcl__group">
             <h6 class="bcl__group-title"><i :class="g.icon"></i>[[ g.label ]] <span>[[ g.items.length ]]</span></h6>
             <div v-for="it in g.items" :key="it.id" class="bcl__item"
-                 :class="['bcl__item--' + kind(it), { 'is-conflict': it.conflict, 'is-left-out': it.decision === 'reject' || it.decision === 'target' }]">
+                 :class="['bcl__item--' + kind(it), { 'is-conflict': it.conflict && !resolved(it), 'is-resolved': resolved(it), 'is-left-out': it.decision === 'reject' || it.decision === 'target' }]">
                 <div class="bcl__row" :class="{ 'is-clickable': hasDiff(it) }" @click="hasDiff(it) && (open[it.id] = !open[it.id])">
                     <span class="bcl__badge">[[ KIND[kind(it)] || it.kind ]]</span>
                     <span class="bcl__label">[[ it.label ]]</span>
                     <span v-if="it.kind === 'rule_moved'" class="bcl__path">[[ it.base_folder || '/' ]] → [[ it.source.folder || '/' ]]</span>
                     <span v-else-if="it.source && it.source.folder" class="bcl__path">[[ it.source.folder ]]</span>
-                    <span v-if="it.conflict" class="bcl__conflict"><i class="fa-solid fa-triangle-exclamation"></i>Conflict: [[ CONFLICT[it.conflict_kind] || 'both sides' ]]</span>
+                    <span v-if="resolved(it)" class="bcl__resolved" :title="'Was a conflict: ' + (CONFLICT[it.conflict_kind] || 'both sides')">
+                        <i class="fa-solid fa-circle-check"></i>Resolved — [[ it.decision === 'target' ? 'kept ' + leftLabel : 'took ' + rightLabel ]]</span>
+                    <span v-else-if="it.conflict" class="bcl__conflict"><i class="fa-solid fa-triangle-exclamation"></i>Conflict: [[ CONFLICT[it.conflict_kind] || 'both sides' ]]</span>
                     <span class="bcl__spacer"></span>
                     <span v-if="reviewable" class="bcl__decide" @click.stop>
                         <template v-if="it.conflict">

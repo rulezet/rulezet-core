@@ -149,7 +149,8 @@
                 <span v-if="data.summary.files"><i class="fa-solid fa-file-lines"></i>[[ data.summary.files ]] file(s)</span>
                 <span v-if="data.summary.folders"><i class="fa-solid fa-folder"></i>[[ data.summary.folders ]] folder(s)</span>
                 <span v-if="data.summary.meta"><i class="fa-solid fa-circle-info"></i>[[ data.summary.meta ]] detail(s)</span>
-                <span v-if="data.summary.conflicts" class="text-danger"><i class="fa-solid fa-triangle-exclamation"></i>[[ data.summary.conflicts ]] conflict(s), [[ mr.counts.unresolved ]] to resolve</span>
+                <span v-if="mr.counts.unresolved" class="text-danger"><i class="fa-solid fa-triangle-exclamation"></i>[[ mr.counts.unresolved ]] conflict(s) to resolve</span>
+                <span v-if="data.summary.resolved" class="text-success"><i class="fa-solid fa-circle-check"></i>[[ data.summary.resolved ]] resolved</span>
                 <span v-if="mr.status === 'open' && mr.computed_at" class="ms-auto small text-muted" title="Recomputed each time the page opens">
                     <i class="fa-solid fa-rotate me-1"></i>up to date — [[ mr.computed_at ]]</span>
             </div>

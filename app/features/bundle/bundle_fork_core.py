@@ -223,10 +223,13 @@ def compute_changes(base: dict, source: dict, target: dict) -> list:
 
 
 def summarize_changes(items: list) -> dict:
-    out = {'rules': 0, 'files': 0, 'folders': 0, 'meta': 0, 'conflicts': 0, 'total': len(items or [])}
+    """conflicts: the ones still to resolve — a conflict decided (take theirs / keep mine) is 'resolved', not a
+    conflict anymore."""
+    out = {'rules': 0, 'files': 0, 'folders': 0, 'meta': 0, 'conflicts': 0, 'resolved': 0, 'total': len(items or [])}
     for i in items or []:
         out[{'rule': 'rules', 'file': 'files', 'folder': 'folders', 'meta': 'meta'}[i['kind'].split('_')[0]]] += 1
-        out['conflicts'] += 1 if i.get('conflict') else 0
+        if i.get('conflict'):
+            out['resolved' if i.get('decision') in ('source', 'target') else 'conflicts'] += 1
     return out
 
 

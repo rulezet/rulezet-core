@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import 'macros/discuss.html' as rz_discuss with context %}
 {% block title %}{{ bundle_name if bundle_name is defined else 'Bundle' }} — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ai-writer-badge.css') }}">
@@ -286,11 +287,13 @@
                             </ul>
                         </div>
 
+                        <!-- Discuss: channels about this bundle (features/messages/) -->
+                        {{ rz_discuss.discuss_button('bundle', bundle_id, 'bd-btn bd-btn--icon', author_id=bundle_user_id) }}
                         <!-- Fork: your own copy, linked to this bundle (bundle_fork_routes.py) -->
                         <button v-if="IS_AUTHENTICATED && forkInfo && forkInfo.enabled !== false && !viewRelease" type="button"
-                                class="bd-btn bd-btn--icon" :disabled="forkBusy || !forkInfo.can_fork"
+                                class="bd-btn bd-btn--icon" :disabled="forkBusy || (!forkInfo.can_fork && !forkInfo.forks_count)"
                                 :title="forkInfo.can_fork ? 'Make your own copy of this bundle, linked to it — change it, then propose your changes back' : forkInfo.why_not_fork"
-                                @click="forkBundle">
+                                @click="openForkModal">
                             <i class="fa-solid fa-code-fork"></i><span>Fork</span><span v-if="forkInfo.forks_count" class="bf-count">[[ forkInfo.forks_count ]]</span>
                         </button>
                         <!-- Suggest changes: works on your fork (made on the first click), then you propose it back -->
@@ -383,9 +386,10 @@
                     </div>
                 </div>
 
-                            <!-- Modal-->
+                            <!-- Modal — in <body>: inside the page an ancestor's stacking context put it under its backdrop -->
+                            <teleport to="body">
                             <div class="modal fade" :id="'delete_bundle_modal_'+bundle.id" tabindex="-1"
-                                aria-hidden="true" style="z-index: 2000;">
+                                aria-hidden="true">
                                 <div class="modal-dialog modal-dialog-centered">
                                     <div class="modal-content border-0 shadow-lg" style="border-radius: 15px;">
                                         <div class="modal-header border-0 pb-0">
@@ -409,6 +413,50 @@
                                     </div>
                                 </div>
                             </div>
+                            </teleport>
+
+                            <!-- Fork window: a new fork, or one that exists (bundle_fork_routes.py) -->
+                            <teleport to="body">
+                            <div v-if="forkModal" class="bd-fork-modal" @mousedown.self="forkModal = false" @keydown.esc="forkModal = false">
+                                <div class="bd-fork-modal__card" role="dialog" aria-modal="true" aria-labelledby="bd-fork-title">
+                                    <div class="bd-fork-modal__head">
+                                        <h5 id="bd-fork-title"><i class="fa-solid fa-code-fork me-2"></i>Fork “[[ bundle.name ]]”</h5>
+                                        <button type="button" class="btn-close" aria-label="Close" @click="forkModal = false"></button>
+                                    </div>
+                                    <p class="bd-fork-modal__intro">A fork is your own copy of this bundle, linked to it: change it as you like, then propose your changes back with a merge request.</p>
+
+                                    <div v-if="forkInfo && forkInfo.can_fork" class="bd-fork-modal__new">
+                                        <label for="bd-fork-name" class="bd-fork-modal__label">New fork</label>
+                                        <div class="d-flex gap-2">
+                                            <input id="bd-fork-name" class="form-control" v-model="forkName" maxlength="255"
+                                                   :placeholder="bundle.name + ' (fork)'" @keydown.enter.prevent="forkBundle">
+                                            <button type="button" class="btn btn-primary rounded-pill px-4 text-nowrap" :disabled="forkBusy" @click="forkBundle">
+                                                <i :class="forkBusy ? 'fa-solid fa-circle-notch fa-spin' : 'fa-solid fa-code-fork'" class="me-1"></i>Create</button>
+                                        </div>
+                                        <div class="bd-fork-modal__hint">Leave the name empty to keep “[[ bundle.name ]] (fork)”.</div>
+                                    </div>
+                                    <div v-else-if="forkInfo" class="bd-fork-modal__note"><i class="fa-solid fa-circle-info me-1"></i>[[ forkInfo.why_not_fork || 'You can\'t fork this bundle.' ]]</div>
+
+                                    <div class="bd-fork-modal__label mt-3">Existing forks</div>
+                                    <div class="bd-fork-modal__list">
+                                        <div v-if="forkList === null" class="bd-fork-modal__empty"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
+                                        <div v-else-if="!forkList.length" class="bd-fork-modal__empty">No fork yet.</div>
+                                        <a v-for="f in forkList" :key="f.id" :href="'/bundle/detail/' + f.id" class="bd-fork-modal__row"
+                                           :class="{ 'is-mine': f.user_id === CURRENT_USER_ID }">
+                                            <i class="fa-solid fa-code-fork"></i>
+                                            <span class="bd-fork-modal__name">[[ f.name ]]
+                                                <small>[[ f.user_id === CURRENT_USER_ID ? 'Yours' : (f.owner || 'Someone') ]] · [[ f.updated_at || f.created_at ]]<template v-if="!f.access"> · private</template></small></span>
+                                            <span v-if="f.open_merge_request" class="bd-fork-modal__mr" title="It has an open merge request"><i class="fa-solid fa-code-pull-request"></i></span>
+                                            <span class="bd-fork-modal__open">Open <i class="fa-solid fa-arrow-right"></i></span>
+                                            <button v-if="is_admin || f.user_id === CURRENT_USER_ID" type="button" class="bd-fork-modal__del"
+                                                    :title="'Delete this fork' + (f.user_id === CURRENT_USER_ID ? '' : ' (admin)')" @click.prevent.stop="deleteFork(f)">
+                                                <i class="fa-solid fa-trash"></i></button>
+                                        </a>
+                                        <div v-if="forkHidden" class="bd-fork-modal__empty">+ [[ forkHidden ]] private fork[[ forkHidden > 1 ? 's' : '' ]] you can't see</div>
+                                    </div>
+                                </div>
+                            </div>
+                            </teleport>
 
                 <!-- Tags-->
                 <template v-if="!viewRelease">
@@ -1152,13 +1200,13 @@
                     id
                 })
                 const res = await fetch('/bundle/delete?' + params.toString(), { method: 'POST', headers: { 'X-CSRFToken': csrfToken } })
-                if (await res.status == 200) {
-                    var myModalEl = document.getElementById('delete_bundle_modal_' + id);
-                    var modal = bootstrap.Modal.getInstance(myModalEl)
-                    modal.hide();
+                const out = await res.json().catch(() => ({}))
+                if (res.status == 200) {
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('delete_bundle_modal_' + id));
+                    if (modal) modal.hide();
                     window.location.href = `/bundle/list`;
                 } else {
-                    create_message(res.message, res.toast_class);
+                    create_message(out.message || 'The bundle could not be deleted.', out.toast_class || 'danger-subtle');
                 }
             }
 
@@ -1952,11 +2000,32 @@
             const forkInfo = ref(null);
             const reloadPage = () => window.location.reload();
             const forkBusy = ref(false);
+            // Fork window: make a new fork (named) or open one that exists
+            const forkModal = ref(false), forkName = ref(''), forkList = ref(null), forkHidden = ref(0);
+            async function openForkModal() {
+                forkModal.value = true;
+                forkName.value = '';
+                forkList.value = null;
+                const d = await fetch(`/bundle/${bundle_id}/forks`).then(r => r.ok ? r.json() : null).catch(() => null);
+                forkList.value = d ? d.forks : [];
+                forkHidden.value = d ? (d.hidden || 0) : 0;
+                Vue.nextTick(() => document.getElementById('bd-fork-name')?.focus());
+            }
+            // admins: any fork; owners: theirs (/bundle/delete checks it again)
+            async function deleteFork(f) {
+                if (!confirm(`Delete the fork "${f.name}"${f.user_id === CURRENT_USER_ID_ ? '' : ' of ' + (f.owner || 'someone')}? Its open merge requests are closed. This cannot be undone.`)) return;
+                const res = await fetch('/bundle/delete?' + new URLSearchParams({ id: f.id }), { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                const out = await res.json().catch(() => ({}));
+                create_message(out.message || (res.ok ? 'Fork deleted.' : 'The fork could not be deleted.'), out.toast_class || (res.ok ? 'success-subtle' : 'danger-subtle'));
+                if (res.ok) forkList.value = forkList.value.filter(x => x.id !== f.id);
+            }
+            const CURRENT_USER_ID_ = parseInt('{{ current_user.id if current_user.is_authenticated else 0 }}');
             async function forkBundle() {
                 forkBusy.value = true;
                 try {
                     const res = await fetch(`/bundle/${bundle_id}/fork`, { method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }, body: '{}' });
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify(forkName.value.trim() ? { name: forkName.value.trim() } : {}) });
                     const out = await res.json().catch(() => ({}));
                     if (out.message) create_message(out.message, out.toast_class || (res.ok ? 'success-subtle' : 'danger-subtle'));
                     if (res.ok && out.url) window.location.href = out.url + '?fork_welcome=1';
@@ -2129,7 +2198,7 @@
                 treeData, fileTreeNodes, allFiles, docFiles,
                 openedFile, viewerList, openedIndex, openFile, closeFile, stepFile,
                 openedOrigin, fileTreeRef, filesPanelRef, focusRule, locateOpenedFile, onAttackRuleAction, onRuleListAction,
-                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, scrollToZone, noteRefs, openNoteRef, canEditStructure, openInEditor, onTreeRowAction, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, forkInfo, reloadPage, IS_AUTHENTICATED, forkBusy, forkBundle, suggestChanges, showRuleInStructure, showRuleInList, structureLoaded, toggleFavorite, showAiTab, aiSummary, CAN_MANAGE_AI,
+                handleFileTreeSelect, activeTab, contentTabs, setTab, ruleListKey, reloadAfterFix, notesSummary, notesAlert, scrollToZone, noteRefs, openNoteRef, canEditStructure, openInEditor, onTreeRowAction, mispView, mispGraphError, mispStats, showMispJson, showMispGraph, reloadMisp, healthSummary, releasesSummary, forkInfo, reloadPage, IS_AUTHENTICATED, forkBusy, forkBundle, forkModal, forkName, forkList, forkHidden, openForkModal, deleteFork, CURRENT_USER_ID: parseInt('{{ current_user.id if current_user.is_authenticated else 0 }}'), suggestChanges, showRuleInStructure, showRuleInList, structureLoaded, toggleFavorite, showAiTab, aiSummary, CAN_MANAGE_AI,
                 viewRelease, releaseData, releaseSwitching, releaseOptions, switchVersion, openReleaseRule, openReleaseRuleDiff, descHtml, descEl, descOverflows, copyDescription, downloadDescription,
                 sharePanelOpen, shareUrl, shareCreatedAt, shareLoading, shareBusy, regenArmed,
                 toggleSharePanel, regenerateShare, revokeShare, copyShareUrl,
