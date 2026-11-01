@@ -1,5 +1,5 @@
-"""Daily clean-up of unverified, never-used accounts (unverified_cleanup_core.py, job purge_unverified_users,
-template unverified_accounts_cleanup): only bots / abandoned sign-ups go, never a real user."""
+"""Daily clean-up of the accounts whose email was never verified (unverified_cleanup_core.py, job purge_unverified_users,
+template unverified_accounts_cleanup): never an admin, a system account or the account running it."""
 import datetime
 
 from app import db
@@ -26,24 +26,28 @@ def _signup(client, **form_overrides):
     return user
 
 
-def test_only_unused_unverified_local_accounts_are_candidates(app, users):
+def test_every_unverified_local_account_is_a_candidate_except_protected(app, users):
     client = app.test_client()
     bot = _signup(client)
     recent = _signup(client)
     recent.created_at = datetime.datetime.utcnow()                    # signed up 1 minute ago: grace period
     sso = _signup(client)
-    sso.auth_provider = "oidc"                                         # vouched for by its identity provider
-    checked = _signup(client)
-    checked.identity_verified = True
-    with_rule = _signup(client)                                        # used Rulezet (e.g. through its API key)
-    make_rule(with_rule)
-    acted = _signup(client)
-    log_activity("rule.create", "x", actor_id=acted.id)
+    sso.auth_provider = "oidc"                                         # verified by its identity provider
+    with_rule = _signup(client)                                        # used Rulezet: still deleted (email never verified)
+    rule = make_rule(with_rule)
+    unverified_admin = _signup(client)
+    unverified_admin.admin = True                                      # never an admin
+    runner = _signup(client)                                           # never the account running the clean-up
     db.session.commit()
-    found = C.find_candidates(24)
-    assert [u.id for u in found["delete"]] == [bot.id]
-    assert found["kept_used"] == 2                                     # with_rule and acted
+    found = C.find_candidates(24, protect_ids=[runner.id])
+    assert sorted(u.id for u in found["delete"]) == sorted([bot.id, with_rule.id])
+    assert found["kept_protected"] == 2
     assert all(u.is_verified for u in (users.owner, users.user, users.admin))   # verified users never looked at
+    C.purge(24, 200, dry_run=False, protect_ids=[runner.id])
+    db.session.expire_all()
+    from app.core.db_class.rule import Rule
+    assert db.session.get(User, with_rule.id) is None
+    assert db.session.get(Rule, rule.id).user_id != with_rule.id                  # its rule goes to the admin
 
 
 def test_purge_deletes_and_makes_the_signup_logs_private(app, users):

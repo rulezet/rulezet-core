@@ -1,4 +1,4 @@
-"""Create issue — the Markdown report of a rule / of a Git source (issue_report.py)."""
+"""Create a report — the Markdown report of a rule / of a Git source (issue_report.py)."""
 import pytest
 
 from app import db

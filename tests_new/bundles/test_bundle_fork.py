@@ -254,3 +254,14 @@ def test_bundle_list_shows_originals_with_their_forks(clients, users):
     assert items[bundle.id]["fork_count"] == 1
     found = clients["anonymous"].get("/bundle/data_table?per_page=100&search=" + fork.name).get_json()["items"]
     assert any(i["id"] == fork.id and i["forked_from_name"] == bundle.name for i in found)   # a search lists it
+
+
+def test_admin_deletes_any_fork(clients, users):
+    from tests_new.helpers.bundles import make_bundle
+    from app import db
+    from app.core.db_class.bundle import Bundle
+    upstream = make_bundle(users.owner)
+    fork_id = clients["user"].post(f"/bundle/{upstream.id}/fork", json={}).get_json()["bundle_id"]
+    assert clients["owner"].post(f"/bundle/delete?id={fork_id}").status_code == 403    # the upstream owner can't
+    assert clients["admin"].post(f"/bundle/delete?id={fork_id}").status_code == 200    # an admin can
+    assert db.session.get(Bundle, fork_id) is None
