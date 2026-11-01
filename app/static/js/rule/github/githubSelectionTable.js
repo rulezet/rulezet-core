@@ -783,7 +783,7 @@ const GitHubSelectionTable = {
                                         <i class="fas fa-eye"></i>
                                     </a>
                                     <button v-if="currentUserIsAdmin" class="dt-action-btn" @click="createIssue(item)"
-                                            title="Create issue — a Markdown report of what went wrong importing it (bad rules, references, failed updates) to post on the repository">
+                                            title="Create a report — a Markdown report of what went wrong importing it (bad rules, references, failed updates) to post on the repository">
                                         <i class="fas fa-bug"></i>
                                     </button>
                                     <template v-if="isAdmin">

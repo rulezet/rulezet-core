@@ -269,7 +269,7 @@ export default {
 
     template: `
     <div class="rl-wrapper">
-        <!-- "Create issue" window (one per page, components/issue-report.js) -->
+        <!-- "Create a report" window (one per page, components/issue-report.js) -->
         <issue-report></issue-report>
 
         <!-- ── Toolbar: search + sort + view toggle ── -->
@@ -1508,7 +1508,7 @@ export default {
                                             </a>
                                             <button v-if="currentUserIsAdmin" class="rl-action-item" @click.stop="createIssue(rule)"
                                                     title="A Markdown report of this rule (evaluation, errors) to post as an issue on its repository">
-                                                <i class="fas fa-bug"></i> Create issue
+                                                <i class="fa-solid fa-file-lines"></i> Create a report
                                             </button>
                                             <template v-if="currentUserIsAuthenticated">
                                                 <report-modal

@@ -1,5 +1,5 @@
 /**
- * issue-report.js — the "Create issue" window: a Markdown report (rule evaluation, or a Git source's
+ * issue-report.js — the "Create a report" window: a Markdown report (rule evaluation, or a Git source's
  * import problems — app/features/rule/issue_report.py) to post as an issue on its repository.
  * Preview / editable Markdown, Copy, Download .md, Open an issue on GitHub / GitLab / Gitea.
  *
@@ -100,7 +100,7 @@ export default {
         <div v-if="state.open" class="irp-modal" @click.self="state.open = false">
             <div class="irp-box" role="dialog" aria-modal="true">
                 <div class="irp-head">
-                    <div class="irp-title"><i class="fa-solid fa-bug me-2"></i>Create issue</div>
+                    <div class="irp-title"><i class="fa-solid fa-file-lines me-2"></i>Create a report</div>
                     <button type="button" class="irp-x" @click="state.open = false" aria-label="Close">×</button>
                 </div>
                 <div v-if="state.loading" class="irp-body text-center py-5 text-muted">
