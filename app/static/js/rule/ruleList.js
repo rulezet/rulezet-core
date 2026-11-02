@@ -871,6 +871,96 @@ export default {
                         </div>
                     </div>
 
+                    <!-- Rule preview: its first 4 lines, faded; a click opens the whole rule right here -->
+                    <div v-if="!expandedIds.has(rule.id)" class="rl-card-preview mb-2" role="button" tabindex="0"
+                         :title="rule.to_string ? 'Click to show the whole rule' : 'No content available'"
+                         @click="toggleExpand(rule)" @keydown.enter.prevent="toggleExpand(rule)">
+                        <code-viewer v-if="rule.to_string" class="rl-card-preview__code"
+                            :code="previewOf(rule)"
+                            :language="rule.format || 'auto'"
+                            :title="rule.title"
+                            :initial-search="contentSearch"
+                            :extra-highlights="showTestResults ? matchedHighlightTerms(rule) : []"
+                            :foldable="false"
+                            :word-wrap="false"
+                            max-height="none">
+                        </code-viewer>
+                        <p v-else class="text-muted small mb-0">No content available.</p>
+                        <span class="rl-card-preview__more"><i class="fa-solid fa-chevron-down me-1"></i>Show the rule</span>
+                        <a :href="ruleHref(rule)" class="rl-card-preview__details" @click.stop title="Open the page of this rule: its content, history, comments, quality, tests">
+                            <i class="fas fa-eye me-1"></i>View details</a>
+                    </div>
+                    <!-- Rule content, opened from its preview (same place) -->
+                    <div v-else class="rl-card-content mb-2">
+                        <div v-if="showTestResults && rule.test_result" class="rl-expand-test-report">
+                            <div class="rl-expand-test-report__title">
+                                <i class="fa-solid fa-flask-vial"></i>
+                                <span>Test report</span>
+                                <span class="ms-auto badge" :class="rule.test_result.matched ? 'bg-success' : (rule.test_result.error ? 'bg-danger' : 'bg-secondary')">
+                                    {{ rule.test_result.matched ? 'MATCHED' : (rule.test_result.error ? 'ERROR' : 'NO MATCH') }}
+                                </span>
+                                <span v-if="rule.test_result.score!=null" class="badge bg-dark">
+                                    {{ Math.round((rule.test_result.score||0)*100) }}%
+                                </span>
+                                <span v-if="rule.test_result.execution_time_ms!=null" class="badge bg-dark">
+                                    {{ rule.test_result.execution_time_ms }}ms
+                                </span>
+                            </div>
+                            <div v-if="rule.test_result.error" class="rtr-hints px-0">
+                                <div class="rtr-hint-item">
+                                    <i class="fa-solid fa-circle-exclamation rtr-hint-icon" style="color:#dc3545;"></i>
+                                    {{ rule.test_result.error }}
+                                </div>
+                            </div>
+                            <yara-match-detail v-if="rule.format==='yara'"
+                                :details="rule.test_result.details || {}"
+                                :quality-hints="rule.test_result.quality_hints || []"
+                                :test-input="testInput">
+                            </yara-match-detail>
+                            <div v-else-if="rule.test_result.quality_hints && rule.test_result.quality_hints.length" class="rtr-hints px-0">
+                                <div v-for="hint in rule.test_result.quality_hints" :key="hint" class="rtr-hint-item">
+                                    <i class="fa-solid fa-lightbulb rtr-hint-icon"></i>{{ hint }}
+                                </div>
+                            </div>
+                            <p v-if="matchedHighlightTerms(rule).length" class="mb-0" style="font-size:.72rem;color:var(--subtle-text-color);">
+                                <i class="fa-solid fa-arrow-down me-1"></i>The matched bytes are highlighted in blue in the rule content below.
+                            </p>
+                        </div>
+                        <div v-if="showValidationRisk && rule.validation_risk && rule.validation_risk.matched_files && rule.validation_risk.matched_files.length" class="rl-expand-test-report">
+                            <div class="rl-expand-test-report__title">
+                                <i class="fa-solid fa-file-shield"></i>
+                                <span>Fired on {{ rule.validation_risk.matched_files.length }} known-clean binar{{ rule.validation_risk.matched_files.length === 1 ? 'y' : 'ies' }}</span>
+                            </div>
+                            <div>
+                                <span v-for="m in rule.validation_risk.matched_files" :key="m.path || m.file"
+                                      class="badge me-1 mb-1" style="background:rgba(220,53,69,.1);color:#dc3545;font-size:.75rem;font-family:monospace;"
+                                      :style="binaryBadgeStyle(m.file)"
+                                      :title="m.path" @click.stop="toggleBinary(m.file)">
+                                    {{ m.path || m.file }}
+                                </span>
+                            </div>
+                        </div>
+                        <code-viewer v-if="rule.to_string"
+                            :code="rule.to_string"
+                            :language="rule.format || 'auto'"
+                            :title="rule.title"
+                            :initial-search="contentSearch"
+                            :extra-highlights="showTestResults ? matchedHighlightTerms(rule) : []"
+                            :word-wrap="true"
+                            max-height="380px">
+                        </code-viewer>
+                        <p v-else class="text-muted text-center py-3 mb-0 small">No content available.</p>
+                        <div class="rl-card-preview__bar">
+                            <button type="button" class="rl-card-preview__toggle" title="Show only the first lines again" @click="toggleExpand(rule)">
+                                <i class="fa-solid fa-chevron-up me-1"></i>Hide the rule
+                            </button>
+                            <a :href="ruleHref(rule)" class="btn btn-primary btn-sm rounded-pill px-3 fw-semibold"
+                               title="Open the page of this rule: its content, history, comments, quality, tests">
+                                <i class="fas fa-eye me-1"></i>View details<i class="fas fa-arrow-right ms-1"></i>
+                            </a>
+                        </div>
+                    </div>
+
                     <!-- Description -->
                     <p data-tour="rl-card-desc" class="rl-card-desc mb-2"
                        style="-webkit-line-clamp:3;-webkit-box-orient:vertical;display:-webkit-box;overflow:hidden;">
@@ -1085,67 +1175,6 @@ export default {
                     </div>
                 </div>
 
-                <!-- Collapse: rule content -->
-                <div v-if="expandedIds.has(rule.id)" class="rl-rule-collapse border-top">
-                    <div v-if="showTestResults && rule.test_result" class="rl-expand-test-report">
-                        <div class="rl-expand-test-report__title">
-                            <i class="fa-solid fa-flask-vial"></i>
-                            <span>Test report</span>
-                            <span class="ms-auto badge" :class="rule.test_result.matched ? 'bg-success' : (rule.test_result.error ? 'bg-danger' : 'bg-secondary')">
-                                {{ rule.test_result.matched ? 'MATCHED' : (rule.test_result.error ? 'ERROR' : 'NO MATCH') }}
-                            </span>
-                            <span v-if="rule.test_result.score!=null" class="badge bg-dark">
-                                {{ Math.round((rule.test_result.score||0)*100) }}%
-                            </span>
-                            <span v-if="rule.test_result.execution_time_ms!=null" class="badge bg-dark">
-                                {{ rule.test_result.execution_time_ms }}ms
-                            </span>
-                        </div>
-                        <div v-if="rule.test_result.error" class="rtr-hints px-0">
-                            <div class="rtr-hint-item">
-                                <i class="fa-solid fa-circle-exclamation rtr-hint-icon" style="color:#dc3545;"></i>
-                                {{ rule.test_result.error }}
-                            </div>
-                        </div>
-                        <yara-match-detail v-if="rule.format==='yara'"
-                            :details="rule.test_result.details || {}"
-                            :quality-hints="rule.test_result.quality_hints || []"
-                            :test-input="testInput">
-                        </yara-match-detail>
-                        <div v-else-if="rule.test_result.quality_hints && rule.test_result.quality_hints.length" class="rtr-hints px-0">
-                            <div v-for="hint in rule.test_result.quality_hints" :key="hint" class="rtr-hint-item">
-                                <i class="fa-solid fa-lightbulb rtr-hint-icon"></i>{{ hint }}
-                            </div>
-                        </div>
-                        <p v-if="matchedHighlightTerms(rule).length" class="mb-0" style="font-size:.72rem;color:var(--subtle-text-color);">
-                            <i class="fa-solid fa-arrow-down me-1"></i>The matched bytes are highlighted in blue in the rule content below.
-                        </p>
-                    </div>
-                    <div v-if="showValidationRisk && rule.validation_risk && rule.validation_risk.matched_files && rule.validation_risk.matched_files.length" class="rl-expand-test-report">
-                        <div class="rl-expand-test-report__title">
-                            <i class="fa-solid fa-file-shield"></i>
-                            <span>Fired on {{ rule.validation_risk.matched_files.length }} known-clean binar{{ rule.validation_risk.matched_files.length === 1 ? 'y' : 'ies' }}</span>
-                        </div>
-                        <div>
-                            <span v-for="m in rule.validation_risk.matched_files" :key="m.path || m.file"
-                                  class="badge me-1 mb-1" style="background:rgba(220,53,69,.1);color:#dc3545;font-size:.75rem;font-family:monospace;"
-                                  :style="binaryBadgeStyle(m.file)"
-                                  :title="m.path" @click.stop="toggleBinary(m.file)">
-                                {{ m.path || m.file }}
-                            </span>
-                        </div>
-                    </div>
-                    <code-viewer v-if="rule.to_string"
-                        :code="rule.to_string"
-                        :language="rule.format || 'auto'"
-                        :title="rule.title"
-                        :initial-search="contentSearch"
-                        :extra-highlights="showTestResults ? matchedHighlightTerms(rule) : []"
-                        :word-wrap="true"
-                        max-height="380px">
-                    </code-viewer>
-                    <p v-else class="text-muted text-center py-3 mb-0 small">No content available.</p>
-                </div>
             </div>
         </div>
 
@@ -1251,7 +1280,7 @@ export default {
                                        :aria-label="'Select ' + rule.title" />
                             </td>
 
-                            <td v-if="showStatus" class="dt-td" @click.stop>
+                            <td v-if="showStatus" class="dt-td">
 <div class="dropdown d-inline-block rl-status-pick" @click.stop>
                                     <button type="button" class="rl-status-badge" :class="'rl-status--' + (rule.status || 'draft')"
                                             :data-bs-toggle="canChangeStatus(rule) ? 'dropdown' : null" aria-expanded="false"
@@ -1358,10 +1387,9 @@ export default {
                                              :active="ruleType === rule.format" @filter="filterByFormat"></format-chip>
                             </td>
 
-                            <td v-show="colVisible.editor" class="dt-td" style="max-width:64px;"
-                                @click.stop>
+                            <td v-show="colVisible.editor" class="dt-td" style="max-width:64px;">
                                 <!-- profile picture only (room); the name is on hover -->
-                                <user-chip
+                                <user-chip data-no-row-toggle
                                     :user-id="rule.user_id"
                                     :username="rule.editor"
                                     :avatar="rule.editor_avatar"
@@ -1383,24 +1411,24 @@ export default {
                                 </div>
                             </td>
 
-                            <td v-show="colVisible.tags" class="dt-td" @click.stop>
-                                <tags-displays-list v-if="rule.tags && rule.tags.length"
+                            <td v-show="colVisible.tags" class="dt-td">
+                                <tags-displays-list data-no-row-toggle v-if="rule.tags && rule.tags.length"
                                     object-type="rule" :object-id="rule.id" :max-visible="2"
                                     :initial-tags="rule.tags">
                                 </tags-displays-list>
                                 <span v-else class="text-muted small">—</span>
                             </td>
 
-                            <td v-show="colVisible.cves" class="dt-td" @click.stop>
-                                <vulnerability-displays-list v-if="rule.cves && rule.cves.length"
+                            <td v-show="colVisible.cves" class="dt-td">
+                                <vulnerability-displays-list data-no-row-toggle v-if="rule.cves && rule.cves.length"
                                     object-type="rule" :object-id="rule.id" :max-visible="2"
                                     :initial-vulnerabilities="rule.cves">
                                 </vulnerability-displays-list>
                                 <span v-else class="text-muted small">—</span>
                             </td>
 
-                            <td v-show="colVisible.attacks" class="dt-td" @click.stop>
-                                <attack-display-list
+                            <td v-show="colVisible.attacks" class="dt-td">
+                                <attack-display-list data-no-row-toggle
                                     :initial-attacks="rule.attacks || []"
                                     :max-visible="2">
                                 </attack-display-list>
@@ -1542,7 +1570,7 @@ export default {
                                     <!-- Expand : toujours en dernier -->
                                     <button class="dt-action-btn dt-action-btn--expand"
                                             :class="{ 'is-expanded': expandedIds.has(rule.id) }"
-                                            title="Expand" @click="toggleExpand(rule)">
+                                            :title="expandedIds.has(rule.id) ? 'Hide the content' : 'Show the content of the rule'" @click="toggleExpand(rule)">
                                         <i class="fas fa-chevron-down dt-expand-chevron"
                                            style="font-size:.65rem;"></i>
                                     </button>
@@ -1555,6 +1583,15 @@ export default {
                             :key="'expand-' + rule.id" class="dt-row-expand">
                             <td :colspan="tableColspan" class="dt-expand-cell p-0">
                                 <div class="rl-expand-wrap">
+
+                                    <!-- the way to the rule's own page, impossible to miss -->
+                                    <div class="rl-expand-head">
+                                        <span class="rl-expand-head__title text-truncate">{{ rule.title }}</span>
+                                        <a :href="ruleHref(rule)" class="btn btn-primary btn-sm rounded-pill px-3 fw-semibold flex-shrink-0"
+                                           title="Open the page of this rule: its content, history, comments, quality, tests">
+                                            <i class="fas fa-eye me-1"></i>View details<i class="fas fa-arrow-right ms-1"></i>
+                                        </a>
+                                    </div>
 
                                     <!-- ⓪ Test report (only when showTestResults) -->
                                     <div v-if="showTestResults && rule.test_result" class="rl-expand-test-report">
@@ -2507,6 +2544,13 @@ export default {
 
         // ── Expand / collapse ─────────────────────────────────────────────
 
+        // first lines of the rule (leading blank lines skipped) for the card preview
+        const previewOf = (rule) => {
+            const lines = String(rule.to_string || '').replace(/\r/g, '').split('\n')
+            while (lines.length && !lines[0].trim()) lines.shift()
+            return lines.slice(0, 4).join('\n')
+        }
+
         function toggleExpand(rule) {
             if (expandedIds.has(rule.id)) {
                 expandedIds.delete(rule.id)
@@ -2900,7 +2944,7 @@ export default {
         const createIssue = (rule) => openIssueReport('/rule/' + rule.id + '/issue_report')
 
         return {
-            createIssue,
+            createIssue, previewOf,
             searchIdKind,
             orgOwners, hasOrgBadge, filterByOrgBadge,
             contentSearch, ruleHref, filterByPlatform, linkedShown,
