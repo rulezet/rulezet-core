@@ -248,8 +248,10 @@ def test_invite_link_and_who_adds_people(clients, users):
     assert clients["user"].post(f"{API}/channels/{u}/invite").status_code == 404     # not even visible
     code = clients["owner"].post(f"{API}/channels/{u}/invite").get_json()["channel"]["invite_code"]
     assert code
-    r = clients["user"].get(f"/messages/join/{code}")
-    assert r.status_code == 302 and r.headers["Location"].endswith(f"/messages/c/{u}")
+    assert clients["user"].get(f"/messages/join/{code}").status_code == 200        # a page that asks…
+    assert clients["user"].get(f"{API}/channels/{u}").status_code == 404             # …the visit alone doesn't join
+    r = clients["user"].post(f"/messages/join/{code}")
+    assert r.status_code == 200 and r.get_json()["uuid"] == u
     me = clients["user"].get(f"{API}/channels/{u}").get_json()["channel"]
     assert me["is_member"] and me["invite_code"] is None                        # members don't see the code
     # a member adds people only when the channel allows it
@@ -263,6 +265,7 @@ def test_invite_link_and_who_adds_people(clients, users):
     from tests_new.conftest import _logged_in_client
     from flask import current_app
     assert _logged_in_client(current_app, late).get(f"/messages/join/{code}").status_code == 404
+    assert _logged_in_client(current_app, late).post(f"/messages/join/{code}").status_code == 404
 
 
 def test_going_private_keeps_members(clients, users):
