@@ -145,7 +145,7 @@
                     </label>
                     <button type="button" class="ibx-star" :class="{ 'is-on': n.is_starred }" @click.stop="act([n], n.is_starred ? 'unstar' : 'star')"
                             :title="n.is_starred ? 'Unstar' : 'Star'"><i :class="n.is_starred ? 'fa-solid fa-star' : 'fa-regular fa-star'"></i></button>
-                    <span class="ibx-row__icon" :class="'ibx-cat--' + catKey(n)"><i :class="n.icon || catIcon(n)"></i></span>
+                    <span class="ibx-row__icon" :style="{ '--c': typeColor(n) }"><i :class="n.icon || catIcon(n)"></i></span>
                     <div class="ibx-row__body">
                         <div class="ibx-row__top">
                             <span class="ibx-row__cat">[[ catLabel(n) ]]</span>
@@ -200,7 +200,7 @@
                 <button type="button" class="ibx-tool ibx-tool--danger ms-auto" @click="act([opened], 'delete')" title="Delete"><i class="fa-solid fa-trash"></i></button>
             </div>
             <div class="ibx-read__body">
-                <div class="ibx-read__cat"><span class="ibx-row__icon" :class="'ibx-cat--' + catKey(opened)"><i :class="opened.icon || catIcon(opened)"></i></span>[[ catLabel(opened) ]]</div>
+                <div class="ibx-read__cat"><span class="ibx-row__icon" :style="{ '--c': typeColor(opened) }"><i :class="opened.icon || catIcon(opened)"></i></span>[[ catLabel(opened) ]]</div>
                 <h3 class="ibx-read__title">[[ opened.title ]]</h3>
                 <div class="ibx-read__meta"><i class="fa-regular fa-clock me-1"></i>[[ fullDate(opened.created_at) ]]</div>
                 <div v-if="opened.labels.length" class="ibx-read__labels">
@@ -630,6 +630,25 @@ const DEFAULT_PREFS = {
     workflow_runs: true, alerts: true, favorite_rule_update: true, bundle_fork: true,
     muted_types: [], auto_archive_days: 0, email_messages: 'off',
 }
+// Each kind of notification keeps its own colour (icon and its square)
+const TYPE_COLORS = {
+    new_rule: '#0d6efd', follow_new_bundle: '#14b8a6', follow_new_comment: '#f59e0b',
+    rule_comment: '#6366f1', bundle_comment: '#6366f1', comment_reply: '#8b5cf6',
+    proposal_submitted: '#f97316', proposal_comment: '#f97316', proposal_accepted: '#198754', proposal_rejected: '#dc3545', proposal_thread: '#f97316',
+    rule_update_found: '#0dcaf0',
+    job_created: '#6c757d', job_finished: '#198754', job_failed: '#dc3545', session_running: '#6c757d', session_done: '#198754',
+    github_import_done: '#495057', github_update_done: '#6610f2',
+    github_proposal_submitted: '#6610f2', github_proposal_approved: '#198754', github_proposal_rejected: '#dc3545', github_proposal_import_done: '#6610f2',
+    github_token_invalid: '#dc3545', sync_run_finished: '#0dcaf0',
+    ownership_requested: '#d48d00', ownership_approved: '#198754', ownership_rejected: '#dc3545',
+    role_granted: '#198754', role_removed: '#dc3545', blog_published: '#20c997',
+    message_direct: '#0d6efd', message_channel: '#0a58ca', message_mention: '#d63384', message_invite: '#6f42c1',
+    bundle_forked: '#6f42c1', bundle_mr_opened: '#6f42c1', bundle_mr_updated: '#6f42c1', bundle_mr_merged: '#198754',
+    bundle_mr_closed: '#dc3545', bundle_mr_comment: '#8b5cf6',
+    favorite_rule_update: '#f5a400', alert_match: '#e8590c',
+    workflow_run_started: '#0d6efd', workflow_run_finished: '#0d6efd', workflow_run_failed: '#dc3545',
+    report_submitted: '#dc3545',
+}
 const FOLDERS = [
     { key: 'inbox', label: 'Inbox', icon: 'fa-solid fa-inbox' },
     { key: 'unread', label: 'Unread', icon: 'fa-solid fa-envelope' },
@@ -659,6 +678,7 @@ createApp({
         const catKey = n => (optOf(n) || {}).key || 'other'
         const catLabel = n => (optOf(n) || {}).label || 'Notification'
         const catIcon = n => (optOf(n) || {}).icon || 'fa-solid fa-bell'
+        const typeColor = n => TYPE_COLORS[n.notif_type] || (n.job_status === 'failed' ? '#dc3545' : '#0d6efd')
         const categoriesWithItems = computed(() => {
             const byType = counts.value.unread_by_type || {}
             const list = TYPE_OPTIONS.map(o => ({ ...o, unread: o.types.reduce((s, t) => s + (byType[t] || 0), 0) }))
@@ -891,7 +911,7 @@ createApp({
             labelForm, labelInput, searchInput, categoriesWithItems, whereLabel, folderCount, allSelected, someSelected,
             load, openFolder, openLabel, openCategory, onSearch, toggle, toggleAll, selectAllMatching, act, bulk,
             markFolderRead, open, hasLabel, toggleLabel, selectionHasLabel, toggleLabelOnSelection, startLabel,
-            saveLabel, deleteLabel, catKey, catLabel, catIcon, highlight, shortDate, fullDate,
+            saveLabel, deleteLabel, catKey, catLabel, catIcon, typeColor, highlight, shortDate, fullDate,
             progressFillClass, progressWidth, isAdmin: ref(IS_ADMIN),
             prefs, prefsLoading, prefsSaved, loadPrefs, savePrefs, resetPrefs, isMuted, toggleMute,
         }
