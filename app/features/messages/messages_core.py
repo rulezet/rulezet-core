@@ -761,7 +761,7 @@ def toggle_reaction(m, user, emoji):
     allowed = list(REACTIONS.value or [])
     if emoji not in allowed:
         return 'This reaction is not offered.'
-    if m.deleted_at or m.kind != 'message':
+    if m.deleted_at or m.kind not in ('message', 'feed'):   # feed = automation posts (releases…), reactable like any message
         return 'This message can\'t get reactions.'
     r = ChannelReaction.query.filter_by(message_id=m.id, user_id=user.id, emoji=emoji).first()
     if r:
