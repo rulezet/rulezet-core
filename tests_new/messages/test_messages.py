@@ -401,3 +401,17 @@ def test_discuss_a_comment_in_a_channel(clients, users):
     other = make_rule(users.owner)
     page = clients["user"].get(f"/messages/new?ref=rule:{other.id}&quote={com.uuid}").get_data(as_text=True)
     assert "misses the lowercase variant" not in page
+
+
+def test_anti_spam_limits(clients, users, monkeypatch):
+    from app.features.messages import messages_core as M
+    monkeypatch.setattr(M, "_limit", lambda key, default: {"messages_per_minute": 3, "new_direct_per_day": 1}.get(key, default))
+    d = clients["user"].post(f"{API}/direct/{users.owner.id}").get_json()["channel"]
+    for i in range(3):
+        assert _post(clients["user"], d["uuid"], f"m{i}").status_code == 201
+    r = _post(clients["user"], d["uuid"], "too fast")
+    assert r.status_code == 400 and "too fast" in r.get_json()["message"]
+    assert clients["user"].post(f"{API}/direct/{users.admin.id}").status_code == 429       # 1 new conversation a day
+    assert clients["user"].post(f"{API}/direct/{users.owner.id}").status_code == 200       # an existing one still opens
+    for i in range(5):                                                                      # admins aren't limited
+        assert _post(clients["admin"], clients["admin"].post(f"{API}/direct/{users.user.id}").get_json()["channel"]["uuid"], f"a{i}").status_code == 201
