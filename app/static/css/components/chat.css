@@ -531,3 +531,11 @@
     font-size: .72rem; color: var(--subtle-text-color);
 }
 .chat-public-strip i { color: #d48d00; }
+
+/* people picker: add a whole organisation */
+.pp-org-all {
+    display: flex; align-items: center; gap: .6rem; padding: .5rem .75rem; border-radius: 10px;
+    background: rgba(111, 66, 193, .07); border: 1px solid rgba(111, 66, 193, .25); font-size: .82rem;
+}
+.pp-org-all i { color: #6f42c1; }
+.pp-org-all span { flex: 1; min-width: 0; }

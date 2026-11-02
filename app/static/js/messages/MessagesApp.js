@@ -345,6 +345,11 @@ export default {
             create_message('Channel deleted.', 'success-subtle')
         }
         const canDeleteChannel = c => c.kind === 'channel' && (c.my_role === 'owner' || props.isAdmin)
+        const canEditChannel = c => c.kind === 'channel' && (c.my_role === 'owner' || c.my_role === 'moderator' || props.isAdmin)
+        async function editChannel(c) {
+            if (!current.value || current.value.uuid !== c.uuid) await openConversation(c.uuid)
+            panel.value = 'settings'
+        }
 
         // ── messages by email (Notifications → Preferences too) ──
         const EMAIL_MODES = [{ value: 'off', label: 'Never' }, { value: 'direct', label: 'Direct messages and mentions' },
@@ -450,9 +455,9 @@ export default {
         }
 
         // ── dialogs: new channel, new message, browse ──
-        const form = reactive({ name: '', topic: '', is_private: false, members: [], ref: null, file: null, preview: null })
+        const form = reactive({ name: '', topic: '', is_private: false, members: [], ref: null, file: null, preview: null, first: '' })
         function newChannel(refItem = null) {
-            Object.assign(form, { name: refItem ? refItem.label.slice(0, 80) : '', topic: '', is_private: false, members: [], ref: refItem, file: null, preview: null })
+            Object.assign(form, { name: refItem ? refItem.label.slice(0, 80) : '', topic: '', is_private: false, members: [], ref: refItem, file: null, preview: null, first: '' })
             dialog.value = 'channel'
         }
         async function createChannel() {
@@ -462,6 +467,7 @@ export default {
             })
             if (!data) return
             if (form.file) await sendAvatar(data.channel.uuid, form.file)
+            if (form.first.trim()) await api(`/messages/api/channels/${data.channel.uuid}/messages`, 'POST', { content: form.first.trim() })
             dialog.value = null
             await loadConversations()
             openConversation(data.channel.uuid)
@@ -532,7 +538,17 @@ export default {
                 history.replaceState(null, '', `/messages/c/${props.openUuid}`)
             }
             if (props.openUuid) await openConversation(props.openUuid, focusId)
-            else if (props.start && props.start.ref) newChannel(props.start.ref)
+            else if (props.start && props.start.ref) {
+                newChannel(props.start.ref)
+                if (props.start.members) form.members = props.start.members
+                if (props.start.quote) {
+                    // from a comment: the first message quotes it, with a link to where it was written
+                    const q = props.start.quote, r = props.start.ref
+                    const who = q.author && q.author.id ? `@[${q.author.name.replace(/[\[\]()]/g, ' ')}](${q.author.id})` : 'Someone'
+                    form.first = `${who} wrote on #[${r.label.replace(/[\[\]()]/g, ' ')}](${r.kind}:${r.key}):\n\n` +
+                                 q.content.split('\n').map(l => '> ' + l).join('\n') + '\n\n'
+                }
+            }
             pollTimer = setInterval(poll, 3000)
             listTimer = setInterval(() => { loadConversations(); if (++listTicks % 5 === 0) loadPublic() }, 12000)
             document.addEventListener('visibilitychange', onVisibility)
@@ -551,7 +567,7 @@ export default {
             dialog, form, browseQ, browseList, browsing, roleLabel,
             openConversation, loadOlder, onScroll, send, cancelCompose, editLast, react, removeMsg, pin, copyLink, quote,
             join, leave, toggleMe, saveSettings, deleteChannel, addPeople, removeMember, setRole, openResult,
-            EMAIL_MODES, emailMode, setEmailMode, loadEmailMode, joinable, quickJoin, inviteUrl, setInvite, copyInvite, onConvKey, onFilterKey, browseInput, focusBrowse, onBrowseKey, dialogEl, trapFocus, convFlag, convRead, convClear, convLeave, convDelete, canDeleteChannel, newChannel, createChannel, startDirect, pickAvatar, uploadAvatar, removeAvatar, openBrowse, openFromBrowse, convIcon, reactorNames,
+            EMAIL_MODES, emailMode, setEmailMode, loadEmailMode, joinable, quickJoin, inviteUrl, setInvite, copyInvite, onConvKey, onFilterKey, browseInput, focusBrowse, onBrowseKey, dialogEl, trapFocus, convFlag, convRead, convClear, convLeave, convDelete, canDeleteChannel, canEditChannel, editChannel, newChannel, createChannel, startDirect, pickAvatar, uploadAvatar, removeAvatar, openBrowse, openFromBrowse, convIcon, reactorNames,
             timeLabel, listTime, plainMessage,
         }
     },
@@ -627,6 +643,7 @@ export default {
                     <li v-if="c.unread"><button type="button" class="dropdown-item" @click="convRead(c)"><i class="fa-solid fa-check-double me-2"></i>Mark as read</button></li>
                     <li><button type="button" class="dropdown-item" @click="convFlag(c, 'starred')"><i class="me-2" :class="c.is_starred ? 'fa-regular fa-star' : 'fa-solid fa-star'"></i>[[ c.is_starred ? 'Unstar' : 'Star' ]]</button></li>
                     <li><button type="button" class="dropdown-item" @click="convFlag(c, 'muted')"><i class="me-2" :class="c.is_muted ? 'fa-regular fa-bell' : 'fa-solid fa-bell-slash'"></i>[[ c.is_muted ? 'Unmute' : 'Mute' ]]</button></li>
+                    <li v-if="canEditChannel(c)"><button type="button" class="dropdown-item" @click="editChannel(c)"><i class="fa-solid fa-pen me-2"></i>Edit the channel <span class="small text-muted">— picture, name, topic, access</span></button></li>
                     <li><hr class="dropdown-divider"></li>
                     <li><button type="button" class="dropdown-item text-danger" @click="convClear(c)"><i class="fa-solid fa-eraser me-2"></i>Delete for me</button></li>
                     <li v-if="c.kind === 'channel'"><button type="button" class="dropdown-item text-danger" @click="convLeave(c)"><i class="fa-solid fa-right-from-bracket me-2"></i>Leave the channel</button></li>
@@ -704,6 +721,7 @@ export default {
                     <li v-if="current.unread"><button type="button" class="dropdown-item" @click="convRead(current)"><i class="fa-solid fa-check-double me-2"></i>Mark as read</button></li>
                     <li><button type="button" class="dropdown-item" @click="convFlag(current, 'starred')"><i class="me-2" :class="current.is_starred ? 'fa-regular fa-star' : 'fa-solid fa-star'"></i>[[ current.is_starred ? 'Unstar' : 'Star' ]]</button></li>
                     <li><button type="button" class="dropdown-item" @click="convFlag(current, 'muted')"><i class="me-2" :class="current.is_muted ? 'fa-regular fa-bell' : 'fa-solid fa-bell-slash'"></i>[[ current.is_muted ? 'Unmute' : 'Mute' ]]</button></li>
+                    <li v-if="canEditChannel(current)"><button type="button" class="dropdown-item" @click="editChannel(current)"><i class="fa-solid fa-pen me-2"></i>Edit the channel <span class="small text-muted">— picture, name, topic, access</span></button></li>
                     <li><hr class="dropdown-divider"></li>
                     <li><button type="button" class="dropdown-item text-danger" @click="convClear(current)"><i class="fa-solid fa-eraser me-2"></i>Delete for me</button></li>
                     <li v-if="current.kind === 'channel'"><button type="button" class="dropdown-item text-danger" @click="convLeave(current)"><i class="fa-solid fa-right-from-bracket me-2"></i>Leave the channel</button></li>
@@ -949,6 +967,10 @@ export default {
         <input id="chat-new-name" class="form-control mb-3" v-model="form.name" maxlength="80" placeholder="e.g. yara-review" @keydown.enter.prevent="createChannel">
         <label class="chat-field__label" for="chat-new-topic">Topic <span class="fw-normal">(optional)</span></label>
         <input id="chat-new-topic" class="form-control mb-3" v-model="form.topic" maxlength="300" placeholder="What is it for?">
+        <template v-if="form.first">
+          <label class="chat-field__label" for="chat-new-first">First message <span class="fw-normal">(the comment, quoted — edit it or clear it)</span></label>
+          <textarea id="chat-new-first" class="form-control mb-3" v-model="form.first" rows="5"></textarea>
+        </template>
         <div class="chat-privacy" role="radiogroup" aria-label="Visibility">
           <button type="button" :class="{ 'is-on': !form.is_private }" @click="form.is_private = false">
             <i class="fa-solid fa-globe"></i><b>Public</b><span>Anyone signed in can find it, read it and join</span></button>

@@ -50,6 +50,8 @@ export default {
         watch(org, () => load(1))
 
         const choosable = u => !u.in_channel
+        const orgName = computed(() => org.value === 'mine' ? 'My organisation' + (data.my_orgs.length > 1 ? 's' : '')
+                                     : ((data.orgs.find(o => String(o.id) === org.value) || {}).name || 'Organisation'))
         function toggle(u) {
             if (!u || !choosable(u)) return
             if (props.single) { emit('pick', u); return }
@@ -76,8 +78,15 @@ export default {
             const have = selectedIds.value
             const known = new Map(data.users.map(u => [u.id, u]))
             const inChannel = new Set(data.users.filter(u => u.in_channel).map(u => u.id))
-            const extra = (res.ids || []).filter(id => !have.has(id) && !inChannel.has(id))
-                .map(id => known.get(id) || { id, name: `User #${id}`, initial: '#', avatar: null })
+            let ids = (res.ids || []).filter(id => !have.has(id) && !inChannel.has(id))
+            // names of the ones not loaded yet (people in the channel come back flagged and are left out)
+            for (let page = 2; ids.some(id => !known.has(id)) && page <= 20; page++) {
+                const more = await (await fetch('/messages/api/people?' + new URLSearchParams({ page, ...(q.value.trim() ? { q: q.value.trim() } : {}), ...(org.value ? { org: org.value } : {}), ...(props.channel ? { channel: props.channel } : {}) }))).json().catch(() => null)
+                if (!more || !more.users.length) break
+                more.users.forEach(u => { known.set(u.id, u); if (u.in_channel) inChannel.add(u.id) })
+            }
+            ids = ids.filter(id => !inChannel.has(id))
+            const extra = ids.map(id => known.get(id) || { id, name: `User #${id}`, username: `User #${id}`, initial: '#', avatar: null })
             emit('update:modelValue', [...props.modelValue, ...extra])
         }
         const clearAll = () => emit('update:modelValue', [])
@@ -114,7 +123,7 @@ export default {
         onMounted(() => { load(1); if (props.autofocus) nextTick(() => searchEl.value && searchEl.value.focus()) })
 
         return { q, org, data, loading, cursor, searchEl, listEl, selectedIds, allShownSelected,
-                 toggle, remove, toggleShown, selectAllMatching, clearAll, onSearchKey, onRowKey, onChipKey, onListScroll, choosable }
+                 toggle, remove, toggleShown, selectAllMatching, orgName, clearAll, onSearchKey, onRowKey, onChipKey, onListScroll, choosable }
     },
     template: `
     <div class="pp" :class="{ 'pp--single': single }">
@@ -133,10 +142,16 @@ export default {
             </select>
         </div>
 
+        <div v-if="!single && org && data.total" class="pp-org-all">
+            <i class="fa-solid fa-building"></i>
+            <span>[[ orgName ]] — [[ data.total ]] [[ data.total === 1 ? 'person' : 'people' ]][[ q.trim() ? ' matching “' + q.trim() + '”' : '' ]]</span>
+            <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" @click="selectAllMatching">
+                <i class="fa-solid fa-user-plus me-1"></i>Add everyone</button>
+        </div>
         <div v-if="!single" class="pp-bar">
             <span class="pp-count">[[ data.total ]] [[ data.total === 1 ? 'person' : 'people' ]]</span>
             <button type="button" class="pp-link" @click="toggleShown" :disabled="!data.users.length">[[ allShownSelected ? 'Unselect shown' : 'Select shown' ]]</button>
-            <button v-if="data.total > data.users.length" type="button" class="pp-link" @click="selectAllMatching">Select all [[ Math.min(data.total, 500) ]]</button>
+            <button v-if="data.total > data.users.length && !org" type="button" class="pp-link" @click="selectAllMatching">Select all [[ Math.min(data.total, 500) ]]</button>
             <span class="ms-auto pp-count"><b>[[ modelValue.length ]]</b> selected</span>
             <button v-if="modelValue.length" type="button" class="pp-link pp-link--muted" @click="clearAll">Clear</button>
         </div>

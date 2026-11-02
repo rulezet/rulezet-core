@@ -734,6 +734,14 @@ def mark_read(c, user, upto=None):
     if int(last) > me.last_read_id:
         me.last_read_id = int(last)
         db.session.commit()
+    # read here: its message notifications are read too
+    from app.core.db_class.notification import Notification
+    n = (Notification.query.filter(Notification.user_id == user.id, Notification.is_read.is_(False),
+                                   Notification.notif_type.in_(('message_direct', 'message_channel', 'message_mention')),
+                                   Notification.link.like(f'/messages/c/{c.uuid}%'))
+         .update({Notification.is_read: True, Notification.read_at: _now()}, synchronize_session=False))
+    if n:
+        db.session.commit()
 
 
 def search(user, q, channel=None, limit=40):
@@ -787,16 +795,19 @@ def _notify_message(c, m, author):
                             f'{author.get_username()} mentioned you in ' + ('a message' if c.kind == 'direct' else f'#{c.name}'),
                             body=text, link=_link(c, m))
         done.add(uid)
-    if c.kind == 'direct':
-        for uid, mm in members.items():
-            if uid == author.id or uid in done or mm.is_muted:
-                continue
-            # one unread notification per conversation is enough
-            if Notification.query.filter_by(user_id=uid, notif_type='message_direct', is_read=False,
-                                            link=_link(c)).first():
-                continue
-            create_notification(uid, 'message_direct', f'New message from {author.get_username()}', body=text,
-                                link=_link(c))
+    # every member is told (direct: the other one; channel: each member) — one unread notification per conversation
+    # at a time, never for a muted one, never to the author or to someone already told by a mention
+    notif_type = 'message_direct' if c.kind == 'direct' else 'message_channel'
+    pending = {n.user_id for n in Notification.query.filter(Notification.notif_type == notif_type,
+                                                              Notification.is_read.is_(False),
+                                                              Notification.link == _link(c),
+                                                              Notification.user_id.in_(list(members))).all()}
+    title = (f'New message from {author.get_username()}' if c.kind == 'direct'
+             else f'{author.get_username()} wrote in #{c.name}')
+    for uid, mm in members.items():
+        if uid == author.id or uid in done or mm.is_muted or uid in pending:
+            continue
+        create_notification(uid, notif_type, title, body=text, link=_link(c))
 
 
 # ── Messages by email ──────────────────────────────────────────────────────

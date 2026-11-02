@@ -78,7 +78,19 @@ def _start_args():
         return None
     kind, key = ref.split(':', 1)
     hit = R.resolve(kind, key)
-    return {'ref': hit} if hit else None
+    if not hit:
+        return None
+    start = {'ref': hit}
+    # "Discuss in a channel" from a comment: its author is added, the comment quoted (only a comment of that object)
+    if request.args.get('quote'):
+        from app.core.db_class.comment import UnifiedComment
+        c = UnifiedComment.query.filter_by(uuid=request.args['quote'], is_active=True).first()
+        if c and c.object_type == kind and str(c.object_id) == str(key):
+            author = c.author
+            start['quote'] = {'content': c.content[:2000], 'author': M.user_json(author)}
+            if author and author.id != current_user.id:
+                start['members'] = [{**M.user_json(author), 'username': author.get_username()}]
+    return start
 
 
 # ── Lists ──────────────────────────────────────────────────────────────────

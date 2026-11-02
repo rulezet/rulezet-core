@@ -338,6 +338,7 @@ const CommentItem = {
         allowMarkdown: { type: Boolean, default: false },
         // 'proposal' enables "%123" → link-to-proposal rendering in this comment's body.
         objectType: { type: String, default: '' },
+        objectId: { type: Number, default: 0 },
         // Threaded down to this comment's edit/reply MarkdownComposer instances.
         relatedProposals: { type: Array, default: () => [] },
     },
@@ -623,6 +624,11 @@ const CommentItem = {
                 @click="showReplyForm = !showReplyForm">
             <i class="fas fa-reply"></i> Reply
         </button>
+        <a v-if="currentUserId && !isDeleted && (objectType === 'rule' || objectType === 'bundle') && objectId"
+           class="cm-action-btn" :href="'/messages/new?ref=' + objectType + ':' + objectId + '&quote=' + comment.uuid"
+           title="Start a channel from this comment — its author is added, the comment quoted">
+            <i class="fas fa-comments"></i> Discuss in a channel
+        </a>
         <button v-if="canEdit" class="cm-action-btn" @click="startEdit">
             <i class="fas fa-pen"></i> Edit
         </button>
@@ -706,6 +712,7 @@ const CommentItem = {
             :csrf-token="csrfToken"
             :allow-markdown="allowMarkdown"
             :object-type="objectType"
+            :object-id="objectId"
             :related-proposals="relatedProposals" />
 
         <button v-if="hasMoreReplies" class="cm-load-more" @click="loadReplies()"
@@ -956,6 +963,7 @@ const CommentThread = {
                 :csrf-token="csrfToken"
                 :allow-markdown="allowMarkdown"
                 :object-type="objectType"
+            :object-id="objectId"
                 :related-proposals="relatedProposals" />
             <div v-else class="cm-event" :class="{ 'cm-event--final': isFinalEvent(item) }">
                 <span class="cm-event-dot" :class="'cm-event-dot--' + item.type"><i :class="item.icon || 'fa-solid fa-circle-dot'"></i></span>
