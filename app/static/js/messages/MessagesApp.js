@@ -450,6 +450,34 @@ export default {
             else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
         }
 
+        // ── automations (feeds_core.py) ──
+        const feedData = ref(null)
+        const feedForm = reactive({ kind: '', target: '', q: '', results: [] })
+        async function loadFeeds() {
+            if (!current.value || current.value.kind !== 'channel') return
+            feedData.value = null
+            feedData.value = await api(`/messages/api/channels/${current.value.uuid}/feeds`)
+        }
+        watch(() => [panel.value, current.value && current.value.uuid], ([p]) => { if (p === 'automations') loadFeeds() })
+        watch(() => feedForm.kind, () => { feedForm.target = ''; feedForm.q = ''; feedForm.results = [] })
+        let feedTimer = null
+        function searchFeedBundle() {
+            clearTimeout(feedTimer)
+            feedTimer = setTimeout(async () => {
+                const d = await fetch('/messages/api/refs?kinds=bundle&q=' + encodeURIComponent(feedForm.q)).then(r => r.json()).catch(() => ({}))
+                feedForm.results = d.items || []
+            }, 250)
+        }
+        async function addFeed() {
+            const d = await api(`/messages/api/channels/${current.value.uuid}/feeds`, 'POST', { kind: feedForm.kind, target_id: feedForm.target || null })
+            if (d) { feedData.value.feeds = d.feeds; feedForm.kind = ''; create_message('Automation added.', 'success-subtle'); poll() }
+        }
+        async function removeFeed(f) {
+            if (!confirm(`Remove "${f.label}"?`)) return
+            const d = await api(`/messages/api/channels/${current.value.uuid}/feeds/${f.id}`, 'DELETE')
+            if (d) { feedData.value.feeds = d.feeds; poll() }
+        }
+
         // ── search in messages ──
         const searchQ = ref(''), searchResults = ref([]), searching = ref(false), searchScope = ref('here')
         let searchTimer = null
@@ -593,7 +621,7 @@ export default {
             dialog, form, browseQ, browseList, browsing, roleLabel,
             openConversation, loadOlder, onScroll, send, cancelCompose, editLast, react, removeMsg, pin, copyLink, quote,
             join, leave, toggleMe, saveSettings, deleteChannel, addPeople, removeMember, setRole, openResult,
-            EMAIL_MODES, emailMode, setEmailMode, loadEmailMode, joinable, quickJoin, inviteUrl, setInvite, copyInvite, onConvKey, onFilterKey, browseInput, focusBrowse, onBrowseKey, dialogEl, trapFocus, convFlag, convRead, convClear, convLeave, convDelete, canDeleteChannel, CONV_EMAIL, convEmail, canEditChannel, editChannel, newChannel, createChannel, acceptInvite, startDirect, pickAvatar, uploadAvatar, removeAvatar, openBrowse, openFromBrowse, convIcon, reactorNames,
+            feedData, feedForm, searchFeedBundle, addFeed, removeFeed, EMAIL_MODES, emailMode, setEmailMode, loadEmailMode, joinable, quickJoin, inviteUrl, setInvite, copyInvite, onConvKey, onFilterKey, browseInput, focusBrowse, onBrowseKey, dialogEl, trapFocus, convFlag, convRead, convClear, convLeave, convDelete, canDeleteChannel, CONV_EMAIL, convEmail, canEditChannel, editChannel, newChannel, createChannel, acceptInvite, startDirect, pickAvatar, uploadAvatar, removeAvatar, openBrowse, openFromBrowse, convIcon, reactorNames,
             timeLabel, listTime, plainMessage, reads, seenBy, seenNames, lastMineId,
         }
     },
@@ -800,6 +828,7 @@ export default {
               <div v-if="!r.grouped" class="chat-msg__meta">
                 <a :href="r.m.author && r.m.author.id ? '/account/detail_user/' + r.m.author.id : null" class="chat-msg__author">[[ r.m.author ? r.m.author.name : 'Deleted user' ]]</a>
                 <span v-if="r.m.author && r.m.author.is_admin" class="chat-tag chat-tag--admin">Admin</span>
+                <span v-if="r.m.author && r.m.author.is_bot" class="chat-tag chat-tag--bot"><i class="fa-solid fa-robot me-1"></i>Automation</span>
                 <span class="chat-msg__time" :title="new Date(r.m.created_at).toLocaleString()">[[ timeLabel(r.m.created_at) ]]</span>
                 <i v-if="r.m.is_pinned" class="fa-solid fa-thumbtack chat-msg__pin" title="Pinned"></i>
               </div>
@@ -859,7 +888,7 @@ export default {
         <i class="fa-solid fa-globe"></i>Public channel — anyone signed in can join and read what you write here.
       </div>
       <message-composer v-if="!(current.kind === 'channel' && !current.is_member && !current.is_private) && !current.is_archived" ref="composer" :disabled="!current.can_post" :upload-url="'/messages/api/channels/' + current.uuid + '/images'" :reply-to="replyTo" :editing="editing" :max-length="maxLength"
-                        :draft-key="current.uuid" :placeholder="current.kind === 'direct' ? 'Message ' + current.name : 'Message #' + current.name"
+                        :draft-key="current.uuid" :mentionable="current.is_private || current.kind === 'direct' ? (current.members || []).filter(u => u.id !== currentUserId) : null" :placeholder="current.kind === 'direct' ? 'Message ' + current.name : 'Message #' + current.name"
                         @send="send" @cancel="cancelCompose" @edit-last="editLast"></message-composer>
     </template>
   </section>
@@ -868,9 +897,9 @@ export default {
   <aside v-if="current && panel" class="chat-panel">
     <div class="chat-panel__head">
       <div class="chat-panel__tabs">
-        <button v-for="t in (current.kind === 'channel' ? ['about', 'members', 'pinned', 'settings', 'search'] : ['about', 'pinned', 'search'])" :key="t"
+        <button v-for="t in (current.kind === 'channel' ? ['about', 'members', 'pinned', 'automations', 'settings', 'search'] : ['about', 'pinned', 'search'])" :key="t"
                 type="button" :class="{ 'is-on': panel === t }" @click="panel = t">
-          [[ { about: 'About', members: 'Members', pinned: 'Pinned', settings: 'Settings', search: 'Search' }[t] ]]
+          [[ { about: 'About', members: 'Members', pinned: 'Pinned', automations: 'Automations', settings: 'Settings', search: 'Search' }[t] ]]
         </button>
       </div>
       <button type="button" class="chat-icon-btn" @click="panel = ''" title="Close"><i class="fa-solid fa-xmark"></i></button>
@@ -928,6 +957,45 @@ export default {
           <div class="chat-result__meta"><b>[[ p.author ? p.author.name : '' ]]</b> · [[ new Date(p.created_at).toLocaleDateString() ]]</div>
           <div class="chat-result__text">[[ plainMessage(p.content).slice(0, 220) ]]</div>
         </button>
+      </template>
+
+      <template v-else-if="panel === 'automations'">
+        <p class="small text-muted">Rulezet posts a message here when something happens — with the link, so its card shows.
+          Only public content: every member reads it.</p>
+        <div v-if="!feedData" class="chat-empty-small"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
+        <template v-else>
+          <div v-if="!feedData.feeds.length" class="chat-empty-small">No automation yet.</div>
+          <div v-for="f in feedData.feeds" :key="f.id" class="chat-feed">
+            <i :class="f.icon"></i>
+            <div class="chat-feed__body"><b>[[ f.label ]]</b>
+              <a v-if="f.target && f.target.url" :href="f.target.url" class="d-block small">[[ f.target.label ]]</a>
+              <span v-else-if="f.target" class="d-block small">[[ f.target.label ]]</span>
+              <span class="d-block small text-muted">[[ f.posted ]] posted<template v-if="f.created_by"> · by [[ f.created_by ]]</template></span></div>
+            <button v-if="current.can_manage" type="button" class="chat-icon-btn" title="Remove" @click="removeFeed(f)"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          <div v-if="current.can_manage" class="chat-feed-add">
+            <label class="chat-field__label">Add an automation</label>
+            <select class="form-select form-select-sm mb-2" v-model="feedForm.kind" aria-label="Event">
+              <option value="">Choose an event…</option>
+              <option v-for="(k, key) in feedData.kinds" :key="key" :value="key">[[ k.label ]]</option>
+            </select>
+            <p v-if="feedForm.kind" class="small text-muted mb-2">[[ feedData.kinds[feedForm.kind].help ]]</p>
+            <template v-if="feedForm.kind && feedData.kinds[feedForm.kind].target === 'bundle'">
+              <input class="form-control form-control-sm mb-1" v-model="feedForm.q" placeholder="Search a public bundle (name, id…)" @input="searchFeedBundle">
+              <div class="chat-feed-pick">
+                <button v-for="b in feedForm.results" :key="b.key" type="button" :class="{ 'is-on': feedForm.target === b.key }" @click="feedForm.target = b.key">
+                  <i class="fa-solid fa-box-archive"></i>[[ b.label ]]</button>
+              </div>
+            </template>
+            <select v-if="feedForm.kind === 'alert'" class="form-select form-select-sm mb-2" v-model="feedForm.target" aria-label="Your alert">
+              <option value="">Choose one of your alerts…</option>
+              <option v-for="a in feedData.my_alerts || []" :key="a.id" :value="String(a.id)">[[ a.name ]]</option>
+            </select>
+            <p v-if="feedForm.kind === 'alert' && !(feedData.my_alerts || []).length" class="small text-muted">You have no alert yet — <a href="/alert/new">make one</a> (by format, tag, CVE, ATT&amp;CK, author…).</p>
+            <button type="button" class="btn btn-sm btn-primary rounded-pill px-3"
+                    :disabled="!feedForm.kind || (feedData.kinds[feedForm.kind].target && !feedForm.target)" @click="addFeed">Add</button>
+          </div>
+        </template>
       </template>
 
       <template v-else-if="panel === 'settings'">

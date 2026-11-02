@@ -91,3 +91,21 @@ class ChannelReaction(db.Model):
     message_id = db.Column(db.Integer, db.ForeignKey('channel_message.id', ondelete='CASCADE'), nullable=False, index=True)
     user_id    = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
     emoji      = db.Column(db.String(16), nullable=False)
+
+
+class ChannelFeed(db.Model):
+    """An automation of a channel: on an event (a Rulezet release, a bundle release, an alert's matches, a blog post,
+    a merge request) Rulezet posts a message in the channel (app/features/messages/feeds_core.py)."""
+    __tablename__ = 'channel_feed'
+
+    id          = db.Column(db.Integer, primary_key=True)
+    channel_id  = db.Column(db.Integer, db.ForeignKey('channel.id', ondelete='CASCADE'), nullable=False, index=True)
+    kind        = db.Column(db.String(24), nullable=False, index=True)   # rulezet_release | bundle_release | alert | blog_post | merge_request
+    target_id   = db.Column(db.Integer, nullable=True, index=True)       # the bundle (bundle_release, merge_request) or the alert
+    created_by  = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+    created_at  = db.Column(db.DateTime, nullable=False, default=_now)
+    is_active   = db.Column(db.Boolean, nullable=False, default=True, server_default='true')
+    posted      = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    last_posted_at = db.Column(db.DateTime, nullable=True)
+
+    channel = db.relationship('Channel', backref=db.backref('feeds', cascade='all, delete-orphan', lazy='dynamic'))

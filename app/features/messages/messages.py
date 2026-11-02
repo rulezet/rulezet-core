@@ -293,6 +293,43 @@ def api_people():
                             request.args.get('page', 1, type=int)))
 
 
+# ── Automations (feeds_core.py) ────────────────────────────────────────────
+
+@messages_blueprint.get('/api/channels/<string:uuid>/feeds')
+@login_required
+def api_feeds(uuid):
+    from . import feeds_core as F
+    c = _channel_or_404(uuid)
+    out = {'feeds': F.feeds(c), 'kinds': F.KINDS}
+    if M.can_manage(c, current_user):                       # what can be chosen: your alerts
+        from app.core.db_class.alert import Alert
+        out['my_alerts'] = [{'id': a.id, 'name': a.name} for a in
+                            Alert.query.filter_by(user_id=current_user.id).order_by(Alert.name).limit(200)]
+    return jsonify(out)
+
+
+@messages_blueprint.post('/api/channels/<string:uuid>/feeds')
+@login_required
+def api_add_feed(uuid):
+    from . import feeds_core as F
+    c = _channel_or_404(uuid, 'manage')
+    data = request.get_json(silent=True) or {}
+    f, err = F.add_feed(c, current_user, data.get('kind'), data.get('target_id'))
+    if not f:
+        return _err(err)
+    return jsonify({'ok': True, 'feeds': F.feeds(c)}), 201
+
+
+@messages_blueprint.delete('/api/channels/<string:uuid>/feeds/<int:feed_id>')
+@login_required
+def api_delete_feed(uuid, feed_id):
+    from . import feeds_core as F
+    c = _channel_or_404(uuid, 'manage')
+    if not F.delete_feed(c, current_user, feed_id):
+        return _err('Not found.', 404)
+    return jsonify({'ok': True, 'feeds': F.feeds(c)})
+
+
 @messages_blueprint.post('/api/channels/<string:uuid>/join')
 @login_required
 def api_join(uuid):

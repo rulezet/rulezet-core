@@ -485,6 +485,9 @@ def open_merge_request(source: Bundle, target: Bundle, user, title: str, message
     )
     db.session.add(mr)
     db.session.commit()
+    if kind != 'sync':                     # channel automations (a fork catching up with its source is not news)
+        from app.features.messages.feeds_core import on_merge_request
+        on_merge_request(mr)
     return mr, ''
 
 

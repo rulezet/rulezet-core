@@ -756,6 +756,9 @@ def run_sweep(now=None) -> dict:
     db.session.commit()
 
     _notify_in_app(fired.values())
+    from app.features.messages.feeds_core import on_alert_matches       # channel automations
+    for alert, matches, _overflow in fired.values():
+        on_alert_matches(alert, matches)
     for alert, matches, overflow in fired.values():
         log_activity('alert.triggered',
                      f'Alert "{alert.name}" matched {len(matches)}{"+" if overflow else ""} new item(s)',

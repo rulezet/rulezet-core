@@ -594,3 +594,14 @@
 .chat-help__kinds { display: flex; flex-wrap: wrap; gap: .3rem; padding: 0; margin: .2rem 0 .4rem; list-style: none; }
 .chat-help__kinds li { display: inline-flex; align-items: center; gap: .3rem; padding: .1rem .5rem; border-radius: 7px; background: rgba(13, 110, 253, .08); color: #0d6efd; font-size: .72rem; font-weight: 600; }
 @media (max-width: 767.98px) { .chat-help__grid { grid-template-columns: 1fr; } }
+
+/* automations (Automations tab, messages signed Rulezet) */
+.chat-tag--bot { text-transform: none; letter-spacing: 0; background: rgba(111, 66, 193, .1); color: #6f42c1; border-color: rgba(111, 66, 193, .25); }
+.chat-feed { display: flex; align-items: flex-start; gap: .6rem; padding: .55rem .6rem; margin-bottom: .4rem; border: 1px solid var(--border-color); border-radius: 10px; }
+.chat-feed > i { color: #6f42c1; margin-top: .2rem; width: 16px; text-align: center; }
+.chat-feed__body { flex: 1; min-width: 0; }
+.chat-feed-add { margin-top: 1rem; padding: .8rem; border-radius: 12px; background: var(--light-bg-color); }
+.chat-feed-pick { display: flex; flex-direction: column; gap: 2px; max-height: 160px; overflow-y: auto; margin-bottom: .5rem; }
+.chat-feed-pick button { display: flex; align-items: center; gap: .5rem; padding: .35rem .5rem; border: 0; border-radius: 8px; background: none; color: var(--text-color); font-size: .8rem; text-align: left; }
+.chat-feed-pick button i { color: #6f42c1; }
+.chat-feed-pick button:hover, .chat-feed-pick button.is-on { background: rgba(111, 66, 193, .1); }

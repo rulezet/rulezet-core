@@ -25,7 +25,9 @@ export default {
         editing: { type: Object, default: null },
         maxLength: { type: Number, default: 8000 },
         draftKey: { type: String, default: '' },
-        uploadUrl: { type: String, default: '' },          // POST image → { url, name }
+        uploadUrl: { type: String, default: '' },
+        // private channel / direct conversation: @ offers only these people [{ id, name, avatar }] (null = anyone)
+        mentionable: { type: Array, default: null },          // POST image → { url, name }
     },
     emits: ['send', 'cancel', 'edit-last', 'typing'],
     setup(props, { emit }) {
@@ -86,6 +88,13 @@ export default {
             if (!um && picker.value !== 'ref') pickKind.value = null
             picker.value = um ? 'user' : 'ref'
             start = before.length - q.length - 1
+            if (picker.value === 'user' && props.mentionable) {      // only the conversation's members, filtered here
+                const n = q.toLowerCase()
+                results.value = props.mentionable.filter(u => (u.name || '').toLowerCase().includes(n))
+                    .slice(0, 8).map(u => ({ id: u.id, username: u.name, avatar: u.avatar }))
+                loading.value = false; active.value = 0
+                return
+            }
             if (picker.value === 'user' && q.length < 2) { results.value = []; loading.value = false; return }
             if (picker.value === 'ref' && q.length < 1 && !pickKind.value) { results.value = []; loading.value = false; return }
             loading.value = true
@@ -236,10 +245,10 @@ export default {
         </div>
 
         <div v-if="picker" class="chat-picker">
-            <div class="chat-picker__head">[[ picker === 'user' ? 'Mention someone' : (pickKind ? 'Attach a ' + ATTACH.find(a => a.kind === pickKind).label.toLowerCase() + ' — type to search' : 'Link a rule, bundle, blog post, CVE, technique, git source or channel') ]]
+            <div class="chat-picker__head">[[ picker === 'user' ? (mentionable ? 'Mention a member of this conversation' : 'Mention someone') : (pickKind ? 'Attach a ' + ATTACH.find(a => a.kind === pickKind).label.toLowerCase() + ' — type to search' : 'Link a rule, bundle, blog post, CVE, technique, git source or channel') ]]
                 <button v-if="pickKind" type="button" class="chat-picker__close" @mousedown.prevent="closePicker" title="Close"><i class="fa-solid fa-xmark"></i></button></div>
             <div v-if="loading" class="chat-picker__empty"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
-            <div v-else-if="!results.length" class="chat-picker__empty">[[ picker === 'user' ? 'Type 2 letters of a name' : (pickKind ? 'Nothing found' : 'Type a title, an id, CVE-…, T1059…') ]]</div>
+            <div v-else-if="!results.length" class="chat-picker__empty">[[ picker === 'user' ? (mentionable ? 'Nobody in this conversation by that name' : 'Type 2 letters of a name') : (pickKind ? 'Nothing found' : 'Type a title, an id, CVE-…, T1059…') ]]</div>
             <button v-for="(it, i) in results" :key="i" type="button" class="chat-picker__row" :class="{ 'is-active': i === active }"
                     @mousedown.prevent="pick(it)" @mouseenter="active = i">
                 <template v-if="picker === 'user'">

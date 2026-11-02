@@ -250,6 +250,9 @@ def create_release(bundle_id: int, user, version: str, title: str | None, notes:
         db.session.commit()
     except Exception:
         db.session.rollback()
+    from app.core.db_class.bundle import Bundle
+    from app.features.messages.feeds_core import on_bundle_release      # channel automations
+    on_bundle_release(db.session.get(Bundle, bundle_id), rel)
     return rel, None
 
 

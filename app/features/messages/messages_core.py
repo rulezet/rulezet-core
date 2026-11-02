@@ -178,6 +178,10 @@ def member_json(m):
     return {**user_json(m.user), 'role': m.role, 'joined_at': m.joined_at.isoformat() + 'Z'}
 
 
+# Who signs the messages of the channel automations (feeds_core.py)
+BOT = {'id': None, 'name': 'Rulezet', 'avatar': '/static/image/rulezet_official_logo.png', 'initial': 'R', 'is_bot': True}
+
+
 def message_json(m, user):
     deleted = m.deleted_at is not None
     groups = {}
@@ -192,7 +196,8 @@ def message_json(m, user):
         reply = {'id': p.id, 'author': user_json(p.author)['name'],
                  'content': '' if p.deleted_at else (p.content or '')[:200], 'deleted': p.deleted_at is not None}
     return {
-        'id': m.id, 'uuid': m.uuid, 'kind': m.kind, 'author': user_json(m.author) if m.kind == 'message' else None,
+        'id': m.id, 'uuid': m.uuid, 'kind': m.kind,
+        'author': user_json(m.author) if m.kind == 'message' else (BOT if m.kind == 'feed' else None),
         'content': '' if deleted else m.content, 'is_deleted': deleted, 'is_pinned': m.is_pinned,
         'created_at': m.created_at.isoformat() + 'Z', 'edited_at': m.edited_at.isoformat() + 'Z' if m.edited_at else None,
         'reply_to': reply, 'reactions': [] if deleted else list(groups.values()),
@@ -210,7 +215,7 @@ def _unread_counts(user_id, channel_ids):
                                       ChannelMember.user_id == user_id))
             .filter(ChannelMessage.channel_id.in_(channel_ids), ChannelMessage.id > ChannelMember.last_read_id,
                     ChannelMessage.id > ChannelMember.cleared_id,
-                    ChannelMessage.kind == 'message', ChannelMessage.deleted_at.is_(None),
+                    ChannelMessage.kind.in_(('message', 'feed')), ChannelMessage.deleted_at.is_(None),
                     or_(ChannelMessage.user_id.is_(None), ChannelMessage.user_id != user_id))
             .group_by(ChannelMessage.channel_id).all())
     return dict(rows)
@@ -220,14 +225,14 @@ def _last_previews(channel_ids):
     if not channel_ids:
         return {}
     last_ids = (db.session.query(func.max(ChannelMessage.id))
-                .filter(ChannelMessage.channel_id.in_(channel_ids), ChannelMessage.kind == 'message',
+                .filter(ChannelMessage.channel_id.in_(channel_ids), ChannelMessage.kind.in_(('message', 'feed')),
                         ChannelMessage.deleted_at.is_(None))
                 .group_by(ChannelMessage.channel_id))
     out = {}
     for m in ChannelMessage.query.filter(ChannelMessage.id.in_(last_ids)).all():
         text = MENTION.sub(lambda x: '@' + x.group(1), m.content or '')
         text = re.sub(r'#\[([^\]]{1,120})\]\([a-z]+:[^)]+\)', r'#\1', text)
-        out[m.channel_id] = {'id': m.id, 'author': user_json(m.author)['name'], 'author_id': m.user_id,
+        out[m.channel_id] = {'id': m.id, 'author': 'Rulezet' if m.kind == 'feed' else user_json(m.author)['name'], 'author_id': m.user_id,
                              'text': re.sub(r'\s+', ' ', text)[:140]}
     return out
 
@@ -271,6 +276,17 @@ def for_ref(user, ref_type, ref_key) -> list:
 
 
 # ── Channels ───────────────────────────────────────────────────────────────
+
+def _log(action, c, text, user=None, **extra):
+    """Activity log of messages: who did what in which conversation — never a message's content. Private."""
+    try:
+        from app.core.utils.activity_log import log_activity
+        where = 'a direct conversation' if c.kind == 'direct' else f'#{c.name}'
+        log_activity(action, f'{text} — {where}', target_type='channel', target_id=c.id, target_uuid=c.uuid,
+                     is_public=False, icon='fa-solid fa-comments', actor_id=getattr(user, 'id', None), extra=extra or None)
+    except Exception:
+        pass
+
 
 def _system(channel, text, actor=None):
     db.session.add(ChannelMessage(channel_id=channel.id, user_id=actor.id if actor else None, kind='system',
@@ -342,6 +358,8 @@ def direct_with(user, other_id):
     db.session.add_all([ChannelMember(channel_id=c.id, user_id=user.id, role='member'),
                         ChannelMember(channel_id=c.id, user_id=other.id, role='member')])
     db.session.commit()
+    _log('message.direct_start', c, f'{user.get_username()} started a direct conversation with {other.get_username()}', user,
+         with_user=other.id)
     return c, ''
 
 
@@ -371,6 +389,8 @@ def update_channel(c, user, name=None, topic=None, is_private=None, is_archived=
     for text in changes:
         _system(c, f'{user.get_username()} {text}', user)
     db.session.commit()
+    if changes:
+        _log('channel.update', c, f'{user.get_username()} ' + '; '.join(changes), user)
     return ''
 
 
@@ -486,6 +506,7 @@ def set_invite(c, user, enabled=True):
     """Make (or renew) the invite link, or turn it off."""
     import secrets
     c.invite_code = secrets.token_urlsafe(18) if enabled else None
+    _log('channel.invite_link', c, f'{user.get_username()} ' + ('made an invite link' if enabled else 'turned the invite link off'), user)
     _system(c, f'{user.get_username()} ' + ('made a new invite link' if enabled else 'turned the invite link off'), user)
     db.session.commit()
 
@@ -549,6 +570,7 @@ def join(c, user):
     db.session.add(ChannelMember(channel_id=c.id, user_id=user.id, role='member'))
     _system(c, f'{user.get_username()} joined', user)
     db.session.commit()
+    _log('channel.join', c, f'{user.get_username()} joined', user)
     return True
 
 
@@ -565,6 +587,7 @@ def leave(c, user):
     db.session.delete(m)
     _system(c, f'{user.get_username()} left', user)
     db.session.commit()
+    _log('channel.leave', c, f'{user.get_username()} left', user)
     return ''
 
 
@@ -579,6 +602,8 @@ def add_members(c, actor, user_ids):
     if new:
         _system(c, f'{actor.get_username()} added {", ".join(u.get_username() for u in new)}', actor)
     db.session.commit()
+    if new:
+        _log('channel.members_add', c, f'{actor.get_username()} added {len(new)} member(s)', actor, user_ids=[u.id for u in new])
     for u in new:
         _notify_invite(c, u, actor)
     return new, ''
@@ -596,6 +621,7 @@ def remove_member(c, actor, user_id):
     db.session.delete(m)
     _system(c, f'{actor.get_username()} removed {name}', actor)
     db.session.commit()
+    _log('channel.member_remove', c, f'{actor.get_username()} removed {name}', actor, user_id=user_id)
     return ''
 
 
@@ -613,6 +639,7 @@ def set_role(c, actor, user_id, role):
     elif m.role == 'owner':
         return 'Give the channel to someone else first.'
     m.role = role
+    _log('channel.role', c, f'{actor.get_username()} made {m.user.get_username()} {role}', actor, user_id=user_id, role=role)
     _system(c, f'{actor.get_username()} made {m.user.get_username()} {"the owner" if role == "owner" else "a " + role}', actor)
     db.session.commit()
     return ''
@@ -700,6 +727,9 @@ def post_message(c, user, content, reply_to_id=None):
     me = member(c, user.id)
     me.last_read_id = m.id
     db.session.commit()
+    # logged without its content: who wrote where, its size, whether it has an image or a reply
+    _log('message.post', c, f'{user.get_username()} wrote a message', user, message_id=m.id, length=len(content),
+         image='/messages/files/' in content, reply=bool(reply))
     _notify_message(c, m, user)
     return m, ''
 
@@ -712,6 +742,7 @@ def edit_message(m, user, content):
         return 'The message is empty or too long.'
     m.content, m.edited_at = content, _now()
     db.session.commit()
+    _log('message.edit', m.channel, f'{user.get_username()} edited their message', user, message_id=m.id, length=len(content))
     return ''
 
 
@@ -721,6 +752,8 @@ def delete_message(m, user):
     m.deleted_at, m.is_pinned = _now(), False
     ChannelReaction.query.filter_by(message_id=m.id).delete()
     db.session.commit()
+    _log('message.delete', m.channel, f'{user.get_username()} deleted ' + ('their message' if m.user_id == user.id else 'a message'),
+         user, message_id=m.id, author_id=m.user_id)
     return ''
 
 
