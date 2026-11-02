@@ -484,9 +484,14 @@ def set_invite(c, user, enabled=True):
     db.session.commit()
 
 
-def join_by_code(user, code):
+def channel_by_code(code):
     c = Channel.query.filter_by(invite_code=code).first() if code else None
-    if not c or c.kind != 'channel' or c.is_archived:
+    return c if c and c.kind == 'channel' and not c.is_archived else None
+
+
+def join_by_code(user, code):
+    c = channel_by_code(code)
+    if not c:
         return None, 'This invite link is not valid anymore.'
     if not member(c, user.id):
         if c.members.count() >= _limit('members_max', 500):

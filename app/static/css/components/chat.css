@@ -539,3 +539,6 @@
 }
 .pp-org-all i { color: #6f42c1; }
 .pp-org-all span { flex: 1; min-width: 0; }
+
+/* invite link: what you're joining, before you join */
+.chat-invite-card { display: flex; gap: 1rem; align-items: center; padding: 1rem; border: 1px solid var(--border-color); border-radius: 14px; background: var(--light-bg-color); }

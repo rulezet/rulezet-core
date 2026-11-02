@@ -495,6 +495,13 @@ export default {
             const data = await api(`/messages/api/channels/${current.value.uuid}/avatar`, 'DELETE')
             if (data) { current.value = data.channel; loadConversations(); poll() }
         }
+        async function acceptInvite() {
+            const data = await api(`/messages/join/${encodeURIComponent(props.start.invite.code)}`, 'POST')
+            if (!data) return
+            dialog.value = null
+            await loadConversations()
+            openConversation(data.uuid)
+        }
         async function startDirect(u) {
             const data = await api(`/messages/api/direct/${u.id}`, 'POST')
             if (!data) return
@@ -538,6 +545,7 @@ export default {
                 history.replaceState(null, '', `/messages/c/${props.openUuid}`)
             }
             if (props.openUuid) await openConversation(props.openUuid, focusId)
+            else if (props.start && props.start.invite) dialog.value = 'invite'
             else if (props.start && props.start.ref) {
                 newChannel(props.start.ref)
                 if (props.start.members) form.members = props.start.members
@@ -567,7 +575,7 @@ export default {
             dialog, form, browseQ, browseList, browsing, roleLabel,
             openConversation, loadOlder, onScroll, send, cancelCompose, editLast, react, removeMsg, pin, copyLink, quote,
             join, leave, toggleMe, saveSettings, deleteChannel, addPeople, removeMember, setRole, openResult,
-            EMAIL_MODES, emailMode, setEmailMode, loadEmailMode, joinable, quickJoin, inviteUrl, setInvite, copyInvite, onConvKey, onFilterKey, browseInput, focusBrowse, onBrowseKey, dialogEl, trapFocus, convFlag, convRead, convClear, convLeave, convDelete, canDeleteChannel, canEditChannel, editChannel, newChannel, createChannel, startDirect, pickAvatar, uploadAvatar, removeAvatar, openBrowse, openFromBrowse, convIcon, reactorNames,
+            EMAIL_MODES, emailMode, setEmailMode, loadEmailMode, joinable, quickJoin, inviteUrl, setInvite, copyInvite, onConvKey, onFilterKey, browseInput, focusBrowse, onBrowseKey, dialogEl, trapFocus, convFlag, convRead, convClear, convLeave, convDelete, canDeleteChannel, canEditChannel, editChannel, newChannel, createChannel, acceptInvite, startDirect, pickAvatar, uploadAvatar, removeAvatar, openBrowse, openFromBrowse, convIcon, reactorNames,
             timeLabel, listTime, plainMessage,
         }
     },
@@ -994,6 +1002,22 @@ export default {
         <div class="chat-modal__foot">
           <button type="button" class="btn btn-light rounded-pill px-3" @click="dialog = null">Cancel</button>
           <button type="button" class="btn btn-primary rounded-pill px-4" :disabled="!form.name.trim()" @click="createChannel">Create</button>
+        </div>
+      </template>
+
+      <template v-else-if="dialog === 'invite' && start && start.invite">
+        <div class="chat-modal__head"><h5><i class="fa-solid fa-envelope-open-text me-2 text-primary"></i>You're invited</h5>
+          <button type="button" class="chat-icon-btn" @click="dialog = null" aria-label="Close"><i class="fa-solid fa-xmark"></i></button></div>
+        <div class="chat-invite-card">
+          <span class="chat-avatar chat-avatar--lg chat-avatar--channel"><img v-if="start.invite.avatar" :src="start.invite.avatar" alt=""><i v-else :class="start.invite.is_private ? 'fa-solid fa-lock' : 'fa-solid fa-hashtag'"></i></span>
+          <div><h5 class="mb-1">[[ start.invite.name ]]</h5>
+            <div class="small text-muted">[[ start.invite.is_private ? 'Private channel' : 'Public channel' ]] · [[ start.invite.member_count ]] member[[ start.invite.member_count === 1 ? '' : 's' ]]</div>
+            <p v-if="start.invite.topic" class="mb-0 mt-2 small">[[ start.invite.topic ]]</p></div>
+        </div>
+        <p class="small text-muted mt-3 mb-0">Its members will see you in the list once you join. You can leave at any time.</p>
+        <div class="chat-modal__foot">
+          <button type="button" class="btn btn-light rounded-pill px-3" @click="dialog = null">Not now</button>
+          <button type="button" class="btn btn-primary rounded-pill px-4" @click="acceptInvite"><i class="fa-solid fa-right-to-bracket me-1"></i>Join the channel</button>
         </div>
       </template>
 

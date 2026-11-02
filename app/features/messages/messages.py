@@ -250,11 +250,26 @@ def api_invite_off(uuid):
 @messages_blueprint.get('/join/<string:code>')
 @login_required
 def page_join(code):
-    """An invite link: joins the channel (even private), then opens it."""
+    """An invite link: shows the channel and asks — joining is a POST (a link loaded by another site, e.g. as an
+    image, must not add the visitor to a channel nor show its owner who came)."""
+    c = M.channel_by_code(code)
+    if not c:
+        return render_template('messages/messages.html', open_uuid=None, start=None,
+                               invite_error='This invite link is not valid anymore.'), 404
+    if M.member(c, current_user.id):
+        return redirect(f'/messages/c/{c.uuid}')
+    invite = {'code': code, 'name': c.name, 'topic': c.topic, 'avatar': M.avatar_url(c), 'is_private': c.is_private,
+              'member_count': c.members.count()}
+    return render_template('messages/messages.html', open_uuid=None, start={'invite': invite})
+
+
+@messages_blueprint.post('/join/<string:code>')
+@login_required
+def api_join_by_code(code):
     c, err = M.join_by_code(current_user, code)
     if not c:
-        return render_template('messages/messages.html', open_uuid=None, start=None, invite_error=err), 404
-    return redirect(f'/messages/c/{c.uuid}')
+        return _err(err, 404)
+    return jsonify({'ok': True, 'uuid': c.uuid})
 
 
 @messages_blueprint.get('/api/people')
