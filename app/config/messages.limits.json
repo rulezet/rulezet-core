@@ -1,7 +1,7 @@
 {
     "label": "Messages limits",
     "category": "Messages",
-    "description": "Message length, members per channel, channels a user can create per day, messages per minute and new direct conversations per day (anti-spam; admins are not limited).",
+    "description": "Message length, members per channel, channels a user can create per day, messages per minute and new direct conversations per day (anti-spam), requests per minute to the messages API (an open page does about 25) — admins are not limited.",
     "public": true,
     "value": {
         "message_max_chars": 8000,
@@ -9,6 +9,7 @@
         "channels_per_day": 20,
         "page_size": 50,
         "messages_per_minute": 30,
-        "new_direct_per_day": 40
+        "new_direct_per_day": 40,
+        "api_per_minute": 120
     }
 }

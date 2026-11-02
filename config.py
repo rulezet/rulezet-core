@@ -182,6 +182,7 @@ class TestingConfig(Config):
     SECRET_KEY = "testing-secret-key-do-not-use-in-production"
     SQLALCHEMY_DATABASE_URI = "sqlite:///rulezet-test.sqlite"
     WTF_CSRF_ENABLED = False
+    MESSAGES_RATE_LIMIT = False      # per-account limit on the messages API — its own test turns it on
     # NullCache — every @cache.cached() call is a live no-op miss, so tests
     # always see fresh data instead of a stale value left over from an
     # earlier test in the same run.

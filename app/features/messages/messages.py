@@ -9,6 +9,52 @@ from . import refs_core as R
 
 messages_blueprint = Blueprint('messages', __name__)
 
+# ── Per-account limit on the messages API (setting messages.limits.api_per_minute; admins not limited) ──
+# An open page asks about 25 times a minute (new messages every 3-30 s, the list every 12 s); a bot looping on the
+# API gets 429 past the limit, logged once per minute. Counted in the shared cache (Redis in production: all
+# workers count together), in this process when there is no real cache.
+_RL_LOCAL = {}
+
+
+def _rate_count(key):
+    from app import memory_cache
+    backend = getattr(memory_cache, 'cache', None)
+    if backend is not None and type(backend).__name__ != 'NullCache':
+        try:
+            n = memory_cache.inc(key) if hasattr(memory_cache, 'inc') else None
+            if n is None:
+                n = (memory_cache.get(key) or 0) + 1
+                memory_cache.set(key, n, timeout=120)
+            elif n == 1:
+                memory_cache.set(key, 1, timeout=120)
+            return int(n)
+        except Exception:
+            pass
+    for k in [k for k in _RL_LOCAL if k.rsplit(':', 1)[1] < key.rsplit(':', 1)[1]]:
+        _RL_LOCAL.pop(k, None)                      # older minutes
+    _RL_LOCAL[key] = _RL_LOCAL.get(key, 0) + 1
+    return _RL_LOCAL[key]
+
+
+@messages_blueprint.before_request
+def _api_rate_limit():
+    import time
+    from flask import current_app
+    if not request.path.startswith('/messages/api/') or not current_user.is_authenticated or current_user.is_admin() \
+            or not current_app.config.get('MESSAGES_RATE_LIMIT', True):      # off in tests (config.py TestingConfig)
+        return None
+    limit = M._limit('api_per_minute', 120)
+    n = _rate_count(f'msgapi:{current_user.id}:{int(time.time() // 60)}')
+    if n <= limit:
+        return None
+    if n == limit + 1:                               # once a minute in the activity log
+        log_activity('messages.rate_limited', f'{current_user.get_username()} went over {limit} requests a minute '
+                     f'on the messages API', target_type='user', target_id=current_user.id, is_public=False, level='warning')
+    resp = jsonify({'ok': False, 'message': 'Too many requests — slow down a little.'})
+    resp.status_code = 429
+    resp.headers['Retry-After'] = '60'
+    return resp
+
 
 def _err(msg, code=400):
     return jsonify({'ok': False, 'message': msg}), code

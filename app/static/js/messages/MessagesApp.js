@@ -101,6 +101,7 @@ export default {
 
         async function openConversation(uuid, focusId = null) {
             if (!uuid) return
+            wakePoll()
             const data = await api(`/messages/api/channels/${uuid}`)
             if (!data) return
             current.value = data.channel
@@ -159,6 +160,12 @@ export default {
 
         // ── polling ──
         let pollTimer = null, listTimer = null, tick = 0, listTicks = 0
+        // Asks again every 3 s while the conversation moves, then 10 s after 1 min without anything new, 30 s after
+        // 5 min — and back to 3 s as soon as something arrives or you type / send / come back to the tab.
+        let lastActivity = Date.now()
+        const pollDelay = () => { const idle = Date.now() - lastActivity; return idle < 60e3 ? 3000 : idle < 300e3 ? 10000 : 30000 }
+        function schedulePoll() { clearTimeout(pollTimer); pollTimer = setTimeout(async () => { await poll(); schedulePoll() }, pollDelay()) }
+        function wakePoll() { lastActivity = Date.now(); schedulePoll() }
         async function poll() {
             tick++
             if (!current.value || document.hidden) return
@@ -170,11 +177,13 @@ export default {
             if (page.reads) reads.value = page.reads
             const fresh = page.messages.filter(m => !msgs.value.some(x => x.id === m.id))
             if (fresh.length) {
+                lastActivity = Date.now()
                 msgs.value = [...msgs.value, ...fresh]
                 if (stay) { toBottom(); markRead() }
                 if (fresh.some(m => m.kind === 'system')) refreshChannel()
             }
-            if (tick % 5 === 0) refreshRecent(uuid)       // edits, deletions and reactions of the last messages
+            if (tick % 5 === 0 && pollDelay() === 3000) refreshRecent(uuid)       // edits, deletions, reactions — while it moves
+            else if (tick % 3 === 0 && pollDelay() > 3000) refreshRecent(uuid)
         }
         async function refreshRecent(uuid) {
             const page = await fetch(`/messages/api/channels/${uuid}/messages?limit=50`).then(r => r.ok ? r.json() : null).catch(() => null)
@@ -212,6 +221,7 @@ export default {
 
         // ── sending, editing ──
         async function send(text, done) {
+            wakePoll()
             if (!current.value) return done(false)
             if (editing.value) {
                 const data = await api(`/messages/api/channels/${current.value.uuid}/messages/${editing.value.id}`, 'POST', { content: text })
@@ -571,7 +581,7 @@ export default {
         const convIcon = c => c.kind === 'direct' ? null : (c.is_private ? 'fa-solid fa-lock' : 'fa-solid fa-hashtag')
         const roleLabel = { owner: 'Owner', moderator: 'Moderator', member: 'Member' }
 
-        function onVisibility() { if (!document.hidden) { poll(); loadConversations(); markRead() } }
+        function onVisibility() { if (!document.hidden) { wakePoll(); poll(); loadConversations(); markRead() } }
         function onGlobalKey(e) {
             if (e.key === 'k' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); const el = document.getElementById('chat-filter'); el && el.focus() }
             if (e.key === 'Escape' && dialog.value) dialog.value = null
@@ -603,13 +613,13 @@ export default {
                                  q.content.split('\n').map(l => '> ' + l).join('\n') + '\n\n'
                 }
             }
-            pollTimer = setInterval(poll, 3000)
+            schedulePoll()
             listTimer = setInterval(() => { loadConversations(); if (++listTicks % 5 === 0) loadPublic() }, 12000)
             document.addEventListener('visibilitychange', onVisibility)
             document.addEventListener('keydown', onGlobalKey)
         })
         onUnmounted(() => {
-            clearInterval(pollTimer); clearInterval(listTimer)
+            clearTimeout(pollTimer); clearInterval(listTimer)
             document.removeEventListener('visibilitychange', onVisibility)
             document.removeEventListener('keydown', onGlobalKey)
         })
