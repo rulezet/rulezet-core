@@ -17,6 +17,7 @@ import json
 from urllib.parse import urlparse
 
 from app.core.utils.app_settings import setting
+from app.core.utils.urls import with_scheme
 
 SOCIAL_LINKS = setting('user.social_links')   # app/config/user.social_links.json
 COLUMNS = {'website': 'website_url', 'git': 'github_url', 'twitter': 'twitter_url', 'mastodon': 'mastodon_url'}
@@ -75,7 +76,7 @@ def clean_links(values: dict) -> tuple[dict, dict]:
     for key, raw in (values or {}).items():
         if key not in known or not isinstance(raw, str):
             continue
-        url = raw.strip()
+        url = with_scheme(raw)            # 'github.com/me' → 'https://github.com/me'
         if not url:
             cleaned[key] = None
             continue

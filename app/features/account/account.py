@@ -382,7 +382,8 @@ def set_identity_verification():
 # ── Organisations (admin) — informative: shown on the profile and the UserChip ──
 
 def _clean_website(value):
-    value = (value or '').strip()
+    from app.core.utils.urls import with_scheme
+    value = with_scheme(value)             # 'circl.lu' → 'https://circl.lu'
     if not value:
         return None
     if not value.lower().startswith(('http://', 'https://')) or len(value) > 256 or any(c in value for c in ' "<>'):
