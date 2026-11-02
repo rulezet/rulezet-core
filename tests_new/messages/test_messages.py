@@ -497,6 +497,9 @@ def test_channel_automations(clients, users, monkeypatch):
     feed = [m for m in clients["user"].get(f"{API}/channels/{c['uuid']}/messages").get_json()["messages"] if m["kind"] == "feed"]
     assert len(feed) == 1 and "Rulezet v9.9.0" in feed[0]["content"] and feed[0]["author"]["name"] == "Rulezet"
     assert Notification.query.filter_by(user_id=users.user.id, notif_type="message_channel").count() == 1
+    # the release post takes reactions like any message
+    react = clients["user"].post(f"{API}/channels/{c['uuid']}/messages/{feed[0]['id']}/react", json={"emoji": "🎉"})
+    assert react.status_code == 200 and react.get_json()["message"]["reactions"][0]["count"] == 1
     # a release of the chosen bundle, not of another one
     class Rel: version, title = "v2.0", "Big one"
     assert F.on_bundle_release(pub, Rel) == 1 and F.on_bundle_release(private, Rel) == 0
