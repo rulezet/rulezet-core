@@ -537,3 +537,21 @@ def test_admin_oversight_without_content(clients, users):
     assert r["content"] == "a very private sentence"
     rev = ActivityLog.query.filter_by(action="admin.message_reveal").one()
     assert rev.user_id == users.admin.id and (rev.extra or {}).get("message_id") == m["id"]
+
+
+def test_api_rate_limit(clients, users, monkeypatch):
+    from app.core.db_class.activity_log import ActivityLog
+    from app.features.messages import messages, messages_core as M
+    from flask import current_app
+    monkeypatch.setitem(current_app.config, "MESSAGES_RATE_LIMIT", True)
+    monkeypatch.setattr(messages, "_RL_LOCAL", {})
+    real = M._limit
+    monkeypatch.setattr(M, "_limit", lambda key, default: 5 if key == "api_per_minute" else real(key, default))
+    codes = [clients["user"].get(f"{API}/conversations").status_code for _ in range(7)]
+    assert codes[:5] == [200] * 5 and codes[5:] == [429, 429]
+    r = clients["user"].get(f"{API}/unread")
+    assert r.status_code == 429 and r.headers["Retry-After"] == "60"
+    assert ActivityLog.query.filter_by(action="messages.rate_limited").count() == 1    # logged once
+    assert clients["owner"].get(f"{API}/conversations").status_code == 200            # per account
+    assert all(clients["admin"].get(f"{API}/conversations").status_code == 200 for _ in range(8))   # admins not limited
+    assert clients["user"].get("/messages/").status_code == 200                        # only the API, not the page
