@@ -229,6 +229,14 @@ def create_app(start_worker=True):
         # its declared Content-Type — a backstop against stored-XSS-via-upload
         # regardless of what mimetype ends up attached to a file.
         response.headers['X-Content-Type-Options'] = 'nosniff'
+        # Clickjacking: no other site may show Rulezet in a (hidden) frame and make a signed-in user click
+        # "Delete" / "Make admin" without knowing. A route that must be framed sets its own header first.
+        response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+        if 'frame-ancestors' not in response.headers.get('Content-Security-Policy', ''):
+            csp = response.headers.get('Content-Security-Policy')
+            response.headers['Content-Security-Policy'] = (csp + '; ' if csp else '') + "frame-ancestors 'self'"
+        # A page's full address (private bundle share links, tokens in a query) never goes to another site
+        response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
         return response
 
     from app.features.jobs import job_handlers  # noqa

@@ -203,6 +203,10 @@ class ProductionConfig(Config):
     SESSION_COOKIE_SECURE   = True
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
+    # Flask-Login's "remember me" cookie: same protections as the session
+    REMEMBER_COOKIE_SECURE   = True
+    REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SAMESITE = 'Lax'
 
     @classmethod
     def init_app(cls, app):
