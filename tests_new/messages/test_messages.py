@@ -370,3 +370,31 @@ def test_delete_for_me_an_empty_direct_conversation(clients, users):
     assert clients["owner"].get(f"{API}/conversations").get_json()["conversations"] == []
     again = clients["user"].post(f"{API}/direct/{users.owner.id}").get_json()["channel"]   # writing again works
     assert _post(clients["user"], again["uuid"], "hi").status_code == 201
+
+
+def test_channel_members_get_a_notification(clients, users):
+    c = _channel(clients["owner"], member_ids=[users.user.id, users.admin.id])
+    clients["admin"].post(f"{API}/channels/{c['uuid']}/me", json={"muted": True})
+    _post(clients["owner"], c["uuid"], "first")
+    _post(clients["owner"], c["uuid"], "second")                                  # still one unread notification
+    q = lambda u: Notification.query.filter_by(user_id=u.id, notif_type="message_channel")
+    assert q(users.user).count() == 1 and q(users.admin).count() == 0 and q(users.owner).count() == 0
+    clients["user"].post(f"{API}/channels/{c['uuid']}/read", json={})            # read in the channel → read here too
+    assert q(users.user).first().is_read is True
+    _post(clients["owner"], c["uuid"], "third")
+    assert q(users.user).count() == 2
+
+
+def test_discuss_a_comment_in_a_channel(clients, users):
+    from app.core.db_class.comment import UnifiedComment
+    rule = make_rule(users.owner)
+    com = UnifiedComment(content="This regex misses the lowercase variant", object_type="rule", object_id=rule.id,
+                         created_by=users.owner.id)
+    db.session.add(com)
+    db.session.commit()
+    page = clients["user"].get(f"/messages/new?ref=rule:{rule.id}&quote={com.uuid}").get_data(as_text=True)
+    assert "misses the lowercase variant" in page and f'"id": {users.owner.id}' in page
+    # a comment of another object is not quoted
+    other = make_rule(users.owner)
+    page = clients["user"].get(f"/messages/new?ref=rule:{other.id}&quote={com.uuid}").get_data(as_text=True)
+    assert "misses the lowercase variant" not in page
