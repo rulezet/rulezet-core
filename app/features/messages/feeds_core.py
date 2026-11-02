@@ -174,8 +174,10 @@ def fire(kind, target_id, text, once_key=None):
         q = q.filter(ChannelFeed.target_id == target_id) if target_id is not None else q.filter(ChannelFeed.target_id.is_(None))
         n = 0
         for f in q.all():
+            # once per channel — a message someone deleted doesn't count: removing and adding the automation posts it again
             if once_key and ChannelMessage.query.filter(ChannelMessage.channel_id == f.channel_id,
                                                          ChannelMessage.kind == 'feed',
+                                                         ChannelMessage.deleted_at.is_(None),
                                                          ChannelMessage.content.contains(once_key)).first():
                 continue
             _post(f.channel, text)
