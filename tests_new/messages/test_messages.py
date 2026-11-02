@@ -425,3 +425,55 @@ def test_seen_by(clients, users):
     clients["user"].post(f"{API}/channels/{c['uuid']}/read", json={})
     reads = {r["id"]: r["last_read_id"] for r in clients["owner"].get(f"{API}/channels/{c['uuid']}/messages?after=0").get_json()["reads"]}
     assert reads[users.user.id] >= m["id"] and reads[users.admin.id] < m["id"]     # seen by user, not by admin
+
+
+def test_link_previews(clients, users):
+    from tests_new.helpers.bundles import make_bundle
+    rule = make_rule(users.owner)
+    private = make_bundle(users.owner, public=False)
+    urls = [f"/rule/detail_rule/{rule.id}", f"/rule/detail_rule/{rule.uuid}",
+            f"/bundle/detail/{private.id}", "https://evil.example/rule/detail_rule/1", "/rule/detail_rule/999999",
+            f"/account/detail_user/{users.owner.id}"]
+    p = clients["user"].post(f"{API}/previews", json={"urls": urls}).get_json()["previews"]
+    assert p[urls[0]]["kind"] == "rule" and p[urls[0]]["title"] == rule.title, p
+    assert p[urls[1]]["title"] == rule.title                       # by uuid
+    assert p[urls[2]] is None                                      # a private bundle you can't see: no card
+    assert p[urls[3]] is None and p[urls[4]] is None               # another site: never fetched; not found
+    assert p[urls[5]]["kind"] == "user"
+    assert clients["owner"].post(f"{API}/previews", json={"urls": [urls[2]]}).get_json()["previews"][urls[2]]["kind"] == "bundle"
+
+
+def test_email_per_conversation(clients, users, monkeypatch):
+    import datetime
+    from tests_new.helpers.account import captured_mails
+    from app.features.messages import messages_core as M
+    monkeypatch.setattr("app.core.utils.mail_status.is_email_available", lambda *a, **k: True)
+    later = datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
+    c = _channel(clients["user"], member_ids=[users.owner.id])
+    # preferences off, but this channel "on": its messages are emailed
+    assert clients["owner"].post(f"{API}/channels/{c['uuid']}/me", json={"email_mode": "on"}).status_code == 200
+    _post(clients["user"], c["uuid"], "channel news")
+    with captured_mails() as sent:
+        assert M.send_due_emails(later) == 1 and "channel news" in sent[0].body
+    # preferences "all", but this conversation "off": nothing
+    clients["owner"].post("/notifications/preferences", json={"email_messages": "all"})
+    clients["owner"].post(f"{API}/channels/{c['uuid']}/me", json={"email_mode": "off"})
+    _post(clients["user"], c["uuid"], "more news")
+    with captured_mails() as sent:
+        assert M.send_due_emails(later) == 0
+    conv = clients["owner"].get(f"{API}/channels/{c['uuid']}").get_json()["channel"]
+    assert conv["email_mode"] == "off"
+
+
+def test_reactors_popover(clients, users):
+    c = _channel(clients["owner"], member_ids=[users.user.id])
+    m = _post(clients["owner"], c["uuid"], "hi").get_json()["message"]
+    clients["user"].post(f"{API}/channels/{c['uuid']}/messages/{m['id']}/react", json={"emoji": "👍"})
+    d = clients["owner"].get(f"{API}/channels/{c['uuid']}/messages/{m['id']}/reactors?emoji=👍").get_json()
+    assert d["total"] == 1 and d["users"][0]["id"] == users.user.id
+    outsider = make_user("nosy")
+    from tests_new.conftest import _logged_in_client
+    from flask import current_app
+    c2 = _channel(clients["owner"], is_private=True)
+    m2 = _post(clients["owner"], c2["uuid"], "secret").get_json()["message"]
+    assert _logged_in_client(current_app, outsider).get(f"{API}/channels/{c2['uuid']}/messages/{m2['id']}/reactors?emoji=👍").status_code == 404
