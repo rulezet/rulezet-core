@@ -613,7 +613,14 @@ def clear_for_me(c, user):
     m = member(c, user.id)
     if not m:
         return 'You are not in this conversation.'
-    m.cleared_id = db.session.query(func.max(ChannelMessage.id)).filter(ChannelMessage.channel_id == c.id).scalar() or 0
+    last = db.session.query(func.max(ChannelMessage.id)).filter(ChannelMessage.channel_id == c.id).scalar()
+    if not last:
+        if c.kind == 'direct':           # nothing written yet: nothing to keep for anyone — gone, made again on the next message
+            db.session.delete(c)
+            db.session.commit()
+            return ''
+        last = 0
+    m.cleared_id = last
     m.last_read_id = max(m.last_read_id, m.cleared_id)
     db.session.commit()
     return ''
