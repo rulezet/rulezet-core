@@ -594,3 +594,19 @@ def test_rulezet_release_links_the_blog_release_post(clients, users, monkeypatch
     assert len(feed) == 2 and "github.com" in feed[0] and f"/blog/post/{post.uuid}" in feed[1]
     F.on_rulezet_release("1.7.8", "https://github.com/x")                             # (another version, no post: GitHub)
     assert F.release_post("1.7.7").id == post.id
+
+
+def test_deleted_release_message_can_be_posted_again(clients, users, monkeypatch):
+    from app.features.messages import feeds_core as F
+    monkeypatch.setattr(F, "_latest_release", lambda: {"version": "1.7.6", "url": "https://github.com/x"})
+    c = _channel(clients["owner"])
+    url = f"{API}/channels/{c['uuid']}/feeds"
+    clients["owner"].post(url, json={"kind": "rulezet_release"})
+    feed = [m for m in clients["owner"].get(f"{API}/channels/{c['uuid']}/messages").get_json()["messages"] if m["kind"] == "feed"]
+    clients["owner"].delete(f"{API}/channels/{c['uuid']}/messages/{feed[0]['id']}")
+    fid = clients["owner"].get(url).get_json()["feeds"][0]["id"]
+    clients["owner"].delete(f"{url}/{fid}")
+    clients["owner"].post(url, json={"kind": "rulezet_release"})                      # removed and added: posted again
+    live = [m for m in clients["owner"].get(f"{API}/channels/{c['uuid']}/messages").get_json()["messages"]
+            if m["kind"] == "feed" and not m["is_deleted"]]
+    assert len(live) == 1 and "v1.7.6" in live[0]["content"]
