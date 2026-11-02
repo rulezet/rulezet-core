@@ -193,9 +193,37 @@ def fire(kind, target_id, text, once_key=None):
 
 # ── The events ─────────────────────────────────────────────────────────────
 
+def release_post(version):
+    """The Rulezet blog's post of this release (public, published, tagged "release" and "v<version>"), or None."""
+    from app.core.db_class.blog import BlogPost
+    want = {'release', f'v{version}'.lower()}
+    for p in (BlogPost.query.filter(BlogPost.is_public.is_(True), BlogPost.is_draft.is_(False))
+              .order_by(BlogPost.published_at.desc().nullslast()).limit(50)):
+        if want <= {a.tag.name.lower() for a in p.tags if a.tag}:
+            return p
+    return None
+
+
 def on_rulezet_release(version, url):
-    return fire('rulezet_release', None, f'🚀 **Rulezet v{version} is out** — [read the release notes]({url})',
-                once_key=f'Rulezet v{version} ')
+    """A new Rulezet release: read on the Rulezet blog when its release post exists, else on GitHub."""
+    post = release_post(version)
+    where = (f'[read the release notes on the blog]({_base()}/blog/post/{post.uuid})' if post
+             else f'[read the release notes]({url})')
+    return fire('rulezet_release', None, f'🚀 **Rulezet v{version} is out** — {where}', once_key=f'Rulezet v{version} ')
+
+
+def on_release_post(post):
+    """The release post of a version published after the release was announced: point to it (once)."""
+    import re as _re
+    tags = [a.tag.name for a in post.tags if a.tag]
+    if 'release' not in {t.lower() for t in tags}:
+        return 0
+    version = next((t.lstrip('vV') for t in tags if _re.fullmatch(r'[vV]\d+(\.\d+)*', t)), None)
+    if not version:
+        return 0
+    return fire('rulezet_release', None,
+                f'📰 **Release notes of Rulezet v{version}** on the blog: [{post.title}]({_base()}/blog/post/{post.uuid})',
+                once_key=f'Release notes of Rulezet v{version}')
 
 
 def on_bundle_release(bundle, release):
@@ -209,6 +237,7 @@ def on_bundle_release(bundle, release):
 def on_blog_post(post):
     if not post or not post.is_public or post.is_draft:
         return 0
+    on_release_post(post)                  # a release post also goes to the "Rulezet releases" channels
     return fire('blog_post', None, f'📰 **New blog post:** [{post.title}]({_base()}/blog/post/{post.uuid})')
 
 
