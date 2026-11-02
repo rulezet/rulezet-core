@@ -67,6 +67,23 @@ def _backend_for(target: str):
     raise ValueError(f"Unknown Sigma conversion target: {target}")
 
 
+def _raised_by_pysigma(e) -> bool:
+    """A plain Python error raised inside pySigma's own code — e.g. the Loki and SecOps backends refuse a
+    boolean value with NotImplementedError("Boolean value True not supported by the backend")."""
+    import os
+    import sigma
+    root = os.path.dirname(os.path.abspath(sigma.__path__[0] if hasattr(sigma, '__path__') else sigma.__file__))
+    tb = e.__traceback__
+    last = None
+    while tb is not None:
+        last = tb
+        tb = tb.tb_next
+    if last is None:
+        return False
+    path = os.path.abspath(last.tb_frame.f_code.co_filename)
+    return path.startswith(os.path.join(root, 'sigma') + os.sep)
+
+
 def convert_sigma_rule(rule, target: str) -> str:
     """Convert a Sigma rule's raw content into the given target query language via pySigma."""
     if target not in SIGMA_CONVERT_TARGETS:
@@ -78,7 +95,7 @@ def convert_sigma_rule(rule, target: str) -> str:
         # Errors of pySigma and of its backends / pipelines (some don't derive from SigmaError, e.g.
         # the Kusto pipelines' InvalidHashAlgorithmError) mean "this rule can't be converted for this
         # target" — shown to the visitor, never logged as an application error. Anything else is a bug.
-        if not (isinstance(e, SigmaError) or type(e).__module__.split('.')[0] == 'sigma'):
+        if not (isinstance(e, SigmaError) or type(e).__module__.split('.')[0] == 'sigma' or _raised_by_pysigma(e)):
             raise
         # pySigma refusing a rule for a target is expected — e.g. the Sentinel
         # ASIM pipeline only knows the fields of its tables and only maps some
