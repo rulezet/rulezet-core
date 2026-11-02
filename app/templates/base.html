@@ -299,6 +299,8 @@
     <script type="application/json" id="rz-tour-data">{{ tour_ctx | tojson }}</script>
     <script type="module" src="{{ url_for('static', filename='js/tour/tourLauncher.js') }}"></script>
     {% endif %}
+    {# tables whose rows open: a click on the row opens it (rule list, bundle list, data tables…) #}
+    <script type="module" src="{{ url_for('static', filename='js/components/table/row-click-expand.js') }}"></script>
     <script src="{{ url_for('static', filename='js/themes/christmas.js') }}" defer></script>
     {# hover card of badges with data-rz-pop-title (organisation, Verified by an admin…) #}
     <script type="module" src="{{ url_for('static', filename='js/components/badge-popover.js') }}"></script>
