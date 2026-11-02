@@ -17,7 +17,7 @@ annotated-doc==0.0.4
     # via typer
 annotated-types==0.7.0
     # via pydantic
-anthropic==0.107.1
+anthropic==2.3.0
     # via
     #   nova-hunting
     #   rulezet-core
