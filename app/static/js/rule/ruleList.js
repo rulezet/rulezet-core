@@ -875,7 +875,7 @@ export default {
                     <div v-if="!expandedIds.has(rule.id)" class="rl-card-preview mb-2" role="button" tabindex="0"
                          :title="rule.to_string ? 'Click to show the whole rule' : 'No content available'"
                          @click="toggleExpand(rule)" @keydown.enter.prevent="toggleExpand(rule)">
-                        <code-viewer v-if="rule.to_string" class="rl-card-preview__code"
+                        <code-viewer :show-meta="false" v-if="rule.to_string" class="rl-card-preview__code"
                             :code="previewOf(rule)"
                             :language="rule.format || 'auto'"
                             :title="rule.title"
@@ -887,8 +887,6 @@ export default {
                         </code-viewer>
                         <p v-else class="text-muted small mb-0">No content available.</p>
                         <span class="rl-card-preview__more"><i class="fa-solid fa-chevron-down me-1"></i>Show the rule</span>
-                        <a :href="ruleHref(rule)" class="rl-card-preview__details" @click.stop title="Open the page of this rule: its content, history, comments, quality, tests">
-                            <i class="fas fa-eye me-1"></i>View details</a>
                     </div>
                     <!-- Rule content, opened from its preview (same place) -->
                     <div v-else class="rl-card-content mb-2">
@@ -940,7 +938,7 @@ export default {
                                 </span>
                             </div>
                         </div>
-                        <code-viewer v-if="rule.to_string"
+                        <code-viewer :show-meta="false" v-if="rule.to_string"
                             :code="rule.to_string"
                             :language="rule.format || 'auto'"
                             :title="rule.title"
@@ -1763,7 +1761,7 @@ export default {
                                         </div>
 
                                         <div class="rl-expand-code">
-                                            <code-viewer v-if="rule.to_string"
+                                            <code-viewer :show-meta="false" v-if="rule.to_string"
                                                 :code="rule.to_string"
                                                 :language="rule.format || 'auto'"
                                                 :title="rule.title"
@@ -1995,7 +1993,7 @@ export default {
             : props.defaultView !== 'card'
             ? props.defaultView
             : (localStorage.getItem('rz-list-view') || 'card')
-        const viewMode    = ref(_isPhone ? 'card' : _p('view', _defaultView))
+        const viewMode    = ref(_isPhone ? 'card' : (props.syncUrl ? _p('view', _defaultView) : _defaultView))   // embedded list (bundle…): its own default, not the page's ?view=
         const _hasUrlFilters = ['tags','sources','branches','licenses','platforms','vulnerabilities','attacks','authors','editors',
                                 'rule_type','search_field','exact_match','person_mode','scope','org_badge']
                                .some(k => _url.has(k))
@@ -2548,7 +2546,7 @@ export default {
         const previewOf = (rule) => {
             const lines = String(rule.to_string || '').replace(/\r/g, '').split('\n')
             while (lines.length && !lines[0].trim()) lines.shift()
-            return lines.slice(0, 4).join('\n')
+            return lines.slice(0, 6).join('\n')   // 4 readable lines + 2 that fade out under the buttons
         }
 
         function toggleExpand(rule) {

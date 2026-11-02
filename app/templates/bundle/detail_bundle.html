@@ -1948,7 +1948,7 @@
             // One panel at a time instead of five stacked sections. The
             // active tab is mirrored in the URL hash (#files…) so it can be
             // linked and survives a reload.
-            const TAB_KEYS = ['structure', 'rules', 'files', 'attack', 'releases', 'health', 'notes', 'ai', 'forks', 'history', 'misp'];
+            const TAB_KEYS = ['rules', 'structure', 'files', 'attack', 'releases', 'health', 'notes', 'ai', 'forks', 'history', 'misp'];
             const notesSummary = ref(null);
             const notesAlert = computed(() => {
                 const open = (notesSummary.value?.notes || []).filter(n => n.status === 'open' && n.severity !== 'info');
@@ -2038,12 +2038,12 @@
                 else forkBundle();
             }
             const _hashTab = (location.hash || '').slice(1);
-            const activeTab = ref(TAB_KEYS.includes(_hashTab) ? _hashTab : 'structure');
+            const activeTab = ref(TAB_KEYS.includes(_hashTab) ? _hashTab : 'rules');   // Rules first, Structure next
 
             const contentTabs = computed(() => {
                 const tabs = [
-                    { key: 'structure', label: 'Structure', icon: 'fa-solid fa-folder-tree',   count: allFiles.value.length || null },
                     { key: 'rules',     label: 'Rules',     icon: 'fa-solid fa-shield-halved', count: totalRules.value },
+                    { key: 'structure', label: 'Structure', icon: 'fa-solid fa-folder-tree',   count: allFiles.value.length || null },
                 ];
                 if (docFiles.value.length)
                     tabs.push({ key: 'files', label: 'Files & Documents', icon: 'fa-solid fa-file-lines', count: docFiles.value.length });
@@ -2093,7 +2093,7 @@
             // bundle with no docs) falls back to Rules.
             const structureLoaded = ref(false);
             watch([contentTabs, structureLoaded], ([tabs, loaded]) => {
-                if (loaded && !tabs.some(t => t.key === activeTab.value)) activeTab.value = 'structure';
+                if (loaded && !tabs.some(t => t.key === activeTab.value)) activeTab.value = 'rules';
             });
 
             // MISP tab: the JSON is shown directly; the Pivotick graph is only

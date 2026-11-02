@@ -81,9 +81,9 @@
     cursor: grabbing;
 }
 
-.carousel-item-wrap {
-    flex: 0 0 calc(33.333% - 1rem);
-    min-width: calc(33.333% - 1rem);
+.carousel-item-wrap {           /* 2 rules at a time (1 on phones): room for the rule preview */
+    flex: 0 0 calc(50% - 0.75rem);
+    min-width: calc(50% - 0.75rem);
 }
 
 @media (max-width: 991px) {

@@ -9,6 +9,9 @@
  *   maxHeight     String   — CSS value, e.g. '500px' (default: '520px')
  *   foldable      Boolean  — enable JSON fold/unfold tree (default: true for JSON)
  *   showLines     Boolean  — show line numbers (default: true)
+ *   showHeader    Boolean  — show the header bar at all (default: true); false = line numbers + code only
+ *   showMeta      Boolean  — show the file name and language badge in the header (default: true);
+ *                            false keeps only the search bar and the buttons on the right
  *
  * Features:
  *   - Syntax highlighting via highlight.js (lazy-loaded from /static/js/hljs.min.js)
@@ -236,6 +239,8 @@ export default {
         maxHeight: { type: String, default: '520px' },
         foldable: { type: Boolean, default: true },
         showLines: { type: Boolean, default: true },
+        showMeta: { type: Boolean, default: true },
+        showHeader: { type: Boolean, default: true },
         initialSearch: { type: String, default: '' },
         // Non-interactive: terms always highlighted, independent of the search box
         // — e.g. the exact byte sequences a rule test matched.
@@ -249,8 +254,8 @@ export default {
     <div class="cv-root">
 
         <!-- ── Header ──────────────────────────────────────────────── -->
-        <div class="cv-header">
-            <div class="cv-header-left">
+        <div v-if="showHeader" class="cv-header">
+            <div v-if="showMeta" class="cv-header-left">
                 <span v-if="title" class="cv-title">
                     <i class="fas fa-file-code"></i> {{ title }}
                 </span>
@@ -527,7 +532,14 @@ export default {
             const container = body_ref.value || pre_ref.value
             if (!container) return
             const el = container.querySelector(`[data-match="${cur_match.value}"]`)
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            if (!el) return
+            // scroll the code pane only — scrollIntoView also scrolled the PAGE, so on a list of
+            // viewers (rules list) the page jumped to the lowest one's match
+            let box = el.parentElement
+            while (box && box !== container.parentElement && box.scrollHeight <= box.clientHeight) box = box.parentElement
+            if (!box || box === container.parentElement) return
+            const top = el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop
+            box.scrollTo({ top: Math.max(0, top - box.clientHeight / 2), behavior: 'smooth' })
         }
 
         // Reset to first match on new search

@@ -423,13 +423,14 @@
 
 /* ── Card rule preview: first 4 lines, faded like the bundle descriptions; a click opens the rule in place ── */
 /* the real CodeViewer (highlighting, line numbers, search marks) on the first 4 lines; the card takes the click */
-.rl-card-preview { position: relative; cursor: pointer; border-radius: 10px; padding-bottom: 1.3rem; transition: box-shadow .15s; }
+.rl-card-preview { position: relative; cursor: pointer; border-radius: 10px; overflow: hidden; transition: box-shadow .15s; }
 .rl-card-preview:hover, .rl-card-preview:focus-visible { box-shadow: 0 0 0 2px rgba(13,110,253,.35); outline: none; }
-.rl-card-preview__code { pointer-events: none;
-                         -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
-                                 mask-image: linear-gradient(to bottom, #000 55%, transparent); }
+/* the last lines fade out UNDER "Show the rule" / "View details" (no blank band below the code) */
+.rl-card-preview__code { pointer-events: none; margin-bottom: 0 !important;
+                         -webkit-mask-image: linear-gradient(to bottom, #000 40%, rgba(0,0,0,.25) 78%, transparent);
+                                 mask-image: linear-gradient(to bottom, #000 40%, rgba(0,0,0,.25) 78%, transparent); }
 .rl-card-preview__more, .rl-card-preview__toggle { font-size: .7rem; font-weight: 600; color: #0d6efd; }
-.rl-card-preview__more { position: absolute; left: 0; right: 0; bottom: .3rem; text-align: center; opacity: .75; transition: opacity .15s; }
+.rl-card-preview__more { position: absolute; left: 0; right: 0; bottom: .35rem; text-align: center; opacity: .8; transition: opacity .15s; z-index: 1; }
 .rl-card-preview:hover .rl-card-preview__more { opacity: 1; }
 .rl-card-preview__toggle { display: block; margin: .35rem auto 0; background: none; border: 0; padding: .15rem .5rem; }
 .rl-card-preview__toggle:hover { text-decoration: underline; }
@@ -1267,7 +1268,3 @@ body.dark-mode .rz-role-chip { color: color-mix(in srgb, var(--role) 70%, #fff);
 /* ── Card: View details next to Show / Hide the rule ── */
 .rl-card-preview__bar { display: flex; align-items: center; justify-content: center; gap: .75rem; margin-top: .4rem; }
 .rl-card-preview__bar .rl-card-preview__toggle { margin: 0; }
-.rl-card-preview__details { position: absolute; right: .5rem; bottom: .2rem; font-size: .7rem; font-weight: 600; color: #0d6efd;
-                            text-decoration: none; background: var(--card-bg-color); border: 1px solid rgba(13,110,253,.3);
-                            border-radius: 999px; padding: .05rem .55rem; z-index: 1; }
-.rl-card-preview__details:hover { background: #0d6efd; color: #fff; }
