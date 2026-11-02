@@ -226,10 +226,11 @@ def api_inbox():
 @notification_blueprint.post('/bulk')
 @login_required
 def api_bulk():
-    """{ids: [...], action: read|unread|star|unstar|archive|unarchive|delete|label_add|label_remove, label_id}"""
+    """{ids: [...] | scope: {folder, label, types, search} (every matching one), action: read|unread|star|unstar|archive|unarchive|delete|label_add|label_remove, label_id}"""
     from app.features.notification import inbox_core as Inbox
     data = request.get_json(silent=True) or {}
-    n, err = Inbox.bulk(current_user.id, data.get('ids'), data.get('action'), data.get('label_id'))
+    n, err = Inbox.bulk(current_user.id, data.get('ids'), data.get('action'), data.get('label_id'),
+                        scope=data.get('scope'))
     if err:
         return jsonify({'ok': False, 'message': err}), 400
     return jsonify({'ok': True, 'changed': n, 'counts': Inbox.counts(current_user.id)})

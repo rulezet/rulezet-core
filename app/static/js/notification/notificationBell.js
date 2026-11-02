@@ -307,6 +307,7 @@ const NotificationPanel = {
                 el.addEventListener('show.bs.offcanvas', fetchAll)
             }
             window.addEventListener('rz:job-created', fetchAll)
+            window.addEventListener('rz:notif-read', fetchAll)
         })
 
         return {

@@ -91,7 +91,7 @@
                     <input type="checkbox" :checked="allSelected" :indeterminate.prop="someSelected && !allSelected" @change="toggleAll">
                 </label>
                 <template v-if="selected.size">
-                    <span class="ibx-selcount">[[ selected.size ]] selected</span>
+                    <span class="ibx-selcount">[[ allMatching ? total : selected.size ]] selected</span>
                     <button type="button" class="ibx-tool" title="Mark as read (Shift+I)" @click="bulk('read')"><i class="fa-regular fa-envelope-open"></i></button>
                     <button type="button" class="ibx-tool" title="Mark as unread (Shift+U)" @click="bulk('unread')"><i class="fa-solid fa-envelope"></i></button>
                     <button type="button" class="ibx-tool" title="Star (S)" @click="bulk('star')"><i class="fa-solid fa-star"></i></button>
@@ -727,21 +727,29 @@ createApp({
             selected.value = allSelected.value ? new Set() : new Set(notifications.value.map(n => n.id))
             allMatching.value = false
         }
-        async function selectAllMatching() {
-            const data = await api(`/notifications/inbox?${params(1, true)}`)
-            if (data && data.matching_ids) { selected.value = new Set(data.matching_ids); allMatching.value = true }
+        // "Select all N": no id list (it was capped at 5000) — the action is sent with the filters
+        // of the current view and the server applies it to every matching notification.
+        function scope() {
+            const q = params(1)
+            return { folder: q.get('folder'), label: labelId.value || null, types: q.get('types') || '', search: q.get('search') || '' }
+        }
+        function selectAllMatching() {
+            selected.value = new Set(notifications.value.map(n => n.id)); allMatching.value = true
         }
 
         // ── actions ──
         const UNDO_LABEL = { archive: 'Archived', delete: 'Deleted', read: 'Marked read', unread: 'Marked unread',
                              star: 'Starred', unstar: 'Unstarred', unarchive: 'Moved to inbox' }
-        async function run(ids, action, label_id) {
-            if (!ids.length) return false
-            if (action === 'delete' && ids.length > 1 && !confirm(`Delete ${ids.length} notifications? This cannot be undone.`)) return false
-            const data = await api('/notifications/bulk', { method: 'POST', body: JSON.stringify({ ids, action, label_id }) })
+        async function run(ids, action, label_id, all = false) {
+            const howMany = all ? total.value : ids.length
+            if (!howMany) return false
+            if (action === 'delete' && howMany > 1 && !confirm(`Delete ${howMany} notifications? This cannot be undone.`)) return false
+            const body = all ? { scope: scope(), action, label_id } : { ids, action, label_id }
+            const data = await api('/notifications/bulk', { method: 'POST', body: JSON.stringify(body) })
             if (!data) return false
             counts.value = data.counts
-            if (UNDO_LABEL[action] && ids.length > 1) create_message(`${UNDO_LABEL[action]}: ${data.changed}`, 'success-subtle')
+            window.dispatchEvent(new Event('rz:notif-read'))   // keep the bell in sync
+            if (UNDO_LABEL[action] && howMany > 1) create_message(`${UNDO_LABEL[action]}: ${data.changed}`, 'success-subtle')
             return true
         }
         async function act(list, action) {
@@ -768,7 +776,11 @@ createApp({
         }
         async function bulk(action) {
             const ids = [...selected.value]
-            if (allMatching.value || ids.some(id => !notifications.value.find(n => n.id === id))) {
+            if (allMatching.value) {
+                if (await run([], action, undefined, true)) load(1)
+                return
+            }
+            if (ids.some(id => !notifications.value.find(n => n.id === id))) {
                 if (await run(ids, action)) load(page.value)
                 return
             }
@@ -776,8 +788,7 @@ createApp({
             selected.value = new Set()
         }
         async function markFolderRead() {
-            const data = await api(`/notifications/inbox?${params(1, true)}`)
-            if (data && data.matching_ids && data.matching_ids.length && await run(data.matching_ids, 'read')) load(page.value)
+            if (total.value && await run([], 'read', undefined, true)) load(page.value)
         }
         function open(n, i) {
             opened.value = n; cursor.value = i
@@ -797,7 +808,7 @@ createApp({
             notifications.value.filter(n => selected.value.has(n.id)).every(n => hasLabel(n, l))
         async function toggleLabelOnSelection(l) {
             const add = !selectionHasLabel(l)
-            if (await run([...selected.value], add ? 'label_add' : 'label_remove', l.id)) load(page.value, true)
+            if (await run([...selected.value], add ? 'label_add' : 'label_remove', l.id, allMatching.value)) load(page.value, true)
         }
         async function startLabel(l) {
             Object.assign(labelForm, l ? { open: true, id: l.id, name: l.name, color: l.color }
