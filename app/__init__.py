@@ -655,6 +655,12 @@ def _start_update_checker(app):
                     }
                     app.config['LATEST_RELEASE'] = info
                     cache.set(UPDATE_CACHE_KEY, info, timeout=INTERVAL * 2)
+                    # channels with the "Rulezet releases" automation: every release, whether this instance is
+                    # behind or not — posted once per version and channel (feeds_core.on_rulezet_release)
+                    if latest_version:
+                        with app.app_context():
+                            from app.features.messages.feeds_core import on_rulezet_release
+                            on_rulezet_release(latest_version, info['url'])
                     # announced once per version (not on every 24 h check)
                     if update_available and announced != latest_version:
                         announced = latest_version

@@ -98,7 +98,35 @@ def add_feed(c, user, kind, target_id=None):
     from app.features.messages.messages_core import _system
     _system(c, f'{user.get_username()} added an automation: {KINDS[kind]["label"].lower()}', user)
     db.session.commit()
+    if kind == 'rulezet_release':          # the latest release right away (the check runs only once a day)
+        latest = _latest_release()
+        if latest:
+            on_rulezet_release(latest['version'], latest['url'])
     return f, ''
+
+
+def _latest_release():
+    """The latest Rulezet release the update check saw (app/__init__.py), or None."""
+    from flask import current_app
+    info = current_app.config.get('LATEST_RELEASE')
+    if not info:
+        try:                                # the check runs in the worker process: shared through the cache
+            from app import UPDATE_CACHE_KEY, cache
+            info = cache.get(UPDATE_CACHE_KEY) or None
+        except Exception:
+            info = None
+    if not info:                            # no check yet (or no shared cache): ask GitHub once
+        try:
+            import os
+            import requests
+            r = requests.get(os.environ.get('UPDATE_CHECK_URL', 'https://api.github.com/repos/rulezet/rulezet-core/releases/latest'),
+                             timeout=6, headers={'Accept': 'application/vnd.github+json'})
+            if r.ok:
+                d = r.json()
+                info = {'version': (d.get('tag_name') or '').lstrip('v'), 'url': d.get('html_url')}
+        except Exception:
+            info = None
+    return info if info and info.get('version') else None
 
 
 def delete_feed(c, user, feed_id):

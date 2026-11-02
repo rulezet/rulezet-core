@@ -362,8 +362,7 @@ def notify_admins_new_version(latest_version, local_version, url):
     except Exception as e:
         db.session.rollback()
         print(f"[notification_core] notify_admins_new_version error: {e}")
-    from app.features.messages.feeds_core import on_rulezet_release     # channel automations, once per version
-    on_rulezet_release(latest_version, url)
+
 
 
 def notify_admins_session_started(user, session_type, session_uuid, label, link):
