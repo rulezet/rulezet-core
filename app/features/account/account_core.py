@@ -42,7 +42,7 @@ ALLOWED_AVATAR_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 # into a PNG in AVATAR_UPLOAD_FOLDER, so it is stored and shown exactly like
 # an uploaded avatar everywhere. Every choice is whitelisted here.
 RULEZY_IMAGE_FOLDER = os.path.join("app", "static", "images", "rulezy")
-FONTAWESOME_DIR = os.path.join("app", "static", "fontawesome-6.3.0")
+FONTAWESOME_DIR = os.path.join("app", "static", "fontawesome-7.3.1")   # the bundled Font Awesome (base.html)
 AVATAR_BACKGROUNDS = setting('account.avatar_backgrounds')  # app/config/account.avatar_backgrounds.json
 AVATAR_BORDERS = setting('account.avatar_borders')  # app/config/account.avatar_borders.json
 AVATAR_ICONS = setting('account.avatar_icons')  # app/config/account.avatar_icons.json
@@ -65,8 +65,12 @@ def _fontawesome_codepoints() -> dict:
             css = fp.read()
     except OSError:
         return {}
-    pairs = re.findall(r'\.fa-([a-z0-9-]+)::before\s*\{\s*content:\s*"\\([0-9a-f]+)"', css)
-    return {name: chr(int(code, 16)) for name, code in pairs}
+    # FA 7: `.fa-user { --fa: "\f007"; }` — FA 6: `.fa-user::before { content: "\f007"; }`; a rule may list aliases
+    out = {}
+    for selectors, code in re.findall(r'([^{}]+)\{\s*(?:--fa|content):\s*"\\([0-9a-f]+)"', css):
+        for name in re.findall(r'\.fa-([a-z0-9-]+)', selectors):
+            out.setdefault(name, chr(int(code, 16)))
+    return out
 
 
 def get_avatar_icons() -> list:
@@ -115,7 +119,10 @@ def render_built_avatar(kind: str, choice: str, background: str, border: str = "
         canvas.alpha_composite(mascot, ((size - mascot.width) // 2, size - mascot.height - int(size * 0.06)))
     else:
         glyph = _fontawesome_codepoints()[choice]
-        font = ImageFont.truetype(os.path.join(FONTAWESOME_DIR, "webfonts", "fa-solid-900.ttf"), int(size * 0.46))
+        fonts = os.path.join(FONTAWESOME_DIR, "webfonts")
+        font_file = next((os.path.join(fonts, f) for f in ("fa-solid-900.ttf", "fa-solid-900.woff2")
+                          if os.path.exists(os.path.join(fonts, f))), None)
+        font = ImageFont.truetype(font_file, int(size * 0.46))
         colour = (30, 41, 59, 255) if background in ("white", "sky", "gold") else (255, 255, 255, 255)
         layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         draw = ImageDraw.Draw(layer)
