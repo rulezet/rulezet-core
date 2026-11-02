@@ -129,6 +129,15 @@ def api_refs():
     return jsonify({'items': R.search(request.args.get('q'), kinds), 'kinds': R.KINDS})
 
 
+@messages_blueprint.post('/api/previews')
+@login_required
+def api_previews():
+    """Cards of the Rulezet links in messages (previews_core.py) — {url: card or null}, only this instance's pages."""
+    from . import previews_core as P
+    urls = [u for u in ((request.get_json(silent=True) or {}).get('urls') or []) if isinstance(u, str)][:P.MAX_PER_REQUEST]
+    return jsonify({'previews': {u: P.preview(u, current_user) for u in urls}})
+
+
 @messages_blueprint.get('/api/search')
 @login_required
 def api_search():
@@ -314,7 +323,7 @@ def api_clear(uuid):
 def api_me(uuid):
     c = _channel_or_404(uuid)
     data = request.get_json(silent=True) or {}
-    if not M.set_member_flags(c, current_user, data.get('muted'), data.get('starred')):
+    if not M.set_member_flags(c, current_user, data.get('muted'), data.get('starred'), data.get('email_mode')):
         return _err('You are not in this conversation.')
     return jsonify({'ok': True})
 
@@ -392,6 +401,20 @@ def api_react(uuid, message_id):
     m = _message_or_404(c, message_id)
     err = M.toggle_reaction(m, current_user, (request.get_json(silent=True) or {}).get('emoji'))
     return _err(err) if err else jsonify({'ok': True, 'message': M.message_json(m, current_user)})
+
+
+@messages_blueprint.get('/api/channels/<string:uuid>/messages/<int:message_id>/reactors')
+@login_required
+def api_reactors(uuid, message_id):
+    """Who added this emoji — the hover pop-up of a reaction (components/VoterPopover.js)."""
+    from app.core.db_class.message import ChannelReaction
+    c = _channel_or_404(uuid)
+    m = _message_or_404(c, message_id)
+    rows = ChannelReaction.query.filter_by(message_id=m.id, emoji=request.args.get('emoji', '')).all()
+    from app.core.db_class.user import User
+    users = [u for u in (M.db.session.get(User, r.user_id) for r in rows) if u]
+    return jsonify({'users': [{'id': u.id, 'username': u.get_username(), 'avatar': u.get_avatar_url()} for u in users[:50]],
+                    'total': len(rows)})
 
 
 @messages_blueprint.post('/api/channels/<string:uuid>/messages/<int:message_id>/pin')

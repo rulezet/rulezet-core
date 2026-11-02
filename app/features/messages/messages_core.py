@@ -155,6 +155,7 @@ def channel_json(c, user, me=None, unread=None, last=None, full=False):
         'last_message_at': c.last_message_at.isoformat() + 'Z' if c.last_message_at else None,
         'is_member': bool(me), 'my_role': me.role if me else None,
         'is_muted': bool(me and me.is_muted), 'is_starred': bool(me and me.is_starred),
+        'email_mode': me.email_mode if me else 'default',
         'unread': unread or 0, 'ref': _ref_json(c) if full or c.ref_type else None,
         'member_count': c.members.count(),
         'last': last,
@@ -636,10 +637,12 @@ def clear_for_me(c, user):
     return ''
 
 
-def set_member_flags(c, user, muted=None, starred=None):
+def set_member_flags(c, user, muted=None, starred=None, email_mode=None):
     m = member(c, user.id)
     if not m:
         return False
+    if email_mode in ('default', 'on', 'off'):
+        m.email_mode = email_mode
     if muted is not None:
         m.is_muted = bool(muted)
     if starred is not None:
@@ -857,19 +860,20 @@ def email_digest(user, now=None):
     from app.core.db_class.notification import NotificationPreference
     pref = NotificationPreference.query.filter_by(user_id=user.id).first()
     mode = pref.email_messages if pref else 'off'
-    if mode not in ('direct', 'all'):
-        return []
     now = now or _now()
     due = now - datetime.timedelta(minutes=_email_conf('delay_minutes', 10))
     out = []
     for m in ChannelMember.query.filter_by(user_id=user.id, is_muted=False).all():
+        # this conversation's own choice wins: on = every message, off = never; default = the preferences
+        if m.email_mode == 'off' or (m.email_mode != 'on' and mode not in ('direct', 'all')):
+            continue
         floor = max(m.last_read_id, m.emailed_id, m.cleared_id)
         rows = (ChannelMessage.query.filter(ChannelMessage.channel_id == m.channel_id, ChannelMessage.id > floor,
                                             ChannelMessage.kind == 'message', ChannelMessage.deleted_at.is_(None),
                                             ChannelMessage.user_id != user.id, ChannelMessage.created_at <= due)
                 .order_by(ChannelMessage.id).all())
         c = m.channel
-        if c.kind == 'channel' and mode != 'all':
+        if c.kind == 'channel' and mode != 'all' and m.email_mode != 'on':
             rows = [r for r in rows if _mentions(r.content, user.id)]
         if not rows:
             continue
@@ -900,9 +904,10 @@ def send_due_emails(now=None) -> int:
     if not is_email_available():
         return 0
     now = now or _now()
-    users = (User.query.join(NotificationPreference, NotificationPreference.user_id == User.id)
-             .filter(NotificationPreference.email_messages.in_(('direct', 'all')), User.is_verified.is_(True),
-                     User.email.isnot(None)).limit(_email_conf('max_emails_per_pass', 200) * 5).all())
+    by_pref = db.session.query(NotificationPreference.user_id).filter(NotificationPreference.email_messages.in_(('direct', 'all')))
+    by_conv = db.session.query(ChannelMember.user_id).filter(ChannelMember.email_mode == 'on')
+    users = (User.query.filter(or_(User.id.in_(by_pref), User.id.in_(by_conv)), User.is_verified.is_(True),
+                               User.email.isnot(None)).limit(_email_conf('max_emails_per_pass', 200) * 5).all())
     try:
         from app.features.alert.alert_core import _public_base_url
         base = _public_base_url()

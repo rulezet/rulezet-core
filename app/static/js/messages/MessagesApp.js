@@ -7,6 +7,7 @@ import { create_message } from '/static/js/toaster.js'
 import MessageText, { plainMessage, REF_ICONS } from '/static/js/components/chat/message-text.js'
 import MessageComposer from '/static/js/components/chat/message-composer.js'
 import PeoplePicker from '/static/js/components/chat/people-picker.js'
+import VoterPopover from '/static/js/components/VoterPopover.js'
 
 const { ref, reactive, computed, watch, nextTick, onMounted, onUnmounted } = Vue
 
@@ -43,7 +44,7 @@ function listTime(iso) {
 export default {
     name: 'MessagesApp',
     delimiters: ['[[', ']]'],
-    components: { MessageText, MessageComposer, PeoplePicker },
+    components: { MessageText, MessageComposer, PeoplePicker, VoterPopover },
     props: {
         currentUserId: { type: Number, required: true },
         isAdmin: { type: Boolean, default: false },
@@ -351,6 +352,16 @@ export default {
             closeIfOpen(c.uuid); loadConversations()
             create_message('Channel deleted.', 'success-subtle')
         }
+        const CONV_EMAIL = [{ value: 'default', label: 'Like my preferences' }, { value: 'on', label: 'Every unread message' },
+                            { value: 'off', label: 'Never for this one' }]
+        async function convEmail(c, value) {
+            if (!await api(`/messages/api/channels/${c.uuid}/me`, 'POST', { email_mode: value })) return
+            c.email_mode = value
+            const listed = findConv(c.uuid); if (listed) listed.email_mode = value
+            if (current.value && current.value.uuid === c.uuid) current.value.email_mode = value
+            create_message(value === 'on' ? 'You\'ll get an email for its unread messages.' : value === 'off' ? 'No email for this conversation.'
+                           : 'This conversation follows your preferences.', 'success-subtle')
+        }
         const canDeleteChannel = c => c.kind === 'channel' && (c.my_role === 'owner' || props.isAdmin)
         const canEditChannel = c => c.kind === 'channel' && (c.my_role === 'owner' || c.my_role === 'moderator' || props.isAdmin)
         async function editChannel(c) {
@@ -582,7 +593,7 @@ export default {
             dialog, form, browseQ, browseList, browsing, roleLabel,
             openConversation, loadOlder, onScroll, send, cancelCompose, editLast, react, removeMsg, pin, copyLink, quote,
             join, leave, toggleMe, saveSettings, deleteChannel, addPeople, removeMember, setRole, openResult,
-            EMAIL_MODES, emailMode, setEmailMode, loadEmailMode, joinable, quickJoin, inviteUrl, setInvite, copyInvite, onConvKey, onFilterKey, browseInput, focusBrowse, onBrowseKey, dialogEl, trapFocus, convFlag, convRead, convClear, convLeave, convDelete, canDeleteChannel, canEditChannel, editChannel, newChannel, createChannel, acceptInvite, startDirect, pickAvatar, uploadAvatar, removeAvatar, openBrowse, openFromBrowse, convIcon, reactorNames,
+            EMAIL_MODES, emailMode, setEmailMode, loadEmailMode, joinable, quickJoin, inviteUrl, setInvite, copyInvite, onConvKey, onFilterKey, browseInput, focusBrowse, onBrowseKey, dialogEl, trapFocus, convFlag, convRead, convClear, convLeave, convDelete, canDeleteChannel, CONV_EMAIL, convEmail, canEditChannel, editChannel, newChannel, createChannel, acceptInvite, startDirect, pickAvatar, uploadAvatar, removeAvatar, openBrowse, openFromBrowse, convIcon, reactorNames,
             timeLabel, listTime, plainMessage, reads, seenBy, seenNames, lastMineId,
         }
     },
@@ -658,6 +669,10 @@ export default {
                     <li v-if="c.unread"><button type="button" class="dropdown-item" @click="convRead(c)"><i class="fa-solid fa-check-double me-2"></i>Mark as read</button></li>
                     <li><button type="button" class="dropdown-item" @click="convFlag(c, 'starred')"><i class="me-2" :class="c.is_starred ? 'fa-regular fa-star' : 'fa-solid fa-star'"></i>[[ c.is_starred ? 'Unstar' : 'Star' ]]</button></li>
                     <li><button type="button" class="dropdown-item" @click="convFlag(c, 'muted')"><i class="me-2" :class="c.is_muted ? 'fa-regular fa-bell' : 'fa-solid fa-bell-slash'"></i>[[ c.is_muted ? 'Unmute' : 'Mute' ]]</button></li>
+                    <li><h6 class="dropdown-header">Email me</h6></li>
+                    <li v-for="o in CONV_EMAIL" :key="o.value"><button type="button" class="dropdown-item" @click="convEmail(c, o.value)">
+                      <i class="me-2" :class="(c.email_mode || 'default') === o.value ? 'fa-solid fa-circle-check text-primary' : 'fa-regular fa-circle'"></i>[[ o.label ]]</button></li>
+                    <li><hr class="dropdown-divider"></li>
                     <li v-if="canEditChannel(c)"><button type="button" class="dropdown-item" @click="editChannel(c)"><i class="fa-solid fa-pen me-2"></i>Edit the channel <span class="small text-muted">— picture, name, topic, access</span></button></li>
                     <li><hr class="dropdown-divider"></li>
                     <li><button type="button" class="dropdown-item text-danger" @click="convClear(c)"><i class="fa-solid fa-eraser me-2"></i>Delete for me</button></li>
@@ -736,6 +751,10 @@ export default {
                     <li v-if="current.unread"><button type="button" class="dropdown-item" @click="convRead(current)"><i class="fa-solid fa-check-double me-2"></i>Mark as read</button></li>
                     <li><button type="button" class="dropdown-item" @click="convFlag(current, 'starred')"><i class="me-2" :class="current.is_starred ? 'fa-regular fa-star' : 'fa-solid fa-star'"></i>[[ current.is_starred ? 'Unstar' : 'Star' ]]</button></li>
                     <li><button type="button" class="dropdown-item" @click="convFlag(current, 'muted')"><i class="me-2" :class="current.is_muted ? 'fa-regular fa-bell' : 'fa-solid fa-bell-slash'"></i>[[ current.is_muted ? 'Unmute' : 'Mute' ]]</button></li>
+                    <li><h6 class="dropdown-header">Email me</h6></li>
+                    <li v-for="o in CONV_EMAIL" :key="o.value"><button type="button" class="dropdown-item" @click="convEmail(current, o.value)">
+                      <i class="me-2" :class="(current.email_mode || 'default') === o.value ? 'fa-solid fa-circle-check text-primary' : 'fa-regular fa-circle'"></i>[[ o.label ]]</button></li>
+                    <li><hr class="dropdown-divider"></li>
                     <li v-if="canEditChannel(current)"><button type="button" class="dropdown-item" @click="editChannel(current)"><i class="fa-solid fa-pen me-2"></i>Edit the channel <span class="small text-muted">— picture, name, topic, access</span></button></li>
                     <li><hr class="dropdown-divider"></li>
                     <li><button type="button" class="dropdown-item text-danger" @click="convClear(current)"><i class="fa-solid fa-eraser me-2"></i>Delete for me</button></li>
@@ -804,8 +823,12 @@ export default {
                 <span v-else class="chat-seen-by__no"><i class="fa-solid fa-check"></i> Sent</span>
               </div>
               <div v-if="r.m.reactions.length" class="chat-reactions">
-                <button v-for="g in r.m.reactions" :key="g.emoji" type="button" class="chat-reaction" :class="{ 'is-mine': g.mine }"
-                        :title="reactorNames(g)" :disabled="!current.can_post" @click="react(r.m, g.emoji)">[[ g.emoji ]] <b>[[ g.count ]]</b></button>
+                <voter-popover v-for="g in r.m.reactions" :key="g.emoji + g.count"
+                               :fetch-url="'/messages/api/channels/' + current.uuid + '/messages/' + r.m.id + '/reactors?emoji=' + encodeURIComponent(g.emoji) + '&n=' + g.count"
+                               :label="'Reacted ' + g.emoji">
+                  <button type="button" class="chat-reaction" :class="{ 'is-mine': g.mine }"
+                          :aria-label="g.emoji + ' ' + g.count + ' — ' + reactorNames(g)" :disabled="!current.can_post" @click="react(r.m, g.emoji)">[[ g.emoji ]] <b>[[ g.count ]]</b></button>
+                </voter-popover>
                 <button v-if="current.can_post" type="button" class="chat-reaction chat-reaction--add" title="Add a reaction" @click="emojiFor = emojiFor === r.m.id ? null : r.m.id"><i class="fa-regular fa-face-smile"></i></button>
               </div>
             </div>

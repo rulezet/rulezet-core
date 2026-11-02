@@ -63,6 +63,7 @@ export default {
             { kind: 'repo', label: 'Git source' }, { kind: 'channel', label: 'Channel' },
         ]
         const attachOpen = ref(false)
+        const helpOpen = ref(false)
         const results = ref([])
         const active = ref(0)
         const loading = ref(false)
@@ -223,7 +224,7 @@ export default {
         }
 
         return { text, preview, box, sending, picker, results, active, loading, tooLong, canSend, REF_ICONS,
-                 onInput, onKey, pick, wrap, trigger, send, focus, closePicker, enterSends, toggleEnter, isTouch, uploading, dragging, fileInput, uploadImages, onPaste, onDrop, onDragOver, pickKind, ATTACH, attachOpen, attach, attachMenu, openAttach, onAttachKey }
+                 onInput, onKey, pick, wrap, trigger, send, focus, closePicker, helpOpen, enterSends, toggleEnter, isTouch, uploading, dragging, fileInput, uploadImages, onPaste, onDrop, onDragOver, pickKind, ATTACH, attachOpen, attach, attachMenu, openAttach, onAttachKey }
     },
     template: `
     <div class="chat-composer" :class="{ 'is-disabled': disabled, 'is-editing': editing }">
@@ -253,6 +254,33 @@ export default {
             </button>
         </div>
 
+        <div v-if="helpOpen" class="chat-help" role="dialog" aria-label="Shortcuts" @keydown.esc.stop="helpOpen = false; focus()">
+            <div class="chat-help__head"><b>What you can write</b>
+                <button type="button" class="chat-composer__x" @click="helpOpen = false" aria-label="Close"><i class="fa-solid fa-xmark"></i></button></div>
+            <div class="chat-help__grid">
+                <section>
+                    <h6><i class="fa-solid fa-at"></i>Mention someone</h6>
+                    <p><code>@</code> + 2 letters of a name → pick them (↑ ↓ Enter / Tab). They get a notification.</p>
+                    <h6><i class="fa-solid fa-hashtag"></i>Link anything in Rulezet</h6>
+                    <p><code>#</code> + a few words, an <b>id</b> or a <b>uuid</b> — words in any order, spaces or _ - don't matter. Or the <b>📎 Attach</b> menu to search one kind only:</p>
+                    <ul class="chat-help__kinds">
+                        <li v-for="a in ATTACH" :key="a.kind"><i :class="REF_ICONS[a.kind]"></i>[[ a.label ]]</li>
+                    </ul>
+                    <p class="mb-0">Examples: <code>#yara loader</code> · <code>#1234</code> · <code>#CVE-2021-44228</code> · <code>#T1059</code></p>
+                </section>
+                <section>
+                    <h6><i class="fa-solid fa-link"></i>Paste a Rulezet link</h6>
+                    <p>A rule, bundle, edit proposal, merge request, blog post, CVE, technique, profile or channel link shows a card under the message.</p>
+                    <h6><i class="fa-regular fa-image"></i>Images</h6>
+                    <p>The image button, paste (Ctrl+V) or drop a file — PNG, JPEG, GIF, WebP, 5 MB.</p>
+                    <h6><i class="fa-brands fa-markdown"></i>Markdown</h6>
+                    <p><code>**bold**</code> <code>_italic_</code> <code>\`code\`</code> <code>\`\`\`block\`\`\`</code> <code>&gt; quote</code> <code>[text](url)</code> <code>- list</code></p>
+                    <h6><i class="fa-regular fa-keyboard"></i>Keys</h6>
+                    <p class="mb-0"><kbd>[[ enterSends ? 'Enter' : 'Ctrl+Enter' ]]</kbd> send · <kbd>[[ enterSends ? 'Shift+Enter' : 'Enter' ]]</kbd> new line · <kbd>↑</kbd> edit your last message ·
+                        <kbd>Esc</kbd> cancel a reply / an edit · <kbd>Ctrl+B</kbd> <kbd>Ctrl+I</kbd> bold, italic · <kbd>Ctrl+K</kbd> find a conversation</p>
+                </section>
+            </div>
+        </div>
         <div class="chat-composer__box" :class="{ 'is-dragging': dragging }"
              @dragover.prevent="onDragOver" @dragleave.self="dragging = false" @drop.prevent="onDrop">
             <div v-if="dragging" class="chat-composer__drop"><i class="fa-solid fa-image me-2"></i>Drop the image to add it</div>
@@ -284,6 +312,8 @@ export default {
                 <button v-for="a in ATTACH.slice(0, 3)" :key="'q' + a.kind" type="button" class="chat-tool chat-tool--quick" :title="'Attach a ' + a.label.toLowerCase()"
                         :disabled="preview || disabled" @click="attach(a.kind)"><i :class="REF_ICONS[a.kind]"></i></button>
                 <button type="button" class="chat-tool" :class="{ 'is-on': preview }" title="Preview" @click="preview = !preview"><i class="fa-solid fa-eye"></i></button>
+                <button type="button" class="chat-tool" :class="{ 'is-on': helpOpen }" title="Every shortcut: @, #, Attach, Markdown, keys" aria-haspopup="dialog"
+                        :aria-expanded="helpOpen" @click="helpOpen = !helpOpen"><i class="fa-solid fa-circle-question"></i></button>
                 <span class="chat-composer__hint">
                     <span v-if="tooLong" class="text-danger">[[ text.length ]] / [[ maxLength ]]</span>
                     <template v-else-if="isTouch">Markdown · send with the button</template>

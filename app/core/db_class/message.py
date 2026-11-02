@@ -57,6 +57,8 @@ class ChannelMember(db.Model):
     cleared_id   = db.Column(db.Integer, nullable=False, default=0, server_default='0')
     # Messages by email: messages up to this id were already in an email to this member
     emailed_id   = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    # default (as "Messages by email" in the preferences) | on (always email this conversation) | off (never)
+    email_mode   = db.Column(db.String(8), nullable=False, default='default', server_default='default')
 
     user = db.relationship('User', lazy='joined')
 
