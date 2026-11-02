@@ -154,7 +154,7 @@ def api_create():
 def api_direct(user_id):
     c, err = M.direct_with(current_user, user_id)
     if not c:
-        return _err(err, 404)
+        return _err(err, 429 if 'Too many' in err else 404)
     return jsonify({'ok': True, 'channel': M.channel_json(c, current_user, full=True)})
 
 

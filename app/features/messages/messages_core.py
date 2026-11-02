@@ -330,6 +330,11 @@ def direct_with(user, other_id):
     c = Channel.query.filter(Channel.kind == 'direct', Channel.id.in_(mine), Channel.id.in_(theirs)).first()
     if c:
         return c, ''
+    if not _is_admin(user):          # anti-spam: new direct conversations per day
+        since = _now() - datetime.timedelta(days=1)
+        if Channel.query.filter(Channel.kind == 'direct', Channel.created_by == user.id,
+                                Channel.created_at > since).count() >= _limit('new_direct_per_day', 40):
+            return None, 'Too many new conversations today — try again tomorrow.'
     c = Channel(kind='direct', is_private=True, created_by=user.id, last_message_at=_now())
     db.session.add(c)
     db.session.flush()
@@ -667,6 +672,11 @@ def post_message(c, user, content, reply_to_id=None):
         return None, 'The message is empty.'
     if len(content) > _limit('message_max_chars', 8000):
         return None, f'{_limit("message_max_chars", 8000)} characters at most.'
+    if not _is_admin(user):          # anti-spam: messages per minute
+        since = _now() - datetime.timedelta(minutes=1)
+        if ChannelMessage.query.filter(ChannelMessage.user_id == user.id, ChannelMessage.kind == 'message',
+                                       ChannelMessage.created_at > since).count() >= _limit('messages_per_minute', 30):
+            return None, 'You are sending messages too fast — wait a minute.'
     if not member(c, user.id):
         if not join(c, user):
             return None, 'You can\'t write here.'
