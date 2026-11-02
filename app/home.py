@@ -1577,6 +1577,20 @@ def admin_settings_test_email():
     return jsonify(result)
 
 
+@home_blueprint.route('/admin/settings/test_matrix', methods=['POST'])
+@login_required
+def admin_settings_test_matrix():
+    """Post a test message in the Matrix room set in the configuration (core/utils/matrix.py)."""
+    if not current_user.is_admin():
+        return jsonify({'error': 'Unauthorized'}), 403
+    from .core.utils import matrix
+    ok, err = matrix.send('✅ Test from Rulezet — this room gets the update messages of manage.py start-prod.',
+                          '✅ <b>Test from Rulezet</b> — this room gets the update messages of <code>manage.py start-prod</code>.')
+    if ok:
+        log_activity('admin.test_matrix_sent', 'Test message sent to the Matrix room', is_public=False)
+    return jsonify({'success': ok, 'error': err})
+
+
 @home_blueprint.route('/admin/settings/generate_key', methods=['POST'])
 @login_required
 def admin_settings_generate_key():

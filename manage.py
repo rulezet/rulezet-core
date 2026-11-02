@@ -25,6 +25,7 @@ Commands:
 import contextlib
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -165,6 +166,43 @@ def banner(mode: str) -> None:
   ╰──────────────────────────────────────────────────╯{r}""")
 
 
+# ── Matrix: tell a room that the production instance is updating / back (.env: MATRIX_HOMESERVER,
+#    MATRIX_ACCESS_TOKEN, MATRIX_ROOM_ID — see .env_default). Never stops an update: a failure is only a warning.
+def _env_value(key: str) -> str:
+    if os.environ.get(key):
+        return os.environ[key]
+    env_file = ROOT / ".env"
+    if env_file.is_file():
+        for line in env_file.read_text().splitlines():
+            k, sep, v = line.strip().partition("=")
+            if sep and k.strip() == key and not line.lstrip().startswith("#"):
+                return v.strip().strip('"').strip("'")
+    return ""
+
+
+def _matrix(text: str, html: str | None = None) -> None:
+    import urllib.parse
+    import urllib.request
+    server, token, room = (_env_value(k) for k in ("MATRIX_HOMESERVER", "MATRIX_ACCESS_TOKEN", "MATRIX_ROOM_ID"))
+    if not (server and token and room):
+        return
+    body = {"msgtype": "m.notice", "body": text}
+    if html:
+        body.update({"format": "org.matrix.custom.html", "formatted_body": html})
+    url = (f"{server.rstrip('/')}/_matrix/client/v3/rooms/{urllib.parse.quote(room, safe='')}"
+           f"/send/m.room.message/rulezet-{int(time.time() * 1000)}")
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="PUT",
+                                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(req, timeout=10).read()
+    except Exception as e:                       # never block an update for a chat message
+        warn(f"Matrix message not sent ({type(e).__name__}: {str(e)[:120]})")
+
+
+def _instance_url() -> str:
+    return _env_value("INSTANCE_PUBLIC_URL") or "this instance"
+
+
 def _announce_when_up(url: str, port: str, mode: str, note: str = "debug mode · reloads on code changes · CTRL+C to stop") -> None:
     """Background: spinner while gunicorn and the app boot, then a clear "ready" box once the
     site really answers an HTTP request (the port opens before the app is loaded)."""
@@ -184,9 +222,14 @@ def _announce_when_up(url: str, port: str, mode: str, note: str = "debug mode ·
                 except (OSError, ValueError):
                     time.sleep(0.4)
             else:
+                if mode.startswith("production"):
+                    _matrix(f"⚠️ Rulezet ({_instance_url()}) is still not answering 3 min after starting — check the logs.")
                 return warn(f"The server is still not answering on port {port} after 3 min — see the logs above.")
         finally:
             _SPIN.stop()
+        if mode.startswith("production"):
+            _matrix(f"✅ Rulezet v{app_version()} is back online — {_instance_url()} ({time.monotonic() - t0:.0f}s to start)",
+                    f"✅ <b>Rulezet v{app_version()} is back online</b> — {_instance_url()}")
         g, d, r = "\033[1;32m", "\033[0;90m", "\033[0m"
         _say(f"""
 {g}  ╭──────────────────────────────────────────────────╮
@@ -197,6 +240,9 @@ def _announce_when_up(url: str, port: str, mode: str, note: str = "debug mode ·
      {d}── logs ─────────────────────────────────────────────{r}""")
     threading.Thread(target=wait, daemon=True).start()
 
+
+# What an open page asks on its own every few seconds (Messages): not shown in the terminal, kept in the log files
+_POLLING = re.compile(r"^/messages/api/(channels/[\w-]+/messages\?(after=|limit=)|conversations$|unread$)")
 
 _LOG_NOISE = ("Starting gunicorn", "Listening at:", "Using worker:",
               "THIS APP IS IN DEBUG MODE", "Handling signal:", "Shutting down: Master",
@@ -319,6 +365,8 @@ def _relay(proc, tag: str) -> None:
             method, path, code, secs = m.group(1), m.group(2), int(m.group(3)), float(m.group(4))
             if path.startswith("/static/") and code < 400:
                 continue                                        # JS / CSS / images: noise (failed ones still show)
+            if code < 400 and method == "GET" and _POLLING.match(path):
+                continue                                        # an open Messages page asking for news (log files keep them)
             color = "32" if code < 300 else "36" if code < 400 else "33" if code < 500 else "31"
             # the client's address, its own column: "web │ 203.0.113.7     │ 200 GET /…"
             ip = line.split()[1] if len(line.split()) > 1 else "-"
@@ -1245,6 +1293,19 @@ def cmd_start_prod() -> None:
     the same gunicorn + worker.py launch as start-dev (see _run_gunicorn_with_worker)."""
     _check_venv()
     banner("production")
+    if not os.environ.get(_SYNCED):                  # once (manage.py restarts itself after the git sync)
+        _matrix(f"🔧 Rulezet ({_instance_url()}) is updating — from v{app_version()}. Back in a few minutes.",
+                f"🔧 <b>Rulezet is updating</b> — {_instance_url()}, from v{app_version()}. Back in a few minutes.")
+    try:
+        _start_prod_steps()
+    except BaseException as e:
+        # CTRL+C (stopping the server) and a clean exit are not failures
+        if not isinstance(e, KeyboardInterrupt) and not (isinstance(e, SystemExit) and e.code in (0, None)):
+            _matrix(f"❌ Rulezet ({_instance_url()}) update failed: {type(e).__name__} {str(e)[:200]} — check the server.")
+        raise
+
+
+def _start_prod_steps() -> None:
     with step(1, 6, "Database backup"):
         if os.environ.get(_SYNCED):
             ok("Backup done before manage.py restarted")

@@ -243,6 +243,11 @@ def get_app_config() -> dict:
             'configured': mail_state['configured'],
             'available': mail_state['available'],
         },
+        'matrix': (lambda env: {
+            'homeserver': env.get('MATRIX_HOMESERVER', ''),
+            'room_id': env.get('MATRIX_ROOM_ID', ''),
+            'token_set': bool(env.get('MATRIX_ACCESS_TOKEN')),
+        })(read_env_file()),
         'app': {
             'flask_url': cfg.get('FLASK_URL', '127.0.0.1'),
             'flask_port': cfg.get('FLASK_PORT', 7009),
@@ -303,6 +308,7 @@ _ENV_ALLOWED = {
     'GITHUB_TOKEN', 'GITHUB_HOST', 'GIT_HOSTS', 'GIT_HOST_TOKENS',
     'SURICATA_BINARY_PATH',
     'MALWAREBAZAAR_API_KEY',
+    'MATRIX_HOMESERVER', 'MATRIX_ACCESS_TOKEN', 'MATRIX_ROOM_ID',     # manage.py start-prod posts there (core/utils/matrix.py)
 }
 
 

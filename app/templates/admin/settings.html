@@ -4,6 +4,7 @@
 
 {% block head %}
 <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/admin/settings.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/help-tip.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -1009,6 +1010,55 @@
                             </div>
                         </div>
 
+                        <!-- Matrix: update messages of manage.py start-prod (core/utils/matrix.py) -->
+                        <div class="config-section mt-4">
+                            <div class="config-section__title">
+                                <img src="{{ url_for('static', filename='image/logo/integrations/element.svg') }}" alt="" class="integration-logo">Matrix · Element
+                                <span v-if="config.matrix.homeserver && config.matrix.room_id && config.matrix.token_set" class="badge bg-success-subtle text-success-emphasis ms-auto">Set</span>
+                                <span v-else class="badge bg-secondary-subtle text-secondary-emphasis ms-auto">Off</span>
+                            </div>
+                            <p class="text-muted" style="font-size:.78rem;">
+                                <code>manage.py start-prod</code> posts in this room when an update starts, when the site is back online
+                                and if it fails. Use a bot account invited to the room; its access token is in Element → Settings →
+                                Help &amp; About.
+                                <help-tip title="Set it up in 4 steps" :width="340" text="1. Create a Matrix account for the bot (e.g. @rulezet-bot:matrix.org) — better than your own.&#10;2. Invite it to the room, log in with it in Element and accept the invite.&#10;3. Fill in the 3 fields below (the ? next to each says where to find it).&#10;4. Send a test message: it shows up in the room, or this card says what is wrong."></help-tip>
+                            </p>
+                            <template v-for="f in MATRIX_FIELDS" :key="f.key">
+                                <div class="config-row">
+                                    <div class="config-row__key">[[ f.label ]] <help-tip :title="f.label" :text="f.help"></help-tip></div>
+                                    <div class="config-row__value d-flex align-items-center gap-2">
+                                        <span v-if="f.secret" class="config-secret">[[ config.matrix.token_set ? '••••••••' : 'not set' ]]</span>
+                                        <span v-else>[[ config.matrix[f.show] || '—' ]]</span>
+                                        <button class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-0 ms-auto" style="font-size:.72rem;"
+                                                @click="matrixEdit[f.key] = matrixEdit[f.key] === undefined ? '' : undefined" :aria-label="'Edit ' + f.label">
+                                            <i class="fa-solid fa-pen-to-square"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div v-if="matrixEdit[f.key] !== undefined" class="pb-2">
+                                    <div class="env-edit-form">
+                                        <input :type="f.secret ? 'password' : 'text'" v-model.trim="matrixEdit[f.key]" class="form-control form-control-sm rounded-pill"
+                                               :placeholder="f.placeholder" @keyup.enter="saveMatrix(f.key)">
+                                        <button class="btn btn-sm btn-success rounded-pill px-3" @click="saveMatrix(f.key)" :disabled="!matrixEdit[f.key]">
+                                            <i class="fa-solid fa-check me-1"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary rounded-pill px-2" @click="matrixEdit[f.key] = undefined">
+                                            <i class="fa-solid fa-xmark"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                            <div class="mt-3 pt-3 d-flex align-items-center gap-2 flex-wrap" style="border-top:1px solid var(--border-color);">
+                                <button class="btn btn-sm btn-primary rounded-pill px-4" @click="testMatrix" :disabled="matrixTesting">
+                                    <span v-if="matrixTesting" class="spinner-border spinner-border-sm me-1"></span>
+                                    <i v-else class="fa-solid fa-paper-plane me-1"></i>Send a test message
+                                </button>
+                                <span v-if="matrixResult" :class="matrixResult.success ? 'text-success' : 'text-danger'" style="font-size:.8rem;">
+                                    <i :class="matrixResult.success ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-xmark'" class="me-1"></i>
+                                    [[ matrixResult.success ? 'Sent — look in the room.' : matrixResult.error ]]</span>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             </template>
@@ -1331,10 +1381,12 @@
 
 {% block script %}
 <script type="module">
+import HelpTip from '/static/js/components/help-tip.js'
 const { createApp, ref, computed, reactive, onMounted } = Vue
 
 createApp({
     delimiters: ['[[', ']]'],
+    components: { HelpTip },
     setup() {
 
         /* ── State ── */
@@ -1691,6 +1743,32 @@ createApp({
             }
         }
 
+        /* ── Matrix (manage.py start-prod messages) ── */
+        const MATRIX_FIELDS = [
+            { key: 'MATRIX_HOMESERVER', label: 'Homeserver', show: 'homeserver', placeholder: 'https://matrix.org',
+              help: 'The server of the bot account, with https:// — e.g. https://matrix.org, or your organisation\'s own (https://matrix.circl.lu…).\nIt is the part after ":" in the bot\'s Matrix ID: @rulezet-bot:matrix.org → https://matrix.org.' },
+            { key: 'MATRIX_ROOM_ID', label: 'Room', show: 'room_id', placeholder: '!abcdef:matrix.org',
+              help: 'Where the messages go. In Element: open the room → Room settings → Advanced → "Internal room ID", it starts with ! (e.g. !AbCdEf123:matrix.org).\nAn alias like #rulezet-ops:matrix.org works too.\nInvite the bot account to this room first, and accept the invite with it.' },
+            { key: 'MATRIX_ACCESS_TOKEN', label: 'Access token', secret: true, placeholder: 'syt_…',
+              help: 'Lets Rulezet post as the bot account. Log in to Element with the bot (not your own account), then Settings → Help & About → Access token → copy it (it starts with syt_).\nKeep it secret: it is stored in .env and never shown again here. Logging the bot out of that Element session makes the token stop working.' },
+        ]
+        const toast = async (msg, cls) => (await import('/static/js/toaster.js')).create_message(msg, cls)
+        const matrixEdit = reactive({})
+        const matrixTesting = ref(false), matrixResult = ref(null)
+        async function saveMatrix(key) {
+            const value = matrixEdit[key]
+            if (!value) return
+            if (key === 'MATRIX_HOMESERVER' && !/^https?:\/\//.test(value)) return toast('The homeserver is an address like https://matrix.org', 'danger-subtle')
+            if (key === 'MATRIX_ROOM_ID' && !/^[!#][^:\s]+:[^\s]+$/.test(value)) return toast('A room looks like !abcdef:matrix.org (or #alias:matrix.org)', 'danger-subtle')
+            const data = await post('/admin/settings/update_env', { key, value })
+            if (data.success) { matrixEdit[key] = undefined; configLoaded.value = false; loadConfig() }
+            else toast(data.message || 'Not saved.', 'danger-subtle')
+        }
+        async function testMatrix() {
+            matrixTesting.value = true; matrixResult.value = null
+            try { matrixResult.value = await post('/admin/settings/test_matrix', {}) } finally { matrixTesting.value = false }
+        }
+
         async function sendTestEmail() {
             testEmailSending.value = true
             testEmailResult.value = null
@@ -1780,6 +1858,7 @@ createApp({
         })
 
         return {
+            MATRIX_FIELDS, matrixEdit, matrixTesting, matrixResult, saveMatrix, testMatrix,
             emailToggleSaving, toggleEmailFeatures, TEST_ACCESS, testAccessSaving, setTestAccess, editorAccessSaving, setEditorAccess,
             system, systemLoading, cacheClearing, clearCaches,
             packages, packagesLoading, pkgSearch, filteredPackages, loadPackages,
