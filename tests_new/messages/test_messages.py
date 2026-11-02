@@ -479,9 +479,10 @@ def test_reactors_popover(clients, users):
     assert _logged_in_client(current_app, outsider).get(f"{API}/channels/{c2['uuid']}/messages/{m2['id']}/reactors?emoji=👍").status_code == 404
 
 
-def test_channel_automations(clients, users):
+def test_channel_automations(clients, users, monkeypatch):
     from tests_new.helpers.bundles import make_bundle
     from app.features.messages import feeds_core as F
+    monkeypatch.setattr(F, "_latest_release", lambda: None)          # no GitHub in tests
     pub, private = make_bundle(users.owner), make_bundle(users.owner, public=False)
     c = _channel(clients["owner"], member_ids=[users.user.id])
     url = f"{API}/channels/{c['uuid']}/feeds"
@@ -555,3 +556,14 @@ def test_api_rate_limit(clients, users, monkeypatch):
     assert clients["owner"].get(f"{API}/conversations").status_code == 200            # per account
     assert all(clients["admin"].get(f"{API}/conversations").status_code == 200 for _ in range(8))   # admins not limited
     assert clients["user"].get("/messages/").status_code == 200                        # only the API, not the page
+
+
+def test_rulezet_release_posted_when_the_automation_is_added(clients, users, monkeypatch):
+    from app.features.messages import feeds_core as F
+    monkeypatch.setattr(F, "_latest_release", lambda: {"version": "1.7.6", "url": "https://github.com/rulezet/rulezet-core/releases/tag/v1.7.6"})
+    c = _channel(clients["owner"], is_private=True)
+    assert clients["owner"].post(f"{API}/channels/{c['uuid']}/feeds", json={"kind": "rulezet_release"}).status_code == 201
+    F.on_rulezet_release("1.7.6", "https://github.com/rulezet/rulezet-core/releases/tag/v1.7.6")     # the daily check: not twice
+    feed = [m for m in clients["owner"].get(f"{API}/channels/{c['uuid']}/messages").get_json()["messages"] if m["kind"] == "feed"]
+    assert len(feed) == 1 and "v1.7.6" in feed[0]["content"]
+    assert clients["owner"].get(f"{API}/channels/{c['uuid']}/feeds").get_json()["feeds"][0]["posted"] == 1
