@@ -128,14 +128,12 @@ def run_next_job(app, lane='default'):
 
     db.session.expire_all()
 
-    job = (
-        _scope_to_lane(
-            BackgroundJob.query.filter(BackgroundJob.status.in_(['pending'])),
-            BackgroundJob, lane
-        )
-        .order_by(BackgroundJob.created_at.asc())
-        .first()
-    )
+    # The oldest pending job that isn't waiting to retry (payload _retry_at, set by job_handlers.retry_later)
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    job = next((j for j in
+                _scope_to_lane(BackgroundJob.query.filter(BackgroundJob.status.in_(['pending'])), BackgroundJob, lane)
+                .order_by(BackgroundJob.created_at.asc()).limit(50).all()
+                if not ((j.payload or {}).get('_retry_at') or '') > now_iso), None)
 
     if job is None:
         # No pending job: the query above still opened a transaction.
@@ -179,6 +177,10 @@ def run_next_job(app, lane='default'):
         job = BackgroundJob.query.filter_by(uuid=job_uuid).first()
         if not job:
             print(f"[worker:{lane}] Job {job_uuid} disappeared after handler.")
+            return job_uuid
+
+        if job.status == 'pending':          # retry_later(): back in the queue, not finished
+            print(f"[worker:{lane}] Job {job.uuid} will retry at {(job.payload or {}).get('_retry_at')}")
             return job_uuid
 
         if job.status not in ('cancelled', 'failed', 'paused'):

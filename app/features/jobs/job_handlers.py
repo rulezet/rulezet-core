@@ -71,6 +71,38 @@ def _reload(job):
         pass
 
 
+RETRY_EVERY = 10 * 60          # seconds
+RETRY_GIVE_UP = 4 * 3600
+
+
+def retry_later(job, reason, every=RETRY_EVERY, give_up_after=RETRY_GIVE_UP):
+    """Something the job needs is busy (e.g. the Git cache): put it back in the queue to run again in `every`
+    seconds; after `give_up_after` seconds of trying it fails for good. The handler returns right after.
+    True = will retry, False = gave up (the job is failed)."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    payload = dict(job.payload or {})
+    since = payload.get('_retry_since') or now.isoformat()
+    waited = (now - datetime.datetime.fromisoformat(since)).total_seconds()
+    tries = int(payload.get('_retry_count', 0)) + 1
+    if waited + every > give_up_after:
+        for k in ('_retry_at', '_retry_since', '_retry_count'):
+            payload.pop(k, None)
+        job.payload = payload
+        message = f'{reason} Tried {tries} times over {round(waited / 3600, 1)} h — giving up.'
+        log_job(job, message, level='error', event='failed')
+        job.status, job.error = 'failed', message
+        db.session.commit()
+        return False
+    at = now + datetime.timedelta(seconds=every)
+    payload.update({'_retry_at': at.isoformat(), '_retry_since': since, '_retry_count': tries})
+    job.payload = payload
+    job.status = 'pending'
+    log_job(job, f'{reason} Trying again at {at.strftime("%H:%M")} UTC (attempt {tries}, '
+                 f'gives up after {give_up_after // 3600} h).', level='warning', event='retry')
+    db.session.commit()
+    return True
+
+
 def _is_cancelled(job):
     _reload(job)
     return job.status == 'cancelled'
@@ -1147,11 +1179,7 @@ def handle_git_cache_pull(job, app):
     )
     with repo_cache_exclusive() as free:
         if not free:
-            message = 'A Git import or update is using the cache right now — try again once it is done.'
-            log_job(job, message, level='error', event='failed')
-            job.status = 'failed'
-            job.error = message
-            db.session.commit()
+            retry_later(job, 'A Git import or update is using the cache right now.')
             return
         clones = list_cached_clones()
         job.total = len(clones)
