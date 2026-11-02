@@ -1,0 +1,22 @@
+/* Git Sources table (githubSelectionTable.js) — the details opened under a row */
+.ghx { padding: .75rem .25rem; font-size: .82rem; color: var(--text-color); }
+.ghx-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; margin-bottom: .75rem; }
+.ghx-head__title { display: flex; align-items: center; gap: .5rem; min-width: 0; font-weight: 600; }
+.ghx-head__actions { display: flex; align-items: center; gap: .5rem; flex-shrink: 0; }
+.ghx-pill { display: inline-flex; align-items: center; gap: .3rem; font-size: .7rem; font-weight: 600; border-radius: 999px; padding: .1rem .5rem; white-space: nowrap; }
+.ghx-pill--ok { color: #157347; background: rgba(25,135,84,.1); }
+.ghx-pill--danger { color: #b02a37; background: rgba(220,53,69,.1); }
+.ghx-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .5rem; }
+.ghx-cell { border: 1px solid var(--border-color); border-radius: 8px; padding: .5rem .65rem; background: var(--light-bg-color); min-width: 0; }
+.ghx-label { display: flex; align-items: center; gap: .35rem; font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--subtle-text-color); margin-bottom: .3rem; }
+.ghx-link { background: none; border: 0; padding: 0; color: var(--subtle-text-color); font-size: .7rem; cursor: pointer; }
+.ghx-link:hover { color: #0d6efd; }
+.ghx-value { font-size: 1.1rem; font-weight: 700; color: #0d6efd; line-height: 1.2; }
+.ghx-date { font-weight: 600; }
+.ghx-stats { display: flex; gap: .6rem; color: var(--subtle-text-color); font-size: .76rem; }
+.ghx-muted { color: var(--subtle-text-color); }
+.ghx-branch { display: inline-flex; align-items: center; gap: .25rem; font-size: .7rem; border: 1px solid var(--border-color); border-radius: 999px; padding: .05rem .45rem; }
+.ghx-branch i { font-size: .6rem; }
+.ghx-branch.is-current { color: #0a58ca; background: rgba(13,110,253,.1); border-color: rgba(13,110,253,.25); }
+body.dark-mode .ghx-pill--ok { color: #75b798; } body.dark-mode .ghx-pill--danger { color: #ea868f; }
+body.dark-mode .ghx-branch.is-current { color: #6ea8fe; }

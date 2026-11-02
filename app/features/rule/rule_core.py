@@ -3706,7 +3706,7 @@ def rule_org_badge(rule):
     return None
 
 
-def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, author_names: list = None, editor_names: list = None, license_filter: str = None, conflicts_only: bool = False, sort: str = None, sort_dir: str = 'asc', provider_filter: str = None, circl_only: bool = False):
+def get_optimized_github_data(page: int = 1, search: str = None, search_field: str = 'url', format_filter: str = None, author_filter: str = None, author_names: list = None, editor_names: list = None, license_filter: str = None, conflicts_only: bool = False, sort: str = None, sort_dir: str = 'asc', provider_filter: str = None, circl_only: bool = False, quality_filter: str = None):
     """Paginates AND filters/sorts entirely off GithubRepo (a small,
     incrementally-synced table — see github_repo_core.py) instead of
     running a live GROUP BY / per-rule scan over the whole Rule table.
@@ -3778,6 +3778,13 @@ def get_optimized_github_data(page: int = 1, search: str = None, search_field: s
 
     if circl_only:
         query = query.filter(circl_badge_expr())
+
+    # quality band of the source (same thresholds as the badge colours in githubSelectionTable.js)
+    q = GithubRepo.quality_score
+    quality_bands = {'excellent': q >= 80, 'good': and_(q >= 60, q < 80), 'fair': and_(q >= 40, q < 60),
+                     'poor': q < 40, 'none': q.is_(None)}
+    if quality_filter in quality_bands:
+        query = query.filter(quality_bands[quality_filter])
 
     if sort in ('url', 'author', 'rule_count', 'cve_count', 'quality_score'):
         sort_column = getattr(GithubRepo, sort)

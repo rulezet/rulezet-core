@@ -27,6 +27,7 @@ const GithubFilter = {
         const selectedFormat  = Vue.ref(_p('format'))
         const selectedLicense = Vue.ref(_p('license'))
         const selectedProvider = Vue.ref(_p('provider'))
+        const selectedQuality = Vue.ref(_p('quality'))
         const availableProviders = Vue.ref([]);
         const providersTotal = Vue.computed(() => availableProviders.value.reduce((n, p) => n + p.count, 0));
         const conflictsOnly   = Vue.ref(_p('conflicts_only') === 'true')
@@ -51,6 +52,7 @@ const GithubFilter = {
         const activeFilterCount = Vue.computed(() =>
             (selectedFormat.value ? 1 : 0) +
             (selectedLicense.value ? 1 : 0) +
+            (selectedQuality.value ? 1 : 0) +
             (conflictsOnly.value ? 1 : 0) +
             (circlOnly.value ? 1 : 0) +
             (personFilter.value.values.length ? 1 : 0)
@@ -87,6 +89,7 @@ const GithubFilter = {
             _upd('format',         selectedFormat.value || null)
             _upd('license',        selectedLicense.value || null)
             _upd('provider',       selectedProvider.value || null)
+            _upd('quality',        selectedQuality.value || null)
             _upd('conflicts_only', conflictsOnly.value ? 'true' : null)
             _upd('circl_only',     circlOnly.value ? 'true' : null)
             _upd('page',           currentPage.value > 1 ? currentPage.value : null)
@@ -118,6 +121,7 @@ const GithubFilter = {
                 format: selectedFormat.value,
                 license: selectedLicense.value || '',
                 provider: selectedProvider.value || '',
+                quality: selectedQuality.value || '',
                 conflicts_only: conflictsOnly.value ? 'true' : 'false',
                 circl_only: circlOnly.value ? 'true' : 'false',
             });
@@ -160,6 +164,7 @@ const GithubFilter = {
         const resetFilters = () => {
             selectedFormat.value = '';
             selectedLicense.value = '';
+            selectedQuality.value = '';
             conflictsOnly.value = false;
             circlOnly.value = false;
             personFilter.value = { mode: 'author', values: [] };
@@ -185,7 +190,7 @@ const GithubFilter = {
             searchQuery,
             searchField,
             selectedFormat,
-            selectedLicense, selectedProvider, availableProviders, providersTotal, setProvider,
+            selectedLicense, selectedQuality, selectedProvider, availableProviders, providersTotal, setProvider,
             conflictsOnly, circlOnly, org,
             personFilter,
             searchIsLoading,
@@ -280,6 +285,18 @@ const GithubFilter = {
                         <option v-for="lic in availableLicenses" :key="lic.name" :value="lic.name">
                             [[ lic.name ]] ([[ lic.count ]])
                         </option>
+                    </select>
+                </div>
+
+                <div class="rl-fp-item">
+                    <select v-model="selectedQuality" @change="fetchUrls(1)" class="rl-fp-select" aria-label="Quality score"
+                            title="Quality score of the source, 0-100">
+                        <option value="">All quality scores</option>
+                        <option value="excellent">Excellent (80-100)</option>
+                        <option value="good">Good (60-79)</option>
+                        <option value="fair">Fair (40-59)</option>
+                        <option value="poor">Poor (0-39)</option>
+                        <option value="none">Not computed yet</option>
                     </select>
                 </div>
 

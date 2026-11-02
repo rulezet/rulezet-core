@@ -55,7 +55,8 @@ const GitHubSelectionTable = {
             selectedIds: new Map(),
             excludedIds: new Map(),
             isAllSelectedMode: false,
-            expandedRows: new Set(),
+            // rows whose details are open: { rowKey: true } — a plain object, simplest reactivity
+            openRows: {},
             isActionLoading: false,
             resyncing: false,
             backfilling: false,
@@ -252,9 +253,16 @@ const GitHubSelectionTable = {
             return item.branch ? gitTreeUrl(item.url, item.branch) : item.url;
         },
 
+        // A click anywhere on the row opens / closes it: done for every table by the global
+        // components/table/row-click-expand.js (it clicks the chevron) — no @click on the row here.
+        isExpanded(item) {
+            return !!this.openRows[this.rowKey(item)];
+        },
+
         toggleRow(key) {
-            if (this.expandedRows.has(key)) this.expandedRows.delete(key);
-            else this.expandedRows.add(key);
+            const next = { ...this.openRows };
+            if (next[key]) delete next[key]; else next[key] = true;
+            this.openRows = next;
         },
 
         updateSelection(item, isChecked) {
@@ -621,12 +629,12 @@ const GitHubSelectionTable = {
                         <tr class="dt-row"
                             :class="{
                                 'dt-row--selected': isItemChecked(item),
-                                'dt-row--expanded': expandedRows.has(rowKey(item)),
+                                'dt-row--expanded': isExpanded(item),
                                 'dt-row--repo-group-start': isRepoGroupStart(index),
                                 'dt-row--repo-group-continuation': isRepoGroupContinuation(index),
                             }"
                             style="cursor:pointer"
-                            @click="toggleRow(rowKey(item))">
+                            :title="isExpanded(item) ? 'Click to collapse' : 'Click to show the details of this repository'">
                             <td class="dt-td dt-td--checkbox" @click.stop>
                                 <input type="checkbox" class="dt-checkbox"
                                        :checked="isItemChecked(item)"
@@ -677,20 +685,21 @@ const GitHubSelectionTable = {
                                 </span>
                                 <span v-else class="text-muted small" title="No branch recorded — imported before branch tracking, or run Backfill branches">—</span>
                             </td>
-                            <td v-show="colVisible.license" class="dt-td" @click.stop>
+                            <td v-show="colVisible.license" class="dt-td">
                                 <span v-for="lic in (item.licensesExpanded ? item.licenses : (item.licenses || []).slice(0, 10))" :key="lic"
                                       class="badge ghst-chip fw-normal border-0 me-1"
                                       style="font-size:.7rem;">[[ lic ]]</span>
                                 <button v-if="item.licenses && item.licenses.length > 10 && !item.licensesExpanded"
                                         class="badge ghst-chip fw-normal border-0"
                                         style="font-size:.7rem;cursor:pointer;"
-                                        @click="item.licensesExpanded = true">
+                                        :title="'Show the ' + (item.licenses.length - 10) + ' other licenses'"
+                                        @click.stop="item.licensesExpanded = true">
                                     +[[ item.licenses.length - 10 ]]
                                 </button>
                                 <button v-else-if="item.licenses && item.licenses.length > 10"
                                         class="badge ghst-chip fw-normal border-0"
-                                        style="font-size:.7rem;cursor:pointer;"
-                                        @click="item.licensesExpanded = false">
+                                        style="font-size:.7rem;cursor:pointer;" title="Show fewer licenses"
+                                        @click.stop="item.licensesExpanded = false">
                                     <i class="fas fa-angle-up"></i>
                                 </button>
                                 <span v-if="!item.licenses || !item.licenses.length" class="text-muted small">—</span>
@@ -699,7 +708,7 @@ const GitHubSelectionTable = {
                             <td v-show="colVisible.quality" class="dt-td text-center">
                                 <span v-if="item.quality_score !== null && item.quality_score !== undefined" class="repo-quality"
                                       :class="item.quality_score >= 80 ? 'is-excellent' : item.quality_score >= 60 ? 'is-good' : item.quality_score >= 40 ? 'is-fair' : 'is-poor'"
-                                      :title="'Quality ' + Math.round(item.quality_score) + '/100 — computed ' + (item.quality_computed_at || '')">
+                                      :title="'Quality score: ' + Math.round(item.quality_score) + '/100 (' + (item.quality_score >= 80 ? 'excellent' : item.quality_score >= 60 ? 'good' : item.quality_score >= 40 ? 'fair' : 'poor') + ') — rules quality, failed imports, validity, licenses, last sync, conflicts' + (item.quality_computed_at ? ' · computed ' + item.quality_computed_at : '')">
                                     [[ Math.round(item.quality_score) ]]</span>
                                 <span v-else class="text-muted small" title="Not computed yet — workflow task Git Sources — quality score">—</span>
                             </td>
@@ -711,19 +720,19 @@ const GitHubSelectionTable = {
                             </td>
                             <td v-show="colVisible.imported" class="dt-td">[[ item.last_import ? item.last_import.date : '—' ]]</td>
                             <td v-show="colVisible.updated" class="dt-td">[[ item.last_update ? item.last_update.date : 'Never' ]]</td>
-                            <td class="dt-td dt-td--actions" @click.stop>
+                            <td class="dt-td dt-td--actions">
                                 <div class="dt-actions justify-content-end">
                                     <template v-if="isAdmin">
                                         <button class="dt-action-btn dt-action-btn--danger"
                                                 data-bs-toggle="modal"
                                                 :data-bs-target="'#delete_repo_modal_' + index"
-                                                title="Delete Repository">
+                                                title="Delete this repository — all its rules go to the trash">
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </template>
 
                                     <!-- Delete confirmation modal (single repo — bulk delete was removed) -->
-                                    <div class="modal fade" :id="'delete_repo_modal_' + index"
+                                    <div class="modal fade" data-no-row-toggle :id="'delete_repo_modal_' + index"
                                          tabindex="-1" aria-hidden="true">
                                         <div class="modal-dialog modal-dialog-centered">
                                             <div class="modal-content border-0 shadow-lg"
@@ -765,21 +774,21 @@ const GitHubSelectionTable = {
 
                                     <div v-if="isAdmin" class="dropdown d-inline-block">
                                         <button class="dt-action-btn" data-bs-toggle="dropdown" aria-expanded="false"
-                                                :class="{ 'ghst-circl-on': item.circl }" :title="org.label + ' badge'">
+                                                :class="{ 'ghst-circl-on': item.circl }" :title="org.label + ' badge — add it, remove it or let the keywords decide'">
                                             <i class="fas fa-shield-halved"></i>
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end">
-                                            <li><button class="dropdown-item" :class="{ active: item.circl_badge === true }" @click="setCirclBadge(item, true)">
+                                            <li><button class="dropdown-item" :class="{ active: item.circl_badge === true }" :title="'Always show the ' + org.label + ' badge on this repository'" @click="setCirclBadge(item, true)">
                                                 <i class="fas fa-plus me-2"></i>Add the [[ org.label ]] badge</button></li>
-                                            <li><button class="dropdown-item" :class="{ active: item.circl_badge === false }" @click="setCirclBadge(item, false)">
+                                            <li><button class="dropdown-item" :class="{ active: item.circl_badge === false }" :title="'Never show the ' + org.label + ' badge on this repository'" @click="setCirclBadge(item, false)">
                                                 <i class="fas fa-minus me-2"></i>Remove the [[ org.label ]] badge</button></li>
-                                            <li><button class="dropdown-item" :class="{ active: item.circl_badge === null }" @click="setCirclBadge(item, null)">
+                                            <li><button class="dropdown-item" :class="{ active: item.circl_badge === null }" title="Show the badge when the repository matches the keywords" @click="setCirclBadge(item, null)">
                                                 <i class="fas fa-wand-magic-sparkles me-2"></i>Automatic (from the keywords)</button></li>
                                         </ul>
                                     </div>
 
                                     <a :href="'/rule/github_detail?url=' + encodeURIComponent(item.url) + (item.branch ? '&branch=' + encodeURIComponent(item.branch) : '')"
-                                       class="dt-action-btn" title="View Details">
+                                       class="dt-action-btn" title="Open the page of this repository (its rules, imports, updates, quality)">
                                         <i class="fas fa-eye"></i>
                                     </a>
                                     <button v-if="currentUserIsAdmin" class="dt-action-btn" @click="createIssue(item)"
@@ -790,7 +799,7 @@ const GitHubSelectionTable = {
                                         <button class="dt-action-btn"
                                                 @click="updateSingleRepo(item)"
                                                 :disabled="item.isUpdating"
-                                                title="Check for updates">
+                                                :title="item.isUpdating ? 'Checking for updates…' : 'Check this repository for updates now'">
                                             <i class="fas fa-sync-alt"
                                                :class="{'fa-spin': item.isUpdating}"></i>
                                         </button>
@@ -798,8 +807,8 @@ const GitHubSelectionTable = {
 
                                     <!-- Expand: always last -->
                                     <button class="dt-action-btn dt-action-btn--expand"
-                                            :class="{ 'is-expanded': expandedRows.has(rowKey(item)) }"
-                                            title="Expand" @click="toggleRow(rowKey(item))">
+                                            :class="{ 'is-expanded': isExpanded(item) }"
+                                            :title="isExpanded(item) ? 'Hide the details' : 'Show the details (branches, latest import and update)'" @click="toggleRow(rowKey(item))">
                                         <i class="fas fa-chevron-down dt-expand-chevron" style="font-size:.65rem;"></i>
                                     </button>
                                 </div>
@@ -807,10 +816,9 @@ const GitHubSelectionTable = {
                         </tr>
 
                         <!-- ── Expanded detail row ── -->
-                        <tr v-if="expandedRows.has(rowKey(item))" class="dt-row-expand">
+                        <tr v-if="isExpanded(item)" class="dt-row-expand">
                             <td :colspan="tableColspan" class="dt-expand-cell">
-                                    <div class="animate__animated animate__fadeIn">
-
+                                    <div class="ghx">
                                         <!-- ── Job tracker (shown when a delete job is active) ── -->
                                         <div v-if="activeDeleteJobs[item.url]"
                                              class="card border-0 shadow-sm rounded-4 mb-3 border-danger">
@@ -827,160 +835,81 @@ const GitHubSelectionTable = {
                                             </div>
                                         </div>
 
-                                        <div class="d-flex justify-content-between align-items-center mb-3">
-                                            <h6 class="fw-bold mb-0">
-                                                <i class="fas fa-info-circle me-2"></i>Repository Analysis
-                                            </h6>
-                                            <span v-if="item.has_conflicts"
-                                                  class="badge bg-danger animate__animated animate__pulse animate__infinite">
-                                                <i class="fas fa-exclamation-triangle me-1"></i>
-                                                High Similarity Detected (&gt;90%)
-                                            </span>
-                                            <span v-else class="badge bg-success">
-                                                <i class="fas fa-check-circle me-1"></i> No Duplicate Conflicts
-                                            </span>
-                                        </div>
-
-                                        <div class="row g-3">
-                                            <div class="col-md-4">
-                                                <div class="p-3 border rounded h-100">
-                                                    <small class="text-muted d-block mb-2 text-uppercase fw-bold"
-                                                           style="font-size:0.7rem">Detected Formats</small>
-                                                    <div class="d-flex flex-wrap gap-1">
-                                                        <format-chip v-for="fmt in item.formats" :key="fmt" :format="fmt"></format-chip>
-                                                        <span v-if="!item.formats.length"
-                                                              class="text-muted small">None</span>
-                                                    </div>
-                                                    <small class="text-muted d-block mb-2 mt-3 text-uppercase fw-bold"
-                                                           style="font-size:0.7rem">Imported Branches</small>
-                                                    <div class="d-flex flex-wrap gap-1">
-                                                        <span v-for="br in item.branches" :key="br"
-                                                              class="badge fw-normal"
-                                                              :class="br === item.branch ? 'bg-primary text-white' : 'border ghst-text'"
-                                                              :title="br === item.branch ? 'This row' : ''">
-                                                            <i class="fas fa-code-branch me-1" style="font-size:.6rem;"></i>[[ br ]]
-                                                        </span>
-                                                        <span v-if="!item.branches || !item.branches.length"
-                                                              class="text-muted small">Not recorded</span>
-                                                    </div>
-                                                </div>
+                                        <!-- head: repo + conflict state + the two ways out -->
+                                        <div class="ghx-head">
+                                            <div class="ghx-head__title">
+                                                <i :class="gitProviderIcon(item.url, item.git_provider)"></i>
+                                                <span class="text-truncate">[[ item.url ]]</span>
+                                                <span v-if="item.has_conflicts" class="ghx-pill ghx-pill--danger" title="At least one rule is more than 90% similar to another rule">
+                                                    <i class="fas fa-triangle-exclamation"></i>Conflicts</span>
+                                                <span v-else class="ghx-pill ghx-pill--ok" title="No rule of this repository is more than 90% similar to another one">
+                                                    <i class="fas fa-check"></i>No conflicts</span>
                                             </div>
-                                            <div class="col-md-4">
-                                                <div class="p-3 border rounded h-100 d-flex flex-column justify-content-center">
-                                                    <small class="text-muted d-block mb-1 text-uppercase fw-bold"
-                                                           style="font-size:0.7rem">CVE Identifiers</small>
-                                                    <div class="d-flex align-items-center">
-                                                        <h4 class="mb-0 fw-bold text-primary">[[ item.cve_count ]]</h4>
-                                                        <i class="fas fa-bug ms-2 text-muted"></i>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-4">
-                                                <div class="p-3 border rounded h-100">
-                                                    <small class="text-muted d-block mb-2 text-uppercase fw-bold"
-                                                           style="font-size:0.7rem">Repository Link</small>
-                                                    <a :href="repoTreeUrl(item)" target="_blank"
-                                                       class="btn btn-sm btn-outline-dark w-100 text-truncate">
-                                                        <i :class="gitProviderIcon(item.url, item.git_provider)" class="me-2"></i>Open on [[ gitProviderLabel(item.url, item.git_provider) ]]
-                                                    </a>
-                                                </div>
+                                            <div class="ghx-head__actions">
+                                                <a :href="repoTreeUrl(item)" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary rounded-pill"
+                                                   :title="'Open ' + item.url + (item.branch ? ' (branch ' + item.branch + ')' : '') + ' in a new tab'">
+                                                    <i :class="gitProviderIcon(item.url, item.git_provider)" class="me-1"></i>[[ gitProviderLabel(item.url, item.git_provider) ]]
+                                                </a>
+                                                <a :href="'/rule/github_detail?url=' + encodeURIComponent(item.url) + (item.branch ? '&branch=' + encodeURIComponent(item.branch) : '')"
+                                                   class="btn btn-primary rounded-pill px-4 fw-semibold"
+                                                   title="Open the page of this repository: its rules, imports, updates, quality score and conflicts">
+                                                    <i class="fas fa-eye me-2"></i>View details<i class="fas fa-arrow-right ms-2"></i>
+                                                </a>
                                             </div>
                                         </div>
 
-                                        <div class="row g-4 mt-1">
-                                            <div class="col-md-6" v-if="item.last_import">
-                                                <div class="p-3 border-0 rounded-4 shadow-sm h-100">
-                                                    <div class="d-flex justify-content-between align-items-center mb-3">
-                                                        <div class="d-flex align-items-center mb-3">
-                                                            <div class="bg-success-soft rounded-circle p-2 me-2">
-                                                                <i class="fas fa-file-import text-success"></i>
-                                                            </div>
-                                                            <small class="text-muted text-uppercase fw-bold"
-                                                                   style="font-size:0.75rem">Latest Import</small>
-                                                        </div>
-                                                        <a v-if="item.last_import.url_imported"
-                                                           :href="item.last_import.url_imported"
-                                                           class="btn btn-sm btn-link text-success p-1"
-                                                           title="View Import Details">
-                                                            <i class="fas fa-external-link-alt"></i>
-                                                        </a>
-                                                    </div>
-                                                    <div class="vstack gap-2">
-                                                        <div class="d-flex justify-content-between">
-                                                            <span class="small text-muted">
-                                                                <i class="far fa-calendar-alt me-1"></i>Date
-                                                            </span>
-                                                            <span class="small fw-bold">[[ item.last_import.date ]]</span>
-                                                        </div>
-                                                        <hr class="my-1 opacity-5">
-                                                        <div class="d-flex justify-content-between">
-                                                            <span class="small text-muted">Imported Rules</span>
-                                                            <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle px-3">
-                                                                [[ item.last_import.imported ]]
-                                                            </span>
-                                                        </div>
-                                                        <div class="d-flex justify-content-between">
-                                                            <span class="small text-muted">Bad Rules</span>
-                                                            <span class="badge rounded-pill"
-                                                                  :class="item.last_import.bad_rules > 0
-                                                                      ? 'bg-danger text-white'
-                                                                      : 'ghst-chip px-3'">
-                                                                [[ item.last_import.bad_rules ]]
-                                                            </span>
-                                                        </div>
-                                                    </div>
+                                        <!-- facts, one small cell each -->
+                                        <div class="ghx-grid">
+                                            <div class="ghx-cell">
+                                                <div class="ghx-label">Formats</div>
+                                                <div class="d-flex flex-wrap gap-1">
+                                                    <format-chip v-for="fmt in item.formats" :key="fmt" :format="fmt"></format-chip>
+                                                    <span v-if="!item.formats.length" class="ghx-muted">None</span>
                                                 </div>
                                             </div>
-                                            <div class="col-md-6" v-if="item.last_update">
-                                                <div class="p-3 border-0 rounded-4 shadow-sm h-100">
-                                                    <div class="d-flex justify-content-between align-items-center mb-3">
-                                                        <div class="d-flex align-items-center mb-3">
-                                                            <div class="bg-primary-soft rounded-circle p-2 me-2">
-                                                                <i class="fas fa-sync-alt text-primary"></i>
-                                                            </div>
-                                                            <small class="text-muted text-uppercase fw-bold"
-                                                                   style="font-size:0.75rem">Latest Update</small>
-                                                        </div>
-                                                        <div class="d-flex align-items-center">
-                                                            <button class="btn btn-sm btn-outline-success border-0 rounded-circle me-1"
-                                                                    @click="updateSingleRepo(item)"
-                                                                    :disabled="item.isUpdating"
-                                                                    title="Check for updates">
-                                                                <i class="fas fa-sync-alt"
-                                                                   :class="{'fa-spin': item.isUpdating}"></i>
-                                                            </button>
-                                                            <a v-if="item.last_update.url_updated"
-                                                               :href="item.last_update.url_updated"
-                                                               class="btn btn-sm btn-link text-primary p-1"
-                                                               title="View Update Details">
-                                                                <i class="fas fa-external-link-alt"></i>
-                                                            </a>
-                                                        </div>
-                                                    </div>
-                                                    <div class="vstack gap-2">
-                                                        <div class="d-flex justify-content-between">
-                                                            <span class="small text-muted">
-                                                                <i class="far fa-calendar-alt me-1"></i>Date
-                                                            </span>
-                                                            <span class="small fw-bold">[[ item.last_update.date ]]</span>
-                                                        </div>
-                                                        <hr class="my-1 opacity-5">
-                                                        <div class="d-flex justify-content-between">
-                                                            <span class="small text-muted">Updated</span>
-                                                            <span v-if="item.last_update.updated > 0"
-                                                                  class="badge rounded-pill bg-primary px-3">
-                                                                [[ item.last_update.updated ]]
-                                                            </span>
-                                                            <span v-else class="text-muted smaller italic">No changes</span>
-                                                        </div>
-                                                        <div class="d-flex justify-content-between">
-                                                            <span class="small text-muted">New Rules Found</span>
-                                                            <span class="badge rounded-pill bg-info-subtle text-info border border-info-subtle px-3">
-                                                                [[ item.last_update.new_rules_count ]]
-                                                            </span>
-                                                        </div>
-                                                    </div>
+                                            <div class="ghx-cell">
+                                                <div class="ghx-label">Branches</div>
+                                                <div class="d-flex flex-wrap gap-1">
+                                                    <span v-for="br in item.branches" :key="br" class="ghx-branch" :class="{ 'is-current': br === item.branch }"
+                                                          :title="br === item.branch ? 'The branch of this row' : 'Rules were also imported from this branch'">
+                                                        <i class="fas fa-code-branch"></i>[[ br ]]</span>
+                                                    <span v-if="!item.branches || !item.branches.length" class="ghx-muted">Not recorded</span>
                                                 </div>
+                                            </div>
+                                            <div class="ghx-cell">
+                                                <div class="ghx-label">CVEs</div>
+                                                <div class="ghx-value" title="CVE identifiers referenced by the rules of this repository">[[ item.cve_count ]]</div>
+                                            </div>
+                                            <div class="ghx-cell">
+                                                <div class="ghx-label">Latest import
+                                                    <a v-if="item.last_import && item.last_import.url_imported" :href="item.last_import.url_imported"
+                                                       class="ghx-link" title="Open the report of this import"><i class="fas fa-arrow-up-right-from-square"></i></a>
+                                                </div>
+                                                <template v-if="item.last_import">
+                                                    <div class="ghx-date">[[ item.last_import.date ]]</div>
+                                                    <div class="ghx-stats">
+                                                        <span title="Rules imported">[[ item.last_import.imported ]] imported</span>
+                                                        <span :class="{ 'text-danger fw-semibold': item.last_import.bad_rules > 0 }" title="Rules that could not be imported">[[ item.last_import.bad_rules ]] bad</span>
+                                                    </div>
+                                                </template>
+                                                <span v-else class="ghx-muted">Never</span>
+                                            </div>
+                                            <div class="ghx-cell">
+                                                <div class="ghx-label">Latest update
+                                                    <a v-if="item.last_update && item.last_update.url_updated" :href="item.last_update.url_updated"
+                                                       class="ghx-link" title="Open the report of this update"><i class="fas fa-arrow-up-right-from-square"></i></a>
+                                                    <button v-if="isAdmin" class="ghx-link" @click="updateSingleRepo(item)" :disabled="item.isUpdating"
+                                                            :title="item.isUpdating ? 'Checking for updates…' : 'Check this repository for updates now'">
+                                                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': item.isUpdating }"></i></button>
+                                                </div>
+                                                <template v-if="item.last_update">
+                                                    <div class="ghx-date">[[ item.last_update.date ]]</div>
+                                                    <div class="ghx-stats">
+                                                        <span title="Rules changed by this update">[[ item.last_update.updated ]] updated</span>
+                                                        <span title="New rules found in the repository">[[ item.last_update.new_rules_count ]] new</span>
+                                                    </div>
+                                                </template>
+                                                <span v-else class="ghx-muted">Never</span>
                                             </div>
                                         </div>
                                     </div>

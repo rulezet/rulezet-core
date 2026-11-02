@@ -5149,6 +5149,7 @@ def get_url_github():
     conflicts_only = request.args.get("conflicts_only", default='false', type=str) == 'true'
     provider_filter = request.args.get("provider", default=None, type=str) or None
     circl_only = request.args.get("circl_only", default='false', type=str) == 'true'
+    quality_filter = request.args.get("quality", default=None, type=str) or None
     page = request.args.get("page", default=1, type=int)
     sort = request.args.get("sort", default=None, type=str)
     sort_dir = request.args.get("dir", default='asc', type=str)
@@ -5170,6 +5171,7 @@ def get_url_github():
         conflicts_only=conflicts_only,
         provider_filter=provider_filter,
         circl_only=circl_only,
+        quality_filter=quality_filter,
         sort=sort,
         sort_dir=sort_dir
     )

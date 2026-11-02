@@ -1,7 +1,13 @@
 /* Quality of a Git source (github_repo_quality.py) — Git Sources table and source page */
-.repo-quality { display: inline-block; min-width: 2.4rem; font-weight: 800; font-size: .8rem; border-radius: 999px; padding: .1rem .55rem; color: #fff; }
-.repo-quality.is-excellent { background: #198754; } .repo-quality.is-good { background: #0d6efd; }
-.repo-quality.is-fair { background: #fd7e14; } .repo-quality.is-poor { background: #dc3545; }
+/* soft tinted pill (like the other badges of the table), not a solid flashy block */
+.repo-quality { display: inline-block; min-width: 2.4rem; font-weight: 700; font-size: .78rem; border-radius: 999px;
+                padding: .12rem .55rem; border: 1px solid transparent; cursor: help; font-variant-numeric: tabular-nums; }
+.repo-quality.is-excellent { color: #157347; background: rgba(25,135,84,.1);  border-color: rgba(25,135,84,.25); }
+.repo-quality.is-good      { color: #0a58ca; background: rgba(13,110,253,.1); border-color: rgba(13,110,253,.25); }
+.repo-quality.is-fair      { color: #b35900; background: rgba(253,126,20,.1); border-color: rgba(253,126,20,.28); }
+.repo-quality.is-poor      { color: #b02a37; background: rgba(220,53,69,.1);  border-color: rgba(220,53,69,.25); }
+body.dark-mode .repo-quality.is-excellent { color: #75b798; } body.dark-mode .repo-quality.is-good { color: #6ea8fe; }
+body.dark-mode .repo-quality.is-fair { color: #feb272; }      body.dark-mode .repo-quality.is-poor { color: #ea868f; }
 .repo-q-top { display: flex; gap: 1.2rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
 .repo-q-score { width: 92px; height: 92px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 7px solid var(--border-color); line-height: 1; flex-shrink: 0; }
 .repo-q-score strong { font-size: 1.7rem; font-weight: 800; color: var(--text-color); }
