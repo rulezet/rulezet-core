@@ -542,3 +542,16 @@
 
 /* invite link: what you're joining, before you join */
 .chat-invite-card { display: flex; gap: 1rem; align-items: center; padding: 1rem; border: 1px solid var(--border-color); border-radius: 14px; background: var(--light-bg-color); }
+
+/* "seen by": an eye with a count on each message, the readers' faces under your last one */
+.chat-seen { display: inline-flex; align-items: center; gap: .25rem; margin-left: .4rem; font-size: .66rem; color: var(--subtle-text-color); opacity: .75; cursor: default; }
+.chat-msg:hover .chat-seen, .chat-seen:focus { opacity: 1; }
+.chat-seen-by { display: flex; align-items: center; justify-content: flex-end; gap: .35rem; margin-top: .2rem; font-size: .68rem; color: var(--subtle-text-color); }
+.chat-seen-by__faces { display: inline-flex; align-items: center; }
+.chat-seen-by__faces .chat-avatar { width: 16px; height: 16px; font-size: .5rem; margin-left: -4px; border: 1.5px solid var(--card-bg-color); }
+.chat-seen-by__faces b { margin-left: .25rem; font-weight: 600; }
+.chat-seen-by__no i { font-size: .6rem; }
+/* message box: what Enter does, switched with a click */
+.chat-enter-mode { border: 0; background: none; padding: 0; color: inherit; font-size: inherit; }
+.chat-enter-mode:hover, .chat-enter-mode:focus-visible { color: #0d6efd; }
+.chat-enter-mode i { margin-right: .25rem; }

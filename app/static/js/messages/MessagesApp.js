@@ -80,6 +80,7 @@ export default {
         // ── open conversation ──
         const current = ref(null)          // full channel json
         const msgs = ref([])
+        const reads = ref([])              // other members and the last message each read
         const hasMore = ref(false)
         const loadingMsgs = ref(false)
         const firstUnreadId = ref(null)
@@ -109,7 +110,7 @@ export default {
             const page = await api(`/messages/api/channels/${uuid}/messages`)
             loadingMsgs.value = false
             if (!page || !current.value || current.value.uuid !== uuid) return
-            msgs.value = page.messages; hasMore.value = page.has_more
+            msgs.value = page.messages; hasMore.value = page.has_more; reads.value = page.reads || []
             const unread = listed ? listed.unread : 0
             firstUnreadId.value = null
             if (unread) {
@@ -165,6 +166,7 @@ export default {
             const stay = atBottom()
             const page = await fetch(`/messages/api/channels/${uuid}/messages?after=${last}`).then(r => r.ok ? r.json() : null).catch(() => null)
             if (!page || !current.value || current.value.uuid !== uuid) return
+            if (page.reads) reads.value = page.reads
             const fresh = page.messages.filter(m => !msgs.value.some(x => x.id === m.id))
             if (fresh.length) {
                 msgs.value = [...msgs.value, ...fresh]
@@ -184,6 +186,11 @@ export default {
             const data = await fetch(`/messages/api/channels/${current.value.uuid}`).then(r => r.ok ? r.json() : null).catch(() => null)
             if (data && current.value && data.channel.uuid === current.value.uuid) current.value = data.channel
         }
+
+        // ── seen by: who read each message (the other members whose last read message is at least this one) ──
+        const seenBy = m => reads.value.filter(u => u.last_read_id >= m.id && (!m.author || u.id !== m.author.id))
+        const seenNames = list => list.slice(0, 15).map(u => u.name).join(', ') + (list.length > 15 ? ` and ${list.length - 15} more` : '')
+        const lastMineId = computed(() => { const mine = [...msgs.value].reverse().find(m => m.is_mine && m.kind === 'message' && !m.is_deleted); return mine ? mine.id : null })
 
         // ── grouped display ──
         const rows = computed(() => {
@@ -576,7 +583,7 @@ export default {
             openConversation, loadOlder, onScroll, send, cancelCompose, editLast, react, removeMsg, pin, copyLink, quote,
             join, leave, toggleMe, saveSettings, deleteChannel, addPeople, removeMember, setRole, openResult,
             EMAIL_MODES, emailMode, setEmailMode, loadEmailMode, joinable, quickJoin, inviteUrl, setInvite, copyInvite, onConvKey, onFilterKey, browseInput, focusBrowse, onBrowseKey, dialogEl, trapFocus, convFlag, convRead, convClear, convLeave, convDelete, canDeleteChannel, canEditChannel, editChannel, newChannel, createChannel, acceptInvite, startDirect, pickAvatar, uploadAvatar, removeAvatar, openBrowse, openFromBrowse, convIcon, reactorNames,
-            timeLabel, listTime, plainMessage,
+            timeLabel, listTime, plainMessage, reads, seenBy, seenNames, lastMineId,
         }
     },
     template: `
@@ -784,6 +791,18 @@ export default {
               <div v-if="r.m.is_deleted" class="chat-msg__deleted"><i class="fa-solid fa-ban me-1"></i>Message deleted</div>
               <message-text v-else :text="r.m.content"></message-text>
               <span v-if="r.m.edited_at && !r.m.is_deleted" class="chat-msg__edited" :title="new Date(r.m.edited_at).toLocaleString()">(edited)</span>
+              <span v-if="!r.m.is_deleted && seenBy(r.m).length && r.m.id !== lastMineId" class="chat-seen" tabindex="0"
+                    :title="'Seen by ' + seenNames(seenBy(r.m))"><i class="fa-regular fa-eye"></i>[[ seenBy(r.m).length ]]</span>
+              <div v-if="r.m.id === lastMineId" class="chat-seen-by" :title="seenBy(r.m).length ? 'Seen by ' + seenNames(seenBy(r.m)) : 'Not seen yet'">
+                <template v-if="seenBy(r.m).length">
+                  <span>[[ current.kind === 'direct' ? 'Seen' : 'Seen by' ]]</span>
+                  <span v-if="current.kind !== 'direct'" class="chat-seen-by__faces">
+                    <span v-for="u in seenBy(r.m).slice(0, 6)" :key="u.id" class="chat-avatar chat-avatar--xs"><img v-if="u.avatar" :src="u.avatar" alt=""><template v-else>[[ u.initial ]]</template></span>
+                    <b v-if="seenBy(r.m).length > 6">+[[ seenBy(r.m).length - 6 ]]</b>
+                  </span>
+                </template>
+                <span v-else class="chat-seen-by__no"><i class="fa-solid fa-check"></i> Sent</span>
+              </div>
               <div v-if="r.m.reactions.length" class="chat-reactions">
                 <button v-for="g in r.m.reactions" :key="g.emoji" type="button" class="chat-reaction" :class="{ 'is-mine': g.mine }"
                         :title="reactorNames(g)" :disabled="!current.can_post" @click="react(r.m, g.emoji)">[[ g.emoji ]] <b>[[ g.count ]]</b></button>

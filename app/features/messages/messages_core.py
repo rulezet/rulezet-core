@@ -666,6 +666,13 @@ def messages(c, user, before=None, after=None, limit=None, around=None):
     return [message_json(m, user) for m in reversed(rows[:limit])], more
 
 
+def reads(c, user):
+    """[{id, name, avatar, initial, last_read_id}] of the other members — "seen by" under each message."""
+    return [{**user_json(m.user), 'last_read_id': m.last_read_id}
+            for m in ChannelMember.query.filter(ChannelMember.channel_id == c.id, ChannelMember.user_id != user.id)
+            .limit(500).all()]
+
+
 def post_message(c, user, content, reply_to_id=None):
     content = (content or '').strip()
     if not content:

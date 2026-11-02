@@ -182,6 +182,15 @@ export default {
         function onDrop(e) { dragging.value = false; if (e.dataTransfer?.files?.length) uploadImages(e.dataTransfer.files) }
         function onDragOver(e) { if (props.uploadUrl && [...(e.dataTransfer?.items || [])].some(i => i.kind === 'file')) dragging.value = true }
 
+        // ── what Enter does (remembered in this browser) ──
+        const isTouch = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches
+        const enterSends = ref((() => { try { return localStorage.getItem('rz-chat-enter') !== 'newline' } catch { return true } })())
+        function toggleEnter() {
+            enterSends.value = !enterSends.value
+            try { localStorage.setItem('rz-chat-enter', enterSends.value ? 'send' : 'newline') } catch { }
+            focus()
+        }
+
         // ── sending ──
         const tooLong = computed(() => text.value.length > props.maxLength)
         const canSend = computed(() => !props.disabled && !sending.value && !uploading.value && text.value.trim() && !tooLong.value)
@@ -202,14 +211,19 @@ export default {
                 if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pick(results.value[active.value]); return }
             }
             if (e.key === 'Escape') { if (picker.value) closePicker(); else emit('cancel'); return }
-            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); return }
+            if (e.key === 'Enter' && !e.isComposing) {
+                // "Enter sends" (Shift+Enter = new line) or "Enter = new line" (Ctrl/⌘+Enter sends); on a phone Enter is a new line
+                const sends = enterSends.value && !isTouch ? !e.shiftKey && !e.ctrlKey && !e.metaKey : (e.ctrlKey || e.metaKey)
+                if (sends) { e.preventDefault(); send(); return }
+                return
+            }
             if (e.key === 'ArrowUp' && !text.value && !props.editing) { e.preventDefault(); emit('edit-last') }
             if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); wrap('**') }
             if ((e.ctrlKey || e.metaKey) && e.key === 'i') { e.preventDefault(); wrap('_') }
         }
 
         return { text, preview, box, sending, picker, results, active, loading, tooLong, canSend, REF_ICONS,
-                 onInput, onKey, pick, wrap, trigger, send, focus, closePicker, uploading, dragging, fileInput, uploadImages, onPaste, onDrop, onDragOver, pickKind, ATTACH, attachOpen, attach, attachMenu, openAttach, onAttachKey }
+                 onInput, onKey, pick, wrap, trigger, send, focus, closePicker, enterSends, toggleEnter, isTouch, uploading, dragging, fileInput, uploadImages, onPaste, onDrop, onDragOver, pickKind, ATTACH, attachOpen, attach, attachMenu, openAttach, onAttachKey }
     },
     template: `
     <div class="chat-composer" :class="{ 'is-disabled': disabled, 'is-editing': editing }">
@@ -272,7 +286,14 @@ export default {
                 <button type="button" class="chat-tool" :class="{ 'is-on': preview }" title="Preview" @click="preview = !preview"><i class="fa-solid fa-eye"></i></button>
                 <span class="chat-composer__hint">
                     <span v-if="tooLong" class="text-danger">[[ text.length ]] / [[ maxLength ]]</span>
-                    <template v-else><b>Enter</b> send · <b>Shift+Enter</b> new line · Markdown</template>
+                    <template v-else-if="isTouch">Markdown · send with the button</template>
+                    <template v-else>
+                        <button type="button" class="chat-enter-mode" @click="toggleEnter" :title="'Switch to: ' + (enterSends ? 'Enter = new line, Ctrl+Enter sends' : 'Enter sends, Shift+Enter = new line')">
+                            <i class="fa-solid fa-keyboard"></i>
+                            <template v-if="enterSends"><b>Enter</b> send · <b>Shift+Enter</b> new line</template>
+                            <template v-else><b>Enter</b> new line · <b>Ctrl+Enter</b> send</template>
+                        </button> · Markdown
+                    </template>
                 </span>
                 <button type="button" class="chat-send" :disabled="!canSend" @click="send" :title="editing ? 'Save' : 'Send'">
                     <i :class="sending ? 'fa-solid fa-circle-notch fa-spin' : (editing ? 'fa-solid fa-check' : 'fa-solid fa-paper-plane')"></i>

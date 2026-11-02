@@ -353,7 +353,7 @@ def api_messages(uuid):
     c = _channel_or_404(uuid)
     rows, more = M.messages(c, current_user, request.args.get('before', type=int),
                             request.args.get('after', type=int), request.args.get('limit', type=int))
-    return jsonify({'messages': rows, 'has_more': more})
+    return jsonify({'messages': rows, 'has_more': more, 'reads': M.reads(c, current_user)})
 
 
 @messages_blueprint.post('/api/channels/<string:uuid>/messages')
