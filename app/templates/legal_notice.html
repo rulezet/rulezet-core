@@ -84,6 +84,12 @@
         is not responsible for how rules are used. Always review and test detection content before deploying it
         in a production environment.
       </p>
+      <p class="text-muted mt-2 mb-0" style="font-size:.9rem;">
+        Each user is responsible for what they publish or send — rules, comments and messages. Content that is
+        illegal, abusive or spam can be removed and its author's account suspended. To check a report of abuse,
+        an administrator can reveal a single message; every such reveal is logged (see the
+        <a href="/privacy">Privacy Policy</a>, “who sees what”).
+      </p>
     </div>
   </div>
 
@@ -109,46 +115,78 @@
       <div class="row g-4">
         <div class="col-md-6">
           <h6 class="fw-bold mb-2" style="font-size:.82rem;text-transform:uppercase;letter-spacing:.03em;color:var(--subtle-text-color);">
-            Frontend framework &amp; UI
+            Application &amp; data
           </h6>
           <ul class="text-muted mb-0 ps-3" style="font-size:.87rem;line-height:1.9;">
-            <li><strong>Vue.js</strong> — MIT License — <a href="https://vuejs.org" target="_blank" rel="noreferrer">vuejs.org</a></li>
-            <li><strong>Bootstrap</strong> 5.3.0 — MIT License — <a href="https://getbootstrap.com" target="_blank" rel="noreferrer">getbootstrap.com</a></li>
-            <li><strong>Font Awesome</strong> 7.3.1 — Font Awesome Free License — <a href="https://fontawesome.com" target="_blank" rel="noreferrer">fontawesome.com</a></li>
-            <li><strong>jQuery</strong> &amp; <strong>jQuery UI</strong> — MIT License — <a href="https://jquery.com" target="_blank" rel="noreferrer">jquery.com</a></li>
-            <li><strong>Select2</strong> — MIT License — <a href="https://select2.org" target="_blank" rel="noreferrer">select2.org</a></li>
-            <li><strong>Day.js</strong> — MIT License — <a href="https://day.js.org" target="_blank" rel="noreferrer">day.js.org</a></li>
-            <li>Google Fonts (JetBrains Mono, Fira Code) — SIL Open Font License</li>
+            <li><strong>Python</strong> — PSF License — <a href="https://www.python.org" target="_blank" rel="noreferrer">python.org</a></li>
+            <li><strong>Flask</strong> — BSD 3-Clause — <a href="https://flask.palletsprojects.com" target="_blank" rel="noreferrer">flask.palletsprojects.com</a></li>
+            <li>Flask extensions: <strong>Flask-Login, Flask-WTF, Flask-Mail, Flask-Caching, Flask-Session, Flask-Migrate, Flask-RESTX</strong> — BSD / MIT</li>
+            <li><strong>SQLAlchemy</strong> — MIT — <a href="https://www.sqlalchemy.org" target="_blank" rel="noreferrer">www.sqlalchemy.org</a> &amp; <strong>Alembic</strong> — MIT</li>
+            <li><strong>PostgreSQL</strong> — PostgreSQL License — <a href="https://www.postgresql.org" target="_blank" rel="noreferrer">www.postgresql.org</a></li>
+            <li><strong>Redis</strong> — RSALv2 / SSPLv1 / AGPLv3 — <a href="https://redis.io" target="_blank" rel="noreferrer">redis.io</a></li>
+            <li><strong>Gunicorn</strong> — MIT — <a href="https://gunicorn.org" target="_blank" rel="noreferrer">gunicorn.org</a> &amp; <strong>nginx</strong> — BSD 2-Clause</li>
+            <li><strong>uv</strong> — Apache 2.0 / MIT — <a href="https://docs.astral.sh/uv" target="_blank" rel="noreferrer">docs.astral.sh/uv</a> — Python dependencies</li>
+            <li><strong>Authlib</strong> — BSD 3-Clause — <a href="https://authlib.org" target="_blank" rel="noreferrer">authlib.org</a> — single sign-on (OIDC)</li>
           </ul>
         </div>
         <div class="col-md-6">
           <h6 class="fw-bold mb-2" style="font-size:.82rem;text-transform:uppercase;letter-spacing:.03em;color:var(--subtle-text-color);">
-            Charts, grids &amp; drag-and-drop
+            Detection formats &amp; security tools
           </h6>
           <ul class="text-muted mb-0 ps-3" style="font-size:.87rem;line-height:1.9;">
-            <li><strong>Apache ECharts</strong> 5 — Apache License 2.0 — <a href="https://echarts.apache.org" target="_blank" rel="noreferrer">echarts.apache.org</a></li>
-            <li><strong>Chart.js</strong> — MIT License — <a href="https://www.chartjs.org" target="_blank" rel="noreferrer">chartjs.org</a></li>
-            <li><strong>GridStack.js</strong> — MIT License — <a href="https://gridstackjs.com" target="_blank" rel="noreferrer">gridstackjs.com</a></li>
-            <li><strong>Sortable.js</strong> — MIT License — <a href="https://sortablejs.github.io/Sortable" target="_blank" rel="noreferrer">sortablejs.github.io</a></li>
-            <li><strong>vue.draggable.next</strong> — MIT License</li>
-            <li><strong>diff2html</strong> — MIT License — <a href="https://diff2html.xyz" target="_blank" rel="noreferrer">diff2html.xyz</a></li>
+            <li><strong>YARA</strong> — BSD 3-Clause — <a href="https://virustotal.github.io/yara" target="_blank" rel="noreferrer">virustotal.github.io/yara</a> (yara-python) &amp; <strong>YARA-X</strong> — BSD 3-Clause</li>
+            <li><strong>CCCS-YARA</strong> — MIT — <a href="https://github.com/CybercentreCanada/CCCS-Yara" target="_blank" rel="noreferrer">github.com/CybercentreCanada/CCCS-Yara</a> &amp; <strong>yaraQA</strong> — GPL 3.0</li>
+            <li><strong>pySigma</strong> — LGPL 2.1 — <a href="https://github.com/SigmaHQ/pySigma" target="_blank" rel="noreferrer">github.com/SigmaHQ/pySigma</a> and its backends (Splunk, Elastic, Kusto, Loki, SecOps, Sumo Logic — LGPL)</li>
+            <li><strong>Suricata</strong> tooling: idstools, suricataparser — <strong>Zeek</strong>: zeekscript — <strong>ModSecurity</strong>: msc-pyparser (GPL 3.0) — <strong>NOVA</strong>: nova-hunting (MIT)</li>
+            <li><strong>PyMISP</strong> — BSD 2-Clause — <a href="https://github.com/MISP/PyMISP" target="_blank" rel="noreferrer">github.com/MISP/PyMISP</a> &amp; <strong>MITRE ATT&amp;CK</strong> data — © The MITRE Corporation</li>
+            <li><strong>pyvelociraptor</strong> — Apache 2.0 — <a href="https://github.com/Velocidex/pyvelociraptor" target="_blank" rel="noreferrer">github.com/Velocidex/pyvelociraptor</a></li>
+            <li><strong>bubblewrap</strong> — LGPL 2.0+ — <a href="https://github.com/containers/bubblewrap" target="_blank" rel="noreferrer">github.com/containers/bubblewrap</a> — sandbox of the rule tester</li>
           </ul>
         </div>
         <div class="col-md-6">
           <h6 class="fw-bold mb-2 mt-2" style="font-size:.82rem;text-transform:uppercase;letter-spacing:.03em;color:var(--subtle-text-color);">
-            Content &amp; editors
+            Files, documents &amp; analysis
           </h6>
           <ul class="text-muted mb-0 ps-3" style="font-size:.87rem;line-height:1.9;">
-            <li><strong>marked</strong> — MIT License — <a href="https://marked.js.org" target="_blank" rel="noreferrer">marked.js.org</a></li>
-            <li><strong>DOMPurify</strong> — Apache License 2.0 / MPL-2.0 — <a href="https://github.com/cure53/DOMPurify" target="_blank" rel="noreferrer">github.com/cure53/DOMPurify</a></li>
-            <li><strong>highlight.js</strong> — BSD 3-Clause License — <a href="https://highlightjs.org" target="_blank" rel="noreferrer">highlightjs.org</a></li>
+            <li><strong>GitPython</strong> — BSD 3-Clause — <a href="https://github.com/gitpython-developers/GitPython" target="_blank" rel="noreferrer">github.com/gitpython-developers/GitPython</a> — Git imports</li>
+            <li><strong>WeasyPrint</strong> — BSD 3-Clause — <a href="https://weasyprint.org" target="_blank" rel="noreferrer">weasyprint.org</a> — PDF exports</li>
+            <li><strong>Pillow</strong> — MIT-CMU (HPND) — <a href="https://python-pillow.org" target="_blank" rel="noreferrer">python-pillow.org</a> — images, avatars</li>
+            <li><strong>Python-Markdown</strong> — BSD 3-Clause — <strong>PyYAML</strong> — MIT — <strong>Requests</strong> — Apache 2.0</li>
+            <li><strong>scikit-learn</strong> — BSD 3-Clause — <strong>FAISS</strong> — MIT — <strong>RapidFuzz</strong> — MIT — similar rules</li>
+            <li><strong>Ollama</strong> — MIT — local AI models; <strong>Anthropic</strong> and <strong>OpenAI</strong> SDKs — MIT, when the instance uses them</li>
+          </ul>
+        </div>
+        <div class="col-md-6">
+          <h6 class="fw-bold mb-2 mt-2" style="font-size:.82rem;text-transform:uppercase;letter-spacing:.03em;color:var(--subtle-text-color);">
+            Interface
+          </h6>
+          <ul class="text-muted mb-0 ps-3" style="font-size:.87rem;line-height:1.9;">
+            <li><strong>Vue.js</strong> — MIT — <a href="https://vuejs.org" target="_blank" rel="noreferrer">vuejs.org</a></li>
+            <li><strong>Bootstrap</strong> — MIT — <a href="https://getbootstrap.com" target="_blank" rel="noreferrer">getbootstrap.com</a> 5.3</li>
+            <li><strong>Font Awesome</strong> — Font Awesome Free License — <a href="https://fontawesome.com" target="_blank" rel="noreferrer">fontawesome.com</a> 7.3</li>
+            <li><strong>jQuery</strong> &amp; <strong>jQuery UI</strong>, <strong>Select2</strong>, <strong>Day.js</strong> — MIT</li>
+            <li><strong>Apache ECharts</strong> — Apache 2.0 — <a href="https://echarts.apache.org" target="_blank" rel="noreferrer">echarts.apache.org</a> — <strong>Chart.js</strong> — MIT</li>
+            <li><strong>FullCalendar</strong>, <strong>GridStack.js</strong>, <strong>Sortable.js</strong>, <strong>vue.draggable.next</strong> — MIT</li>
+            <li><strong>marked</strong> — MIT — <strong>DOMPurify</strong> — Apache 2.0 / MPL 2.0 — <strong>highlight.js</strong> — BSD 3-Clause — <strong>diff2html</strong> — MIT</li>
+            <li>Fonts: <strong>Inter, Poppins, JetBrains Mono, Fira Code</strong> (Google Fonts) — SIL Open Font License</li>
+          </ul>
+        </div>
+        <div class="col-md-6">
+          <h6 class="fw-bold mb-2 mt-2" style="font-size:.82rem;text-transform:uppercase;letter-spacing:.03em;color:var(--subtle-text-color);">
+            Rulezet’s own modules
+          </h6>
+          <ul class="text-muted mb-0 ps-3" style="font-size:.87rem;line-height:1.9;">
+            <li><strong>rulezet-editor</strong>, <strong>rulezet-tester</strong>, <strong>rulezet-validation</strong> — AGPL 3.0</li>
+            <li><strong>Pivotick</strong> &amp; <strong>Pivograph</strong> — graphs of rules, bundles and formats</li>
+            <li>Logos of the services Rulezet connects to (Matrix / Element, GitHub, GitLab, MISP…) belong to their owners and are shown only to name them.</li>
           </ul>
         </div>
       </div>
 
       <p class="text-muted mb-0 mt-3" style="font-size:.82rem;">
-        This list reflects the platform's main dependencies at the time of writing and may evolve. Each
-        component's license text is preserved alongside its source where required.
+        This list reflects the platform’s main dependencies (November 2026) and evolves with it — the complete,
+        exact list is in <code>pyproject.toml</code> and <code>uv.lock</code> on GitHub. Each component’s license
+        text is preserved alongside its source where required.
       </p>
     </div>
   </div>

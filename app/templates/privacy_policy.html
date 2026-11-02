@@ -20,7 +20,7 @@
       </div>
     </div>
     <p class="text-muted mb-0" style="max-width:700px;font-size:.95rem;">
-      This page explains what data Rulezet collects, why, and how you can control it. Last updated: {{ privacy_last_updated | default('2026') }}.
+      This page explains what data Rulezet collects, why, and how you can control it. Last updated: {{ privacy_last_updated | default('2 November 2026') }}.
     </p>
   </div>
 
@@ -32,111 +32,117 @@
         Rulezet from its source code — if you are using a self-hosted instance, this default policy may have
         been customized by that instance's operator, who is responsible for it instead of the Rulezet project.
       </p>
+    </div>  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-eye text-primary me-2"></i>1. Public or private — who sees what</h5>
+      <p class="text-muted mb-3" style="font-size:.9rem;">The short version: <strong>rules are public, almost everything else is yours to choose</strong>. Here is who can see what.</p>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0" style="font-size:.86rem;">
+          <thead><tr><th scope="col">What</th><th scope="col">Who can see it</th><th scope="col">Good to know</th></tr></thead>
+          <tbody>
+          <tr><th scope="row">Detection rules</th><td><span class="badge bg-success-subtle text-success-emphasis">Everyone</span>, signed in or not</td><td>Rules are always public — that is what Rulezet is for. Never put secrets, internal hostnames or customer data in a rule.</td></tr>
+          <tr><th scope="row">Bundles — public</th><td><span class="badge bg-success-subtle text-success-emphasis">Everyone</span></td><td>You choose public or private when you create or edit a bundle.</td></tr>
+          <tr><th scope="row">Bundles — private</th><td><span class="badge bg-secondary-subtle text-secondary-emphasis">You</span>, administrators, and anyone you give the private share link</td><td>Renew or remove the share link to cut access. A private bundle never shows a link preview on other sites.</td></tr>
+          <tr><th scope="row">Comments, votes, reactions</th><td>The same people as the rule / bundle / post they are on</td><td>A comment on a private bundle is as private as the bundle.</td></tr>
+          <tr><th scope="row">Your profile</th><td><span class="badge bg-success-subtle text-success-emphasis">Everyone</span></td><td>Username, name, avatar, bio, profile links, organisations and public activity. <strong>Your email address is never shown.</strong></td></tr>
+          <tr><th scope="row">Direct messages</th><td><span class="badge bg-secondary-subtle text-secondary-emphasis">The two of you only</span></td><td>Administrators cannot open them. Against spam and abuse they can see that a message was sent (who, when, its size) and reveal one message — every reveal is logged with the administrator’s name.</td></tr>
+          <tr><th scope="row">Private channels</th><td><span class="badge bg-secondary-subtle text-secondary-emphasis">Members</span>, and administrators to moderate</td><td>People join only when added or with the invite link. Making a public channel private keeps its current members.</td></tr>
+          <tr><th scope="row">Public channels</th><td><span class="badge bg-warning-subtle text-warning-emphasis">Every signed-in user</span></td><td>Anyone with an account can join and read every message, the old ones too. Never post anything private there.</td></tr>
+          <tr><th scope="row">Images in messages</th><td>Only the people who can read that conversation</td><td>Re-encoded on upload: no metadata (location, camera…) is kept.</td></tr>
+          <tr><th scope="row">Notifications, alerts, workspaces, settings</th><td><span class="badge bg-secondary-subtle text-secondary-emphasis">You</span></td><td></td></tr>
+          <tr><th scope="row">Activity log</th><td>Public entries (e.g. “rule created”) for everyone; the rest to administrators</td><td>Activity in messages is logged <strong>without the text of the messages</strong>.</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
   <div class="card border-0 shadow-sm rounded-3 mb-4">
     <div class="card-body p-4">
-      <h5 class="fw-bold mb-3"><i class="fa-solid fa-database text-primary me-2"></i>1. Information We Collect</h5>
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-database text-primary me-2"></i>2. Information we collect</h5>
       <ul class="text-muted mb-0" style="font-size:.9rem;line-height:1.7;">
-        <li><strong>Account data</strong> — username, email address, and a securely hashed password (or your SSO identity, if you sign in that way).</li>
-        <li><strong>Content you submit</strong> — detection rules, bundles, comments, tags, votes, and reports you create or upload.</li>
-        <li><strong>API keys</strong> — if you generate one, it is stored to authenticate your programmatic requests. Treat it like a password.</li>
-        <li><strong>Activity logs</strong> — actions such as rule creation, edits, votes, and moderation events are logged for accountability and abuse prevention.</li>
-        <li><strong>Technical data</strong> — standard web server logs (IP address, browser user-agent, timestamps) generated automatically by any web request.</li>
+        <li><strong>Account data</strong> — username, email address and a securely hashed password (or your SSO identity if you sign in that way). An account whose email is not verified within 24 hours is deleted automatically.</li>
+        <li><strong>What you publish</strong> — rules, bundles, comments, tags, votes, reports, edit proposals, forks and merge requests.</li>
+        <li><strong>Messages</strong> — the messages, images and reactions you send in direct conversations and channels, and which messages you have read (shown to the others as “Seen by”).</li>
+        <li><strong>Preferences</strong> — notification and email choices, alerts, labels, theme.</li>
+        <li><strong>API keys</strong> — if you create one, to authenticate your scripts. Treat it like a password.</li>
+        <li><strong>Activity logs</strong> — actions such as creating or editing a rule, joining a channel or a moderation, for accountability and abuse prevention.</li>
+        <li><strong>Technical data</strong> — standard web server logs (IP address, browser user-agent, time of each request).</li>
       </ul>
     </div>
   </div>
 
   <div class="card border-0 shadow-sm rounded-3 mb-4">
     <div class="card-body p-4">
-      <h5 class="fw-bold mb-3"><i class="fa-solid fa-gears text-primary me-2"></i>2. How We Use It</h5>
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-gears text-primary me-2"></i>3. How we use it</h5>
       <ul class="text-muted mb-0" style="font-size:.9rem;line-height:1.7;">
-        <li>To operate your account and let you create, edit, and share detection rules.</li>
-        <li>To keep an audit trail of changes, for transparency and to resolve disputes or abuse.</li>
-        <li>To protect the platform against spam, abuse, and unauthorized access.</li>
-        <li>To send you account-related notifications (for example, comments on your rules).</li>
-        <li>To compile anonymous, aggregate usage statistics (for example, total rule count) shown publicly on the site.</li>
+        <li>To run your account and let you publish, share and discuss detection rules.</li>
+        <li>To deliver your messages and notifications — and only the emails you turned on (alert emails, “Messages by email”).</li>
+        <li>To keep an audit trail of changes, and to resolve disputes or abuse.</li>
+        <li>To protect the platform: spam limits, rate limits, blocking abusive accounts.</li>
+        <li>To show anonymous, aggregate statistics (for example the number of rules).</li>
       </ul>
-      <p class="text-muted mt-3 mb-0" style="font-size:.9rem;">
-        We do not sell your personal data, and we do not use it for third-party advertising.
-      </p>
+      <p class="text-muted mt-3 mb-0" style="font-size:.9rem;">We do not sell your personal data and we do not use it for advertising.</p>
     </div>
   </div>
 
   <div class="card border-0 shadow-sm rounded-3 mb-4">
     <div class="card-body p-4">
-      <h5 class="fw-bold mb-3"><i class="fa-solid fa-share-nodes text-primary me-2"></i>3. Sharing &amp; Federation</h5>
-      <p class="text-muted mb-2" style="font-size:.9rem;">
-        Any rule, bundle, or profile field you mark <strong>public</strong> is visible to every visitor, including
-        anonymous ones. Content you keep <strong>private</strong> is visible only to you and platform administrators.
-      </p>
-      <p class="text-muted mb-0" style="font-size:.9rem;">
-        Rulezet supports optional "connectors" that let instance administrators sync public rules with other
-        Rulezet instances. Only content you have made public can be replicated this way — private data is never
-        federated.
-      </p>
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-share-nodes text-primary me-2"></i>4. Sharing, federation and other services</h5>
+      <ul class="text-muted mb-0" style="font-size:.9rem;line-height:1.7;">
+        <li><strong>Federation</strong> — administrators can sync rules with other Rulezet instances through connectors. Only public content can be replicated; private bundles and messages are never federated.</li>
+        <li><strong>Instance statistics</strong> — a self-hosted Rulezet sends a daily ping to rulezet.org with its address, version and number of rules and bundles. No personal data.</li>
+        <li><strong>AI features</strong> — when you ask for an AI analysis or use the assistant, the rule and your request go to the AI provider this instance is configured with (a local Ollama model, or a provider such as Anthropic or OpenAI).</li>
+        <li><strong>Link previews</strong> — a link to a public rule, bundle or post shared in a chat app or on a social network shows its title and description. Private content never gets a preview.</li>
+        <li><strong>Fonts and libraries</strong> — some pages load fonts from Google Fonts and code libraries from public CDNs (cdnjs, jsDelivr); your browser contacts them like for any website.</li>
+      </ul>
     </div>
   </div>
 
   <div class="card border-0 shadow-sm rounded-3 mb-4">
     <div class="card-body p-4">
-      <h5 class="fw-bold mb-3"><i class="fa-solid fa-cookie-bite text-primary me-2"></i>4. Cookies</h5>
-      <p class="text-muted mb-0" style="font-size:.9rem;">
-        We use a small number of cookies that are strictly necessary to run the site: a session cookie to keep
-        you signed in, a CSRF token to protect your forms, and a local preference for light/dark theme. We do not
-        use third-party tracking or advertising cookies.
-      </p>
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-cookie-bite text-primary me-2"></i>5. Cookies and local storage</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">Only what is needed to run the site: a session cookie to keep you signed in (plus the “remember me” cookie if you tick it) and a CSRF token protecting your forms. Your browser also keeps a few preferences on your own device — light / dark theme, message drafts, what the Enter key does. No third-party tracking or advertising cookies.</p>
     </div>
   </div>
 
   <div class="card border-0 shadow-sm rounded-3 mb-4">
     <div class="card-body p-4">
-      <h5 class="fw-bold mb-3"><i class="fa-solid fa-box-archive text-primary me-2"></i>5. Data Retention</h5>
-      <p class="text-muted mb-0" style="font-size:.9rem;">
-        We keep your account and content for as long as your account is active. Deleted rules are first moved to
-        a trash area (soft delete) and are permanently removed after the retention period configured by the
-        instance, or sooner on request. Activity logs may be retained longer for security and audit purposes.
-      </p>
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-box-archive text-primary me-2"></i>6. How long we keep it</h5>
+      <ul class="text-muted mb-0" style="font-size:.9rem;line-height:1.7;">
+        <li>Your account and content: as long as your account exists.</li>
+        <li>Deleted rules go to a trash first and are removed for good after the instance’s retention period, or sooner on request.</li>
+        <li>A deleted message is hidden from everyone; its text stays in the database so that abuse can still be checked by an administrator. “Delete for me” hides a conversation for you only.</li>
+        <li>Accounts whose email was never verified: deleted after 24 hours.</li>
+        <li>Activity logs and server logs: kept longer, for security and audit.</li>
+      </ul>
     </div>
   </div>
 
   <div class="card border-0 shadow-sm rounded-3 mb-4">
     <div class="card-body p-4">
-      <h5 class="fw-bold mb-3"><i class="fa-solid fa-user-check text-primary me-2"></i>6. Your Rights</h5>
-      <p class="text-muted mb-2" style="font-size:.9rem;">
-        Depending on where you live, you may have the right to access, correct, export, or delete your personal
-        data (for example, under the EU/UK GDPR or similar laws elsewhere). You can update most of your
-        information directly from your account settings, or contact us to request a full export or deletion of
-        your account.
-      </p>
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-user-check text-primary me-2"></i>7. Your rights</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">Depending on where you live (for example under the EU / UK GDPR), you can access, correct, export or delete your personal data. Most of it can be changed from your account settings; for a full export or the deletion of your account, contact us (below).</p>
     </div>
   </div>
 
   <div class="card border-0 shadow-sm rounded-3 mb-4">
     <div class="card-body p-4">
-      <h5 class="fw-bold mb-3"><i class="fa-solid fa-shield-halved text-primary me-2"></i>7. Security</h5>
-      <p class="text-muted mb-0" style="font-size:.9rem;">
-        Passwords are stored using a salted hash, never in plain text. We apply role-based access control
-        (anonymous / authenticated / administrator) throughout the platform and log administrative actions.
-        No online service can guarantee absolute security, so please use a strong, unique password.
-      </p>
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-shield-halved text-primary me-2"></i>8. Security</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">Passwords are stored as salted hashes, never in plain text. Access rights (visitor / signed-in user / owner / administrator) are checked on every request and administrator actions are logged. Messages are limited against spam, uploaded images are re-encoded, and user content is cleaned before it is shown. No online service can promise absolute security: use a strong, unique password.</p>
     </div>
   </div>
 
   <div class="card border-0 shadow-sm rounded-3 mb-4">
     <div class="card-body p-4">
-      <h5 class="fw-bold mb-3"><i class="fa-solid fa-pen text-primary me-2"></i>8. Changes to This Policy</h5>
-      <p class="text-muted mb-0" style="font-size:.9rem;">
-        We may update this policy as the platform evolves. Material changes will be announced on the project's
-        GitHub repository. Continued use of Rulezet after an update means you accept the revised policy.
-      </p>
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-pen text-primary me-2"></i>9. Changes to this policy</h5>
+      <p class="text-muted mb-0" style="font-size:.9rem;">We may update this policy as the platform evolves. Important changes are announced on the project’s GitHub repository. Using Rulezet after an update means you accept the new version.</p>
     </div>
   </div>
 
   <div class="card border-0 shadow-sm rounded-3 mb-4">
     <div class="card-body p-4">
-      <h5 class="fw-bold mb-3"><i class="fa-solid fa-envelope text-primary me-2"></i>9. Contact</h5>
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-envelope text-primary me-2"></i>10. Contact</h5>
       <p class="text-muted mb-0" style="font-size:.9rem;">
         Questions about this policy or your data? Reach out via
         <a href="https://github.com/rulezet/rulezet-core/discussions" target="_blank" rel="noreferrer">GitHub Discussions</a>
@@ -144,6 +150,9 @@
         <a href="https://github.com/rulezet/rulezet-core" target="_blank" rel="noreferrer">rulezet-core</a> repository.
       </p>
     </div>
+  </div>
+
+
   </div>
 
 </div>
