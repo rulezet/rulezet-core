@@ -1484,7 +1484,9 @@ def detail_rule_ai_analysis_download_pdf(rule_id, analysis_id):
             source_url=f'{base_url}/rule/detail_rule/{rule.id}/ai_analysis',
             generated_at=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC'),
         )
-        pdf_bytes = WeasyprintHTML(string=html_str, base_url=base_url).write_pdf()
+        from app.core.utils.pdf_fetcher import safe_url_fetcher
+        # LLM output rendered as HTML: no local file, no internal address — fonts only
+        pdf_bytes = WeasyprintHTML(string=html_str, base_url=base_url, url_fetcher=safe_url_fetcher()).write_pdf()
     except Exception as e:
         current_app.logger.exception(f'AI analysis PDF export failed (rule {rule_id}, analysis {analysis_id})')
         return current_app.response_class(

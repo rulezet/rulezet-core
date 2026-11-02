@@ -458,6 +458,7 @@ def download_post_pdf(post_uuid):
     base_url = request.url_root.rstrip('/')
     ctx = _build_render_context(post, base_url)
 
+    from app.core.utils.pdf_fetcher import safe_url_fetcher
     content_html = _md.markdown(
         post.content or '',
         extensions=['extra', 'codehilite', 'toc', 'nl2br'],
@@ -469,6 +470,7 @@ def download_post_pdf(post_uuid):
     pdf_bytes = WeasyprintHTML(
         string=html_str,
         base_url=base_url,
+        url_fetcher=safe_url_fetcher(base_url),     # its own images and fonts — no local file, no other host
     ).write_pdf()
 
     filename = _safe_filename(post.title, post.uuid[:8], 'pdf')

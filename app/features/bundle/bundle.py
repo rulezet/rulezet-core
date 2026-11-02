@@ -2839,17 +2839,9 @@ def bundle_ai_analysis_download(bundle_id, analysis_id, kind):
             content_html=_md.markdown(gen.content or '', extensions=['extra', 'toc', 'nl2br']),
             source_url=source_url, generated_at=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC'),
         )
-        from weasyprint import default_url_fetcher
-
-        def _fonts_only(url, *a, **kw):
-            # The report is LLM output rendered as HTML — an injected <img>/<link>
-            # must not make the server fetch arbitrary URLs. Only the print
-            # template's Google Fonts are allowed.
-            if url.startswith(('https://fonts.googleapis.com/', 'https://fonts.gstatic.com/')):
-                return default_url_fetcher(url, *a, **kw)
-            raise ValueError(f'blocked resource: {url[:80]}')
-
-        pdf = WeasyprintHTML(string=html_str, base_url=request.url_root, url_fetcher=_fonts_only).write_pdf()
+        from app.core.utils.pdf_fetcher import safe_url_fetcher
+        # LLM output rendered as HTML: only the print template's fonts are fetched (pdf_fetcher.py)
+        pdf = WeasyprintHTML(string=html_str, base_url=request.url_root, url_fetcher=safe_url_fetcher()).write_pdf()
         resp = current_app.response_class(pdf, mimetype='application/pdf')
     resp.headers['Content-Disposition'] = f'attachment; filename="{_bundle_ai_filename(bundle, "md" if kind == "markdown" else "pdf")}"'
     log_activity('bundle.ai_analysis_download',
