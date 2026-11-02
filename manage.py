@@ -987,7 +987,8 @@ def cmd_init() -> None:
 # environment still wins), so the deploy scripts can just edit .env. Only
 # these keys: everything else in .env is loaded by the app, as before.
 _LAUNCH_ENV_KEYS = ("PORT", "GUNICORN_BIND_HOST", "GUNICORN_THREADS",
-                    "API_PORT", "API_GUNICORN_THREADS", "LOG_DIR")
+                    "API_PORT", "API_GUNICORN_THREADS", "LOG_DIR",
+                    "GUNICORN_MAX_REQUESTS", "GUNICORN_RELOAD_HOURS")
 
 
 def _load_launch_env() -> None:
@@ -1015,6 +1016,10 @@ def _gunicorn_cmd(bind: str, threads: str, log_name: str, reload: bool = False) 
         error_log = os.path.join(log_dir, f"{log_name}-error.log")
     else:
         access_log = error_log = "-"
+    try:
+        max_requests = max(0, int(os.environ.get("GUNICORN_MAX_REQUESTS", "0") or 0))
+    except ValueError:
+        max_requests = 0
     return [
         GUNICORN,
         "wsgi:app",
@@ -1023,13 +1028,48 @@ def _gunicorn_cmd(bind: str, threads: str, log_name: str, reload: bool = False) 
         "--workers", "1",
         "--threads", threads,
         "--timeout", "120",
-        "--max-requests", "1000",
-        "--max-requests-jitter", "100",
+        # Recycling a worker after N requests made a visitor wait for a full app boot every few
+        # minutes (1 worker): off by default, the nightly reload below keeps memory in check.
+        "--max-requests", str(max_requests),
+        "--max-requests-jitter", str(max_requests // 10),
         "--access-logfile", access_log,
         "--error-logfile", error_log,
         # [site] / [api] prefix so both streams stay readable when they share stdout
         "--access-logformat", f'[{log_name}] %(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s %(L)ss "%(f)s" "%(a)s"',
     ] + (["--reload"] if reload else [])
+
+
+def _reload_hours() -> list:
+    """GUNICORN_RELOAD_HOURS (.env): hours of the day (server time) the web workers are
+    reloaded, comma-separated; default "4"; "off" = never."""
+    raw = os.environ.get("GUNICORN_RELOAD_HOURS", "4").strip().lower()
+    if raw in ("", "off", "none"):
+        return []
+    return sorted({int(h) for h in raw.split(",") if h.strip().isdigit() and 0 <= int(h) <= 23})
+
+
+def _start_nightly_reload(procs: list) -> None:
+    """Fresh workers once or twice a day (memory kept in check, the job the old
+    --max-requests 1000 did every few minutes): SIGHUP to each gunicorn master, which
+    starts new workers and lets the old ones finish their requests (graceful)."""
+    import signal
+    hours = _reload_hours()
+    if not hours or not hasattr(signal, "SIGHUP"):
+        return
+
+    def loop():
+        done = None
+        while not _STOPPING.is_set():
+            now = datetime.now()
+            if now.hour in hours and now.minute == 0 and done != (now.date(), now.hour):
+                done = (now.date(), now.hour)
+                for proc in procs:
+                    if proc.poll() is None:
+                        proc.send_signal(signal.SIGHUP)
+                info(f"Web workers reloaded (scheduled, GUNICORN_RELOAD_HOURS={','.join(map(str, hours))})")
+            _STOPPING.wait(20)
+
+    threading.Thread(target=loop, daemon=True, name="nightly-reload").start()
 
 
 def _run_gunicorn_with_worker(flaskenv: str, port: str, reload: bool = False) -> None:
@@ -1056,6 +1096,12 @@ def _run_gunicorn_with_worker(flaskenv: str, port: str, reload: bool = False) ->
                           process only — the website keeps its own.
                           Only meaningful behind nginx.
       API_GUNICORN_THREADS  threads of the API process (default 8).
+      GUNICORN_MAX_REQUESTS  recycle a web worker after this many requests
+                          (default 0 = never: each recycle made a user wait
+                          for a full app boot).
+      GUNICORN_RELOAD_HOURS  hours (server time, e.g. "4" or "4,16") the web
+                          workers are gracefully reloaded (SIGHUP); default
+                          "4"; "off" = never.
       LOG_DIR             write access/error logs to files there
                           (site-*.log, api-*.log) instead of stdout.
     """
@@ -1073,11 +1119,10 @@ def _run_gunicorn_with_worker(flaskenv: str, port: str, reload: bool = False) ->
             api_proc = _spawn(_gunicorn_cmd(f"{host}:{api_port}", os.environ.get("API_GUNICORN_THREADS", "8"), "api", reload),
                               flaskenv, pretty, "api ")
         threads = os.environ.get("GUNICORN_THREADS", "8")
-        if pretty:
-            site_proc = _spawn(_gunicorn_cmd(f"{host}:{port}", threads, "site", reload), flaskenv, True, "web ")
-            site_proc.wait()
-        else:
-            run(_gunicorn_cmd(f"{host}:{port}", threads, "site", reload), extra_env={"FLASKENV": flaskenv})
+        site_proc = _spawn(_gunicorn_cmd(f"{host}:{port}", threads, "site", reload), flaskenv, pretty, "web ")
+        if not reload:
+            _start_nightly_reload([p for p in (site_proc, api_proc) if p is not None])
+        site_proc.wait()
     except KeyboardInterrupt:
         _STOPPING.set()
         _SPIN.stop()
