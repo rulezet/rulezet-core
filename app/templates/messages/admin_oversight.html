@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% import 'macros/admin_nav.html' as anav %}
+{% block title %}Messages oversight — Admin — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/chat.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/messages/oversight.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-lg-4">
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-user-shield banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/admin/settings" class="text-decoration-none text-muted">Admin</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Messages</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-comments"></i></div>
+            <div><h2 class="fw-bold mb-1">Messages oversight</h2><div class="banner-accent"></div></div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:680px;font-size:.95rem;">
+            Who writes where and when — never what. To check a misuse (spam, a report), reveal one message:
+            every reveal is written to the activity log with your name.
+        </p>
+    </div>
+
+    <nav class="dr-nav mb-3">{{ anav.admin_nav_toggle() }}</nav>
+    {{ anav.admin_nav_panel('messages') }}
+
+    <div id="oversight-app"></div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+import MessagesOversight from '/static/js/messages/MessagesOversight.js'
+Vue.createApp(MessagesOversight).mount('#oversight-app')
+</script>
+{% endblock %}

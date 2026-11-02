@@ -1,0 +1,5 @@
+/* Admin → Messages oversight (messages/admin_oversight.html, js/messages/MessagesOversight.js) */
+.ovs-filters { display: flex; gap: .6rem; flex-wrap: wrap; margin-bottom: .8rem; }
+.ovs-table th { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--subtle-text-color); font-weight: 700; }
+.ovs-member { display: inline-block; margin: 0 .3rem .15rem 0; padding: 0 .45rem; border-radius: 6px; background: var(--light-bg-color); font-size: .76rem; }
+.ovs-revealed td { background: rgba(220, 53, 69, .04); border-left: 3px solid #dc3545; padding: .6rem .8rem; }

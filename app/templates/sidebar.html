@@ -160,6 +160,9 @@
                                  <i class="fa-solid fa-triangle-exclamation"></i><span>Reports</span>
                                  <span v-if="reports_to_check > 0" class="dr-nav__badge dr-nav__badge--alert">[[ reports_to_check ]]</span>
                               </a>
+                              <a href="/admin/messages/" class="dr-nav__item {% if request.path.startswith('/admin/messages') %}active{% endif %}">
+                                 <i class="fa-solid fa-comments"></i><span>Messages</span>
+                              </a>
                               <a href="/blog/admin/" class="dr-nav__item {% if request.path.startswith('/blog/admin') %}active{% endif %}">
                                  <i class="fa-solid fa-newspaper"></i><span>Blog</span>
                               </a>
@@ -478,6 +481,7 @@
       { label: 'Admin: Users', url: '/account/admin/all_users', icon: 'fa-users', keywords: ['admin users'] },
       { label: 'Admin: Ownership Requests', url: '/requests', icon: 'fa-envelope', keywords: ['ownership requests'] },
       { label: 'Admin: Reports', url: '/report/admin', icon: 'fa-triangle-exclamation', keywords: ['reports'] },
+      { label: 'Admin: Messages', url: '/admin/messages/', icon: 'fa-comments', keywords: ['messages', 'oversight', 'moderation', 'channels'] },
       { label: 'Admin: Blog', url: '/blog/admin/', icon: 'fa-newspaper', keywords: ['admin blog'] },
       { label: 'Admin: Formats', url: '/rule/admin/manage_format_rule', icon: 'fa-file-code', keywords: ['formats'] },
       { label: 'Admin: Tags', url: '/tags/admin/list', icon: 'fa-tag', keywords: ['admin tags'] },
