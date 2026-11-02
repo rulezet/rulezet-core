@@ -361,3 +361,12 @@ def test_messages_by_email(clients, users, monkeypatch):
     with captured_mails() as sent:
         assert M.send_due_emails(later) == 1 and "news for all" in sent[0].body
     assert clients["owner"].get("/notifications/preferences").get_json()["email_messages"] == "all"
+
+
+def test_delete_for_me_an_empty_direct_conversation(clients, users):
+    d = clients["user"].post(f"{API}/direct/{users.owner.id}").get_json()["channel"]
+    assert clients["user"].post(f"{API}/channels/{d['uuid']}/clear").status_code == 200
+    assert clients["user"].get(f"{API}/conversations").get_json()["conversations"] == []   # gone after a reload too
+    assert clients["owner"].get(f"{API}/conversations").get_json()["conversations"] == []
+    again = clients["user"].post(f"{API}/direct/{users.owner.id}").get_json()["channel"]   # writing again works
+    assert _post(clients["user"], again["uuid"], "hi").status_code == 201
