@@ -567,3 +567,30 @@ def test_rulezet_release_posted_when_the_automation_is_added(clients, users, mon
     feed = [m for m in clients["owner"].get(f"{API}/channels/{c['uuid']}/messages").get_json()["messages"] if m["kind"] == "feed"]
     assert len(feed) == 1 and "v1.7.6" in feed[0]["content"]
     assert clients["owner"].get(f"{API}/channels/{c['uuid']}/feeds").get_json()["feeds"][0]["posted"] == 1
+
+
+def test_rulezet_release_links_the_blog_release_post(clients, users, monkeypatch):
+    import uuid as _u
+    from app.core.db_class.blog import BlogPost, BlogPostTagAssociation
+    from app.core.db_class.tag import Tag
+    from app.features.messages import feeds_core as F
+    monkeypatch.setattr(F, "_latest_release", lambda: None)
+    c = _channel(clients["owner"])
+    clients["owner"].post(f"{API}/channels/{c['uuid']}/feeds", json={"kind": "rulezet_release"})
+    F.on_rulezet_release("1.7.7", "https://github.com/x/releases/tag/v1.7.7")         # no blog post yet: GitHub
+    post = BlogPost(uuid=str(_u.uuid4()), slug="v177", title="Rulezet v1.7.7", content="notes", user_id=users.admin.id,
+                    is_public=True, is_draft=False)
+    db.session.add(post)
+    db.session.flush()
+    for name in ("release", "v1.7.7"):
+        t = Tag.query.filter_by(name=name).first() or Tag(uuid=str(_u.uuid4()), name=name, is_active=True, created_by=users.admin.id)
+        db.session.add(t)
+        db.session.flush()
+        db.session.add(BlogPostTagAssociation(post_id=post.id, tag_id=t.id))
+    db.session.commit()
+    F.on_blog_post(post)                                                               # published later: pointed to, once
+    F.on_blog_post(post)
+    feed = [m["content"] for m in clients["owner"].get(f"{API}/channels/{c['uuid']}/messages").get_json()["messages"] if m["kind"] == "feed"]
+    assert len(feed) == 2 and "github.com" in feed[0] and f"/blog/post/{post.uuid}" in feed[1]
+    F.on_rulezet_release("1.7.8", "https://github.com/x")                             # (another version, no post: GitHub)
+    assert F.release_post("1.7.7").id == post.id
