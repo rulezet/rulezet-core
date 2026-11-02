@@ -415,3 +415,13 @@ def test_anti_spam_limits(clients, users, monkeypatch):
     assert clients["user"].post(f"{API}/direct/{users.owner.id}").status_code == 200       # an existing one still opens
     for i in range(5):                                                                      # admins aren't limited
         assert _post(clients["admin"], clients["admin"].post(f"{API}/direct/{users.user.id}").get_json()["channel"]["uuid"], f"a{i}").status_code == 201
+
+
+def test_seen_by(clients, users):
+    c = _channel(clients["owner"], member_ids=[users.user.id, users.admin.id])
+    m = _post(clients["owner"], c["uuid"], "hello").get_json()["message"]
+    reads = {r["id"]: r["last_read_id"] for r in clients["owner"].get(f"{API}/channels/{c['uuid']}/messages").get_json()["reads"]}
+    assert users.owner.id not in reads and reads[users.user.id] < m["id"]           # the others, not yourself; not read yet
+    clients["user"].post(f"{API}/channels/{c['uuid']}/read", json={})
+    reads = {r["id"]: r["last_read_id"] for r in clients["owner"].get(f"{API}/channels/{c['uuid']}/messages?after=0").get_json()["reads"]}
+    assert reads[users.user.id] >= m["id"] and reads[users.admin.id] < m["id"]     # seen by user, not by admin
