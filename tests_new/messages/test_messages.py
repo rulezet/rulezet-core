@@ -477,3 +477,63 @@ def test_reactors_popover(clients, users):
     c2 = _channel(clients["owner"], is_private=True)
     m2 = _post(clients["owner"], c2["uuid"], "secret").get_json()["message"]
     assert _logged_in_client(current_app, outsider).get(f"{API}/channels/{c2['uuid']}/messages/{m2['id']}/reactors?emoji=👍").status_code == 404
+
+
+def test_channel_automations(clients, users):
+    from tests_new.helpers.bundles import make_bundle
+    from app.features.messages import feeds_core as F
+    pub, private = make_bundle(users.owner), make_bundle(users.owner, public=False)
+    c = _channel(clients["owner"], member_ids=[users.user.id])
+    url = f"{API}/channels/{c['uuid']}/feeds"
+    assert clients["user"].post(url, json={"kind": "blog_post"}).status_code == 403                # members don't set them up
+    assert clients["owner"].post(url, json={"kind": "bundle_release", "target_id": private.id}).status_code == 400   # public only
+    assert clients["owner"].post(url, json={"kind": "bundle_release", "target_id": pub.id}).status_code == 201
+    assert clients["owner"].post(url, json={"kind": "rulezet_release"}).status_code == 201
+    assert clients["owner"].post(url, json={"kind": "rulezet_release"}).status_code == 400          # once
+    # a Rulezet release: posted once per version, by "Rulezet", the members told
+    F.on_rulezet_release("9.9.0", "https://github.com/rulezet/rulezet-core/releases")
+    F.on_rulezet_release("9.9.0", "https://github.com/rulezet/rulezet-core/releases")
+    feed = [m for m in clients["user"].get(f"{API}/channels/{c['uuid']}/messages").get_json()["messages"] if m["kind"] == "feed"]
+    assert len(feed) == 1 and "Rulezet v9.9.0" in feed[0]["content"] and feed[0]["author"]["name"] == "Rulezet"
+    assert Notification.query.filter_by(user_id=users.user.id, notif_type="message_channel").count() == 1
+    # a release of the chosen bundle, not of another one
+    class Rel: version, title = "v2.0", "Big one"
+    assert F.on_bundle_release(pub, Rel) == 1 and F.on_bundle_release(private, Rel) == 0
+    data = clients["user"].get(url).get_json()
+    assert {f["kind"] for f in data["feeds"]} == {"bundle_release", "rulezet_release"} and "my_alerts" not in data
+    fid = data["feeds"][0]["id"]
+    assert clients["owner"].delete(f"{url}/{fid}").status_code == 200
+
+
+def test_automation_alert_is_your_own(clients, users):
+    from app.core.db_class.alert import Alert
+    a = Alert(uuid="alert-x", user_id=users.admin.id, name="Admin alert", criteria={}, is_active=True)
+    db.session.add(a)
+    db.session.commit()
+    c = _channel(clients["owner"])
+    assert clients["owner"].post(f"{API}/channels/{c['uuid']}/feeds", json={"kind": "alert", "target_id": a.id}).status_code == 400
+
+
+def test_admin_oversight_without_content(clients, users):
+    from app.core.db_class.activity_log import ActivityLog
+    d = clients["user"].post(f"{API}/direct/{users.owner.id}").get_json()["channel"]
+    m = _post(clients["user"], d["uuid"], "a very private sentence").get_json()["message"]
+    # the activity log says who wrote where — never the text
+    log = ActivityLog.query.filter_by(action="message.post").order_by(ActivityLog.id.desc()).first()
+    assert log and "private sentence" not in (log.description or "") and "private sentence" not in str(log.extra or "")
+    assert log.is_public is False
+    # admins only
+    assert clients["user"].get("/admin/messages/").status_code == 403
+    assert clients["user"].get("/admin/messages/api/conversations").status_code == 403
+    assert clients["admin"].get("/admin/messages/").status_code == 200
+    convs = clients["admin"].get("/admin/messages/api/conversations?kind=direct").get_json()["conversations"]
+    assert any(c["uuid"] == d["uuid"] for c in convs)
+    meta = clients["admin"].get(f"/admin/messages/api/conversations/{d['uuid']}").get_json()["messages"]
+    assert meta[0]["id"] == m["id"] and meta[0]["length"] == len("a very private sentence")
+    assert "private sentence" not in str(meta)                                    # no text in the overview
+    # revealing one message: its text, and a log entry naming the admin
+    assert clients["user"].post(f"/admin/messages/api/messages/{m['id']}/reveal").status_code == 403
+    r = clients["admin"].post(f"/admin/messages/api/messages/{m['id']}/reveal").get_json()
+    assert r["content"] == "a very private sentence"
+    rev = ActivityLog.query.filter_by(action="admin.message_reveal").one()
+    assert rev.user_id == users.admin.id and (rev.extra or {}).get("message_id") == m["id"]
