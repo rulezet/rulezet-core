@@ -13,16 +13,34 @@ from urllib.parse import urlparse
 FONT_HOSTS = ('https://fonts.googleapis.com/', 'https://fonts.gstatic.com/')
 
 
+def _allowed(url, own):
+    if url.startswith(FONT_HOSTS):
+        return True
+    return bool(own) and url.startswith(own) and urlparse(url).netloc == urlparse(own).netloc
+
+
 def safe_url_fetcher(own_base_url=None):
-    from weasyprint import default_url_fetcher
     own = None
     if own_base_url:
         p = urlparse(own_base_url)
         if p.scheme in ('http', 'https') and p.netloc:
             own = f'{p.scheme}://{p.netloc}/'
 
-    def fetch(url, *args, **kwargs):
-        if url.startswith(FONT_HOSTS) or (own and url.startswith(own) and urlparse(url).netloc == urlparse(own).netloc):
+    try:                                   # WeasyPrint >= 70: a URLFetcher (no redirect: an allowed address
+        from weasyprint.urls import URLFetcher   # must not bounce the request somewhere else)
+
+        class _Safe(URLFetcher):
+            def fetch(self, url, headers=None):
+                if not _allowed(url, own):
+                    raise ValueError(f'blocked resource in a PDF export: {url[:80]}')
+                return super().fetch(url, headers)
+
+        return _Safe(allowed_protocols={'http', 'https'}, allow_redirects=False, timeout=10)
+    except ImportError:                    # older WeasyPrint: a plain function
+        from weasyprint import default_url_fetcher
+
+        def fetch(url, *args, **kwargs):
+            if not _allowed(url, own):
+                raise ValueError(f'blocked resource in a PDF export: {url[:80]}')
             return default_url_fetcher(url, *args, **kwargs)
-        raise ValueError(f'blocked resource in a PDF export: {url[:80]}')
-    return fetch
+        return fetch
