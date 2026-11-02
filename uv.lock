@@ -2701,7 +2701,7 @@ wheels = [
 
 [[package]]
 name = "rulezet-core"
-version = "1.7.5"
+version = "1.7.6"
 source = { virtual = "." }
 dependencies = [
     { name = "aiofiles" },

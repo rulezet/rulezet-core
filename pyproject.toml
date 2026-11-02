@@ -9,7 +9,7 @@
 
 [project]
 name = "rulezet-core"
-version = "1.7.5"
+version = "1.7.6"
 description = "Community-Driven Detection Rules Platform"
 readme = "README.md"
 requires-python = ">=3.12"
