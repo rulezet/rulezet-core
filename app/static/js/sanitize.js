@@ -14,7 +14,8 @@ export const SANITIZE_CONFIG = {
     FORBID_TAGS: ['form', 'input', 'button', 'select', 'textarea', 'option',
                   'fieldset', 'legend', 'datalist', 'output', 'label', 'style',
                   'base', 'meta', 'link'],
-    FORBID_ATTR: ['style', 'action', 'method', 'formaction', 'target'],
+    FORBID_ATTR: ['style', 'action', 'method', 'formaction', 'target', 'id', 'name'],
+    ALLOW_DATA_ATTR: false,
     // DOMPurify's default allows http(s)/mailto/tel/sms/cid/xmpp/matrix/callto/ftp
     // in href/src. This is user-authored rule/comment content, not a chat app —
     // restrict to the schemes we actually render links/images for.
@@ -39,9 +40,28 @@ async function getMarked() {
     return _marked
 }
 
+// User content keeps only the classes our own renderers put in it (mention / reference chips, icons, code
+// highlighting): any other class would reuse the page's CSS — e.g. <div class="chat-modal"> draws a fixed,
+// full-screen "window" over the page (phishing: "session expired, log in here"). id / name (DOM clobbering)
+// and data-* (data-bs-toggle="modal" data-bs-target="#delete_…" would trigger the page's own actions) go too.
+const USER_CLASS = /^(cm-mention-chip|cm-mention-chip-avatar|cm-proposal-chip|chat-chip|chat-chip--[a-z]+|chat-img|bn-mention|bn-ref|bn-ref--rule|bn-ref--file|bfv-img-ph|bfv-ext-link|fa|fas|far|fab|fa-solid|fa-regular|fa-brands|fa-[a-z0-9-]{1,40}|language-[\w-]{1,30}|hljs[\w-]*|task-list-item|contains-task-list)$/
+
+function _keepOwnClasses(node, data) {
+    if (data.attrName === 'class') {
+        const keep = String(data.attrValue || '').split(/\s+/).filter(c => USER_CLASS.test(c))
+        if (keep.length) data.attrValue = keep.join(' ')
+        else data.keepAttr = false
+    }
+}
+
 export async function sanitizeHtml(html) {
     const purify = await getPurify()
-    return purify.sanitize(html, SANITIZE_CONFIG)
+    purify.addHook('uponSanitizeAttribute', _keepOwnClasses)
+    try {
+        return purify.sanitize(html, SANITIZE_CONFIG)
+    } finally {
+        purify.removeHook('uponSanitizeAttribute')
+    }
 }
 
 export async function renderMarkdown(text) {
