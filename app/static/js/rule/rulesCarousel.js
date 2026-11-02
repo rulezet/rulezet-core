@@ -3,6 +3,7 @@ import AttackDisplayList from '/static/js/attack/attackDisplayList.js'
 import SingleTagDisplay from '/static/js/tags/singleTagDisplay.js'
 import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
 import VoterPopover from '/static/js/components/VoterPopover.js'
+import CodeViewer from '/static/js/components/code-viewer.js'
 
 const { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } = Vue
 import { message_list, create_message } from '/static/js/toaster.js'
@@ -17,6 +18,7 @@ const RulesCarousel = {
         'single-tag-display': SingleTagDisplay,
         'vulnerability-displays-list': VulnerabilityDisplaysList,
         'voter-popover': VoterPopover,
+        'code-viewer': CodeViewer,
     },
 
     props: {
@@ -93,11 +95,11 @@ const RulesCarousel = {
                                     <span class="badge rounded-pill bg-dark pt-1">[[ rule.format.toUpperCase() ]]</span>
                                 </div>
 
-                                <div class="card-body d-flex flex-column p-4 z-index-1">
-                                    <div class="mb-3 pe-5">
+                                <div class="card-body d-flex flex-column p-3 z-index-1">
+                                    <div class="mb-2 pe-5">
                                         <h5 class="fw-bold mb-1">
                                             <a :href="'/rule/detail_rule/' + rule.id"
-                                               class="fw-bold h5 mb-4 border-start border-primary border-4 ps-3 custom-rule-link"
+                                               class="fw-bold h5 mb-0 border-start border-primary border-4 ps-3 custom-rule-link"
                                                title="See more about this rule">
                                                 [[ rule.title ]]
                                             </a>
@@ -116,8 +118,35 @@ const RulesCarousel = {
                                         </div>
                                     </div>
 
-                                    <div class="flex-grow-1" style="overflow:hidden;">
-                                        <p class="text-muted small lh-base mb-2" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;" title="Description of the rule">
+                                    <!-- Rule preview, same as the rules list cards: first 4 lines faded, a click opens it here -->
+                                    <div v-if="!rule.show_full" class="rl-card-preview mb-2" role="button" tabindex="0"
+                                         :title="rule.to_string ? 'Click to show the whole rule' : 'No content available'"
+                                         @click="openPreview(rule)" @keydown.enter.prevent="rule.show_full = true">
+                                        <code-viewer :show-header="false" v-if="rule.to_string" class="rl-card-preview__code"
+                                            :code="previewOf(rule)" :language="rule.format || 'auto'" :title="rule.title"
+                                            :foldable="false" :word-wrap="false" max-height="none">
+                                        </code-viewer>
+                                        <p v-else class="text-muted small mb-0">No content available.</p>
+                                        <span class="rl-card-preview__more"><i class="fa-solid fa-chevron-down me-1"></i>Show the rule</span>
+                                    </div>
+                                    <div v-else class="rl-card-content mb-2" @mousedown.stop @touchstart.stop>
+                                        <code-viewer :show-header="false" v-if="rule.to_string" :code="rule.to_string" :language="rule.format || 'auto'"
+                                            :title="rule.title" :word-wrap="true" max-height="300px">
+                                        </code-viewer>
+                                        <p v-else class="text-muted text-center py-3 mb-0 small">No content available.</p>
+                                        <div class="rl-card-preview__bar">
+                                            <button type="button" class="rl-card-preview__toggle" title="Show only the first lines again" @click="rule.show_full = false">
+                                                <i class="fa-solid fa-chevron-up me-1"></i>Hide the rule
+                                            </button>
+                                            <a :href="'/rule/detail_rule/' + rule.id" class="btn btn-primary btn-sm rounded-pill px-3 fw-semibold"
+                                               title="Open the page of this rule: its content, history, comments, quality, tests">
+                                                <i class="fas fa-eye me-1"></i>View details<i class="fas fa-arrow-right ms-1"></i>
+                                            </a>
+                                        </div>
+                                    </div>
+
+                                    <div style="overflow:hidden;">
+                                        <p class="text-muted small lh-base mb-2" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;" title="Description of the rule">
                                             [[ rule.description ? rule.description.substring(0, 120) : '' ]][[ rule.description && rule.description.length > 120 ? '…' : '' ]]
                                         </p>
                                     </div>
@@ -152,7 +181,7 @@ const RulesCarousel = {
                                         </div>
                                     </div>
 
-                                    <div class="d-flex justify-content-between align-items-center pt-3 border-top mt-auto bg-transparent">
+                                    <div class="d-flex justify-content-between align-items-center pt-2 mt-2 border-top bg-transparent">
                                         <div class="btn-group shadow-sm border rounded-pill overflow-hidden">
                                             <voter-popover :fetch-url="'/rule/voters/' + rule.id + '?type=up'" label="Liked by">
                                                 <button @click="doVote('up', rule.id); animateClick($event)"
@@ -247,7 +276,7 @@ const RulesCarousel = {
         /* ── carousel ── */
         const carouselIndex = ref(0)
         const carouselOffset = ref(0)
-        const carouselVisible = ref(3)
+        const carouselVisible = ref(2)
         const isDragging = ref(false)
         let dragStartX = 0
         let touchStartX = 0
@@ -293,8 +322,7 @@ const RulesCarousel = {
         function updateVisible() {
             const w = carouselOuter.value?.offsetWidth || window.innerWidth
             if (w < 576) carouselVisible.value = 1
-            else if (w < 992) carouselVisible.value = 2
-            else carouselVisible.value = 3
+            else carouselVisible.value = 2
             const max = Math.max(0, rules_list.value.length - carouselVisible.value)
             if (carouselIndex.value > max) carouselIndex.value = max
             updateOffset()
@@ -316,9 +344,11 @@ const RulesCarousel = {
         }
 
         /* drag souris */
+        let dragDistance = 0          // a drag of the carousel is not a click on a card's preview
         function dragStart(e) {
             isDragging.value = true
             dragStartX = e.clientX
+            dragDistance = 0
             window.addEventListener('mousemove', dragMove)
             window.addEventListener('mouseup', dragEnd)
         }
@@ -332,6 +362,7 @@ const RulesCarousel = {
             window.removeEventListener('mousemove', dragMove)
             window.removeEventListener('mouseup', dragEnd)
             const diff = dragStartX - e.clientX
+            dragDistance = Math.abs(diff)
             if (Math.abs(diff) > 60) carouselSlide(diff > 0 ? 1 : -1)
             else updateOffset()
         }
@@ -345,6 +376,17 @@ const RulesCarousel = {
             const diff = touchStartX - e.changedTouches[0].clientX
             if (Math.abs(diff) > 50) carouselSlide(diff > 0 ? 1 : -1)
             else updateOffset()
+        }
+
+        /* ── rule preview (same as the rules list cards) ── */
+        function previewOf(rule) {
+            const lines = String(rule.to_string || '').replace(/\r/g, '').split('\n')
+            while (lines.length && !lines[0].trim()) lines.shift()
+            return lines.slice(0, 6).join('\n')   // 4 readable lines + 2 that fade out under the buttons
+        }
+        function openPreview(rule) {
+            if (dragDistance > 5) return
+            if (rule.to_string) rule.show_full = true
         }
 
         /* ── vote / favorite ── */
@@ -432,6 +474,7 @@ const RulesCarousel = {
             dragStart, dragMove, dragEnd,
             touchStart, touchMove, touchEnd,
             doVote, doFavorite, animateClick, fromNow, tagStyle,
+            previewOf, openPreview,
         }
     }
 }
