@@ -1,0 +1,33 @@
+# Dependabot: security updates come as pull requests on their own (Settings → Code security → Dependabot security
+# updates must be on); version updates below are grouped once a week so they don't flood the PR list.
+# Python dependencies are managed by uv (pyproject.toml + uv.lock) — Dependabot updates uv.lock directly.
+# requirements.txt is generated from uv.lock (see its header): regenerate it when merging a Dependabot PR.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Luxembourg"
+    target-branch: "development"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "chg: [deps]"
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+        patterns: ["*"]
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    target-branch: "development"
+    commit-message:
+      prefix: "chg: [ci]"

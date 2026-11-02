@@ -83,6 +83,9 @@ dependencies = [
 [tool.uv]
 # Rulezet is an application, not a package to build
 package = false
+# Security fixes a dependency's own pin would hold back: CCCS-YARA asks for gitpython<3.2, but the fixes of
+# GitPython's advisories are in 3.2.1 (CCCS-YARA's use of it is unaffected — external checks tested).
+override-dependencies = ["gitpython>=3.2.1"]
 
 [tool.uv.sources]
 rulezet-validation = { path = "app/modules/rulezet-validation", editable = true }
