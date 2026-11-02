@@ -78,42 +78,60 @@ def counts(user_id) -> dict:
     }
 
 
-def bulk(user_id, ids, action, label_id=None) -> tuple[int, str]:
-    """(how many changed, error). ids: the user's notification ids (others are ignored)."""
+def bulk(user_id, ids, action, label_id=None, scope=None) -> tuple[int, str]:
+    """(how many changed, error). ids: the user's notification ids (others are ignored).
+    scope: instead of ids, the filters of query() ({folder, label, types, search, date_from, date_to}) —
+    the action then covers every matching notification, however many there are (no id list, no cap)."""
     if action not in ACTIONS:
         return 0, 'Unknown action.'
-    ids = [i for i in (ids or []) if isinstance(i, int)][:5000]
-    if not ids:
-        return 0, 'Nothing selected.'
-    q = Notification.query.filter(Notification.user_id == user_id, Notification.id.in_(ids))
+    if isinstance(scope, dict):
+        folder = scope.get('folder') if scope.get('folder') in FOLDERS else 'inbox'
+        types = scope.get('types') or []
+        if isinstance(types, str):
+            types = [t for t in types.split(',') if t.strip()]
+        label = scope.get('label')
+        q = query(user_id, folder, label if isinstance(label, int) else None, types,
+                  scope.get('search'), scope.get('date_from'), scope.get('date_to'))
+    else:
+        ids = [i for i in (ids or []) if isinstance(i, int)]
+        if not ids:
+            return 0, 'Nothing selected.'
+        q = Notification.query.filter(Notification.user_id == user_id, Notification.id.in_(ids))
+    id_sub = q.with_entities(Notification.id).scalar_subquery()
     now = datetime.datetime.utcnow()
+    link = notification_label_link
     if action == 'delete':
-        n = 0
-        for notif in q.all():
-            db.session.delete(notif)
-            n += 1
+        db.session.execute(link.delete().where(link.c.notification_id.in_(id_sub)))
+        n = Notification.query.filter(Notification.id.in_(id_sub)).delete(synchronize_session=False)
         db.session.commit()
+        db.session.expire_all()
         return n, ''
     if action in ('label_add', 'label_remove'):
         label = NotificationLabel.query.filter_by(id=label_id, user_id=user_id).first()
         if not label:
             return 0, 'Label not found.'
-        n = 0
-        for notif in q.all():
-            if action == 'label_add' and label not in notif.labels:
-                notif.labels.append(label)
-                n += 1
-            elif action == 'label_remove' and label in notif.labels:
-                notif.labels.remove(label)
-                n += 1
+        linked = db.session.query(link.c.notification_id).filter(link.c.label_id == label.id)
+        if action == 'label_add':
+            todo = [i for (i,) in q.with_entities(Notification.id)
+                    .filter(Notification.id.not_in(linked.scalar_subquery())).all()]
+            if todo:
+                db.session.execute(link.insert(), [{'notification_id': i, 'label_id': label.id} for i in todo])
+            n = len(todo)
+        else:
+            n = db.session.execute(link.delete().where(link.c.label_id == label.id,
+                                                       link.c.notification_id.in_(id_sub))).rowcount
         db.session.commit()
+        db.session.expire_all()
         return n, ''
     values = {'read': {Notification.is_read: True, Notification.read_at: now},
               'unread': {Notification.is_read: False, Notification.read_at: None},
               'star': {Notification.is_starred: True}, 'unstar': {Notification.is_starred: False},
               'archive': {Notification.is_archived: True, Notification.is_read: True},
               'unarchive': {Notification.is_archived: False}}[action]
-    n = q.update(values, synchronize_session=False)
+    if action == 'read':
+        q = q.filter(Notification.is_read.is_(False))
+    n = Notification.query.filter(Notification.id.in_(q.with_entities(Notification.id).scalar_subquery())) \
+        .update(values, synchronize_session=False)
     db.session.commit()
     return n, ''
 
