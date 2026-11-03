@@ -3,7 +3,7 @@ name: Python application
 on:
   push:
    branches:
-      - '*'
+      - '**'          # every branch, also the ones with a / (dependabot/…, which '*' never matched)
 
 # The job only checks out the code and runs the tests — a read-only token.
 permissions:
