@@ -346,7 +346,7 @@ pygments==2.20.0
     # via
     #   pytest
     #   rich
-pymisp==2.5.34.1
+pymisp==2.5.34.4
     # via rulezet-core
 pyparsing==3.3.2
     # via
