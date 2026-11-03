@@ -151,9 +151,9 @@
                             </div>
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
-                            <button type="button" class="btn btn-sm btn-outline-primary" @click="openSchedule(calOpenDay, calSelected)"><i class="fa-regular fa-calendar-plus me-1"></i>Schedule</button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary" @click="openCalEntry('note', calOpenDay)"><i class="fa-solid fa-note-sticky me-1"></i>Note</button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary" @click="openCalEntry('reminder', calOpenDay)"><i class="fa-solid fa-bell me-1"></i>Reminder</button>
+                            <button type="button" class="rz-pill" style="--c:#0d6efd" @click="openSchedule(calOpenDay, calSelected)"><i class="fa-regular fa-calendar-plus me-1"></i>Schedule</button>
+                            <button type="button" class="rz-pill" style="--c:#b08800" @click="openCalEntry('note', calOpenDay)"><i class="fa-solid fa-note-sticky me-1"></i>Note</button>
+                            <button type="button" class="rz-pill" style="--c:#e35d6a" @click="openCalEntry('reminder', calOpenDay)"><i class="fa-solid fa-bell me-1"></i>Reminder</button>
                             <button type="button" class="btn-close ms-1" aria-label="Close the day" @click="calOpenDay = null"></button>
                         </div>
                     </header>
@@ -366,25 +366,12 @@
                     </div>
                     <button type="button" class="btn-close tf-hero__close" aria-label="Close" @click="calPick = null"></button>
                 </div>
-                <div class="modal-body tf-body">
-                    <div class="wf-tpl-grid wcal-actions">
-                        <a :href="'/admin/tasks/' + calPick.extendedProps.workflow_uuid" class="wf-tpl">
-                            <span class="wf-tpl__icon"><i class="fa-solid fa-arrow-right"></i></span>
-                            <span class="wf-tpl__name">Open the workflow</span>
-                            <span class="wf-tpl__desc">Its tasks, launches and notebook</span>
-                        </a>
-                        <button type="button" class="wf-tpl" @click="calRunNow(calPick.extendedProps.workflow_uuid)">
-                            <span class="wf-tpl__icon wcal-actions__run"><i class="fa-solid fa-play"></i></span>
-                            <span class="wf-tpl__name">Run now</span>
-                            <span class="wf-tpl__desc">Launch it right away, the schedule stays as it is</span>
-                        </button>
-                        <button v-if="calPick.extendedProps.kind !== 'past'" type="button" class="wf-tpl"
-                                @click="openSchedule(new Date(calPick.start), [calPick.extendedProps.workflow_uuid], calPick.extendedProps.mode); calPick = null">
-                            <span class="wf-tpl__icon"><i class="fa-regular fa-calendar"></i></span>
-                            <span class="wf-tpl__name">Reschedule</span>
-                            <span class="wf-tpl__desc">Pick another date or rhythm</span>
-                        </button>
-                    </div>
+                <div class="rz-pills px-4 py-3">
+                    <a :href="'/admin/tasks/' + calPick.extendedProps.workflow_uuid" class="rz-pill" style="--c:#0d6efd"><i class="fa-solid fa-arrow-right me-1"></i>Open the workflow</a>
+                    <button type="button" class="rz-pill" style="--c:#198754" @click="calRunNow(calPick.extendedProps.workflow_uuid)"><i class="fa-solid fa-play me-1"></i>Run now</button>
+                    <button v-if="calPick.extendedProps.kind !== 'past'" type="button" class="rz-pill" style="--c:#6c757d"
+                            @click="openSchedule(new Date(calPick.start), [calPick.extendedProps.workflow_uuid], calPick.extendedProps.mode); calPick = null">
+                        <i class="fa-regular fa-calendar me-1"></i>Reschedule</button>
                 </div>
             </div>
         </div>
@@ -423,6 +410,15 @@
                     </div>
                 </div>
 
+                <div v-if="wfChecked.size" class="dt-bulk-bar wf-bulk mb-3">
+                    <span class="dt-bulk-count">[[ wfChecked.size ]] selected</span>
+                    <div class="rz-pills">
+                        <button type="button" class="rz-pill" style="--c:#fd7e14" :disabled="wfBulkBusy" @click="bulkWorkflows('stop')"><i class="fa-solid fa-stop me-1"></i>Stop</button>
+                        <button type="button" class="rz-pill" style="--c:#6c757d" :disabled="wfBulkBusy" @click="bulkWorkflows('pause')"><i class="fa-solid fa-pause me-1"></i>Pause</button>
+                        <button type="button" class="rz-pill" style="--c:#dc3545" :disabled="wfBulkBusy" @click="bulkWorkflows('delete')"><i class="fa-solid fa-trash me-1"></i>Delete</button>
+                        <button type="button" class="rz-pill" style="--c:var(--subtle-text-color)" @click="wfChecked.clear()">Clear</button>
+                    </div>
+                </div>
                 <template v-if="workflowsLoading">
                     <div class="text-center py-4 text-muted">
                         <div class="spinner-border spinner-border-sm me-2" role="status"></div>Loading…
@@ -456,8 +452,9 @@
                         </button>
                     </div>
                     <div class="wf-cards">
-                        <div v-for="w in workflows" :key="w.uuid" class="wf-card" :class="{ 'is-off': !w.is_active }" @click="openWorkflow(w)">
+                        <div v-for="w in workflows" :key="w.uuid" class="wf-card" :class="{ 'is-off': !w.is_active, 'is-checked': wfChecked.has(w.uuid) }" @click="openWorkflow(w)">
                             <div class="wf-card__head">
+                                <input type="checkbox" class="dt-checkbox" :checked="wfChecked.has(w.uuid)" @click.stop @change="toggleWfCheck(w.uuid)" :aria-label="'Select ' + w.title">
                                 <span class="wcal-wf__icon" :style="{ '--wf-color': wfColor(w.uuid) }"><i class="fa-solid" :class="wfIcon(w.uuid)"></i></span>
                                 <div class="wf-card__title">[[ w.title ]]</div>
                                 <span class="badge" :class="w.is_active ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
@@ -504,6 +501,7 @@
                     <table class="dt-table">
                         <thead class="dt-thead">
                             <tr>
+                                <th class="dt-th dt-th--checkbox"><input type="checkbox" class="dt-checkbox" :checked="wfAllChecked" @change="toggleAllWf" aria-label="Select all"></th>
                                 <th class="dt-th dt-th--sortable" :class="{ 'dt-th--sorted': wfSort.key === 'title' }" @click="setWfSort('title')">Title <i class="dt-sort-icon fa-solid" :class="sortIcon(wfSort, 'title')"></i></th>
                                 <th class="dt-th dt-th--sortable text-center" :class="{ 'dt-th--sorted': wfSort.key === 'tasks' }" @click="setWfSort('tasks')">Tasks <i class="dt-sort-icon fa-solid" :class="sortIcon(wfSort, 'tasks')"></i></th>
                                 <th class="dt-th">Editor</th>
@@ -516,7 +514,8 @@
                         </thead>
                         <tbody>
                             <template v-for="w in workflows" :key="w.uuid">
-                            <tr class="dt-row" style="cursor:pointer;" @click="openWorkflow(w)">
+                            <tr class="dt-row" :class="{ 'is-checked': wfChecked.has(w.uuid) }" style="cursor:pointer;" @click="openWorkflow(w)">
+                                <td class="dt-td dt-td--checkbox" @click.stop><input type="checkbox" class="dt-checkbox" :checked="wfChecked.has(w.uuid)" @change="toggleWfCheck(w.uuid)" :aria-label="'Select ' + w.title"></td>
                                 <td class="dt-td">
                                     <div class="fw-bold d-flex align-items-center gap-2">
                                         <span class="wcal-wf__icon" :style="{ '--wf-color': wfColor(w.uuid) }"><i class="fa-solid" :class="wfIcon(w.uuid)"></i></span>[[ w.title ]]</div>
@@ -533,9 +532,8 @@
                                     <span v-else>—</span>
                                 </td>
                                 <td class="dt-td text-center">
-                                    <span class="badge" :class="w.is_active ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
-                                        [[ w.is_active ? 'Active' : 'Paused' ]]
-                                    </span>
+                                    <span v-if="w.is_active" class="badge bg-success-subtle text-success-emphasis">Active</span>
+                                    <span v-else class="wf-paused-badge" title="Paused — nothing launches until it is resumed"><i class="fa-solid fa-pause"></i>Paused</span>
                                 </td>
                                 <td class="dt-td">
                                     <template v-if="health && health.per_workflow[w.uuid] && health.per_workflow[w.uuid].dots.length">
@@ -575,7 +573,7 @@
                                 </td>
                             </tr>
                             <tr v-if="openWfTasks.has(w.uuid)" class="wf-tasks-row">
-                                <td class="dt-td" colspan="8">
+                                <td class="dt-td" colspan="9">
                                     <div v-if="!(w.tasks_brief || []).length" class="text-muted small">No task in this workflow yet.</div>
                                     <ol v-else class="wf-tasks-list">
                                         <li v-for="t in w.tasks_brief" :key="t.uuid" class="wf-tasks-item" :class="{ 'is-off': !t.is_active }" :title="t.type_label">
@@ -2788,6 +2786,34 @@
                     savingWorkflow.value = false;
                 }
             }
+            // Bulk actions on the checked workflows
+            const wfChecked = ref(new Set());
+            const wfBulkBusy = ref(false);
+            const wfAllChecked = computed(() => workflows.value.length > 0 && workflows.value.every(w => wfChecked.value.has(w.uuid)));
+            function toggleWfCheck(uuid) { if (wfChecked.value.has(uuid)) wfChecked.value.delete(uuid); else wfChecked.value.add(uuid); }
+            function toggleAllWf() {
+                if (wfAllChecked.value) workflows.value.forEach(w => wfChecked.value.delete(w.uuid));
+                else workflows.value.forEach(w => wfChecked.value.add(w.uuid));
+            }
+            async function bulkWorkflows(action) {
+                const n = wfChecked.value.size;
+                const what = `${n} workflow${n > 1 ? 's' : ''}`;
+                const ask = { stop: `Stop the running jobs of ${what}?`, delete: `Delete ${what} and all their tasks? This cannot be undone.` }[action];
+                if (ask && !window.confirm(ask)) return;
+                wfBulkBusy.value = true;
+                try {
+                    const res = await fetch('/admin/tasks/workflows/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                                                                             body: JSON.stringify({ action, uuids: [...wfChecked.value] }) });
+                    const data = await res.json().catch(() => ({}));
+                    create_message(data.message || (res.ok ? 'Done.' : 'Failed.'), data.toast_class || (res.ok ? 'success-subtle' : 'danger-subtle'));
+                    if (res.ok) {
+                        if (action === 'delete') wfChecked.value.clear();
+                        fetchWorkflows(action === 'delete' ? 1 : workflowsPage.value);
+                        loadHealth();
+                    }
+                } finally { wfBulkBusy.value = false; }
+            }
+
             async function deleteWorkflow(w) {
                 if (!window.confirm(`Delete workflow "${w.title}" and all ${w.task_count} of its task(s)? This cannot be undone.`)) return;
                 const res = await fetch(`/admin/tasks/workflows/${w.uuid}/delete`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
@@ -3751,7 +3777,7 @@
             onUnmounted(() => stopLivePolling());
 
             return {
-                truncate, health, listView, setListView, calWorkflows, calSelected, calEvents, calPick, calendarRef, calDay, calEntry, openCalEntry, reuseCalEntry, calOpenDay, calDayItems, calDayHidden, calMd, calItemLabel, saveCalEntry, deleteCalEntry, CAL_CATEGORIES, calHidden, toggleCalHide, resetCalHidden, calHiddenCount, calCatCount, calVisibleEvents, calSide, wfColor, wfTitle, wfIcon, WF_ICONS, PALETTE,
+                truncate, health, listView, setListView, calWorkflows, calSelected, calEvents, calPick, calendarRef, calDay, wfChecked, wfBulkBusy, wfAllChecked, toggleWfCheck, toggleAllWf, bulkWorkflows, calEntry, openCalEntry, reuseCalEntry, calOpenDay, calDayItems, calDayHidden, calMd, calItemLabel, saveCalEntry, deleteCalEntry, CAL_CATEGORIES, calHidden, toggleCalHide, resetCalHidden, calHiddenCount, calCatCount, calVisibleEvents, calSide, wfColor, wfTitle, wfIcon, WF_ICONS, PALETTE,
                 modeLabel, userTz, onCalRange, schedule, openSchedule, addScheduleRow, weekdayName, dayOfMonth, scheduleSentence, saveSchedule,
                 spreadRows, dayCount, dayIsFull, calMaxPerDay,
                 onCalSelect, onCalDrop, onCalEventDrop, onCalEventClick, calRunNow, backupsInfo, loadBackupsInfo, fmtBytes, willBeDeleted, exportWorkflow, alertTaskCount, retryTaskCount, autoPausedCount, linkAlert, saveLinkAlert, taskAlert, ALERT_POINTS, notebook, noteOnRun, pinnedNotes, showPinned, share, openShare, shareAction, copyShare,

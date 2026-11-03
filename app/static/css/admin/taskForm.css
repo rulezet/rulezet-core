@@ -384,3 +384,21 @@
 .wf-ask__field { padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--light-bg-color); }
 .wf-ask__checks { max-height: 260px; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 12px; }
 .wf-ask__check { display: flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--text-color); }
+
+/* Workflows list: bulk actions on the checked ones */
+.wf-bulk { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem; }
+.dt-row.is-checked { background: rgba(13, 110, 253, .06); }
+.wf-card.is-checked { box-shadow: 0 0 0 2px #0d6efd; }
+
+/* Action pills, as on the rule detail page (Edit / Delete): outline in the action's colour (--c) */
+.rz-pills { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.rz-pill { display: inline-flex; align-items: center; gap: .1rem; padding: .3rem .9rem; border-radius: 999px; font-size: .8rem; font-weight: 500;
+    background: transparent; color: var(--c, var(--text-color)); border: 1px solid color-mix(in srgb, var(--c, #6c757d) 35%, transparent);
+    text-decoration: none; cursor: pointer; line-height: 1.5; transition: background .12s ease, border-color .12s ease; }
+.rz-pill:hover { background: color-mix(in srgb, var(--c, #6c757d) 10%, transparent); border-color: var(--c, #6c757d); color: var(--c, var(--text-color)); }
+.rz-pill:disabled { opacity: .5; cursor: default; }
+
+/* Workflows table: the Paused status */
+.wf-paused-badge { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .65rem; border-radius: 999px; font-size: .72rem; font-weight: 600;
+    color: #b45309; background: rgba(245, 158, 11, .12); border: 1px solid rgba(245, 158, 11, .35); white-space: nowrap; }
+.wf-paused-badge i { font-size: .6rem; }

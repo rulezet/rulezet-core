@@ -131,8 +131,8 @@ export default {
                 // Hover button on each day (month view): never starts a selection
                 dayCellDidMount: (info) => {
                     if (!props.dayButton) return;
-                    const frame = info.el.querySelector('.fc-daygrid-day-frame');
-                    if (!frame) return;
+                    // on the cell itself (not its frame, which is only as tall as its events): always bottom right
+                    if (!info.el.classList.contains('fc-daygrid-day')) return;
                     const b = document.createElement('button');
                     b.type = 'button';
                     b.className = 'cv-day-btn';
@@ -143,7 +143,7 @@ export default {
                     b.addEventListener('mousedown', stop);
                     b.addEventListener('touchstart', stop, { passive: true });
                     b.addEventListener('click', (e) => { e.stopPropagation(); emit('day-button', { date: info.date }); });
-                    frame.appendChild(b);
+                    info.el.appendChild(b);
                 },
                 dayCellClassNames: (info) => (props.activeDate && sameDay(info.date, props.activeDate) ? ['cv-day-active'] : []),
                 eventDragStart: () => startTracking(),

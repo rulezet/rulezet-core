@@ -625,6 +625,57 @@ def workflow_dashboard(uuid):
     return jsonify(data), 200
 
 
+@task_scheduler_blueprint.route('/workflows/bulk', methods=['POST'])
+def bulk_workflows():
+    """One action on the workflows checked in the list. Body: {action: stop|pause|delete, uuids: [...]}.
+    No bulk run / resume: launching is done one workflow at a time on purpose.
+    Each workflow goes through the same code as its own button; the answer says how many worked."""
+    from app import db
+    data = request.get_json(silent=True) or {}
+    action = data.get('action')
+    uuids = [u for u in (data.get('uuids') or []) if isinstance(u, str)][:500]
+    if action not in ('stop', 'pause', 'delete'):
+        return _err('Unknown action.')
+    if not uuids:
+        return _err('No workflow selected.')
+    done, errors = 0, []
+    for uuid in uuids:
+        workflow = _workflow_or_none(uuid)
+        if not workflow:
+            continue
+        title = workflow.title
+        try:
+            if action == 'stop':
+                stopped, err = TaskSchedulerModel.stop_workflow_jobs(uuid)
+                if err:
+                    errors.append(f'{title}: {err}')
+                    continue
+                if not stopped:
+                    continue
+            elif action == 'pause':
+                workflow.is_active = False
+                db.session.commit()
+            else:
+                if not TaskSchedulerModel.delete_workflow(uuid):
+                    errors.append(f'{title}: not deleted')
+                    continue
+            done += 1
+        except Exception as e:
+            db.session.rollback()
+            errors.append(f'{title}: {e}')
+    verb = {'stop': 'stopped', 'pause': 'paused', 'delete': 'deleted'}[action]
+    log_activity(f"admin.workflow_bulk_{action}", f"{done} workflow(s) {verb} at once",
+                 extra={'count': done, 'action': action, 'errors': errors[:20]}, icon="fa-solid fa-diagram-project")
+    if action == 'stop':
+        msg = f"Running jobs stopped in {done} workflow(s)." if done else "Nothing was running."
+    else:
+        msg = f"{done} workflow(s) {verb}."
+    if errors:
+        msg += f" {len(errors)} could not be: " + '; '.join(errors[:3]) + ('…' if len(errors) > 3 else '')
+    return jsonify({'message': msg, 'toast_class': 'warning-subtle' if errors else 'success-subtle',
+                    'done': done, 'errors': errors}), 200
+
+
 @task_scheduler_blueprint.route('/workflows/<uuid>/set_active', methods=['POST'])
 def set_workflow_active(uuid):
     """Pause / resume a whole workflow (its tasks keep their own Active switch)."""

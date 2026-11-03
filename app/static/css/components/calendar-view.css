@@ -43,7 +43,7 @@
 .cv-event-icon { margin-right: .3em; font-size: .9em; }
 
 /* Hover "+" button of a day (prop dayButton): big, bottom right of the day */
-.calendar-view .fc .fc-daygrid-day-frame { position: relative; }
+.calendar-view .fc .fc-daygrid-day { position: relative; }
 .calendar-view .cv-day-btn { position: absolute; right: 6px; bottom: 6px; z-index: 4; width: 30px; height: 30px; border-radius: 50%;
     border: 0; background: #0d6efd; color: #fff; font-size: .85rem; display: grid; place-items: center; padding: 0; cursor: pointer;
     box-shadow: 0 4px 12px rgba(13, 110, 253, .35); opacity: 0; transform: scale(.85); transition: opacity .12s ease, transform .12s ease; }
