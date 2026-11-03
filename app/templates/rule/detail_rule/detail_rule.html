@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% import 'macros/discuss.html' as rz_discuss with context %}
-{% block title %}{{ rule.title }} — Rulezet{% endblock %}
+{% block title %}{{ rule.title }} — {{ (rule.format or '') | upper }} detection rule | Rulezet{% endblock %}
 {% block head %}
+{% if seo.indexable %}<script type="application/ld+json">{{ seo_rule_jsonld(rule) | tojson }}</script>{% endif %}
 <style>
 @keyframes comment-pulse {
   0%   { box-shadow: 0 0 0 0 rgba(255,193,7,.7); outline: 2px solid #ffc107; }
@@ -41,6 +42,15 @@ window.__rule_risk   = {{ rule_risk | tojson | safe }};
 {% import 'macros/detail_rule_nav.html' as nav with context %}
 
 {% block content %}
+{# The rule as plain HTML for readers and crawlers that do not run JavaScript (the page itself is drawn by Vue) #}
+<noscript>
+  <article class="container py-4">
+    <h1>{{ rule.title }}</h1>
+    <p>{{ (rule.format or '') | upper }} detection rule{% if rule.author %} by {{ rule.author }}{% endif %}{% if rule.license %} · {{ rule.license }}{% endif %}</p>
+    {% if rule.description %}<p>{{ rule.description }}</p>{% endif %}
+    <pre><code>{{ rule.to_string }}</code></pre>
+  </article>
+</noscript>
 <div class="container mt-4" id="main-container" v-cloak>
     <div class="explorer-banner mb-4">
         <i class="fa-solid fa-shield-halved banner-watermark"></i>

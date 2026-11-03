@@ -1459,6 +1459,10 @@
                             <div><div class="fw-bold">[[ gitAsk.t.label ]]</div>
                                 <div class="small text-muted">The workflow runs a Git updater at its rhythm; launches and logs show in the workflow. The updater's own timer is switched off, so it never runs twice.</div></div>
                         </div>
+                        <div class="wf-git-note">
+                            <i class="fa-solid fa-circle-info"></i>
+                            <span><b>No double runs:</b> once the workflow is created, the Git updater's own timer is <b>switched off</b> — only the workflow launches it, at the same dates. Its repositories and settings stay on Manage Git; if you change its dates there, the workflow follows.</span>
+                        </div>
                         <div v-if="gitAsk.step === 'choose'" class="wf-tpl-grid">
                             <button type="button" class="wf-tpl" @click="gitAskStep('existing')">
                                 <span class="wf-tpl__icon"><i class="fa-solid fa-rotate"></i></span>

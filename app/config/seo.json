@@ -1,0 +1,100 @@
+{
+  "label": "SEO — search engines",
+  "category": "Instance",
+  "description": "How search engines see this instance: robots.txt, sitemap.xml, default title / description / keywords, structured data. indexing: auto = indexed only on the official instance (rulezet.org — IS_OFFICIAL_INSTANCE), off elsewhere so self-hosted copies never compete with it; on / off to force. Rules tagged with excluded_tags (TLP) are never listed in the sitemap.",
+  "public": false,
+  "value": {
+    "indexing": "auto",
+    "title": "Rulezet — open detection rules: YARA, Sigma, Suricata, Zeek, Wazuh…",
+    "description": "Rulezet is an open, community platform for detection rules and detection rule management: share, search, validate, test and version YARA, Sigma, Suricata, Zeek, Wazuh, Elastic, KQL, Splunk and more rules, kept in sync with their Git sources, mapped to MITRE ATT&CK and CVEs.",
+    "keywords": [
+      "detection rules",
+      "detection rule management",
+      "detection engineering",
+      "YARA rules",
+      "Sigma rules",
+      "Suricata rules",
+      "Zeek scripts",
+      "Wazuh rules",
+      "Snort rules",
+      "Elastic detection rules",
+      "KQL queries",
+      "Splunk searches",
+      "threat detection",
+      "threat hunting",
+      "MITRE ATT&CK",
+      "CVE detection",
+      "open source detection rules",
+      "rule repository",
+      "SIEM rules",
+      "IDS rules",
+      "malware detection",
+      "CTI"
+    ],
+    "disallow": [
+      "/admin/",
+      "/account/",
+      "/editor-api/",
+      "/api/private/",
+      "/notifications",
+      "/workspace",
+      "/jobs/",
+      "/rule/edit_rule/",
+      "/rule/create_rule",
+      "/bundle/create",
+      "/starfield",
+      "/nightshift",
+      "/tour/",
+      "/login",
+      "/logout"
+    ],
+    "static_pages": [
+      {
+        "path": "/",
+        "priority": 1.0,
+        "changefreq": "daily"
+      },
+      {
+        "path": "/rule/rules_list",
+        "priority": 0.9,
+        "changefreq": "daily"
+      },
+      {
+        "path": "/rule/formats",
+        "priority": 0.7,
+        "changefreq": "weekly"
+      },
+      {
+        "path": "/bundle/list",
+        "priority": 0.8,
+        "changefreq": "daily"
+      },
+      {
+        "path": "/vulnerability/",
+        "priority": 0.8,
+        "changefreq": "daily"
+      },
+      {
+        "path": "/attack/heatmap",
+        "priority": 0.7,
+        "changefreq": "weekly"
+      },
+      {
+        "path": "/blog/",
+        "priority": 0.6,
+        "changefreq": "weekly"
+      },
+      {
+        "path": "/feeds",
+        "priority": 0.6,
+        "changefreq": "weekly"
+      }
+    ],
+    "sitemap_page_size": 20000,
+    "excluded_tags": [
+      "tlp:red",
+      "tlp:amber",
+      "tlp:amber+strict"
+    ]
+  }
+}

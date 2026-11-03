@@ -6,14 +6,19 @@
     {# Points every ES module path at its versioned URL (static_versions.py) — must come before any module script. #}
     <script type="importmap">{{ static_import_map() | tojson }}</script>
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>{% block title %}RULEZET{% endblock %}</title>
+    <title>{% block title %}{{ seo.title }}{% endblock %}</title>
     {# Link previews (LinkedIn, Mastodon, Slack, X…): a page's own card (app/core/utils/share_card.py),
        else the instance's default one — crawlers read this HTML without running Vue #}
     {% set _card = card if card is defined and card else {
         'title': 'Rulezet', 'type': 'website', 'url': request.base_url,
-        'description': 'Community platform for cybersecurity detection rules: YARA, Sigma, Suricata, Zeek and more.',
+        'description': seo.description or 'Community platform for cybersecurity detection rules: YARA, Sigma, Suricata, Zeek and more.',
         'image': request.url_root.rstrip('/') ~ url_for('static', filename='image/rulezet_official_logo.png')} %}
     <meta name="description" content="{{ _card.description }}">
+    {# Search engines (setting seo, app/features/seo): keywords, indexed only where it should be, the site as structured data #}
+    {% if seo.keywords %}<meta name="keywords" content="{{ seo.keywords }}">{% endif %}
+    {% if not seo.indexable %}<meta name="robots" content="noindex, nofollow">{% endif %}
+    {% if seo.indexable and request.path == '/' %}{% for item in seo_site_jsonld() %}<script type="application/ld+json">{{ item | tojson }}</script>
+    {% endfor %}{% endif %}
     <link rel="canonical" href="{{ _card.url }}">
     <meta property="og:type" content="{{ _card.type or 'website' }}">
     <meta property="og:site_name" content="Rulezet">

@@ -457,6 +457,24 @@ def _register_live(schedule):
     from app.features.admin.task_scheduler.scheduler_engine import register_schedule
     register_schedule(current_app._get_current_object(), schedule)
     db.session.commit()
+    _take_over_git_updater(schedule)
+
+
+def _take_over_git_updater(task):
+    """A task that runs a Git updater (Manage Git → Sync Schedules), whatever created it (template, Manage Git
+    button, the task window, a duplicate, an import): the updater's own timer is switched off, so only the workflow
+    launches it — never twice."""
+    if task.task_type != 'github_sync_schedule_launch' or not task.is_active:
+        return
+    from app.core.db_class.git import GithubSyncSchedule
+    schedule_uuid = (task.target_payload or {}).get('schedule_uuid')
+    updater = GithubSyncSchedule.query.filter_by(uuid=schedule_uuid).first() if schedule_uuid else None
+    if updater and updater.is_active:
+        from app.features.rule.rule_from_github.sync_schedule.scheduler_engine import unregister_schedule
+        updater.is_active = False
+        updater.next_run_at = None
+        unregister_schedule(updater.uuid)
+        db.session.commit()
 
 
 def get_schedule_list_page(workflow_id, page=1, per_page=20, search='', sort='created_at', direction='desc', task_type=None):

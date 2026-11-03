@@ -431,3 +431,7 @@
 .wf-ideas-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .45rem; }
 .wf-ideas-list li { display: flex; flex-direction: column; padding: .55rem .75rem; border-radius: 10px; border: 1px solid var(--border-color); font-size: .85rem; }
 .wf-ideas-list li span { color: var(--subtle-text-color); font-size: .8rem; }
+
+.wf-git-note { display: flex; gap: .6rem; align-items: flex-start; padding: .65rem .85rem; margin-bottom: .9rem; border-radius: 10px;
+    font-size: .82rem; background: rgba(13, 110, 253, .07); border: 1px solid rgba(13, 110, 253, .25); }
+.wf-git-note i { color: #0d6efd; margin-top: .15rem; }
