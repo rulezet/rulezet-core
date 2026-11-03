@@ -13,6 +13,9 @@ from wtforms.validators import DataRequired, Email, EqualTo, InputRequired, Leng
 from app.core.db_class.user import User
 
 
+from app.core.utils.urls import with_scheme
+
+
 def web_address(form, field):
     """A profile link is shown to every visitor as a clickable link: only a
     real http(s) address, never javascript:, data: or anything else."""
@@ -66,19 +69,23 @@ class EditUserForm(FlaskForm):
     )
     website_url = StringField(
         'Website',
-        validators=[Optional(), Length(max=256), web_address]
+        validators=[Optional(), Length(max=256), web_address],
+        filters=[with_scheme]  # 'github.com/me' → 'https://github.com/me'
     )
     github_url = StringField(
         'GitHub / GitLab / Git profile',
-        validators=[Optional(), Length(max=256), web_address]
+        validators=[Optional(), Length(max=256), web_address],
+        filters=[with_scheme]  # 'github.com/me' → 'https://github.com/me'
     )
     twitter_url = StringField(
         'Twitter / X',
-        validators=[Optional(), Length(max=256), web_address]
+        validators=[Optional(), Length(max=256), web_address],
+        filters=[with_scheme]  # 'github.com/me' → 'https://github.com/me'
     )
     mastodon_url = StringField(
         'Mastodon',
-        validators=[Optional(), Length(max=256), web_address]
+        validators=[Optional(), Length(max=256), web_address],
+        filters=[with_scheme]  # 'github.com/me' → 'https://github.com/me'
     )
     # --- END NEW FIELDS ---
 

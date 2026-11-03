@@ -99,6 +99,12 @@
     color: var(--text-color);
     outline: none;
 }
+/* A field with an error (is-invalid, set by the template): red outline, focused or not */
+.auth-card .form-control.is-invalid,
+.auth-card .form-control.is-invalid:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 3px rgba(220,53,69,0.15);
+}
 .auth-card .form-label {
     font-size: 0.855rem;
     font-weight: 600;

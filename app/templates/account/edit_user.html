@@ -119,7 +119,7 @@
             </button>
           </div>
           <div data-avatar-pane="upload" class="d-flex flex-column gap-2">
-            {{ form.profile_picture(class_="form-control", id="avatarInput", style="max-width:300px;") }}
+            {{ form.profile_picture(class_="form-control" ~ (" is-invalid" if form.profile_picture.errors else ""), id="avatarInput", style="max-width:300px;") }}
             <small style="color:var(--subtle-text-color);font-size:.8rem;">JPG, PNG, GIF or WebP · max 2 MB</small>
             {% if form.profile_picture.errors %}
               <div class="field-error">{{ form.profile_picture.errors[0] }}</div>
@@ -197,15 +197,15 @@
       <div class="edit-section-label"><i class="fa-solid fa-id-card"></i>Name</div>
       <div class="row g-3 mb-3">
         <div class="col-md-6">
-          <label class="form-label">First name <span class="text-danger">*</span></label>
-          {{ form.first_name(class_="form-control", placeholder="Alice") }}
+          <label for="{{ form.first_name.id }}" class="form-label">First name <span class="text-danger">*</span></label>
+          {{ form.first_name(class_="form-control" ~ (" is-invalid" if form.first_name.errors else ""), placeholder="Alice") }}
           {% if form.first_name.errors %}
             <div class="field-error">{{ form.first_name.errors[0] | safe }}</div>
           {% endif %}
         </div>
         <div class="col-md-6">
-          <label class="form-label">Last name <span class="text-danger">*</span></label>
-          {{ form.last_name(class_="form-control", placeholder="Smith") }}
+          <label for="{{ form.last_name.id }}" class="form-label">Last name <span class="text-danger">*</span></label>
+          {{ form.last_name(class_="form-control" ~ (" is-invalid" if form.last_name.errors else ""), placeholder="Smith") }}
           {% if form.last_name.errors %}
             <div class="field-error">{{ form.last_name.errors[0] | safe }}</div>
           {% endif %}
@@ -215,14 +215,14 @@
       <!-- ===== Username + Email ===== -->
       <div class="row g-3 mb-2">
         <div class="col-md-6">
-          <label class="form-label">Username</label>
-          {{ form.username(class_="form-control", placeholder="john_doe") }}
+          <label for="{{ form.username.id }}" class="form-label">Username</label>
+          {{ form.username(class_="form-control" ~ (" is-invalid" if form.username.errors else ""), placeholder="john_doe") }}
           {% if form.username.errors %}
             <div class="field-error">{{ form.username.errors[0] | safe }}</div>
           {% endif %}
         </div>
         <div class="col-md-6{% if current_user.must_change_password %} rz-setup-field{% endif %}">
-          <label class="form-label">Email
+          <label for="{{ form.email.id }}" class="form-label">Email
           {% if not edit_mode and not is_sso %}
             <span class="text-danger">*</span>
           {% endif %}
@@ -231,7 +231,7 @@
             <div class="form-control-plaintext">{{ form.email.data }}</div>
           {% endif %}
             <div {% if is_sso %}style="display: none;" {% endif %}>
-              {{ form.email(class_="form-control", autocomplete="email") }}
+              {{ form.email(class_="form-control" ~ (" is-invalid" if form.email.errors else ""), autocomplete="email") }}
               {% if form.email.errors %}
                 <div class="field-error">{{ form.email.errors[0] | safe}}</div>
               {% endif %}
@@ -254,8 +254,8 @@
       <!-- ===== Bio ===== -->
       <div class="edit-section-label"><i class="fa-solid fa-pen-to-square"></i>About</div>
       <div class="mb-3">
-        <label class="form-label">Bio</label>
-        <textarea class="form-control" rows="3" id="{{ form.bio.id }}" name="{{ form.bio.name }}"
+        <label for="{{ form.bio.id }}" class="form-label">Bio</label>
+        <textarea class="form-control{% if form.bio.errors %} is-invalid{% endif %}" rows="3" id="{{ form.bio.id }}" name="{{ form.bio.name }}"
                   placeholder="A short description about yourself…" v-model="bio" maxlength="500"></textarea>
         <div class="d-flex justify-content-end mt-1">
           <small style="color:var(--subtle-text-color);font-size:.8rem;">[[ bio.length ]] / 500</small>
@@ -267,8 +267,9 @@
 
       <!-- ===== Location ===== -->
       <div class="mb-2">
-        <label class="form-label"><i class="fa-solid fa-location-dot me-1"></i>Location</label>
-        {{ form.location(class_="form-control", placeholder="Paris, France") }}
+        <label for="{{ form.location.id }}" class="form-label"><i class="fa-solid fa-location-dot me-1"></i>Location</label>
+        {{ form.location(class_="form-control" ~ (" is-invalid" if form.location.errors else ""), placeholder="Paris, France") }}
+        {% if form.location.errors %}<div class="field-error">{{ form.location.errors[0] }}</div>{% endif %}
       </div>
 
       <hr class="edit-section-divider">
@@ -283,15 +284,16 @@
           {% if n.key in social_columns %}
           {% set field = form[social_columns[n.key]] %}
           <label for="{{ field.id }}" class="form-label" style="font-size:.85rem;"><i class="{{ n.icon }} me-1"></i>{{ n.label }}</label>
-          {{ field(class_="form-control", placeholder=n.placeholder) }}
+          {{ field(class_="form-control" ~ (" is-invalid" if field.errors else ""), placeholder=n.placeholder) }}
+          {% if field.errors %}<div class="field-error">{{ field.errors[0] }}</div>{% endif %}
           {% else %}
           <label for="social_{{ n.key }}" class="form-label" style="font-size:.85rem;"><i class="{{ n.icon }} me-1"></i>{{ n.label }}</label>
-          <input type="url" id="social_{{ n.key }}" name="social_{{ n.key }}" class="form-control" maxlength="256"
+          <input type="text" inputmode="url" id="social_{{ n.key }}" name="social_{{ n.key }}" class="form-control{% if social_errors.get(n.key) %} is-invalid{% endif %}" maxlength="256"
                  value="{{ social_values.get(n.key, '') }}" placeholder="{{ n.placeholder }}">
+          {% if social_errors.get(n.key) %}<div class="field-error">{{ social_errors[n.key] }}</div>{% endif %}
           {% endif %}
         </div>
         {% endfor %}
-      </div>
       </div>
 
       <hr class="edit-section-divider">
@@ -307,7 +309,7 @@
             {% else %}
             <div class="form-check">
                 {{form.change_password(class_="form-check-input", id="changePasswordCheckbox")}}
-                <label class="form-label" style="font-size:.85rem;"><i class="fa-solid fa-lock me-1"></i>Change Password</label>
+                <label for="changePasswordCheckbox" class="form-label" style="font-size:.85rem;"><i class="fa-solid fa-lock me-1"></i>Change Password</label>
             </div>
             {% endif %}
         </div>
@@ -316,7 +318,7 @@
         <div class="col">
             {{form.password.label(class_="form-label", style="font-size:.85rem;")}}
             <div class="position-relative">
-                <input class="form-control pe-5" id="password" name="password" type="password" v-model="password">
+                <input class="form-control pe-5{% if form.password.errors %} is-invalid{% endif %}" id="password" name="password" type="password" v-model="password">
                 <i class="fa fa-eye position-absolute top-50 end-0 translate-middle-y me-3"
                 style="cursor: pointer"
                 id="togglePasswordIcon"
@@ -364,7 +366,7 @@
         </div>
         <div class="col">
             {{form.password2.label(class_="form-label", style="font-size:.85rem;")}}
-            <input class="form-control" id="password2" name="password2" type="password" v-model="password2">
+            <input class="form-control{% if form.password2.errors %} is-invalid{% endif %}" id="password2" name="password2" type="password" v-model="password2">
             {% if form.password2.errors %}
                 <div style="color: red;">{{form.password2.errors[0] | safe}}</div>
             {%endif%}

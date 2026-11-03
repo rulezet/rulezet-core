@@ -758,11 +758,10 @@ def edit_user():
         social_cleaned, social_errors = SocialLinks.clean_links(
             {n['key']: request.form[f"social_{n['key']}"] for n in SocialLinks.networks()
              if n['key'] not in SocialLinks.COLUMNS and f"social_{n['key']}" in request.form})
-        for message in social_errors.values():
-            flash(message, 'danger')
 
     was_first_setup = current_user.must_change_password
-    if not first_setup_errors and not social_errors and form.validate_on_submit():
+    form_ok = form.validate_on_submit()          # always run: every field gets its own error at once
+    if not first_setup_errors and not social_errors and form_ok:
         form_dict     = form_to_dict(form)
         # An omitted field keeps its value; a submitted empty field clears it (a link field is not shown
         # when its network was taken out of the setting user.social_links).
@@ -814,6 +813,14 @@ def edit_user():
                 session['rz_just_setup'] = True          # confetti + the tour at once (tour_core.context)
                 return redirect(url_for('home.home'))
             return redirect("/account")
+    elif form.is_submitted():
+        # each error is shown under its own field (red outline); only the ones with no field
+        # on the page (expired form, email of an SSO account) come up as a message
+        for name, errs in form.errors.items():
+            if name == 'csrf_token':
+                flash('The form expired — please save again.', 'danger')
+            elif name == 'email' and is_sso:
+                flash(f"Email: {errs[0]}", 'danger')
     else:
         # first admin of a new instance, or a link asking for it: the password part opened
         if current_user.must_change_password or request.args.get('change_password'):
@@ -835,7 +842,7 @@ def edit_user():
         social_values.update({k: request.form.get(f"social_{k}", '') for k in social_values
                               if f"social_{k}" in request.form})
     return render_template("account/edit_user.html", form=form, is_sso=is_sso,
-                           social_networks=social_networks, social_values=social_values,
+                           social_networks=social_networks, social_values=social_values, social_errors=social_errors,
                            social_columns=SocialLinks.COLUMNS,
                            rulezy_poses=AccountModel.get_rulezy_poses(),
                            avatar_icons=AccountModel.get_avatar_icons(),
