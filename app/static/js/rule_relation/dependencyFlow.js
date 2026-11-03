@@ -27,6 +27,7 @@ const LONG_EDGE_PX = 450;       // vertical run past which an arrow counts as lo
 
 const RELATION_LABELS = {
     yara_condition_ref: 'YARA condition',
+    sigma_correlation:  'Sigma correlation',
     depends_on:         'depends on',
     if_sid:             'if_sid',
     if_matched_sid:     'if_matched_sid',

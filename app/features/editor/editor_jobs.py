@@ -1,4 +1,4 @@
-"""Background job behind the YARA editor's "Create": every rule is checked (already in Rulezet,
+"""Background job behind the rule editor's "Create" (YARA, Sigma): every rule is checked (already in Rulezet,
 syntax with its dependencies, a test on sample sets — setting editor.test_on_create), and only
 when everything passes are the rules created and linked; the test result is then kept with
 each rule written. The steps and the per-rule report are kept in the job payload, so the
@@ -14,6 +14,7 @@ from app.features.jobs.job_worker import register_handler
 
 from . import editor_core as EditorModel
 from . import external_checks as ExternalChecks
+from . import external_checks_sigma as ExternalChecksSigma
 
 JOB_TYPE = 'editor_yara_import'
 
@@ -24,13 +25,29 @@ STEPS = [
     ('samples', 'Test on samples'),
     ('create', 'Create, update or propose, and link'),
 ]
+# Sigma: Rulezet's own check (schema + pySigma); no external tool, no sample test engine for Sigma
+STEPS_BY_FORMAT = {
+    'yara': STEPS,
+    'sigma': [
+        ('existing', 'Already in Rulezet?'),
+        ('syntax', 'Syntax: Sigma schema and pySigma checks'),
+        ('external', 'External checks: SIEM conversion and data models, pySigma advice, SigmaHQ, sigmalint, rsigma (advice)'),
+        ('samples', 'Test on sample events'),
+        ('create', 'Create, update or propose, and link'),
+    ],
+}
 
 
-def new_payload(imports, rules):
+def _steps(fmt):
+    return STEPS_BY_FORMAT.get(fmt or 'yara', STEPS)
+
+
+def new_payload(imports, rules, fmt='yara'):
     return {
+        'format': fmt,
         'imports': imports,
         'rules': rules,
-        'steps': [{'id': key, 'label': label, 'status': 'pending', 'detail': ''} for key, label in STEPS],
+        'steps': [{'id': key, 'label': label, 'status': 'pending', 'detail': ''} for key, label in _steps(fmt)],
         'report': None,
         'ok': None,
         'result_url': None,
@@ -58,11 +75,12 @@ def public_state(job):
 @register_handler(JOB_TYPE)
 def handle_editor_yara_import(job, app):
     payload = dict(job.payload or {})
+    fmt = payload.get('format') or 'yara'
     steps = {s['id']: s for s in payload['steps']}
     user = User.query.get(job.created_by)
 
     def save():
-        payload['steps'] = [steps[key] for key, _ in STEPS]
+        payload['steps'] = [steps[key] for key, _ in _steps(fmt) if key in steps]
         job.payload = dict(payload)
         flag_modified(job, 'payload')
         db.session.commit()
@@ -77,14 +95,22 @@ def handle_editor_yara_import(job, app):
         job.done = done
         save()
 
-    plan = EditorModel.plan_yara(payload.get('imports'), payload.get('rules') or [], progress, user)
+    plan = EditorModel.plan(fmt, payload.get('imports'), payload.get('rules') or [], progress, user)
     count = lambda *states: sum(1 for r in plan['rules'] if r['status'] in states)   # noqa: E731
 
     step('existing', 'ok', f"{count('exists')} already in Rulezet" if count('exists') else 'none')
     bad = count('error', 'blocked')
     step('syntax', 'error' if bad else 'ok', f'{bad} rule(s) to fix' if bad else f"{count('new', 'update', 'proposal')} rule(s) valid")
     run = None
-    if plan['ok']:
+    if fmt != 'yara':
+        # Sigma: no external tools yet; sample events through rulezet-tester's sigma driver
+        if plan['ok']:
+            _external_checks(plan, payload, step, fmt)
+            run = _test_on_samples(plan, payload, user, step, fmt)
+        else:
+            step('external', 'skipped', 'fix the errors first')
+            step('samples', 'skipped', 'fix the errors first')
+    elif plan['ok']:
         _external_checks(plan, payload, step)
         run = _test_on_samples(plan, payload, user, step)
     else:
@@ -110,29 +136,36 @@ def handle_editor_yara_import(job, app):
         SampleTests.record_rule_results(run, [(n, r) for n, r in written if r])
 
 
-def _external_checks(plan, payload, step):
+_TOOL_NAMES = {'yarax': 'YARA-X', 'cccs': 'CCCS', 'yaraqa': 'yaraQA',
+               'siem': 'SIEM conversion', 'schemas': 'SIEM data models', 'duplicates': 'Already in Rulezet', 'cost': 'Search cost',
+               'pysigma': 'pySigma advice',
+               'sigmahq': 'SigmaHQ', 'sigmalint': 'sigmalint', 'rsigma': 'rsigma'}
+
+
+def _external_checks(plan, payload, step, fmt='yara'):
     """YARA-X, CCCS and yaraQA on the document (external_checks.py): advice shown with the result,
     never a reason to refuse — Rulezet's own syntax step above decides."""
-    tools = ExternalChecks.enabled_tools()
+    module = ExternalChecksSigma if fmt == 'sigma' else ExternalChecks
+    tools = module.enabled_tools()
     if not tools:
         step('external', 'skipped', 'switched off (setting editor.external_checks)')
         return
     step('external', 'running', ', '.join(tools))
-    results = ExternalChecks.run_checks(EditorModel.test_document(plan, payload.get('imports')), tools)
+    results = module.run_checks(EditorModel.test_document(plan, payload.get('imports'), fmt), tools)
     payload['external'] = results
     parts = []
     for tool, r in results.items():
-        name = {'yarax': 'YARA-X', 'cccs': 'CCCS', 'yaraqa': 'yaraQA'}[tool]
+        name = _TOOL_NAMES.get(tool, tool)
         if not r.get('available'):
             parts.append(f'{name}: not available')
         else:
-            n = len(r['errors']) + len(r['warnings'])
+            n = len(r['errors']) + sum(1 for w in r['warnings'] if w.get('level') != 'info')   # infos (a SIEM query, a score) are not remarks
             parts.append(f"{name}: {n} remark{'s' if n != 1 else ''}" if n else f'{name}: ok')
-    noisy = any(r.get('available') and (r['errors'] or r['warnings']) for r in results.values())
+    noisy = any(r.get('available') and (r['errors'] or any(w.get('level') != 'info' for w in r['warnings'])) for r in results.values())
     step('external', 'warning' if noisy else 'ok', ' · '.join(parts))
 
 
-def _test_on_samples(plan, payload, user, step):
+def _test_on_samples(plan, payload, user, step, fmt='yara'):
     """Runs the document on the sample sets chosen by the setting (benign by default: false
     positives). A warning only, unless block_on_false_positives. Returns the run (or None)."""
     if not SampleTests.can_use_tests(user):
@@ -146,17 +179,17 @@ def _test_on_samples(plan, payload, user, step):
         step('samples', 'skipped', 'switched off (setting editor.test_on_create)')
         return None
     service = EditorModel.create_test_service()
-    if not service or 'yara' not in service.formats():
+    if not service or fmt not in service.formats():
         step('samples', 'skipped', 'no test engine on this server')
         return None
     kinds = set(conf.get('kinds') or ['benign'])
-    sets = [s['id'] for s in service.sets('yara') if s.get('kind') in kinds]
+    sets = [s['id'] for s in service.sets(fmt) if s.get('kind') in kinds]
     if not sets:
         step('samples', 'skipped', 'no sample set to test on')
         return None
     step('samples', 'running', f'{len(sets)} sample set(s)')
     try:
-        started = service.start('yara', EditorModel.test_document(plan, payload.get('imports')), sets,
+        started = service.start(fmt, EditorModel.test_document(plan, payload.get('imports'), fmt), sets,
                                  owner=user.id if user else None)
     except Exception as e:                       # TestError: a message for the user
         step('samples', 'warning', f'not run: {e}')

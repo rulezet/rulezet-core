@@ -1,5 +1,6 @@
 /**
- * YaraEditorPanel.js — "YARA editor" tab of the create-rule page: the rule editor from
+ * YaraEditorPanel.js — "YARA editor" and "Sigma editor" tabs of the create-rule page (prop
+ * `format`: 'yara' | 'sigma'): the rule editor from
  * app/modules/rulezet-editor (completion, lint checked against libyara, quick fixes, rule
  * tools, several rules per document), backed by this Rulezet through /editor-api.
  *
@@ -17,6 +18,7 @@
  *           modal closes on "Fix the errors" and each error is put back on its line.
  *
  * Props:
+ *   format     'yara' (default) | 'sigma' — the language, the API (/editor-api/<format>/…) and the texts
  *   active     Boolean — the tab is shown; the editor is loaded the first time it is
  *   csrfToken  String
  *   author     String — offered by the "Set author" rule tool
@@ -32,6 +34,18 @@ const EDITOR_JS = '/editor-api/assets/rulezet-editor.js'
 const TOAST_CLASS = { info: 'info', success: 'success', warning: 'warning', error: 'danger' }
 const EDITOR_CSS = '/editor-api/assets/rulezet-editor.css'
 const POLL_MS = 700
+
+// what changes from one format to the other
+const FORMATS = {
+    yara: {
+        title: 'YARA editor', icon: 'fa-laptop-code', draftKey: 'rulezet-create-yara',
+        intro: 'Write or paste as many rules as you want. Each one is checked with the rules it needs, from this document or already in Rulezet; nothing is written until every check passes.',
+    },
+    sigma: {
+        title: 'Sigma editor', icon: 'fa-wave-square', draftKey: 'rulezet-create-sigma',
+        intro: 'Write or paste as many Sigma rules as you want, one per YAML document (separated by ---). Each one is checked as Rulezet checks it (Sigma schema and pySigma); nothing is written until every check passes.',
+    },
+}
 
 const BADGES = {
     new:      { badge: 'New', tone: 'info' },
@@ -81,8 +95,9 @@ function annotations(report, lines) {
         if (r.open_proposal) links.push({ label: 'Your open proposal for this content', url: r.open_proposal.url })
         if (r.proposal) links.push({ label: 'See the proposal', url: r.proposal.url })
         for (const d of r.depends_on || []) {
-            if (d.where === 'rulezet') links.push({ label: `Needs ${d.name} (Rulezet)`, url: d.url })
-            else notes.push(`Needs ${d.name} (this document)`)
+            const what = d.label || 'Needs'          // Sigma related: "Related (derived)"
+            if (d.where === 'rulezet') links.push({ label: `${what}: ${d.name} (Rulezet)`, url: d.url })
+            else notes.push(`${what}: ${d.name} (this document)`)
         }
         if (r.created) links.push({ label: r.status === 'updated' ? 'Open the updated rule' : 'Open the new rule', url: r.created.url })
         rules[r.name] = { ...BADGES[r.status], notes, links }
@@ -95,12 +110,15 @@ export default {
     delimiters: ['[[', ']]'],
     components: { 'editor-import-modal': EditorImportModal },
     props: {
+        format:    { type: String, default: 'yara' },
         active:    { type: Boolean, default: false },
         csrfToken: { type: String, default: '' },
         tests:     { type: Boolean, default: false },
         author:    { type: String, default: '' },
     },
     setup(props) {
+        const conf = FORMATS[props.format] || FORMATS.yara
+        const fmt = FORMATS[props.format] ? props.format : 'yara'
         const host = ref(null)
         const loading = ref(false)
         const loadError = ref('')
@@ -136,7 +154,7 @@ export default {
         }
 
         async function post(path) {
-            const res = await fetch(`/editor-api/yara/${path}`, {
+            const res = await fetch(`/editor-api/${fmt}/${path}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': props.csrfToken },
                 body: body(),
@@ -192,7 +210,7 @@ export default {
             clearTimeout(pollTimer)
             pollTimer = setTimeout(async () => {
                 try {
-                    const res = await fetch(`/editor-api/yara/jobs/${uuid}`)
+                    const res = await fetch(`/editor-api/${fmt}/jobs/${uuid}`)
                     const state = await res.json()
                     if (!res.ok) throw new Error(state.error || `HTTP ${res.status}`)
                     modal.value = { ...modal.value, job: state }
@@ -246,13 +264,13 @@ export default {
                 }
                 await nextTick()
                 editor = new lib.RulezetEditor(host.value, {
-                    language: 'yara',
+                    language: fmt,
                     theme: 'auto',
                     height: '75vh',
                     outline: true,
                     author: props.author || null,
                     host: new lib.EditorServerHost({ baseUrl: '/editor-api', csrfToken: props.csrfToken, name: 'Rulezet' }),
-                    draftKey: 'rulezet-create-yara',
+                    draftKey: conf.draftKey,
                     credits: RULEZET_EDITOR_CREDITS,   // Rulezet's section of the Credits & licences page
                     pickValues: linkedRulesPicker(props.csrfToken),   // "Linked rules" → Browse: Rulezet's rule list in a modal
                     tests: props.tests ? 'auto' : false,      // tests on samples: Rulezet setting editor.test_access
@@ -277,7 +295,7 @@ export default {
         onBeforeUnmount(() => { clearTimeout(pollTimer); if (editor) editor.destroy() })
 
         return {
-            host, loading, loadError, ruleCount, editorErrors, canCreate,
+            conf, host, loading, loadError, ruleCount, editorErrors, canCreate,
             modal, job, badRules,
             openCreate, confirmCreate, fixErrors, closeModal,
         }
@@ -285,15 +303,14 @@ export default {
     template: `
     <div>
         <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
-            <div class="ed-icon-badge"><i class="fas fa-laptop-code"></i></div>
+            <div class="ed-icon-badge"><i class="fas" :class="conf.icon"></i></div>
             <div class="flex-grow-1">
                 <div class="d-flex align-items-center gap-2">
-                    <h5 class="fw-bold mb-0">YARA editor</h5>
+                    <h5 class="fw-bold mb-0">[[ conf.title ]]</h5>
                     <span class="ed-pill ed-pill--update">BETA</span>
                 </div>
                 <div class="small text-muted">
-                    Write or paste as many rules as you want. Each one is checked with the rules it needs, from this document or
-                    already in Rulezet; nothing is written until every check passes. <kbd>Ctrl+Shift+R</kbd>: rule tools.
+                    [[ conf.intro ]] <kbd>Ctrl+Shift+R</kbd>: rule tools.
                 </div>
             </div>
         </div>

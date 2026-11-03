@@ -241,41 +241,42 @@
     "data_sources_refresh": {
       "label": "Data sources refresh",
       "icon": "fa-solid fa-code-branch",
-      "description": "Every 1st of the month: pull the latest MISP taxonomies & galaxies, load them, update MITRE ATT&CK, clear the caches.",
+      "description": "Every month: pull the latest MISP taxonomies, MISP galaxies and MITRE CTI submodules (choose which in the first task), then load the MISP and ATT&CK data from them; a notification if something fails. Code submodules (editor, tester…) are not in it: they need a restart, update them with manage.py deploy.",
       "spec": {
         "title": "Data sources refresh",
-        "description": "MISP and ATT&CK sources pulled and loaded — the 1st of every month at 03:00 UTC.",
+        "description": "Fresh MISP taxonomies / galaxies and ATT&CK data — the 1st of every month at 03:30 UTC.",
         "tasks": [
           {
-            "ref": "pull",
-            "title": "Pull MISP taxonomies & galaxies",
+            "ref": "submodules",
+            "title": "Update the data submodules",
             "task_type": "submodules_update",
             "target_payload": {
               "names": [
                 "misp-taxonomies",
-                "misp-galaxy"
+                "misp-galaxy",
+                "cti"
               ]
             },
             "trigger": {
               "trigger_mode": "monthly",
               "day_of_month": 1,
               "hour": 3,
-              "minute": 0,
+              "minute": 30,
               "timezone": "UTC"
             }
           },
           {
             "ref": "misp",
-            "title": "Load MISP taxonomies & galaxies",
+            "title": "MISP — update taxonomies & galaxies",
             "task_type": "misp_update_data",
             "trigger": {
-              "after": "pull",
+              "after": "submodules",
               "condition": "success"
             }
           },
           {
             "ref": "attack",
-            "title": "Update MITRE ATT&CK data",
+            "title": "ATT&CK — update MITRE data",
             "task_type": "attack_update_data",
             "trigger": {
               "after": "misp",
@@ -283,12 +284,17 @@
             }
           },
           {
-            "ref": "cache",
-            "title": "Clear the caches",
-            "task_type": "clear_caches",
+            "ref": "alert",
+            "title": "Tell the admins",
+            "task_type": "action_notify",
+            "target_payload": {
+              "title": "{workflow}: {status}",
+              "message": "Data sources refresh failed: {failed_tasks}.",
+              "only_editor": false
+            },
             "trigger": {
               "after": "attack",
-              "condition": "always"
+              "condition": "failure"
             }
           }
         ]

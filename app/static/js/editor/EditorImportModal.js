@@ -146,8 +146,8 @@ export default {
                                     <div v-if="r.open_proposal" class="ed-rule__detail">You already proposed this content: <a :href="r.open_proposal.url" target="_blank">see it</a>.</div>
                                     <div v-if="(r.depends_on || []).length" class="ed-rule__deps">
                                         <template v-for="d in r.depends_on" :key="d.name">
-                                            <a v-if="d.url" :href="d.url" target="_blank" class="ed-dep"><i class="fas fa-link"></i>[[ d.name ]] · Rulezet</a>
-                                            <span v-else class="ed-dep"><i class="fas fa-link"></i>[[ d.name ]]</span>
+                                            <a v-if="d.url" :href="d.url" target="_blank" class="ed-dep"><i class="fas fa-link"></i><template v-if="d.label">[[ d.label ]]: </template>[[ d.name ]] · Rulezet</a>
+                                            <span v-else class="ed-dep"><i class="fas fa-link"></i><template v-if="d.label">[[ d.label ]]: </template>[[ d.name ]]</span>
                                         </template>
                                     </div>
                                     <!-- what Rulezet will store for this rule, field by field -->

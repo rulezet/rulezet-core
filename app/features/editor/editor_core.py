@@ -18,8 +18,40 @@ from app.features.rule.rule_format.available_format.yara_format import (
 
 def validate(fmt, content):
     """The check a rule goes through on creation; YARA rules are compiled together with the
-    Rulezet rules they reference. None for an unknown format (the editor shows nothing)."""
+    Rulezet rules they reference. None for an unknown format (the editor shows nothing).
+    Sigma: one rule per YAML document (---), each checked on its own, errors on its first line."""
+    if (fmt or '').lower() == 'sigma':
+        return _validate_sigma_documents(content)
     return RuleModel.validate_rule_syntax(fmt, content, resolve_dependencies=True)
+
+
+_SIGMA_ISSUE = re.compile(r'^issue=\w+ severity=\w+ description="([^"]*)"')
+_SIGMA_DETAIL = re.compile(r"\b(detection_name|identifier|tag|fieldname|event_id)=('?[^\s']+'?)")
+
+
+def sigma_message(message):
+    """pySigma's issue text ('issue=X severity=high description="…" rules=[…] detection_name=extra')
+    as a sentence: 'Rule defines detection that is not referenced from condition (detection_name: extra)'."""
+    text = str(message)
+    m = _SIGMA_ISSUE.match(text)
+    if not m:
+        return text
+    detail = _SIGMA_DETAIL.search(text)
+    return m.group(1) + (f" ({detail.group(1).replace('_', ' ')}: {detail.group(2).strip(chr(39))})" if detail else '')
+
+
+def _validate_sigma_documents(content):
+    from rulezet_editor.validators import split_yaml_documents
+    from app.features.rule.rule_format.available_format.sigma_format import SigmaRule
+    errors, warnings = [], []
+    docs = split_yaml_documents(content or '')
+    checker = SigmaRule()
+    for line, text in docs:
+        # a correlation rule may name the other rules of the same document
+        result = checker.validate(text, context=[t for _, t in docs if t is not text])
+        errors += [f'line {line}: {sigma_message(e)}' for e in (result.errors or [])]
+        warnings += [f'line {line}: {w}' for w in (getattr(result, 'warnings', None) or [])]
+    return {'errors': errors, 'warnings': warnings}
 
 
 def _rule_item(rule):
@@ -45,12 +77,24 @@ def search_rules(fmt, query, limit):
     return [_rule_item(r) for r in q.order_by(Rule.title).limit(limit)]
 
 
+_UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
+
+
 def get_rule(fmt, name):
-    """One rule by exact title (hover, "exists on Rulezet", Ctrl+Click)."""
-    q = RuleModel._active().filter(Rule.title == name)
+    """One rule by exact title (hover, "exists on Rulezet", Ctrl+Click), or by its uuid / original
+    uuid when `name` is one (a Sigma rule's related: ids)."""
+    if _UUID.match(name or ''):
+        q = RuleModel._active().filter(db.or_(Rule.uuid == name, Rule.original_uuid == name))
+    else:
+        q = RuleModel._active().filter(Rule.title == name)
     if fmt:
         q = q.filter(Rule.format.ilike(fmt))
     rule = q.first()
+    if not rule and (fmt or '').lower() == 'sigma':
+        # a correlation rule names rules by their name: key
+        from app.features.rule.rule_format.available_format.sigma_format import SigmaRule
+        text = SigmaRule.find_referenced_rule(name)
+        rule = RuleModel._active().filter(Rule.format.ilike('sigma'), Rule.to_string == text).first() if text else None
     return _rule_item(rule) if rule else None
 
 
@@ -237,9 +281,11 @@ def create_test_service():
     return TestService(tests.store, tests.sandbox, registry=DbRunRegistry('create'), executor=lambda fn: fn())
 
 
-def test_document(plan, imports):
-    """One YARA source with every rule of the plan, each after the rules it needs (rules taken
+def test_document(plan, imports, fmt='yara'):
+    """Sigma: the rules to write, one YAML document each. YARA: one source with every rule of the plan, each after the rules it needs (rules taken
     from Rulezet first), the imports gathered at the top: what the Create job tests."""
+    if fmt == 'sigma':
+        return '\n---\n'.join(e['content'].strip() for e in plan['rules'] if e['status'] in PENDING) + '\n'
     by_name = {e['name']: e for e in plan['rules']}
     modules = {m for m in imports or [] if re.fullmatch(r'\w+', str(m))}
     parts, done, rulezet_ids = [], set(), []
@@ -299,8 +345,8 @@ def _rule_link(rule):
     return {'id': rule.id, 'title': rule.title, 'url': f'/rule/detail_rule/{rule.id}'}
 
 
-def _existing(name, content, meta_id):
-    """(rule, reason) when this rule is already in Rulezet."""
+def _existing(name, content, meta_id, fmt='yara'):
+    """(rule, reason) when this rule is already in Rulezet (YARA: same rule name; Sigma: same title)."""
     if meta_id.lower() not in _EMPTY_UUIDS:
         rule = RuleModel._active().filter(
             db.or_(Rule.uuid == meta_id, Rule.original_uuid == meta_id)).first()
@@ -309,6 +355,9 @@ def _existing(name, content, meta_id):
     rule = RuleModel.get_rule_by_content(content)
     if rule:
         return rule, 'same content'
+    if fmt == 'sigma':
+        rule = RuleModel._active().filter(Rule.format.ilike('sigma'), Rule.title == name).first()
+        return (rule, 'same title') if rule else (None, None)
     rule = RuleModel._active().filter(Rule.format.ilike('yara'), Rule.corpus_identifier == name).first() \
         or RuleModel._active().filter(Rule.format.ilike('yara'), Rule.title == name).first()
     if rule:
@@ -326,6 +375,8 @@ def _can_edit(user, rule):
 
 
 PENDING = ('new', 'update', 'proposal')          # will be written once every check passes
+_LABEL = {'yara': 'YARA', 'sigma': 'Sigma'}
+FORMATS = tuple(_LABEL)                          # formats the editor's Create handles
 
 
 def _rulezet_rule(name):
@@ -452,10 +503,28 @@ def _info(user):
     }
 
 
+def _rule_type(fmt):
+    if fmt == 'sigma':
+        from app.features.rule.rule_format.available_format.sigma_format import SigmaRule
+        return SigmaRule()
+    return YaraRule()
+
+
 def new_rule_dict(e, user):
     """The rule dict Rulezet stores for this document rule: what the rule says (meta), with the
     Fields panel's values on top. The preview and the creation both use it."""
-    return apply_fields(YaraRule().parse_metadata(e['content'], _info(user), _Validation(e['content'])), e.get('fields'))
+    parsed = _rule_type(e.get('format', 'yara')).parse_metadata(e['content'], _info(user), _Validation(e['content']))
+    return apply_fields(parsed, e.get('fields'))
+
+
+def _sigma_doc(text):
+    """The top-level mapping of a Sigma rule ({} when it is not one)."""
+    import yaml
+    try:
+        doc = yaml.safe_load(text)
+    except Exception:
+        return {}
+    return doc if isinstance(doc, dict) else {}
 
 
 def import_preview(e, user):
@@ -464,9 +533,13 @@ def import_preview(e, user):
     from app.core.db_class.tag import Tag
     from app.core.utils.app_settings import get_setting
     fields = e.get('fields') or {}
+    fmt = e.get('format', 'yara')
     meta_values = {}
-    for k, v in re.findall(r'^\s*(\w+)\s*=\s*"((?:[^"\\]|\\.)*)"', e['text'], re.M):
-        meta_values.setdefault(k.lower(), v)
+    if fmt == 'sigma':
+        meta_values = {str(k).lower(): str(v) for k, v in _sigma_doc(e['text']).items() if isinstance(v, (str, int, float))}
+    else:
+        for k, v in re.findall(r'^\s*(\w+)\s*=\s*"((?:[^"\\]|\\.)*)"', e['text'], re.M):
+            meta_values.setdefault(k.lower(), v)
     meta = set(meta_values)
     d = new_rule_dict(e, user)
 
@@ -484,7 +557,7 @@ def import_preview(e, user):
     defaults = list((get_setting('tags.defaults') or {}).get('auto_attach') or [])
     # the tags Rulezet attaches as "Imported" on creation, with the same detection
     from app.features.tags.imported_tags_core import extract_native_tags
-    rule_tags = extract_native_tags('yara', e['content'])
+    rule_tags = extract_native_tags(fmt, e['content'])
     attack = [a.upper() for a in fields.get('attack') or [] if re.fullmatch(r'(?i)T\d{4}(\.\d{3})?', a)]
     rows = [
         {'id': 'title', 'label': 'Title', 'value': d.get('title'),
@@ -678,13 +751,161 @@ def import_yara(imports, rules, user, progress=None):
     return create_from_plan(plan, user)
 
 
+def _status_of_existing(e, rule, reason, user):
+    """exists / update / proposal for a rule already in Rulezet (same as plan_yara)."""
+    e['existing'] = {**_rule_link(rule), 'reason': reason, 'owner_id': rule.user_id}
+    if reason == 'same content' or _same_content(rule.to_string, e['content']):
+        e['status'] = 'exists'
+    elif _can_edit(user, rule):
+        e['status'] = 'update'
+    else:
+        open_proposal = RuleModel.find_open_duplicate(rule.id, e['content'])
+        e['status'] = 'proposal'
+        if open_proposal:
+            e['open_proposal'] = {'id': open_proposal.id, 'url': f'/rule/proposal_content_discuss?id={open_proposal.id}'}
+
+
+def plan_sigma(rules, progress=None, user=None):
+    """plan_yara for Sigma: one entry per rule (YAML document) with status new | exists | update |
+    proposal | error. A rule is in Rulezet when an active rule has its id (uuid / original uuid), the
+    same content or the same title; the syntax is Rulezet's own (schema + pySigma). No dependencies."""
+    tick = progress or (lambda *a: None)
+    if not rules:
+        return {'ok': False, 'rules': [], 'error': 'No rule in the document.'}
+    if len(rules) > MAX_RULES:
+        return {'ok': False, 'rules': [], 'error': f'Too many rules at once (max {MAX_RULES}).'}
+    entries, names, ids = [], {}, {}
+    for r in rules:
+        text = str(r.get('text') or '').strip('\n').rstrip() + '\n'
+        doc = _sigma_doc(text)
+        title = str(doc.get('title') or '').strip()
+        name = str(r.get('name') or title)
+        entry = {'name': name, 'text': text, 'content': text, 'status': 'new', 'errors': [], 'depends_on': [],
+                 'existing': None, 'path': r.get('path') or None, 'fields': clean_fields(r.get('fields')), 'format': 'sigma'}
+        rid = r.get('id')
+        entry['rule_id'] = rid if isinstance(rid, int) and not isinstance(rid, bool) and rid > 0 else None
+        rule_uuid = str(doc.get('id') or '').strip()
+        if not doc or not title:
+            entry.update(status='error', errors=[{'message': 'Not a Sigma rule (a YAML mapping with a title)'}])
+        elif name in names:
+            entry.update(status='error', errors=[{'message': f'Two rules are named "{name}" in the document'}])
+        elif rule_uuid and rule_uuid in ids:
+            entry.update(status='error', errors=[{'message': f'The id {rule_uuid} is used by two rules of the document'}])
+        names.setdefault(name, entry)
+        if rule_uuid:
+            ids.setdefault(rule_uuid, entry)
+        entry['_uuid'] = rule_uuid
+        entry['_title'] = title
+        entries.append(entry)
+
+    for i, e in enumerate(entries):
+        if e['status'] == 'new':
+            rule, reason = _existing(e['_title'], e['content'], e['_uuid'], fmt='sigma')
+            if e.get('rule_id'):
+                own = RuleModel._active().filter(Rule.id == e['rule_id'], Rule.format.ilike('sigma')).first()
+                if own:
+                    rule, reason = own, 'same id'
+            if rule and reason == 'same title' and not _same_content(rule.to_string, e['content']):
+                e['existing'] = {**_rule_link(rule), 'reason': reason, 'owner_id': rule.user_id}
+                e.update(status='error', errors=[{'message': f'A rule titled "{e["_title"]}" already exists in Rulezet: give this one another '
+                                                             f'title (or set its id to the existing rule\'s uuid to update it)'}])
+            elif rule:
+                _status_of_existing(e, rule, reason, user)
+        title = (e['fields'] or {}).get('title')
+        if e['status'] == 'new' and title and title != e['_title']:
+            taken = RuleModel._active().filter(Rule.title == title).first()
+            if taken:
+                e.update(status='error', errors=[{'message': f'The title "{title}" is already used by another rule in Rulezet: choose another one'}])
+                e['existing'] = {**_rule_link(taken), 'reason': 'same title', 'owner_id': taken.user_id}
+        tick('existing', i + 1, len(entries))
+
+    for i, e in enumerate(entries):
+        tick('syntax', i, len(entries))
+        if e['status'] not in PENDING:
+            continue
+        from app.features.rule.rule_format.available_format.sigma_format import SigmaRule
+        result = SigmaRule().validate(e['content'], context=[x['content'] for x in entries if x is not e])
+        if result is not None and not result.ok:
+            e['status'] = 'error'
+            e['errors'] += [{'message': sigma_message(m)} for m in (result.errors or ['Invalid Sigma rule'])]
+    tick('syntax', len(entries), len(entries))
+
+    # related: a rule of the document or of Rulezet (by id / original uuid), linked on creation
+    by_uuid = {e['_uuid']: e for e in entries if e['_uuid']}
+    by_ref = {}
+    for x in entries:
+        for k in (_sigma_doc(x['text']).get('name'), x['_uuid']):
+            if k:
+                by_ref[str(k)] = x
+    for e in entries:
+        # a correlation rule needs the rules it combines: created first, linked (sigma_correlation)
+        corr = _sigma_doc(e['text']).get('correlation')
+        if isinstance(corr, dict):
+            for ref in corr.get('rules') or []:
+                ref = str(ref)
+                if ref in by_ref and by_ref[ref] is not e:
+                    e['depends_on'].append({'name': by_ref[ref]['name'], 'where': 'document', 'relation': 'sigma_correlation',
+                                            'note': str(corr.get('type') or ''), 'label': 'Combines'})
+                    continue
+                target = RuleModel._active().filter(Rule.format.ilike('sigma'), db.or_(Rule.uuid == ref, Rule.original_uuid == ref)).first()
+                if not target:
+                    from app.features.rule.rule_format.available_format.sigma_format import SigmaRule
+                    text = SigmaRule.find_referenced_rule(ref)
+                    target = RuleModel._active().filter(Rule.format.ilike('sigma'), Rule.to_string == text).first() if text else None
+                if target:
+                    e['depends_on'].append({'name': target.title, 'where': 'rulezet', 'relation': 'sigma_correlation',
+                                            'note': str(corr.get('type') or ''), 'label': 'Combines', **_rule_link(target)})
+        for rel in _sigma_doc(e['text']).get('related') or []:
+            if not isinstance(rel, dict) or not _UUID.match(str(rel.get('id') or '')):
+                continue
+            rid, kind = str(rel['id']), str(rel.get('type') or 'related')
+            if rid in by_uuid and by_uuid[rid] is not e:
+                e['depends_on'].append({'name': by_uuid[rid]['name'], 'where': 'document', 'relation': 'sigma_related', 'note': kind,
+                                        'label': f'Related ({kind})'})
+                continue
+            target = RuleModel._active().filter(db.or_(Rule.uuid == rid, Rule.original_uuid == rid)).first()
+            if target:
+                e['depends_on'].append({'name': target.title, 'where': 'rulezet', 'relation': 'sigma_related', 'note': kind,
+                                        'label': f'Related ({kind})', **_rule_link(target)})
+
+    for e in entries:
+        e.pop('_uuid', None)
+        e.pop('_title', None)
+        if e['status'] == 'new':
+            try:
+                e['preview'] = import_preview(e, user)
+            except Exception:
+                e['preview'] = None
+    ok = all(e['status'] in PENDING + ('exists',) for e in entries)
+    return {'ok': ok, 'rules': entries}
+
+
+def plan(fmt, imports, rules, progress=None, user=None):
+    """The plan of the editor's Create for this format."""
+    if fmt == 'sigma':
+        return plan_sigma(rules, progress, user)
+    return plan_yara(imports, rules, progress, user)
+
+
+def import_rules(fmt, imports, rules, user, progress=None):
+    """Checks again, then writes. Writes nothing when one rule has an error."""
+    result = plan(fmt, imports, rules, progress, user)
+    if not result['ok']:
+        return result
+    return create_from_plan(result, user)
+
+
 def _update(e, rule, user):
     """The edit page's path: version bumped, history kept, dependency links refreshed."""
     from app.core.utils.utils import bump_version
-    meta_description = re.search(r'\bdescription\s*=\s*"([^"]*)"', e['text'])
+    if e.get('format') == 'sigma':
+        description = _sigma_doc(e['text']).get('description')
+    else:
+        meta_description = re.search(r'\bdescription\s*=\s*"([^"]*)"', e['text'])
+        description = meta_description.group(1) if meta_description else None
     rule_dict = {
         'format': rule.format, 'title': rule.title, 'license': rule.license,
-        'description': meta_description.group(1) if meta_description else rule.description,
+        'description': description if isinstance(description, str) and description else rule.description,
         'source': rule.source, 'version': bump_version(rule.version or '1.0'),
         'to_string': e['content'], 'author': rule.author, 'original_uuid': rule.original_uuid,
         'cve_id': rule.cve_id,
@@ -692,7 +913,7 @@ def _update(e, rule, user):
     old_snapshot = RuleModel.rule_metadata_snapshot(rule)
     history_id = RuleModel.create_rule_history({
         'id': rule.id, 'title': rule.title, 'success': True, 'manual_submit': True,
-        'message': 'Updated from the YARA editor', 'new_content': e['content'],
+        'message': f"Updated from the {_LABEL.get(e.get('format'), 'YARA')} editor", 'new_content': e['content'],
         'old_content': rule.to_string, 'old_snapshot': old_snapshot, 'analyzed_by_user_id': user.id,
     })
     ok, rule = RuleModel.edit_rule_core(rule_dict, rule.id)
@@ -713,7 +934,7 @@ def _propose(e, rule, user):
     """An edit proposal to the owner, like "Propose an edit" on the rule page."""
     ok, proposal_id = RuleModel.propose_edit_core({
         'rule_id': rule.id, 'proposed_content': e['content'],
-        'message': 'Proposed from the YARA editor', 'edit_type': 'content_update',
+        'message': f"Proposed from the {_LABEL.get(e.get('format'), 'YARA')} editor", 'edit_type': 'content_update',
     }, user.id)
     if not ok:
         return None
@@ -789,7 +1010,7 @@ def create_from_plan(plan, user):
                 dep = by_name[d['name']]
                 target = written[d['name']].id if d['name'] in written else (dep['existing'] or {}).get('id')
             if target:
-                add_relation(rule.id, target, 'yara_condition_ref', user_id=user.id, source='auto')
+                add_relation(rule.id, target, d.get('relation', 'yara_condition_ref'), note=d.get('note'), user_id=user.id, source='auto')
 
     plan['ok'] = all(e['status'] in ('created', 'updated', 'proposed', 'exists') for e in plan['rules'])
     plan['created'] = sum(1 for e in plan['rules'] if e['status'] == 'created')

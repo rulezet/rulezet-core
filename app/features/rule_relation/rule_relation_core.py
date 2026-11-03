@@ -171,7 +171,7 @@ def get_relations_for_rule(rule_id: int) -> dict:
 # YARA condition references, Wazuh if_* parents, Kunai rule() composition,
 # and the manual "depends on".
 DEPENDENCY_RELATION_TYPES = ('yara_condition_ref', 'depends_on', 'if_sid', 'if_matched_sid',
-                             'if_group', 'if_matched_group', 'rule_ref')
+                             'if_group', 'if_matched_group', 'rule_ref', 'sigma_correlation')
 DEPENDENCY_GRAPH_MAX_NODES = 300
 
 

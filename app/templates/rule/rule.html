@@ -151,6 +151,10 @@
       <i class="fas fa-laptop-code"></i><span>YARA editor</span>
       <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill ms-1" style="font-size:.6rem;">BETA</span>
     </a>
+    <a href="#" class="dr-nav__item" :class="activeTab === 'sigma_editor' ? 'active' : ''" @click.prevent="activeTab = 'sigma_editor'">
+      <i class="fas fa-wave-square"></i><span>Sigma editor</span>
+      <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill ms-1" style="font-size:.6rem;">BETA</span>
+    </a>
     {% endif %}
     {% if ai_generate_available %}
     <a href="#" class="dr-nav__item" :class="activeTab === 'ai_generate' ? 'active' : ''" @click.prevent="activeTab = 'ai_generate'">
@@ -348,6 +352,20 @@
         <div class="card-body p-4" style="position: relative; z-index: 1;">
           <yara-editor-panel
             :active="activeTab === 'yara_editor'"
+            :tests="{{ can_use_tests | tojson }}"
+            csrf-token="{{ csrf_token() }}"
+            author="{{ ((current_user.first_name or "") ~ " " ~ (current_user.last_name or ""))|trim or current_user.get_username() }}"></yara-editor-panel>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tab : Sigma editor (same panel, format sigma) ── -->
+    <div v-show="activeTab === 'sigma_editor'">
+      <div class="card border-0 card_detail border-top shadow-lg mb-4" style="border-radius: 12px;">
+        <div class="card-body p-4" style="position: relative; z-index: 1;">
+          <yara-editor-panel
+            format="sigma"
+            :active="activeTab === 'sigma_editor'"
             :tests="{{ can_use_tests | tojson }}"
             csrf-token="{{ csrf_token() }}"
             author="{{ ((current_user.first_name or "") ~ " " ~ (current_user.last_name or ""))|trim or current_user.get_username() }}"></yara-editor-panel>
@@ -965,7 +983,7 @@ window.__deep_validation_available = {{ deep_validation_available | default(fals
       import YaraEditorPanel from '/static/js/rule/YaraEditorPanel.js';
       import RuleImportPreview from '/static/js/components/RuleImportPreview.js';
 
-      const VALID_TABS = ['manual', 'parse', 'github', 'zip', 'json', 'yara_editor', 'ai_generate'];
+      const VALID_TABS = ['manual', 'parse', 'github', 'zip', 'json', 'yara_editor', 'sigma_editor', 'ai_generate'];
 
       createApp({
             delimiters: ['[[', ']]'],

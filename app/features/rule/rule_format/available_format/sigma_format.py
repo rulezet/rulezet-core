@@ -62,9 +62,14 @@ class SigmaRule(RuleType):
         Validate a Sigma rule (YAML) against the JSON schema, then run full
         pySigma validation.
         Does NOT modify or re-dump YAML → preserves quotes.
+        A correlation rule is checked with the rules it names (kwargs context: the other rules
+        of the same document; then Rulezet's rules).
         """
         try:
             rule = yaml.safe_load(content)
+
+            if isinstance(rule, dict) and isinstance(rule.get("correlation"), dict):
+                return self._validate_correlation(content, rule, kwargs.get("context") or [])
 
             if rule is None or not isinstance(rule, dict):
                 return ValidationResult(
@@ -109,6 +114,73 @@ class SigmaRule(RuleType):
             ok=True,
             normalized_content=content
         )
+
+    ##############################
+    #   CORRELATION RULES        #
+    ##############################
+    def _validate_correlation(self, content: str, rule: dict, context: list) -> ValidationResult:
+        """A correlation rule (event_count, value_count, temporal…) combines other Sigma rules, named
+        by their `name` or `id`. It is checked by pySigma together with the rules it names: from
+        `context` (the other rules of the same document) first, then from Rulezet."""
+        errors = []
+        if not str(rule.get("title") or "").strip():
+            errors.append("A correlation rule needs a title.")
+        refs = (rule.get("correlation") or {}).get("rules") or []
+        if not isinstance(refs, list) or not refs:
+            errors.append("correlation.rules must list the rules it combines (their name or id).")
+        if errors:
+            return ValidationResult(ok=False, errors=errors, normalized_content=content)
+        texts, missing = [], []
+        for ref in refs:
+            found = self.find_referenced_rule(str(ref), context)
+            if found is None:
+                missing.append(str(ref))
+            elif found not in texts:
+                texts.append(found)
+        if missing:
+            return ValidationResult(ok=False, normalized_content=content, errors=[
+                f"Rule '{m}' is not in the document nor in Rulezet: add it first (correlation rules name rules by their id or name)" for m in missing])
+        try:
+            collection = SigmaCollection.from_yaml("\n---\n".join(texts + [content]))
+            collection.resolve_rule_references()
+        except Exception as e:
+            return ValidationResult(ok=False, errors=[str(e)], normalized_content=content)
+        return ValidationResult(ok=True, normalized_content=content)
+
+    @staticmethod
+    def _names_of(text: str):
+        try:
+            doc = yaml.safe_load(text)
+        except Exception:
+            return set()
+        if not isinstance(doc, dict):
+            return set()
+        return {str(v).strip() for v in (doc.get("name"), doc.get("id")) if v}
+
+    @classmethod
+    def find_referenced_rule(cls, ref: str, context=()):
+        """The text of the Sigma rule a correlation names: in `context` first (by name or id), then
+        an active Sigma rule of Rulezet (by uuid / original uuid, or its `name:`). None if not found."""
+        ref = (ref or "").strip()
+        if not ref:
+            return None
+        for text in context or []:
+            if ref in cls._names_of(text):
+                return text
+        try:
+            from app import db
+            from app.core.db_class.rule import Rule
+            from app.features.rule.rule_core import _active
+            q = _active().filter(Rule.format.ilike("sigma"))
+            hit = q.filter(db.or_(Rule.uuid == ref, Rule.original_uuid == ref)).first()
+            if not hit:
+                for cand in q.filter(Rule.to_string.contains(f"name: {ref}", autoescape=True)).limit(20):
+                    if ref in cls._names_of(cand.to_string or ""):
+                        hit = cand
+                        break
+            return hit.to_string if hit else None
+        except Exception:
+            return None
 
     ##############################
     #       META PARSING         #
@@ -173,6 +245,8 @@ class SigmaRule(RuleType):
         except Exception:
             doc = None
         if isinstance(doc, dict):
+            if isinstance(doc.get('correlation'), dict) and doc.get('title'):
+                return True              # a correlation rule: it combines other Sigma rules
             return isinstance(doc.get('logsource'), dict) and isinstance(doc.get('detection'), dict)
         # Not parseable as one YAML document — the caller may only pass the
         # first few KB of a big file, cut mid-rule. Fall back to the two

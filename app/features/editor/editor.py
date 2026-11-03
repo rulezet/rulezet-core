@@ -9,6 +9,7 @@ from app.features.rule_tester import sample_test_core as SampleTests
 from . import editor_core as EditorModel
 from . import editor_jobs as EditorJobs
 from . import external_checks as ExternalChecks
+from . import external_checks_sigma as ExternalChecksSigma
 
 def _test_owner():
     return current_user.id if current_user.is_authenticated else None
@@ -27,7 +28,7 @@ def _login_required():
     # the editor itself: only for who the admin allows (setting editor.access); the Samples tab of
     # rule pages also calls /editor-api/test, so tests are checked on their own setting below
     if not request.path.startswith('/editor-api/test') and not SampleTests.can_use_editor(current_user):
-        return jsonify({'error': 'The YARA editor is not available.'}), 403
+        return jsonify({'error': 'The rule editor is not available.'}), 403
     # tests on samples: only for who the admin allows (setting editor.test_access)
     if request.path.startswith('/editor-api/test') and not SampleTests.can_use_tests(current_user):
         if request.method == 'GET' and request.path.rstrip('/').endswith('/sets'):
@@ -38,39 +39,47 @@ def _login_required():
 
 @editor_blueprint.post('/external-checks')
 def external_checks():
-    """YARA-X / CCCS / yaraQA on the document, for the editor's Checks panel — advice next to
-    Rulezet's own validation, never a verdict on saving (external_checks.py). Other formats: none."""
+    """The format's external tools on the document, for the editor's Checks panel — advice next to
+    Rulezet's own validation, never a verdict on saving. YARA: YARA-X / CCCS / yaraQA
+    (external_checks.py); Sigma: SIEM conversion, SigmaHQ conventions, sigmalint, rsigma
+    (external_checks_sigma.py). Other formats: none."""
     payload = request.get_json(silent=True) or {}
     text = payload.get('text')
     if not isinstance(text, str) or not text.strip():
         return jsonify({'error': 'No rule text.'}), 400
-    if str(payload.get('format') or 'yara').lower() != 'yara':
+    fmt = str(payload.get('format') or 'yara').lower()
+    module = {'yara': ExternalChecks, 'sigma': ExternalChecksSigma}.get(fmt)
+    if not module:
         return jsonify({'results': {}})
     tools = payload.get('tools')
     tools = [t for t in tools if isinstance(t, str)] if isinstance(tools, list) else None
-    return jsonify({'results': ExternalChecks.run_checks(text, tools)})
+    return jsonify({'results': module.run_checks(text, tools)})
 
 
-@editor_blueprint.post('/yara/plan')
-def yara_plan():
+# Create of the editor, per format (yara, sigma): /<fmt>/plan, /<fmt>/import, /<fmt>/jobs
+FMT = '<any(yara, sigma):fmt>'
+
+
+@editor_blueprint.post(f'/{FMT}/plan')
+def rules_plan(fmt):
     """Checks every rule of the document; creates nothing."""
     payload = request.get_json(silent=True) or {}
-    return jsonify(EditorModel.plan_yara(payload.get('imports'), payload.get('rules') or [], user=current_user))
+    return jsonify(EditorModel.plan(fmt, payload.get('imports'), payload.get('rules') or [], user=current_user))
 
 
-@editor_blueprint.post('/yara/import')
-def yara_import():
-    """Creates the new rules of the document, linked to the rules they need. Nothing is
+@editor_blueprint.post(f'/{FMT}/import')
+def rules_import(fmt):
+    """Creates the new rules of the document (YARA: linked to the rules they need). Nothing is
     created when one rule has an error (409, the editor shows the errors)."""
     payload = request.get_json(silent=True) or {}
-    result = EditorModel.import_yara(payload.get('imports'), payload.get('rules') or [], current_user)
+    result = EditorModel.import_rules(fmt, payload.get('imports'), payload.get('rules') or [], current_user)
     return jsonify(result), (200 if result.get('ok') else 409)
 
 
 
-@editor_blueprint.post('/yara/jobs')
-def yara_job_start():
-    """Starts the checks + creation in the background; poll GET /yara/jobs/<uuid>."""
+@editor_blueprint.post(f'/{FMT}/jobs')
+def rules_job_start(fmt):
+    """Starts the checks + creation in the background; poll GET /<fmt>/jobs/<uuid>."""
     from app.features.jobs.jobs_core import create_job
     payload = request.get_json(silent=True) or {}
     rules = [{'name': str(r.get('name') or ''), 'text': str(r.get('text') or ''),
@@ -87,8 +96,8 @@ def yara_job_start():
     if BackgroundJob.query.filter(BackgroundJob.job_type == EditorJobs.JOB_TYPE, BackgroundJob.created_by == current_user.id,
                                   BackgroundJob.status.in_(('pending', 'running'))).first():
         return jsonify({'error': 'A Create of yours is still running: wait for it to finish.'}), 429
-    job = create_job(EditorJobs.JOB_TYPE, EditorJobs.new_payload(imports, rules),
-                     f"YARA editor: {len(rules)} rule(s)", current_user.id, total=len(rules))
+    job = create_job(EditorJobs.JOB_TYPE, EditorJobs.new_payload(imports, rules, fmt),
+                     f"{EditorModel._LABEL[fmt]} editor: {len(rules)} rule(s)", current_user.id, total=len(rules))
     if not job:
         return jsonify({'error': 'Could not start the job.'}), 500
     return jsonify(EditorJobs.public_state(job)), 202
@@ -101,8 +110,8 @@ def yara_rule_dependencies(rule_id):
     return jsonify(data) if data else (jsonify({'error': 'Rule not found.'}), 404)
 
 
-@editor_blueprint.get('/yara/jobs/<string:job_uuid>')
-def yara_job_state(job_uuid):
+@editor_blueprint.get(f'/{FMT}/jobs/<string:job_uuid>')
+def rules_job_state(fmt, job_uuid):
     from app.core.db_class.job import BackgroundJob
     job = BackgroundJob.query.filter_by(uuid=job_uuid, job_type=EditorJobs.JOB_TYPE).first()
     if not job or (job.created_by != current_user.id and not current_user.is_admin()):

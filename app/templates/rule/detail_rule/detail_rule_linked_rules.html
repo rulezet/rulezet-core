@@ -230,6 +230,8 @@
         if_matched_group:  { forward: 'requires (if_matched_group)', reverse: 'used by (if_matched_group)' },
         rule_ref:          { forward: 'uses (rule composition)',  reverse: 'used by (rule composition)' },
         yara_condition_ref: { forward: 'needs (YARA condition)',  reverse: 'needed by (YARA condition)' },
+        sigma_related:      { forward: 'related (Sigma related:)', reverse: 'named as related by (Sigma)' },
+        sigma_correlation:  { forward: 'combines (Sigma correlation)', reverse: 'combined by (Sigma correlation)' },
     };
 
     createApp({

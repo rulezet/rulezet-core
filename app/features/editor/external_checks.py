@@ -25,7 +25,19 @@ from app.core.utils.app_settings import get_setting
 
 MAX_TEXT = 200_000            # a YARA document larger than this is not sent to the tools
 
-TOOLS = ('yarax', 'cccs', 'yaraqa')
+TOOLS = ('yarax', 'cccs', 'yaraqa', 'duplicates')
+# what the Checks panel shows for each tool (the editor needs no list of its own); apply = the button
+# offered when the tool returns a corrected document (fixed_text)
+META = {
+    'yarax': {'name': 'YARA-X', 'url': 'https://github.com/VirusTotal/yara-x', 'apply': 'Apply YARA-X formatting',
+              'about': "The new YARA engine (VirusTotal): its diagnostics (errors, slow or always-true patterns) and its formatter"},
+    'cccs': {'name': 'CCCS YARA standard', 'url': 'https://github.com/CybercentreCanada/CCCS-Yara', 'apply': 'Apply CCCS metadata',
+             'about': 'The meta section checked against the Canadian Centre for Cyber Security specification'},
+    'yaraqa': {'name': 'yaraQA', 'url': 'https://github.com/Neo23x0/yaraQA',
+               'about': 'Logic and performance advice on strings and conditions (Florian Roth)'},
+    'duplicates': {'name': 'Already in Rulezet?', 'url': None,
+                   'about': 'YARA rules of this Rulezet with the same strings and condition (whatever the string names), or very close ones'},
+}
 _LINE_COL = re.compile(r'--> line:(\d+):(\d+)')
 _MODULES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'modules')
 
@@ -47,13 +59,14 @@ def run_checks(text: str, tools=None) -> dict:
     wanted = [t for t in (tools or allowed) if t in allowed]
     if len(text or '') > MAX_TEXT:
         return {t: _unavailable(f'the document is larger than {MAX_TEXT // 1000} kB') for t in wanted}
-    runners = {'yarax': check_yarax, 'cccs': check_cccs, 'yaraqa': check_yaraqa}
+    runners = {'yarax': check_yarax, 'cccs': check_cccs, 'yaraqa': check_yaraqa, 'duplicates': check_duplicates}
     out = {}
     for tool in wanted:
         try:
             out[tool] = runners[tool](text or '')
         except Exception as e:                     # a tool crashing never breaks the editor
             out[tool] = _unavailable(f'{tool} failed: {e}')
+        out[tool]['meta'] = META[tool]
     return out
 
 
@@ -259,3 +272,126 @@ def _short(element):
         element = ', '.join(f'{k}: {v}' for k, v in element.items())
     text = str(element or '')
     return text if len(text) <= 160 else text[:159] + '…'
+
+
+# ── Already in Rulezet? ──────────────────────────────────────────────────────────
+
+_FP_CACHE = {}               # rule id -> (hash of its text, [fingerprints of its rules])
+MAX_CANDIDATES = 200
+
+
+def _string_key(st):
+    """A string of the rule, the way it matches: type, value (case folded when nocase, hex without
+    spaces), modifiers — its $name does not count."""
+    mods = tuple(sorted(str(m) for m in (st.get('modifiers') or [])))
+    value = str(st.get('value') or '')
+    kind = st.get('type') or 'text'
+    if kind == 'byte':
+        value = re.sub(r'\s+', '', value).upper()
+    elif 'nocase' in mods:
+        value = value.lower()
+    return (kind, value, mods)
+
+
+def _fingerprint(rule):
+    """(strings, condition) of one plyara rule: the condition with every string id replaced by its
+    string (so $a / $b renamed is the same rule)."""
+    keys = {st['name']: _string_key(st) for st in (rule.get('strings') or []) if st.get('name')}
+    cond = []
+    for term in rule.get('condition_terms') or []:
+        if term in keys:
+            cond.append(repr(keys[term]))
+        elif term.startswith(('$', '#', '@', '!')) and term[1:] and ('$' + term[1:]) in keys:
+            cond.append(term[0] + repr(keys['$' + term[1:]]))
+        else:
+            cond.append(term)
+    return frozenset(keys.values()), ' '.join(cond)
+
+
+def _rulezet_rule_fps(rule):
+    import hashlib
+    import plyara
+    h = hashlib.sha1((rule.to_string or '').encode('utf-8', 'replace')).hexdigest()
+    cached = _FP_CACHE.get(rule.id)
+    if cached and cached[0] == h:
+        return cached[1]
+    try:
+        fps = [_fingerprint(r) for r in plyara.Plyara().parse_string(rule.to_string or '')]
+    except Exception:
+        fps = []
+    if len(_FP_CACHE) > 20000:
+        _FP_CACHE.clear()
+    _FP_CACHE[rule.id] = (h, fps)
+    return fps
+
+
+def check_duplicates(text: str) -> dict:
+    """Rules of the document compared with the YARA rules of Rulezet that contain one of their
+    longest strings (the trigram index of the rule text finds them): same strings and condition =
+    a copy; same strings, other condition, or 80 % of the strings in common = very close."""
+    try:
+        import plyara
+        from app.core.db_class.rule import Rule
+        from app.features.rule import rule_core as RuleModel
+    except ImportError as e:
+        return _unavailable(f'cannot run here ({e})')
+    try:
+        doc_rules = plyara.Plyara().parse_string(text)
+    except Exception as e:
+        return _unavailable(f'the document cannot be read yet ({str(e)[:120]})')
+    errors, warnings, infos = [], [], []
+    lines = text.splitlines()
+
+    def line_of(name):
+        for i, l in enumerate(lines):
+            if re.match(rf'^\s*(?:(?:private|global)\s+)*rule\s+{re.escape(name)}\b', l):
+                return i + 1
+        return 1
+    for r in doc_rules:
+        name = r.get('rule_name') or ''
+        strings, cond = _fingerprint(r)
+        meta_id = next((str(v) for m in (r.get('metadata') or []) for k, v in m.items() if k.lower() in ('id', 'uuid')), '').lower()
+        line = line_of(name)
+        texts = sorted({st['value'] for st in (r.get('strings') or []) if st.get('type') == 'text' and len(str(st.get('value') or '')) >= 5},
+                       key=len, reverse=True)[:3]
+        if not texts:
+            infos.append({'message': 'No text string of 5 characters or more to look for in Rulezet', 'rule': name, 'line': line})
+            continue
+        found = {}
+        for v in texts:
+            q = RuleModel._active().filter(Rule.format.ilike('yara'), Rule.to_string.contains(v, autoescape=True)).limit(MAX_CANDIDATES)
+            for cand in q:
+                found[cand.id] = cand
+            if len(found) >= MAX_CANDIDATES:
+                break
+        hits = 0
+        for cand in found.values():
+            link = f'/rule/detail_rule/{cand.id}'
+            if meta_id and meta_id in {str(cand.uuid or '').lower(), str(cand.original_uuid or '').lower()}:
+                infos.append({'message': f'This is "{cand.title}" in Rulezet (same id)', 'rule': name, 'line': line, 'url': link})
+                continue
+            for cstrings, ccond in _rulezet_rule_fps(cand):
+                if not cstrings:
+                    continue
+                common = len(strings & cstrings) / len(strings | cstrings)
+                if common == 1 and ccond == cond:
+                    errors.append({'message': f'Same strings and condition as "{cand.title}"', 'rule': name, 'line': line, 'url': link,
+                                   'detail': 'Publishing it would add a copy (only the names differ): improve that rule instead, or make this one different.'})
+                elif common == 1:
+                    warnings.append({'message': f'Same strings as "{cand.title}", another condition', 'rule': name, 'line': line, 'url': link})
+                elif common >= 0.8:
+                    warnings.append({'message': f'Very close to "{cand.title}": {round(common * 100)} % of the strings in common', 'rule': name,
+                                     'line': line, 'url': link})
+                else:
+                    continue
+                hits += 1
+                break
+            if hits >= 10:
+                break
+        if not hits:
+            infos.append({'message': f'No YARA rule of Rulezet has these strings ({len(found)} candidates compared)', 'rule': name, 'line': line})
+    out = {'available': True, 'ok': not errors, 'errors': errors, 'warnings': warnings}
+    if infos:
+        out['infos'] = infos
+    return out
+

@@ -1,7 +1,30 @@
 {
-  "label": "YARA editor: external checks",
+  "label": "Rule editor: external checks",
   "category": "Editor",
-  "description": "Extra checks of the YARA editor, next to Rulezet's own validation (which alone decides whether a rule can be saved): yarax = YARA-X diagnostics and formatter, cccs = CCCS YARA metadata standard, yaraqa = yaraQA logic / performance advice. true = offered in the editor (Check button and the 'External checks' step of Create, never blocking).",
+  "description": "Extra checks of the YARA editor, next to Rulezet's own validation (which alone decides whether a rule can be saved): yarax = YARA-X diagnostics and formatter, cccs = CCCS YARA metadata standard, yaraqa = yaraQA logic / performance advice, duplicates = YARA rules of this Rulezet with the same strings and condition (or very close). true = offered in the editor (Check button and the 'External checks' step of Create, never blocking). Sigma (Sigma editor): sigma_siem = the rule converted (SIEM: Splunk, Elastic, Sentinel… where a SOC searches its logs) by the pySigma backends of sigma_siem_targets (splunk, splunk_spl2, lucene, esql, eql, elastalert, kusto, loki, secops, sumologic_cse), sigma_schemas = which fields each SIEM data model knows (Splunk CIM, Elastic ECS, Defender XDR, Sentinel ASIM, Azure Monitor), sigma_duplicates = Sigma rules of this Rulezet with the same / a very close detection, sigma_cost = what makes the search slow or noisy (efficiency score), sigma_pysigma = pySigma's medium / low advice, sigma_sigmahq = SigmaHQ repository conventions, sigma_sigmalint = sigmalint findings and quality score, sigma_rsigma = rsigma lint (needs the rsigma binary on the server; sigma_rsigma_path to point at it, else the PATH / ~/.cargo/bin).",
   "public": false,
-  "value": {"yarax": true, "cccs": true, "yaraqa": true}
+  "value": {
+    "yarax": true,
+    "cccs": true,
+    "yaraqa": true,
+    "duplicates": true,
+    "sigma_siem": true,
+    "sigma_siem_targets": [
+      "splunk",
+      "lucene",
+      "esql",
+      "kusto",
+      "eql",
+      "loki",
+      "secops"
+    ],
+    "sigma_schemas": true,
+    "sigma_duplicates": true,
+    "sigma_cost": true,
+    "sigma_pysigma": true,
+    "sigma_sigmahq": true,
+    "sigma_sigmalint": true,
+    "sigma_rsigma": true,
+    "sigma_rsigma_path": ""
+  }
 }

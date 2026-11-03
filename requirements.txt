@@ -227,6 +227,7 @@ jsonschema==4.26.0
     # via
     #   flask-restx
     #   rulezet-core
+    #   sigmalint-cli
 jsonschema-specifications==2025.9.1
     # via jsonschema
 mako==1.4.3
@@ -348,7 +349,9 @@ pygments==2.20.0
 pymisp==2.5.34.1
     # via rulezet-core
 pyparsing==3.3.2
-    # via pysigma
+    # via
+    #   pysigma
+    #   sigmalint-cli
 pyphen==0.17.2
     # via weasyprint
 pysigma==1.4.0
@@ -395,6 +398,7 @@ pyyaml==6.0.3
     #   pysigma-backend-sumologic
     #   pyvelociraptor
     #   rulezet-core
+    #   sigmalint-cli
     #   transformers
 rapidfuzz==3.14.5
     # via rulezet-core
@@ -413,13 +417,18 @@ requests==2.34.2
     #   pymisp
     #   pysigma
     #   rulezet-core
+    #   sigmalint-cli
     #   stix2
 rich==15.0.0
-    # via typer
+    # via
+    #   sigmalint-cli
+    #   typer
 rpds-py==2026.5.1
     # via
     #   jsonschema
     #   referencing
+ruamel-yaml==0.19.1
+    # via sigmalint-cli
 safetensors==0.7.0
     # via transformers
 schedule==1.2.2
@@ -440,6 +449,8 @@ setuptools==84.2.1
     #   torch
 shellingham==1.5.4
     # via typer
+sigmalint-cli==0.1.7
+    # via rulezet-core
 simplejson==4.2.0
     # via stix2
 six==1.17.0
@@ -496,6 +507,7 @@ triton==3.9.0 ; python_full_version < '3.16' and sys_platform == 'linux'
 typer==0.25.1
     # via
     #   huggingface-hub
+    #   sigmalint-cli
     #   transformers
 types-pyyaml==6.0.12.20260518
     # via pysigma
