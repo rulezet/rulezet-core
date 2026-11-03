@@ -734,19 +734,22 @@
                                     <td class="dt-td">[[ s.next_run_at || '—' ]]</td>
                                     <td class="dt-td">[[ s.last_run_at || 'Never' ]]</td>
                                     <td class="dt-td text-center">
-                                        <a v-if="s.workflow" :href="'/admin/tasks/' + s.workflow.uuid" class="badge bg-primary-subtle text-primary-emphasis text-decoration-none" @click.stop
+                                        <a v-if="s.workflow && s.workflow.uuid" :href="'/admin/tasks/' + s.workflow.uuid" class="badge bg-primary-subtle text-primary-emphasis text-decoration-none" @click.stop
                                    :title="'Run by the workflow \u201c' + s.workflow.title + '\u201d — its dates are the ones of this schedule; its own timer stays off'">
                                     <i class="fa-solid fa-diagram-project me-1"></i>In a workflow</a>
+                                <span v-else-if="s.workflow" class="badge sync-locked-badge"
+                                      title="An admin workflow has taken over this schedule: it launches it, at its dates. To change or delete it, ask an admin.">
+                                    <i class="fa-solid fa-lock me-1"></i>Run by a workflow</span>
                                 <span v-else class="badge" :class="s.is_active ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
                                             [[ s.is_active ? 'Active' : 'Paused' ]]
                                         </span>
                                     </td>
                                     <td class="dt-td text-center">
                                         <div class="dt-actions justify-content-center">
-                                            <button class="dt-action-btn" title="Run now" @click="runScheduleNow(s)"><i class="fa-solid fa-play"></i></button>
-                                {% if current_user.is_admin() %}<button class="dt-action-btn" title="Create a workflow from it — the workflow runs it from now on (its own timer is switched off), launches and logs in Workflows" @click="workflowFromSchedule(s)"><i class="fa-solid fa-diagram-project"></i></button>{% endif %}
-                                            <button class="dt-action-btn" title="Edit" @click="openEditSchedule(s)"><i class="fa-solid fa-pen"></i></button>
-                                            <button class="dt-action-btn dt-action-btn--danger" title="Delete" @click="deleteSchedule(s)"><i class="fa-solid fa-trash"></i></button>
+                                            <button class="dt-action-btn" :title="isLocked(s) ? lockedTitle : 'Run now'" :disabled="isLocked(s)" @click="runScheduleNow(s)"><i class="fa-solid fa-play"></i></button>
+                                {% if current_user.is_admin() %}<button v-if="!s.workflow" class="dt-action-btn" title="Create a workflow from it — the workflow runs it from now on (its own timer is switched off), launches and logs in Workflows" @click="workflowFromSchedule(s)"><i class="fa-solid fa-diagram-project"></i></button>{% endif %}
+                                            <button class="dt-action-btn" :title="isLocked(s) ? lockedTitle : 'Edit'" :disabled="isLocked(s)" @click="openEditSchedule(s)"><i class="fa-solid fa-pen"></i></button>
+                                            <button class="dt-action-btn dt-action-btn--danger" :title="isLocked(s) ? lockedTitle : 'Delete'" :disabled="isLocked(s)" @click="deleteSchedule(s)"><i class="fa-solid fa-trash"></i></button>
                                         </div>
                                     </td>
                                 </tr>
@@ -767,18 +770,21 @@
                                 <div class="small mb-1"><i class="fa-brands fa-git-alt me-1"></i>[[ s.repo_count ]] repo(s)</div>
                                 <div class="small mb-1"><i class="fa-solid fa-clock me-1"></i>[[ frequencySummary(s) ]]</div>
                                 <div class="small mb-1">Next run: [[ s.next_run_at || '—' ]]</div>
-                                <a v-if="s.workflow" :href="'/admin/tasks/' + s.workflow.uuid" class="badge bg-primary-subtle text-primary-emphasis text-decoration-none" @click.stop
+                                <a v-if="s.workflow && s.workflow.uuid" :href="'/admin/tasks/' + s.workflow.uuid" class="badge bg-primary-subtle text-primary-emphasis text-decoration-none" @click.stop
                                    :title="'Run by the workflow \u201c' + s.workflow.title + '\u201d — its dates are the ones of this schedule; its own timer stays off'">
                                     <i class="fa-solid fa-diagram-project me-1"></i>In a workflow</a>
+                                <span v-else-if="s.workflow" class="badge sync-locked-badge"
+                                      title="An admin workflow has taken over this schedule: it launches it, at its dates. To change or delete it, ask an admin.">
+                                    <i class="fa-solid fa-lock me-1"></i>Run by a workflow</span>
                                 <span v-else class="badge" :class="s.is_active ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
                                     [[ s.is_active ? 'Active' : 'Paused' ]]
                                 </span>
                             </div>
                             <div class="dt-card-footer">
-                                <button class="dt-action-btn" title="Run now" @click="runScheduleNow(s)"><i class="fa-solid fa-play"></i></button>
-                                {% if current_user.is_admin() %}<button class="dt-action-btn" title="Create a workflow from it — the workflow runs it from now on (its own timer is switched off), launches and logs in Workflows" @click="workflowFromSchedule(s)"><i class="fa-solid fa-diagram-project"></i></button>{% endif %}
-                                <button class="dt-action-btn" title="Edit" @click="openEditSchedule(s)"><i class="fa-solid fa-pen"></i></button>
-                                <button class="dt-action-btn dt-action-btn--danger" title="Delete" @click="deleteSchedule(s)"><i class="fa-solid fa-trash"></i></button>
+                                <button class="dt-action-btn" :title="isLocked(s) ? lockedTitle : 'Run now'" :disabled="isLocked(s)" @click="runScheduleNow(s)"><i class="fa-solid fa-play"></i></button>
+                                {% if current_user.is_admin() %}<button v-if="!s.workflow" class="dt-action-btn" title="Create a workflow from it — the workflow runs it from now on (its own timer is switched off), launches and logs in Workflows" @click="workflowFromSchedule(s)"><i class="fa-solid fa-diagram-project"></i></button>{% endif %}
+                                <button class="dt-action-btn" :title="isLocked(s) ? lockedTitle : 'Edit'" :disabled="isLocked(s)" @click="openEditSchedule(s)"><i class="fa-solid fa-pen"></i></button>
+                                <button class="dt-action-btn dt-action-btn--danger" :title="isLocked(s) ? lockedTitle : 'Delete'" :disabled="isLocked(s)" @click="deleteSchedule(s)"><i class="fa-solid fa-trash"></i></button>
                             </div>
                         </div>
                     </div>
@@ -1378,6 +1384,9 @@
             }
 
             // Admins: a workflow that runs this Git updater (Admin → Workflows); its own timer is switched off
+            // A schedule an admin workflow runs: a Git manager who is not an admin cannot change it (no conflict)
+            const isLocked = (s) => !!(s.workflow && s.workflow.locked)
+            const lockedTitle = 'An admin workflow has taken over this schedule — ask an admin to change it'
             async function workflowFromSchedule(s) {
                 if (!window.confirm(`Create a workflow that runs "${s.title}"?\n\nThe workflow takes over its timer (same rhythm): this schedule's own timer is switched off so it never runs twice. Its repositories and settings stay here.`)) return
                 const res = await fetch('/admin/tasks/workflows/from_git_updater', {
@@ -1696,7 +1705,7 @@
                 scheduleSortDir,
                 setScheduleSort,
                 scheduleSortIcon,
-                runScheduleNow, workflowFromSchedule,
+                runScheduleNow, workflowFromSchedule, isLocked, lockedTitle,
                 deleteSchedule,
                 savingSchedule,
                 scheduleForm,

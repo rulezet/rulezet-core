@@ -53,7 +53,7 @@
 .wf-look__preview i { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
     background: var(--wf-color); color: #fff; font-size: .75rem; flex-shrink: 0; }
 .wf-look__preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wf-look__colors, .wf-look__icons { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.wf-look__colors { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
 .wf-look__swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; padding: 0; cursor: pointer;
     box-shadow: 0 0 0 1px var(--border-color); transition: transform .12s; }
 .wf-look__swatch:hover { transform: scale(1.12); }
@@ -63,10 +63,6 @@
 .wf-look__swatch--custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .wf-look__reset { border: 1px solid var(--border-color); background: var(--card-bg-color); color: var(--subtle-text-color);
     border-radius: 999px; font-size: .72rem; padding: .15rem .6rem; }
-.wf-look__icon { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--card-bg-color);
-    color: var(--subtle-text-color); display: inline-flex; align-items: center; justify-content: center; font-size: .85rem; }
-.wf-look__icon:hover { color: var(--text-color); border-color: #0d6efd; }
-.wf-look__icon.is-on { background: #0d6efd; border-color: #0d6efd; color: #fff; }
 
 /* Hide a workflow from the calendar */
 .wcal-wf__eye { border: 0; background: none; padding: 0 .2rem; color: var(--subtle-text-color); font-size: .75rem; opacity: .55; cursor: pointer; }

@@ -51,3 +51,7 @@
 /* Repo selection table: the whole row (un)selects the repository */
 .dt-row--selectable { cursor: pointer; user-select: none; }
 .dt-row--selectable.is-checked { background: rgba(13, 110, 253, .06); }
+
+/* A schedule an admin workflow runs, seen by a Git manager who is not an admin */
+.sync-locked-badge { background: var(--light-bg-color); color: var(--subtle-text-color); border: 1px solid var(--border-color); cursor: help; }
+.dt-action-btn:disabled { opacity: .35; cursor: not-allowed; }

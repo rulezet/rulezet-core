@@ -1314,14 +1314,10 @@
                                         </label>
                                         <button type="button" class="wf-look__reset" @click="workflowForm.color = ''" title="Automatic colour">Auto</button>
                                     </div>
-                                    <div class="wf-look__icons">
-                                        <button v-for="ic in WF_ICONS" :key="ic" type="button" class="wf-look__icon" :class="{ 'is-on': workflowForm.icon === ic }"
-                                                :title="ic" @click="workflowForm.icon = ic"><i class="fa-solid" :class="ic"></i></button>
-                                    </div>
-                                    <!-- Any Font Awesome icon (the tags' icon picker): search the groups or type a name -->
+                                    <!-- Any Font Awesome icon (the tags' icon picker + every icon of Font Awesome): search, a group, or type a name -->
                                     <div class="wf-look__picker">
                                         <icon-picker :model-value="workflowForm.icon || 'fa-diagram-project'" @update:model-value="v => workflowForm.icon = v"
-                                                     label="" :color="workflowForm.color || '#0d6efd'"></icon-picker>
+                                                     label="" all-icons :color="workflowForm.color || '#0d6efd'"></icon-picker>
                                     </div>
                                 </div>
                             </div>
@@ -2152,10 +2148,6 @@
             const PALETTE = ref(['#0d6efd', '#6f42c1', '#d63384', '#fd7e14', '#20c997', '#0dcaf0', '#6610f2', '#198754', '#e35d6a', '#b08800']);
             fetch('/api/config/settings/workflows.colors').then(r => r.ok ? r.json() : null)
                 .then(d => { if (d && Array.isArray(d.value) && d.value.length) PALETTE.value = d.value; }).catch(() => {});
-            // Icons offered for a workflow (any Font Awesome name works server side)
-            const WF_ICONS = ['fa-diagram-project', 'fa-database', 'fa-rotate', 'fa-cloud-arrow-down', 'fa-code-branch', 'fa-broom',
-                              'fa-shield-halved', 'fa-bug', 'fa-tags', 'fa-chart-line', 'fa-envelope', 'fa-box-archive',
-                              'fa-robot', 'fa-magnifying-glass', 'fa-bolt', 'fa-clock', 'fa-server', 'fa-flask', 'fa-star', 'fa-fire'];
             const wfOf = (uuid) => calWorkflows.value.find(w => w.uuid === uuid) || (workflows.value || []).find(w => w.uuid === uuid) || {};
             const wfIcon = (uuid) => wfOf(uuid).icon || 'fa-diagram-project';
             function wfColor(uuid) {
@@ -3975,7 +3967,7 @@
             onUnmounted(() => stopLivePolling());
 
             return {
-                truncate, health, listView, setListView, calWorkflows, calSelected, calEvents, calPick, calendarRef, calDay, calView, calViewHtml, showCalEntry, ideas, openIdeas, gitAsk, gitAskStep, gitSourceTitle, gitProviderIcon, confirmGitAsk, OWNER_ME, wfToggling, toggleWfRow, wfChecked, wfBulkBusy, wfAllChecked, toggleWfCheck, toggleAllWf, bulkWorkflows, calEntry, openCalEntry, reuseCalEntry, calOpenDay, calDayItems, calDayHidden, calMd, calItemLabel, saveCalEntry, deleteCalEntry, CAL_CATEGORIES, calHidden, toggleCalHide, resetCalHidden, calHiddenCount, calCatCount, calVisibleEvents, calSide, wfColor, wfTitle, wfIcon, WF_ICONS, PALETTE,
+                truncate, health, listView, setListView, calWorkflows, calSelected, calEvents, calPick, calendarRef, calDay, calView, calViewHtml, showCalEntry, ideas, openIdeas, gitAsk, gitAskStep, gitSourceTitle, gitProviderIcon, confirmGitAsk, OWNER_ME, wfToggling, toggleWfRow, wfChecked, wfBulkBusy, wfAllChecked, toggleWfCheck, toggleAllWf, bulkWorkflows, calEntry, openCalEntry, reuseCalEntry, calOpenDay, calDayItems, calDayHidden, calMd, calItemLabel, saveCalEntry, deleteCalEntry, CAL_CATEGORIES, calHidden, toggleCalHide, resetCalHidden, calHiddenCount, calCatCount, calVisibleEvents, calSide, wfColor, wfTitle, wfIcon, PALETTE,
                 modeLabel, userTz, onCalRange, schedule, openSchedule, addScheduleRow, weekdayName, dayOfMonth, scheduleSentence, saveSchedule,
                 spreadRows, dayCount, dayIsFull, calMaxPerDay,
                 onCalSelect, onCalDrop, onCalEventDrop, onCalEventClick, calRunNow, backupsInfo, loadBackupsInfo, fmtBytes, willBeDeleted, exportWorkflow, alertTaskCount, retryTaskCount, autoPausedCount, linkAlert, saveLinkAlert, taskAlert, ALERT_POINTS, notebook, noteOnRun, pinnedNotes, showPinned, share, openShare, shareAction, copyShare,

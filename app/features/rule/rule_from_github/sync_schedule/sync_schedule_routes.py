@@ -30,6 +30,38 @@ def _require_admin():
 
 # ─── CRUD (JSON API used by the Vue app) ──────────────────────────────────────
 
+def _locked_uuids(uuids=None):
+    """Schedules run by an admin workflow (Admin → Workflows took over their dates and launches)."""
+    from app.features.admin.task_scheduler.workflow_spec import git_updater_workflows
+    from app.core.db_class.git import GithubSyncSchedule
+    if uuids is None:
+        uuids = [u for (u,) in GithubSyncSchedule.query.with_entities(GithubSyncSchedule.uuid).all()]
+    return set(git_updater_workflows(uuids))
+
+
+def _locked_for_me(uuid):
+    """A Git manager who is not an admin cannot change a schedule a workflow runs (no conflict with it)."""
+    return not current_user.is_admin() and uuid in _locked_uuids([uuid])
+
+
+def _locked_answer():
+    return jsonify({"message": "An admin workflow runs this schedule (its dates and launches): ask an admin to change it.",
+                    "toast_class": "warning-subtle"}), 403
+
+
+def _without_locked(data):
+    """Bulk actions of a Git manager who is not an admin leave the schedules run by a workflow alone."""
+    if current_user.is_admin():
+        return data
+    locked = _locked_uuids()
+    if not locked:
+        return data
+    data = dict(data)
+    data['selected_uuids'] = [u for u in (data.get('selected_uuids') or []) if u not in locked]
+    data['excluded_uuids'] = list(set(data.get('excluded_uuids') or []) | locked)
+    return data
+
+
 @sync_schedule_blueprint.route('/schedule/list', methods=['GET'])
 def schedule_list():
     if not (current_user.is_admin() or current_user.has_permission('github.manage')):
@@ -45,7 +77,9 @@ def schedule_list():
     from app.features.admin.task_scheduler.workflow_spec import git_updater_workflows
     in_workflows = git_updater_workflows([s.uuid for s in pagination.items])
     return jsonify({
-        "schedules": [{**s.to_json(), "workflow": in_workflows.get(s.uuid)} for s in pagination.items],
+        "schedules": [{**s.to_json(), "workflow": (in_workflows.get(s.uuid) if current_user.is_admin()
+                                                    else ({'locked': True} if s.uuid in in_workflows else None))}
+                      for s in pagination.items],
         "total": pagination.total,
         "total_pages": pagination.pages,
     }), 200
@@ -80,6 +114,8 @@ def schedule_create():
 def schedule_update(uuid):
     if not (current_user.is_admin() or current_user.has_permission('github.manage')):
         return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
+    if _locked_for_me(uuid):
+        return _locked_answer()
 
     data = json_object()
     from app.features.rule.rule_core import can_choose_new_rule_owner
@@ -109,6 +145,8 @@ def schedule_update(uuid):
 def schedule_delete(uuid):
     if not (current_user.is_admin() or current_user.has_permission('github.manage')):
         return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
+    if _locked_for_me(uuid):
+        return _locked_answer()
 
     ok = SyncScheduleModel.delete_schedule(uuid)
     if not ok:
@@ -128,6 +166,7 @@ def schedule_bulk_delete():
         return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
 
     data = json_object()
+    data = _without_locked(data)
     mode = data.get('mode', 'partial')
     count = SyncScheduleModel.bulk_delete_schedules(
         mode, data.get('filters'), data.get('selected_uuids'), data.get('excluded_uuids')
@@ -150,6 +189,7 @@ def schedule_bulk_set_active():
         return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
 
     data = json_object()
+    data = _without_locked(data)
     mode = data.get('mode', 'partial')
     is_active = bool(data.get('is_active', True))
     count = SyncScheduleModel.bulk_set_active_schedules(
@@ -179,6 +219,8 @@ def schedule_bulk_set_active():
 def schedule_run_now(uuid):
     if not (current_user.is_admin() or current_user.has_permission('github.manage')):
         return jsonify({"message": "Access denied", "toast_class": "danger-subtle"}), 403
+    if _locked_for_me(uuid):
+        return _locked_answer()
 
     ok, err = SyncScheduleModel.run_schedule_now(uuid)
     if not ok:

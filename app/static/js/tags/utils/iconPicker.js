@@ -4,6 +4,8 @@
  * any other Font Awesome 7 name can be typed (preview shown). Brand icons (claude, openai, windows…)
  * render through fontawesome-7.3.1/css/rulezet-brands-shim.css even where tags are drawn with 'fas'.
  * v-model: the icon as "fa-<name>" (what tags already store).
+ * Props: label ('' = none), color (preview colour), all-icons (also offer every icon of the bundled
+ * Font Awesome, ~2 000, read from its stylesheet — nothing to keep in step when Font Awesome is upgraded).
  */
 // Its stylesheet, added once (the page versions this module's URL: reuse its ?v= to bust the CSS cache too)
 if (!document.querySelector('link[data-icon-picker-css]')) {
@@ -26,11 +28,33 @@ function loadChoices() {
     return choicesPromise;
 }
 
+// Every icon name of the bundled Font Awesome, read once from its stylesheet (already in the browser cache)
+let allPromise = null;
+const allIcons = Vue.ref([]);
+function loadAllIcons() {
+    if (!allPromise) {
+        // fontawesome.css (loaded by base.html) holds every icon name; its versioned URL is in the browser cache
+        const link = document.querySelector('link[href*="fontawesome"][href*="/fontawesome."]');
+        const url = link ? link.href : '/static/fontawesome-7.3.1/css/fontawesome.css';
+        allPromise = fetch(url).then(r => (r.ok ? r.text() : ''))
+            .then(css => {
+                const names = new Set();
+                for (const m of css.matchAll(/\.fa-([a-z][a-z0-9-]*)\s*\{\s*--fa\s*:/g)) names.add(m[1]);
+                allIcons.value = [...names].sort();
+            })
+            .catch(() => {});
+    }
+    return allPromise;
+}
+const ALL_GROUP = 'Every icon';
+const MAX_SHOWN = 400;          // a search over every icon shows at most this many
+
 const IconPicker = {
     props: {
         modelValue: { type: String, default: 'fa-tag' },
         label: { type: String, default: 'Icon' },          // '' = no label (the form has its own)
         color: { type: String, default: '' },              // preview colour (e.g. a workflow's colour)
+        allIcons: { type: Boolean, default: false },       // also offer every Font Awesome icon
     },
     emits: ['update:modelValue'],
     delimiters: ['[[', ']]'],
@@ -39,23 +63,35 @@ const IconPicker = {
         const isOpen = Vue.ref(false);
         const group = Vue.ref('');
         loadChoices();
+        if (props.allIcons) loadAllIcons();
 
         const clean = (q) => q.trim().toLowerCase().replace(/^fa-/, '').replace(/[^a-z0-9-]/g, '');
-        const groups = Vue.computed(() => choices.value.map(g => g.group));
+        const groups = Vue.computed(() => [...choices.value.map(g => g.group), ...(props.allIcons ? [ALL_GROUP] : [])]);
+        const more = Vue.ref(0);         // icons of "Every icon" hidden by MAX_SHOWN
         const filtered = Vue.computed(() => {
             const q = clean(searchQuery.value);
             const out = [];
-            for (const g of choices.value) {
-                if (group.value && g.group !== group.value) continue;
-                const icons = g.icons.filter(i => !q || i.includes(q));
-                if (icons.length) out.push({ group: g.group, icons });
+            if (group.value !== ALL_GROUP) {
+                for (const g of choices.value) {
+                    if (group.value && g.group !== group.value) continue;
+                    const icons = g.icons.filter(i => !q || i.includes(q));
+                    if (icons.length) out.push({ group: g.group, icons });
+                }
+            }
+            more.value = 0;
+            // Every icon: when its group is chosen, or when searching (after the curated ones)
+            if (props.allIcons && (group.value === ALL_GROUP || q)) {
+                const shown = new Set(out.flatMap(g => g.icons));
+                const icons = allIcons.value.filter(i => !shown.has(i) && (!q || i.includes(q)));
+                more.value = Math.max(0, icons.length - MAX_SHOWN);
+                if (icons.length) out.push({ group: ALL_GROUP, icons: icons.slice(0, MAX_SHOWN) });
             }
             return out;
         });
         // A name typed that is not in the list: offered as is (Font Awesome has ~2 000 free icons)
         const typed = Vue.computed(() => {
             const q = clean(searchQuery.value);
-            if (!q || choices.value.some(g => g.icons.includes(q))) return null;
+            if (!q || choices.value.some(g => g.icons.includes(q)) || allIcons.value.includes(q)) return null;
             return q;
         });
 
@@ -66,7 +102,7 @@ const IconPicker = {
         };
         const current = Vue.computed(() => (props.modelValue || 'fa-tag').replace(/^fa-/, ''));
 
-        return { searchQuery, isOpen, group, groups, filtered, typed, selectIcon, current };
+        return { searchQuery, isOpen, group, groups, filtered, typed, selectIcon, current, more, total: Vue.computed(() => allIcons.value.length) };
     },
     template: `
     <div class="icon-picker-container position-relative">
@@ -90,7 +126,7 @@ const IconPicker = {
                     <button v-for="g in groups" :key="g" type="button" :class="{ 'is-on': group === g }" @click="group = g">[[ g ]]</button>
                 </div>
             </div>
-            <div class="p-2 overflow-y-auto" style="max-height: 240px;">
+            <div class="p-2 overflow-y-auto" :style="{ maxHeight: allIcons ? '340px' : '240px' }">
                 <button v-if="typed" type="button" class="icon-picker-typed" @click="selectIcon(typed)">
                     <i :class="['fas', 'fa-' + typed]"></i><span>Use <code>fa-[[ typed ]]</code></span>
                     <small>blank preview = no such free icon</small>
@@ -104,6 +140,7 @@ const IconPicker = {
                         </button>
                     </div>
                 </div>
+                <div v-if="more" class="text-center py-2 text-muted small">+ [[ more ]] more — type to narrow ([[ total ]] icons in all)</div>
                 <div v-if="!filtered.length && !typed" class="text-center py-3 text-muted small">No icons found.</div>
             </div>
         </div>
