@@ -38,7 +38,20 @@ def get_workflow_list_page(page=1, per_page=20, search='', sort='created_at', di
     per_page = max(1, min(per_page or 20, 100))
     query = AdminWorkflow.query
     if search:
-        query = query.filter(AdminWorkflow.title.ilike(f"%{search}%"))
+        # a workflow is found by its own title / description or by one of its tasks
+        # (task title, description, type key or the type's label, e.g. "Rulesets — sync")
+        like = f"%{search}%"
+        low = search.lower()
+        types = [k for k, t in TASK_TYPES.items() if low in t['label'].lower()]
+        task_match = db.or_(AdminTaskSchedule.title.ilike(like),
+                            AdminTaskSchedule.description.ilike(like),
+                            AdminTaskSchedule.task_type.ilike(like),
+                            AdminTaskSchedule.task_type.in_(types))
+        has_task = db.session.query(AdminTaskSchedule.id).filter(
+            AdminTaskSchedule.workflow_id == AdminWorkflow.id, task_match).exists()
+        query = query.filter(db.or_(AdminWorkflow.title.ilike(like),
+                                    AdminWorkflow.description.ilike(like),
+                                    has_task))
     sort_col = {
         'title': AdminWorkflow.title,
         'created_at': AdminWorkflow.created_at,

@@ -231,16 +231,14 @@ TASK_TYPES = {
         'required_options': ['schedule_uuid'],
     },
     'submodules_update': {
-        'label': 'Data sources — update MISP taxonomies / galaxies and MITRE CTI',
+        'label': 'Submodules — update (git submodule update --remote)',
         'icon': 'fa-solid fa-code-branch',
         'job_type': 'submodules_update',
         'target_picker': 'none',
-        # data submodules only (job_handlers.DATA_SUBMODULES) — never Rulezet's code
+        # the choices are the submodules of this checkout (git submodule status), read when the
+        # task window opens — job_handlers.handle_submodules_update only accepts one of them
         'extra_options': [
-            {'key': 'names', 'type': 'multiselect', 'label': 'Data sources',
-             'options': [{'value': 'misp-taxonomies', 'label': 'MISP taxonomies'},
-                         {'value': 'misp-galaxy', 'label': 'MISP galaxies'},
-                         {'value': 'cti', 'label': 'MITRE CTI (ATT&CK — large)'}],
+            {'key': 'names', 'type': 'multiselect', 'label': 'Submodules', 'options_from': 'git_submodules',
              'default': ['misp-taxonomies', 'misp-galaxy']},
         ],
         'required_options': ['names'],
@@ -443,6 +441,10 @@ def _with_options(opt):
         opts = [{'value': s.uuid, 'label': s.title + ('' if s.is_active else ' (paused)')}
                 for s in GithubSyncSchedule.query.order_by(GithubSyncSchedule.title).all()]
         return {**opt, 'options': opts}
+    if opt.get('options_from') == 'git_submodules':
+        from app.features.jobs.job_handlers import list_submodules
+        return {**opt, 'options': [{'value': name, 'label': name + ('' if init else ' (not initialized)')}
+                                   for name, (_path, init) in list_submodules().items()]}
     return opt
 
 
@@ -492,7 +494,7 @@ _DESCRIPTIONS = {
     'suricata_deep_validate': 'Validates Suricata rules with the real Suricata engine, a batch per run, and records the result.',
     'gamification_recompute': 'Recomputes every user\'s points, level and badges; the leaderboard cache is reset at the end.',
     'github_sync_schedule_launch': 'Runs one Git sync schedule now: checks its repositories for updated and new rules, then accepts / adds them if the schedule says so — the same as its own timer.',
-    'submodules_update': 'Pulls the latest MISP taxonomies / galaxies (and MITRE CTI if chosen) from their git repositories; run the MISP / ATT&CK update tasks after it to load them.',
+    'submodules_update': 'Pulls the latest commit of each chosen submodule from its git repository (git submodule update --init --remote --merge). Data (MISP taxonomies / galaxies, MITRE CTI): run the MISP / ATT&CK update tasks after it to load them. Code (rulezet-editor, rulezet-tester…): restart Rulezet to use it.',
     'action_email': 'Sends an email to the addresses given and/or the workflow\'s alert recipients; subject and message take {variables} (workflow, status, failed tasks, link…). Chain it after a task with "If it fails" or "If it succeeds".',
     'action_notify': 'Puts a notification in the bell of every admin (or of the workflow\'s editor); title and message take {variables}.',
     'action_log': 'Writes a line in the activity log (Admin → Logs) — e.g. "went well" after the last task; the text takes {variables}.',

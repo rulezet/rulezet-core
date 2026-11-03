@@ -454,6 +454,69 @@
           }
         ]
       }
+    },
+    "rulesets_publication": {
+      "label": "Rulesets publication",
+      "icon": "fa-brands fa-git-alt",
+      "description": "Every night: pull the git clones, resync Git Sources, re-score the rules, then push every Rulesets mirror to its git repository; a notification if the push fails.",
+      "spec": {
+        "title": "Rulesets publication",
+        "description": "Fresh rules on the Rulesets mirrors — every day at 03:00 UTC.",
+        "tasks": [
+          {
+            "ref": "pull",
+            "title": "Pull the git clones",
+            "task_type": "git_cache_pull",
+            "trigger": {
+              "trigger_mode": "daily",
+              "hour": 3,
+              "minute": 0,
+              "timezone": "UTC"
+            }
+          },
+          {
+            "ref": "resync",
+            "title": "Resync Git Sources",
+            "task_type": "github_repo_resync",
+            "trigger": {
+              "after": "pull",
+              "condition": "always"
+            }
+          },
+          {
+            "ref": "quality",
+            "title": "Rule quality scores",
+            "task_type": "quality_score",
+            "trigger": {
+              "after": "resync",
+              "condition": "always"
+            }
+          },
+          {
+            "ref": "mirror",
+            "title": "Rulesets — sync",
+            "task_type": "rule_git_mirror_sync",
+            "trigger": {
+              "after": "quality",
+              "condition": "always"
+            }
+          },
+          {
+            "ref": "alert",
+            "title": "Tell the admins",
+            "task_type": "action_notify",
+            "target_payload": {
+              "title": "{workflow}: {status}",
+              "message": "Rulesets sync failed: {failed_tasks}.",
+              "only_editor": false
+            },
+            "trigger": {
+              "after": "mirror",
+              "condition": "failure"
+            }
+          }
+        ]
+      }
     }
   }
 }

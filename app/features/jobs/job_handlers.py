@@ -1012,22 +1012,32 @@ def handle_action_webhook(job, app):
 
 # Data submodules a workflow may update (never code: the editor / tester / validation float with
 # manage.py update, on purpose, not from a scheduled task)
-DATA_SUBMODULES = {
-    'misp-taxonomies': 'app/modules/misp-taxonomies',
-    'misp-galaxy': 'app/modules/misp-galaxy',
-    'cti': 'app/modules/cti',
-}
+def list_submodules():
+    """{name: (path, initialized)} for every submodule of this checkout (git submodule status) —
+    the choices of the Workflows "Submodules — update" task; the name is the last path segment."""
+    out = {}
+    try:
+        res = subprocess.run(['git', 'submodule', 'status'], capture_output=True, text=True, timeout=15, cwd=os.getcwd())
+        for line in res.stdout.splitlines():
+            parts = line[1:].split() if line else []
+            if len(parts) >= 2:
+                out[parts[1].rstrip('/').split('/')[-1]] = (parts[1], line[0] != '-')
+    except Exception:
+        pass
+    return out
 
 
 @register_handler('submodules_update')
 def handle_submodules_update(job, app):
-    """A Workflows task: pull the latest MISP taxonomies / galaxies and MITRE CTI data
-    (git submodule update --remote) — the data the MISP and ATT&CK update tasks read.
-    Payload: names (list of DATA_SUBMODULES keys)."""
-    names = [n for n in ((job.payload or {}).get('names') or []) if n in DATA_SUBMODULES]
+    """A Workflows task: pull the latest commit of the chosen submodules
+    (git submodule update --init --remote --merge) — data (MISP taxonomies / galaxies,
+    MITRE CTI) or code (rulezet-editor, rulezet-tester…, a restart picks it up).
+    Payload: names (submodule names, see list_submodules — anything else is ignored)."""
+    known = list_submodules()
+    names = [n for n in ((job.payload or {}).get('names') or []) if n in known]
     if not names:
-        log_job(job, 'No data submodule chosen.', level='error', event='failed')
-        job.status, job.error = 'failed', 'No data submodule chosen.'
+        log_job(job, 'No submodule chosen (or none of the chosen ones exists any more).', level='error', event='failed')
+        job.status, job.error = 'failed', 'No submodule chosen.'
         db.session.commit()
         return
     job.total, job.done = len(names), 0
@@ -1036,7 +1046,7 @@ def handle_submodules_update(job, app):
     for name in names:
         log_job(job, f'Updating {name}…', level='info', event='progress')
         try:
-            res = subprocess.run(['git', 'submodule', 'update', '--init', '--remote', '--merge', '--', DATA_SUBMODULES[name]],
+            res = subprocess.run(['git', 'submodule', 'update', '--init', '--remote', '--merge', '--', known[name][0]],
                                  capture_output=True, text=True, timeout=1800, cwd=os.getcwd())
             if res.returncode != 0:
                 failed.append(name)
