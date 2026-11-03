@@ -1,0 +1,54 @@
+{
+  "label": "Rule feeds",
+  "category": "Workflows",
+  "description": "Sources of rules kept in sync by the workflow task \"Rule feed — sync\" (Admin → Workflows, template \"Rule feeds refresh\"). One entry per feed: key (letters, digits, _), label, kind (git = a repository, imported like Git Import; url = one rules file over https, e.g. ET Open; valhalla = Nextron's VALHALLA API, key in .env VALHALLA_API_KEY), url, format (forces the rule format when set), license (applied when a rule has none), author, enabled (false: the task refuses to run it), license_ok (true only when the feed's licence allows Rulezet to republish its rules — required for kinds whose rules are not openly licensed, e.g. Valhalla: written consent of Nextron), branch (git), valhalla: product / min_score. Each run adds what is new; rules already in Rulezet are skipped as duplicates. Add a feed here, then add its task to the workflow.",
+  "public": false,
+  "value": [
+    {
+      "key": "signature_base",
+      "label": "signature-base (Florian Roth) — YARA",
+      "kind": "git",
+      "url": "https://github.com/Neo23x0/signature-base",
+      "format": "yara",
+      "license": "DRL-1.1",
+      "author": "Florian Roth",
+      "enabled": true,
+      "license_ok": true
+    },
+    {
+      "key": "sigmahq",
+      "label": "SigmaHQ — Sigma rules",
+      "kind": "git",
+      "url": "https://github.com/SigmaHQ/sigma",
+      "format": "sigma",
+      "license": "DRL-1.1",
+      "author": "SigmaHQ",
+      "enabled": true,
+      "license_ok": true
+    },
+    {
+      "key": "et_open_suricata",
+      "label": "Emerging Threats Open — Suricata 7",
+      "kind": "url",
+      "url": "https://rules.emergingthreats.net/open/suricata-7.0/emerging-all.rules",
+      "format": "suricata",
+      "license": "BSD (ET Open) / GPL-2.0",
+      "author": "Emerging Threats (Proofpoint)",
+      "enabled": true,
+      "license_ok": true
+    },
+    {
+      "key": "valhalla",
+      "label": "VALHALLA (Nextron) — YARA",
+      "kind": "valhalla",
+      "url": "https://valhalla.nextron-systems.com/api/v1/get",
+      "format": "yara",
+      "license": "Nextron VALHALLA (no redistribution without written consent)",
+      "author": "Nextron Systems",
+      "product": "",
+      "min_score": 75,
+      "enabled": false,
+      "license_ok": false
+    }
+  ]
+}

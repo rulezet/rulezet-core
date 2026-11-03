@@ -13,40 +13,30 @@
                 <p class="footer-brand__tagline">Built for security researchers.</p>
             </div>
 
-            <!-- Nav links -->
-            <nav class="footer-nav">
-                <a href="/about" class="footer-nav__link">
-                    <i class="fa-solid fa-circle-info"></i> About
-                </a>
-                <a href="https://github.com/rulezet/rulezet-core/discussions" target="_blank" class="footer-nav__link">
-                    <i class="fa-solid fa-envelope"></i> Contact
-                </a>
-                <a href="{{ url_for('docs.quick_start') }}" class="footer-nav__link">
-                    <i class="fa-solid fa-book"></i> Documentation
-                </a>
-                <a href="https://github.com/rulezet/rulezet-rulesets" target="_blank" rel="noreferrer" class="footer-nav__link">
-                    <i class="fa-brands fa-github"></i> Rulesets
-                </a>
-                <a href="/roadmap" class="footer-nav__link">
-                    <i class="fa-solid fa-road"></i> Roadmap
-                </a>
-                <a href="/history_logo" class="footer-nav__link">
-                    <i class="fa-solid fa-history"></i> History
-                </a>
-                <a href="https://www.gnu.org/licenses/agpl-3.0.html" rel="noreferrer" target="_blank" class="footer-nav__link">
-                    <i class="fa-solid fa-balance-scale"></i> License
-                </a>
-                <a href="https://rulezet.org/api" rel="noreferrer" target="_blank" class="footer-nav__link">
-                    <i class="fa-solid fa-code"></i> API
-                </a>
+            <!-- Links, grouped -->
+            <nav class="footer-cols" aria-label="Footer">
+                <div class="footer-col">
+                    <div class="footer-col__title">Rulezet</div>
+                    <a href="/about" class="footer-nav__link"><i class="fa-solid fa-circle-info"></i> About</a>
+                    <a href="/roadmap" class="footer-nav__link"><i class="fa-solid fa-road"></i> Roadmap</a>
+                    <a href="/history_logo" class="footer-nav__link"><i class="fa-solid fa-history"></i> History</a>
+                </div>
+                <div class="footer-col">
+                    <div class="footer-col__title">Developers</div>
+                    <a href="{{ url_for('docs.quick_start') }}" class="footer-nav__link"><i class="fa-solid fa-book"></i> Documentation</a>
+                    <a href="/api/" class="footer-nav__link"><i class="fa-solid fa-code"></i> API</a>
+                    <a href="/feeds" class="footer-nav__link"><i class="fa-solid fa-rss"></i> Feeds</a>
+                    <a href="https://github.com/rulezet/rulezet-rulesets" target="_blank" rel="noreferrer" class="footer-nav__link"><i class="fa-brands fa-github"></i> Rulesets</a>
+                </div>
+                <div class="footer-col">
+                    <div class="footer-col__title">Community</div>
+                    <a href="https://github.com/rulezet/rulezet-core/discussions" target="_blank" rel="noreferrer" class="footer-nav__link"><i class="fa-solid fa-comments"></i> Contact</a>
+                    <a href="https://github.com/rulezet/rulezet-core" target="_blank" rel="noreferrer" class="footer-nav__link"><i class="fa-brands fa-github"></i> Source code</a>
+                </div>
             </nav>
 
             <!-- Actions: GitHub + theme toggle -->
             <div class="footer-actions">
-                <a href="https://github.com/rulezet/rulezet-core.git" target="_blank"
-                   class="footer-github" title="GitHub Source">
-                    <i class="fa-brands fa-github"></i>
-                </a>
                 <div class="footer-theme-picker">
                     <i class="fas fa-palette footer-theme-icon"></i>
                     <select id="footer-theme-select" class="footer-theme-select" title="Switch theme">
@@ -63,6 +53,8 @@
         <div class="footer-bottom">
             <small>&copy; 2025-2026 <strong>RULEZET</strong> — Open-source cybersecurity detection platform.</small>
             <nav class="footer-legal">
+                <a href="https://www.gnu.org/licenses/agpl-3.0.html" rel="noreferrer" target="_blank" class="footer-legal__link">License (AGPL-3.0)</a>
+                <span class="footer-legal__sep">·</span>
                 <a href="/privacy" class="footer-legal__link">Privacy Policy</a>
                 <span class="footer-legal__sep">·</span>
                 <a href="/legal" class="footer-legal__link">Legal Notice</a>

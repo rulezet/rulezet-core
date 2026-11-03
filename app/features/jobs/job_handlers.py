@@ -1303,6 +1303,278 @@ def handle_github_import(job, app):
             level=level, event='done')
 
 
+# ─── feed_sync ─────────────────────────────────────────────────────────────────
+
+FEED_MAX_BYTES = 100 * 1024 * 1024
+_FEED_EXT = {'yara': '.yar', 'sigma': '.yml', 'suricata': '.rules', 'sagan': '.rules', 'zeek': '.zeek',
+             'wazuh': '.xml', 'crs': '.conf', 'nse': '.nse', 'kql': '.kql'}
+
+
+def _feed_public_url(url):
+    """https only, and a host that resolves to public addresses: the server fetches it (SSRF gate)."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+    parts = urlparse(url or '')
+    if parts.scheme != 'https' or not parts.hostname or parts.username or parts.password:
+        return False
+    try:
+        infos = socket.getaddrinfo(parts.hostname, parts.port or 443, proto=socket.IPPROTO_TCP)
+    except OSError:
+        return False
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+            return False
+    return True
+
+
+def _feed_download(url, data=None):
+    """The feed's bytes (POST when `data`), at most FEED_MAX_BYTES; raises on any problem."""
+    import requests
+    if not _feed_public_url(url):
+        raise ValueError(f'refused URL (https and a public host only): {url}')
+    method = requests.post if data is not None else requests.get
+    with method(url, data=data, timeout=120, stream=True, allow_redirects=False,
+                headers={'User-Agent': 'Rulezet rule feed sync'}) as r:
+        r.raise_for_status()
+        chunks, size = [], 0
+        for chunk in r.iter_content(1024 * 1024):
+            size += len(chunk)
+            if size > FEED_MAX_BYTES:
+                raise ValueError(f'feed larger than {FEED_MAX_BYTES // (1024 * 1024)} MB')
+            chunks.append(chunk)
+    return b''.join(chunks)
+
+
+def _run_feed_session(job, app, rules_dir, user, info, label):
+    """The Git import's pipeline (Session_class) on a folder of downloaded rules."""
+    from app.features.rule.rule_from_github.import_rule import session_class as SessionModel
+    session = SessionModel.Session_class(rules_dir, user, info)
+    log_job(job, 'Scanning the feed for rules…', level='info', event='scan')
+    session.start(app_obj=app, user_obj=user)
+    job.total = session.total
+    db.session.commit()
+    log_job(job, f'Found {session.total} rule(s) — importing.', level='info', event='progress')
+    while not session._save_done.wait(timeout=2):
+        if _is_cancelled(job):
+            session.jobs.queue.clear()
+            session._save_done.wait(timeout=60)
+            log_job(job, f'Cancelled — {session.imported} imported, {session.skipped} skipped.', level='warning', event='cancelled')
+            return
+        job.done = session.imported + session.skipped + session.bad_rules
+        db.session.commit()
+    job.done = job.total
+    db.session.commit()
+    log_activity('feed.sync', f"Rule feed '{label}': {session.imported} imported, {session.skipped} already there, "
+                              f"{session.bad_rules} kept for review", target_type='feed', extra={'job_uuid': job.uuid},
+                 is_public=True, icon='fa-solid fa-satellite-dish', actor_id=user.id)
+    log_job(job, f'Done — {session.imported} imported, {session.skipped} skipped (already there), '
+                 f'{session.bad_rules} bad rule(s) kept for review.',
+            level='warning' if session.bad_rules and not session.imported else 'success', event='done')
+
+
+def _feed_rule_identifier(fmt, text):
+    """What identifies a rule across versions: Suricata / Sagan SID, YARA name, Wazuh id, Sigma id."""
+    if fmt == 'sigma':
+        import yaml
+        try:
+            doc = yaml.safe_load(text)
+        except Exception:
+            return None
+        return str(doc.get('id')).strip() if isinstance(doc, dict) and doc.get('id') else None
+    from app.features.rule.rule_core import _extract_corpus_identifier
+    return _extract_corpus_identifier(fmt, text)
+
+
+def _feed_update_existing(job, path, fmt, feed, user, label):
+    """Rules of the feed already in Rulezet *from this feed* (same identifier, same source) whose
+    text changed upstream: updated in place — history kept, version bumped. A new version that does
+    not validate never replaces the rule. Rules from any other source are never touched.
+    Returns (updated, unchanged, invalid)."""
+    from app.core.utils.utils import bump_version
+    from app.features.rule import rule_core as RuleModel
+    from app.features.rule.rule_format.abstract_rule_type.rule_type_abstract import RuleType, load_all_rule_formats
+    load_all_rule_formats()
+    rule_type = next((c() for c in RuleType.__subclasses__() if _safe_format(c) == fmt), None)
+    if not rule_type:
+        return 0, 0, 0
+    try:
+        texts = rule_type.extract_rules_from_file(path)
+    except Exception:
+        return 0, 0, 0
+    source = feed.get('url')
+    updated = unchanged = invalid = 0
+    squash = lambda t: ''.join((t or '').split())   # noqa: E731 — layout changes are not updates
+    for text in texts:
+        ident = _feed_rule_identifier(fmt, text)
+        if not ident:
+            continue
+        q = RuleModel._active().filter(db.func.lower(Rule.format) == fmt, Rule.source == source)
+        q = q.filter(Rule.original_uuid == ident) if fmt == 'sigma' else q.filter(Rule.corpus_identifier == ident)
+        rule = q.first()
+        if not rule:
+            continue                         # new: the import adds it
+        if squash(rule.to_string) == squash(text):
+            unchanged += 1
+            continue
+        validation = rule_type.validate(text)
+        if not validation.ok:
+            invalid += 1
+            log_job(job, f'"{rule.title}": the new version does not validate, the rule is kept as it was.',
+                    level='warning', event='progress')
+            continue
+        old = rule.to_string
+        history_id = RuleModel.create_rule_history({
+            'id': rule.id, 'title': rule.title, 'success': True, 'manual_submit': False,
+            'message': f'Updated from the rule feed {label}', 'new_content': text, 'old_content': old,
+            'old_snapshot': RuleModel.rule_metadata_snapshot(rule), 'analyzed_by_user_id': user.id,
+        })
+        ok, rule = RuleModel.edit_rule_core({
+            'format': rule.format, 'title': rule.title, 'license': rule.license, 'description': rule.description,
+            'source': rule.source, 'version': bump_version(rule.version or '1.0'), 'to_string': text,
+            'author': rule.author, 'original_uuid': rule.original_uuid, 'cve_id': rule.cve_id,
+        }, rule.id)
+        if not ok:
+            invalid += 1
+            continue
+        history = RuleModel.get_history_rule_by_id(history_id) if history_id else None
+        if history is not None:
+            history.message = 'accepted'
+            history.new_snapshot = RuleModel.rule_metadata_snapshot(rule)
+            history.change_type = 'content'
+        db.session.commit()
+        updated += 1
+    return updated, unchanged, invalid
+
+
+def _safe_format(cls):
+    try:
+        return cls().format.lower()
+    except Exception:
+        return None
+
+
+def _feed_git_update(job, app, feed, user, label):
+    """A git feed already imported: the Git Sources update check (Update_class) — changed rules
+    updated (auto-accepted, invalid syntax refused), new rules added — as a Sync Schedule does."""
+    from app.features.rule.rule_core import (
+        get_updater_result, get_rule_update_list_filtered, accept_all_update,
+        get_valid_new_rules_by_sid, import_single_new_rule, resolve_new_rule_owner,
+    )
+    from app.features.rule.rule_from_github.update_rule import update_class as UpdateModel
+    url = feed.get('url')
+    log_job(job, f'Checking {url} for changed and new rules…', level='info', event='start')
+    info = {'mode': 'by_url', 'repo_url': url, 'initiated_by': f'Rule feed — {label}', 'author': feed.get('author'),
+            'license': feed.get('license'), 'description': None}
+    session = UpdateModel.Update_class([url], user, info, mode='by_url', is_generic_source=False)
+    session.start()
+    UpdateModel.sessions.append(session)
+    if not session._save_done.wait(timeout=REPO_SYNC_TIMEOUT_SECONDS):
+        raise RuntimeError(f'the update check of {url} timed out')
+    result = get_updater_result(session.uuid)
+    if not result:
+        raise RuntimeError('the update check produced no result (see the server logs)')
+    accepted = 0
+    if feed.get('auto_update', True):
+        rule_list, count = get_rule_update_list_filtered(session.uuid)
+        if count:
+            accepted = sum(1 for r in rule_list if r.rule_syntax_valid)
+            accept_all_update(rule_list)          # never accepts an invalid-syntax update
+    added = 0
+    new_rules = get_valid_new_rules_by_sid(session.uuid)
+    owner = resolve_new_rule_owner(user, url, None)
+    for nr in new_rules:
+        ok, _ = import_single_new_rule(nr, user, owner)
+        added += 1 if ok else 0
+    log_activity('feed.sync', f"Rule feed '{label}': {accepted} updated, {added} new", target_type='feed',
+                 extra={'job_uuid': job.uuid}, is_public=True, icon='fa-solid fa-satellite-dish', actor_id=user.id)
+    log_job(job, f'Done — {accepted} rule(s) updated, {added} new rule(s) added.', level='success', event='done')
+
+
+@register_handler('feed_sync')
+def handle_feed_sync(job, app):
+    """A Workflows task: one feed of the setting feeds.sources, synced. kind git → the Git import
+    (github_import); url → one rules file over https; valhalla → Nextron's VALHALLA API (key in
+    .env VALHALLA_API_KEY). A feed must be enabled; a feed whose rules are not openly licensed must
+    say license_ok (the right to republish them). Payload: feed (its key)."""
+    import tempfile
+    from app.core.utils.app_settings import get_setting
+
+    def _fail(message):
+        log_job(job, message, level='error', event='failed')
+        job.status, job.error = 'failed', message
+        db.session.commit()
+
+    key = (job.payload or {}).get('feed')
+    feed = next((f for f in (get_setting('feeds.sources') or []) if isinstance(f, dict) and f.get('key') == key), None)
+    if not feed:
+        return _fail(f'Unknown feed {key!r}: see the setting feeds.sources.')
+    label = feed.get('label') or key
+    if not feed.get('enabled', True):
+        return _fail(f'The feed "{label}" is disabled (setting feeds.sources).')
+    kind = feed.get('kind')
+    if kind == 'valhalla' and not feed.get('license_ok'):
+        return _fail(f'"{label}": its rules may not be republished without the provider\'s consent — set license_ok in '
+                     f'feeds.sources only once Rulezet has it.')
+    user = User.query.get(job.created_by)
+    if not user:
+        return _fail('The user who launched this sync no longer exists.')
+
+    if kind == 'git':
+        url = (feed.get('url') or '').rstrip('/')
+        already = Rule.query.filter(Rule.is_deleted == False,                                  # noqa: E712
+                                    db.or_(Rule.source == url, Rule.source == url + '.git')).first()
+        if already:
+            # imported before: the Git Sources update check (changed rules updated, new ones added)
+            try:
+                return _feed_git_update(job, app, feed, user, label)
+            except Exception as e:
+                return _fail(f'"{label}": update failed — {str(e)[:300]}')
+        job.payload = {**(job.payload or {}), 'url': feed.get('url'), 'branch': feed.get('branch') or '',
+                       'license': feed.get('license') or '', 'force_format': feed.get('format') or ''}
+        db.session.commit()
+        return handle_github_import(job, app)
+
+    fmt = (feed.get('format') or '').lower()
+    with tempfile.TemporaryDirectory(prefix='rz-feed-') as tmp:
+        try:
+            if kind == 'url':
+                log_job(job, f'Downloading {feed.get("url")}…', level='info', event='start')
+                data = _feed_download(feed.get('url'))
+            elif kind == 'valhalla':
+                apikey = os.environ.get('VALHALLA_API_KEY', '').strip()
+                if not apikey:
+                    return _fail('VALHALLA_API_KEY is not set in .env.')
+                log_job(job, 'Downloading the VALHALLA rule set…', level='info', event='start')
+                form = {'apikey': apikey, 'format': 'text'}
+                if feed.get('product'):
+                    form['product'] = feed['product']
+                if feed.get('min_score'):
+                    form['score'] = str(int(feed['min_score']))
+                data = _feed_download(feed.get('url') or 'https://valhalla.nextron-systems.com/api/v1/get', data=form)
+            else:
+                return _fail(f'Unknown feed kind {kind!r} (git, url, valhalla).')
+        except Exception as e:
+            return _fail(f'"{label}": download failed — {str(e)[:300]}')
+        name = os.path.basename(__import__('urllib.parse', fromlist=['urlparse']).urlparse(feed.get('url') or '').path) or key
+        if fmt and not os.path.splitext(name)[1]:
+            name += _FEED_EXT.get(fmt, '.txt')
+        with open(os.path.join(tmp, name), 'wb') as f:
+            f.write(data)
+        log_job(job, f'{len(data) // 1024} kB downloaded.', level='info', event='progress')
+        info = {'repo_url': feed.get('url'), 'url': feed.get('url'), 'author': feed.get('author') or label,
+                'license': feed.get('license') or 'Unknown', 'license_name': feed.get('license') or 'Unknown'}
+        if fmt:
+            info['force_format'] = fmt
+            # rules of this feed already in Rulezet whose text changed upstream: updated first
+            updated, unchanged, invalid = _feed_update_existing(job, os.path.join(tmp, name), fmt, feed, user, label)
+            log_job(job, f'Already in Rulezet: {updated} updated, {unchanged} unchanged'
+                         + (f', {invalid} new version(s) refused (invalid)' if invalid else '') + '.',
+                    level='info', event='progress')
+        _run_feed_session(job, app, tmp, user, info, label)
+
+
 # ─── github_repo_branch_backfill ───────────────────────────────────────────────
 
 @register_handler('github_repo_branch_backfill')

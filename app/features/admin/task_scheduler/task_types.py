@@ -383,6 +383,18 @@ TASK_TYPES = {
         ],
         'required_options': ['url'],
     },
+    'feed_sync': {
+        'label': 'Rule feed — sync (signature-base, SigmaHQ, ET Open, VALHALLA…)',
+        'icon': 'fa-solid fa-satellite-dish',
+        'job_type': 'feed_sync',
+        'target_picker': 'none',
+        # one feed of the setting feeds.sources: a git repository, a rules file over https or the
+        # VALHALLA API; every run adds what is new (existing rules are skipped as duplicates)
+        'extra_options': [
+            {'key': 'feed', 'type': 'select', 'label': 'Feed (setting feeds.sources)', 'options_from': 'rule_feeds'},
+        ],
+        'required_options': ['feed'],
+    },
     'github_branch_backfill': {
         'label': 'Git Sources — backfill missing rule branches',
         'icon': 'fa-solid fa-code-branch',
@@ -441,6 +453,11 @@ def _with_options(opt):
         opts = [{'value': s.uuid, 'label': s.title + ('' if s.is_active else ' (paused)')}
                 for s in GithubSyncSchedule.query.order_by(GithubSyncSchedule.title).all()]
         return {**opt, 'options': opts}
+    if opt.get('options_from') == 'rule_feeds':
+        from app.core.utils.app_settings import get_setting
+        feeds = get_setting('feeds.sources') or []
+        return {**opt, 'options': [{'value': f.get('key'), 'label': f"{f.get('label') or f.get('key')}" + ('' if f.get('enabled', True) else ' (disabled)')}
+                                   for f in feeds if isinstance(f, dict) and f.get('key')]}
     if opt.get('options_from') == 'git_submodules':
         from app.features.jobs.job_handlers import list_submodules
         return {**opt, 'options': [{'value': name, 'label': name + ('' if init else ' (not initialized)')}
@@ -494,6 +511,7 @@ _DESCRIPTIONS = {
     'suricata_deep_validate': 'Validates Suricata rules with the real Suricata engine, a batch per run, and records the result.',
     'gamification_recompute': 'Recomputes every user\'s points, level and badges; the leaderboard cache is reset at the end.',
     'github_sync_schedule_launch': 'Runs one Git sync schedule now: checks its repositories for updated and new rules, then accepts / adds them if the schedule says so — the same as its own timer.',
+    'feed_sync': 'Fetches one rule feed (setting feeds.sources: a git repository, a rules file over https or the VALHALLA API) and imports the rules that are new; bad rules are kept for review, existing ones skipped. Results in the Git import history.',
     'submodules_update': 'Pulls the latest commit of each chosen submodule from its git repository (git submodule update --init --remote --merge). Data (MISP taxonomies / galaxies, MITRE CTI): run the MISP / ATT&CK update tasks after it to load them. Code (rulezet-editor, rulezet-tester…): restart Rulezet to use it.',
     'action_email': 'Sends an email to the addresses given and/or the workflow\'s alert recipients; subject and message take {variables} (workflow, status, failed tasks, link…). Chain it after a task with "If it fails" or "If it succeeds".',
     'action_notify': 'Puts a notification in the bell of every admin (or of the workflow\'s editor); title and message take {variables}.',

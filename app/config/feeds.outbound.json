@@ -1,0 +1,73 @@
+{
+  "label": "Rule feeds (outbound)",
+  "category": "API",
+  "description": "The feeds Rulezet serves to tools (page /feeds, API GET /api/feed/<format>, a free account's API key required): formats offered and how each is written — style yara (one .yar file, // comment above each rule), lines (one rule per line, # comment: Suricata, Sagan…), yaml (--- between rules, # comment: Sigma), anything else as JSON lines. excluded_tags: rules carrying one of these tags are never in a feed (TLP:RED / AMBER are not for sharing). max_rules: cap per download. dedupe: keep one rule per identifier (YARA name, Suricata SID) — the newest — so the file loads in the tool.",
+  "public": false,
+  "value": {
+    "formats": [
+      {
+        "format": "yara",
+        "label": "YARA",
+        "style": "yara",
+        "ext": "yar",
+        "icon": "fa-solid fa-bug"
+      },
+      {
+        "format": "sigma",
+        "label": "Sigma",
+        "style": "yaml",
+        "ext": "yml",
+        "icon": "fa-solid fa-wave-square"
+      },
+      {
+        "format": "suricata",
+        "label": "Suricata",
+        "style": "lines",
+        "ext": "rules",
+        "icon": "fa-solid fa-network-wired"
+      },
+      {
+        "format": "sagan",
+        "label": "Sagan",
+        "style": "lines",
+        "ext": "rules",
+        "icon": "fa-solid fa-scroll"
+      },
+      {
+        "format": "zeek",
+        "label": "Zeek",
+        "style": "json",
+        "ext": "jsonl",
+        "icon": "fa-solid fa-eye"
+      },
+      {
+        "format": "wazuh",
+        "label": "Wazuh",
+        "style": "json",
+        "ext": "jsonl",
+        "icon": "fa-solid fa-shield-halved"
+      },
+      {
+        "format": "kql",
+        "label": "KQL",
+        "style": "json",
+        "ext": "jsonl",
+        "icon": "fa-solid fa-magnifying-glass"
+      },
+      {
+        "format": "crs",
+        "label": "CRS",
+        "style": "json",
+        "ext": "jsonl",
+        "icon": "fa-solid fa-shield"
+      }
+    ],
+    "excluded_tags": [
+      "tlp:red",
+      "tlp:amber",
+      "tlp:amber+strict"
+    ],
+    "max_rules": 100000,
+    "dedupe": true
+  }
+}

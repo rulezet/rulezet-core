@@ -131,6 +131,7 @@ def create_app(start_worker=True):
     from app.features.admin.media.media_routes import media_blueprint, media_static_blueprint
     from app.features.admin.app_settings.app_settings_routes import app_settings_blueprint
     from app.features.starfield.starfield import starfield_blueprint
+    from app.features.feed.feed import feed_blueprint
     from app.features.nightshift.nightshift import nightshift_blueprint
     from app.features.vulnerability.vulnerability import vulnerability_blueprint
     from app.features.tour.tour import tour_blueprint
@@ -173,6 +174,7 @@ def create_app(start_worker=True):
     app.register_blueprint(media_static_blueprint)
     app.register_blueprint(app_settings_blueprint)
     app.register_blueprint(starfield_blueprint)
+    app.register_blueprint(feed_blueprint)          # /feeds: rule feeds for tools
     app.register_blueprint(nightshift_blueprint)
     app.register_blueprint(vulnerability_blueprint)
     app.register_blueprint(tour_blueprint)

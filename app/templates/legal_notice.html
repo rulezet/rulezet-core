@@ -93,9 +93,68 @@
     </div>
   </div>
 
+  <div class="card border-0 shadow-sm rounded-3 mb-4" id="feeds">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-rss text-primary me-2"></i>6. Rule Sources, Feeds &amp; Licences</h5>
+
+      <h6 class="fw-bold mt-1 mb-2" style="font-size:.9rem;">Every rule keeps its own licence</h6>
+      <p class="text-muted mb-3" style="font-size:.9rem;">
+        Each rule is published under the licence chosen by its author or by the source it comes from — shown on its
+        page, in the API and above it in every feed, together with its author and its source. Rulezet does not
+        relicense rules: whoever reuses one must follow its licence. In particular, rules under the
+        <a href="https://github.com/SigmaHQ/Detection-Rule-License" target="_blank" rel="noreferrer">Detection Rule License (DRL) 1.1</a>
+        require the author to be named in any copy of the rule <em>and</em> in any output showing its matches;
+        rules under the GPL / AGPL keep their copyleft conditions; MIT, BSD and Apache rules keep their notices.
+      </p>
+
+      <h6 class="fw-bold mb-2" style="font-size:.9rem;">Rules imported from public sources</h6>
+      <p class="text-muted mb-2" style="font-size:.9rem;">
+        Rulezet imports rules from public repositories (Git Sources) and from the rule feeds below, only when their licence
+        allows them to be republished. Each imported rule links back to its source and keeps its author and licence.
+      </p>
+      {% if feeds_in %}
+      <ul class="text-muted ps-3 mb-3" style="font-size:.87rem;line-height:1.8;">
+        {% for f in feeds_in %}
+        <li><strong>{{ f.label }}</strong> — {{ f.license or 'see the source' }} —
+          <a href="{{ f.url }}" target="_blank" rel="noreferrer">{{ f.url }}</a></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      <p class="text-muted mb-3" style="font-size:.9rem;">
+        Commercial or restricted feeds (for example Nextron's VALHALLA) are never imported without the written consent
+        of their owner. Rule sets from security vendors and projects stay theirs.
+      </p>
+
+      <h6 class="fw-bold mb-2" style="font-size:.9rem;">Removal on request</h6>
+      <p class="text-muted mb-3" style="font-size:.9rem;">
+        If you hold rights on a rule published here and did not allow it, or want it attributed differently, contact us
+        (section 10) with the rule's link: it is removed or corrected promptly, and its source is not imported again.
+      </p>
+
+      <h6 class="fw-bold mb-2" style="font-size:.9rem;">Rulezet's feeds and API</h6>
+      <ul class="text-muted ps-3 mb-3" style="font-size:.9rem;line-height:1.7;">
+        <li>The <a href="/feeds">rule feeds</a> and the API need a free account and its personal API key; keep it private.</li>
+        <li>A feed gives each rule with its licence, author and source: they must be kept when you redistribute it, and the
+          rule's licence followed (attribution for DRL 1.1, copyleft for GPL…).</li>
+        <li>Rules marked <strong>TLP:RED</strong> or <strong>TLP:AMBER</strong> are never in a feed. TLP markings of the
+          rules you receive must be respected.</li>
+        <li>Feeds are provided "as is", without any warranty (section 5) and may change or stop. Abusive use (excessive
+          downloads, sharing a key, resale of the feed as such) may lead to the key being revoked.</li>
+        <li>Do not present rules from Rulezet as your own or as endorsed by Rulezet or by their authors.</li>
+      </ul>
+
+      <h6 class="fw-bold mb-2" style="font-size:.9rem;">Names and trademarks</h6>
+      <p class="text-muted mb-0" style="font-size:.9rem;">
+        MITRE ATT&amp;CK® is a registered trademark of The MITRE Corporation; YARA, Sigma, Suricata, Zeek, Wazuh, Snort and
+        the other rule formats and products named on Rulezet belong to their respective owners. They are named only to
+        describe the rules and the tools they work with, with no endorsement implied.
+      </p>
+    </div>
+  </div>
+
   <div class="card border-0 shadow-sm rounded-3 mb-4">
     <div class="card-body p-4">
-      <h5 class="fw-bold mb-3"><i class="fa-solid fa-gavel text-primary me-2"></i>6. Limitation of Liability</h5>
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-gavel text-primary me-2"></i>7. Limitation of Liability</h5>
       <p class="text-muted mb-0" style="font-size:.9rem;">
         To the fullest extent permitted by law, Rulezet, its maintainers, and contributors shall not be liable
         for any direct, indirect, incidental, or consequential damages arising from the use of the platform or
@@ -106,7 +165,7 @@
 
   <div class="card border-0 shadow-sm rounded-3 mb-4">
     <div class="card-body p-4">
-      <h5 class="fw-bold mb-3"><i class="fa-solid fa-boxes-packing text-primary me-2"></i>7. Third-Party Software</h5>
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-boxes-packing text-primary me-2"></i>8. Third-Party Software</h5>
       <p class="text-muted mb-3" style="font-size:.9rem;">
         Rulezet is built on top of the following open-source libraries and components, each distributed under
         its own license. We're grateful to their authors and communities.
@@ -140,6 +199,8 @@
             <li><strong>Suricata</strong> tooling: idstools, suricataparser — <strong>Zeek</strong>: zeekscript — <strong>ModSecurity</strong>: msc-pyparser (GPL 3.0) — <strong>NOVA</strong>: nova-hunting (MIT)</li>
             <li><strong>PyMISP</strong> — BSD 2-Clause — <a href="https://github.com/MISP/PyMISP" target="_blank" rel="noreferrer">github.com/MISP/PyMISP</a> &amp; <strong>MITRE ATT&amp;CK</strong> data — © The MITRE Corporation</li>
             <li><strong>pyvelociraptor</strong> — Apache 2.0 — <a href="https://github.com/Velocidex/pyvelociraptor" target="_blank" rel="noreferrer">github.com/Velocidex/pyvelociraptor</a></li>
+            <li><strong>sigmalint</strong> — MIT — <a href="https://github.com/ni5h4nt/sigmalint" target="_blank" rel="noreferrer">github.com/ni5h4nt/sigmalint</a> &amp; <strong>rsigma</strong> — MIT — <a href="https://rsigma.io" target="_blank" rel="noreferrer">rsigma.io</a> — Sigma checks</li>
+            <li><strong>OTRF Security-Datasets</strong> — MIT — <a href="https://github.com/OTRF/Security-Datasets" target="_blank" rel="noreferrer">github.com/OTRF/Security-Datasets</a> — recorded attacks used as test samples</li>
             <li><strong>bubblewrap</strong> — LGPL 2.0+ — <a href="https://github.com/containers/bubblewrap" target="_blank" rel="noreferrer">github.com/containers/bubblewrap</a> — sandbox of the rule tester</li>
           </ul>
         </div>
@@ -193,7 +254,7 @@
 
   <div class="card border-0 shadow-sm rounded-3 mb-4">
     <div class="card-body p-4">
-      <h5 class="fw-bold mb-3"><i class="fa-solid fa-user-shield text-primary me-2"></i>8. Privacy</h5>
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-user-shield text-primary me-2"></i>9. Privacy</h5>
       <p class="text-muted mb-0" style="font-size:.9rem;">
         Information on what personal data is collected and how it is used is available in our
         <a href="/privacy">Privacy Policy</a>.
@@ -203,7 +264,7 @@
 
   <div class="card border-0 shadow-sm rounded-3 mb-4">
     <div class="card-body p-4">
-      <h5 class="fw-bold mb-3"><i class="fa-solid fa-envelope text-primary me-2"></i>9. Contact</h5>
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-envelope text-primary me-2"></i>10. Contact</h5>
       <p class="text-muted mb-0" style="font-size:.9rem;">
         For legal inquiries, reach out via
         <a href="https://github.com/rulezet/rulezet-core/discussions" target="_blank" rel="noreferrer">GitHub Discussions</a>

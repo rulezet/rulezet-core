@@ -90,6 +90,8 @@
     <div class="card-body p-4">
       <h5 class="fw-bold mb-3"><i class="fa-solid fa-share-nodes text-primary me-2"></i>4. Sharing, federation and other services</h5>
       <ul class="text-muted mb-0" style="font-size:.9rem;line-height:1.7;">
+        <li><strong>Rule feeds and API</strong> — downloading a <a href="/feeds">feed</a> or calling the API uses your account's API key; the request (time, address, feed asked) can be kept in the server logs to stop abuse. Feeds only contain public rules, never your private data.</li>
+        <li><strong>Imported sources</strong> — when Rulezet imports rules from a public source (a Git repository, a rule feed), it contacts that source; no personal data is sent.</li>
         <li><strong>Federation</strong> — administrators can sync rules with other Rulezet instances through connectors. Only public content can be replicated; private bundles and messages are never federated.</li>
         <li><strong>Instance statistics</strong> — a self-hosted Rulezet sends a daily ping to rulezet.org with its address, version and number of rules and bundles. No personal data.</li>
         <li><strong>AI features</strong> — when you ask for an AI analysis or use the assistant, the rule and your request go to the AI provider this instance is configured with (a local Ollama model, or a provider such as Anthropic or OpenAI).</li>

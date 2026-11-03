@@ -150,6 +150,11 @@ _hide_ns(rule_tester_private_ns)
 api.add_namespace(rule_tester_public_ns,  path="/rule_tester/public")
 api.add_namespace(rule_tester_private_ns, path="/rule_tester/private")
 
+# Rule feeds for tools (app/features/feed/): GET /api/feed/<format>, a free account's API key
+from .feed.feed_api import feed_ns  # noqa
+
+api.add_namespace(feed_ns, path="/feed")
+
 
 # ─── CSRF enforcement for session-authenticated API calls ────────────────────
 # csrf.exempt(api_blueprint) is set in create_app() to allow external API-key

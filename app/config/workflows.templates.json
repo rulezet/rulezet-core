@@ -523,6 +523,90 @@
           }
         ]
       }
+    },
+    "rule_feeds_refresh": {
+      "label": "Rule feeds refresh",
+      "icon": "fa-solid fa-satellite-dish",
+      "description": "Every Monday night: sync the rule feeds of the setting feeds.sources (signature-base YARA, SigmaHQ, Emerging Threats Open Suricata…), each one after the other, then look again for links between rules; a notification if a feed fails. Add a feed to the setting, then a 'Rule feed — sync' task here.",
+      "spec": {
+        "title": "Rule feeds refresh",
+        "description": "Fresh rules from the public feeds — every Monday at 03:00 UTC.",
+        "tasks": [
+          {
+            "ref": "signature_base",
+            "title": "Feed: signature-base (YARA)",
+            "task_type": "feed_sync",
+            "target_payload": {
+              "feed": "signature_base"
+            },
+            "trigger": {
+              "trigger_mode": "weekly",
+              "days_of_week": [
+                0
+              ],
+              "hour": 3,
+              "minute": 0,
+              "timezone": "UTC"
+            }
+          },
+          {
+            "ref": "sigmahq",
+            "title": "Feed: SigmaHQ (Sigma)",
+            "task_type": "feed_sync",
+            "target_payload": {
+              "feed": "sigmahq"
+            },
+            "trigger": {
+              "after": "signature_base",
+              "condition": "always"
+            }
+          },
+          {
+            "ref": "et_open",
+            "title": "Feed: ET Open (Suricata)",
+            "task_type": "feed_sync",
+            "target_payload": {
+              "feed": "et_open_suricata"
+            },
+            "trigger": {
+              "after": "sigmahq",
+              "condition": "always"
+            }
+          },
+          {
+            "ref": "relink",
+            "title": "Links between rules",
+            "task_type": "relink_rules",
+            "trigger": {
+              "after": "et_open",
+              "condition": "always"
+            },
+            "target_payload": {
+              "formats": [
+                "yara",
+                "sigma",
+                "suricata",
+                "wazuh",
+                "kunai"
+              ]
+            }
+          },
+          {
+            "ref": "alert",
+            "title": "Tell the admins",
+            "task_type": "action_notify",
+            "target_payload": {
+              "title": "{workflow}: {status}",
+              "message": "A rule feed failed: {failed_tasks}.",
+              "only_editor": false
+            },
+            "trigger": {
+              "after": "et_open",
+              "condition": "failure"
+            }
+          }
+        ]
+      }
     }
   }
 }

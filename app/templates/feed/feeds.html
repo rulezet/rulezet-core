@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/feed/feeds.css') }}">
+{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:1150px;" id="feeds-app" v-cloak>
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-rss banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-2">
+      <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">Feeds</li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="banner-icon"><i class="fa-solid fa-rss"></i></div>
+      <div><h2 class="fw-bold mb-1">Rule feeds</h2><div class="banner-accent"></div></div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:660px;font-size:.95rem;">
+      Every shareable rule of Rulezet, ready for your tools — one URL per format, always up to date.
+      Download a file now, or point YARA, Suricata, your Sigma pipeline or a script at the feed.
+    </p>
+  </div>
+
+  {# three steps #}
+  <div class="fd-steps mb-4">
+    <div class="fd-step">
+      <span class="fd-step__n">1</span>
+      <div>
+        <div class="fd-step__t">Create a free account</div>
+        <div class="fd-step__d">{% if logged_in %}<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i>You are logged in.</span>{% else %}A minute, nothing to pay.{% endif %}</div>
+        {% if not logged_in %}<a href="{{ url_for('account.add_user') }}" class="btn btn-sm btn-primary mt-2"><i class="fa-solid fa-user-plus me-1"></i>Sign up</a>
+        <a href="{{ url_for('account.login', next='/feeds') }}" class="btn btn-sm btn-outline-secondary mt-2">Log in</a>{% endif %}
+      </div>
+    </div>
+    <div class="fd-step">
+      <span class="fd-step__n">2</span>
+      <div>
+        <div class="fd-step__t">Get your API key</div>
+        <div class="fd-step__d">On <strong>My account</strong>, section <strong>API key</strong>: generate it once, copy it. Keep it private.</div>
+        {% if logged_in %}<a href="/account#api-key-body" class="btn btn-sm btn-outline-primary mt-2"><i class="fa-solid fa-key me-1"></i>{{ 'Open My account' if has_key else 'Generate my key' }}</a>{% endif %}
+      </div>
+    </div>
+    <div class="fd-step">
+      <span class="fd-step__n">3</span>
+      <div>
+        <div class="fd-step__t">Plug in your tool</div>
+        <div class="fd-step__d">Send the key in the <code>X-API-KEY</code> header, or as <code>?apikey=</code> when the tool only takes a URL.</div>
+      </div>
+    </div>
+  </div>
+
+  {# one card per feed #}
+  <div class="fd-grid mb-4">
+    <div v-for="f in feeds" :key="f.format" class="fd-card" :style="{ '--fd-color': f.color }">
+      <div class="fd-card__head">
+        <img v-if="f.logo" :src="'/static/images/formats/' + f.logo" :alt="f.title" class="fd-card__logo">
+        <span v-else class="fd-card__icon"><i :class="f.icon || 'fa-solid fa-file-code'"></i></span>
+        <div class="fd-card__name">
+          <strong>[[ f.title ]]</strong>
+          <span class="fd-card__kind">[[ kind(f.style) ]]</span>
+        </div>
+        <span class="fd-card__count">[[ f.count.toLocaleString() ]]<small>rules</small></span>
+      </div>
+      <p class="fd-card__desc">[[ f.description ]]</p>
+      <div class="fd-card__url" :title="url(f)"><i class="fa-solid fa-link"></i><span>[[ url(f) ]]</span></div>
+      <div class="fd-card__actions">
+        <a v-if="loggedIn" :href="'/feeds/download/' + f.format" class="btn btn-sm fd-btn-dl"><i class="fa-solid fa-download me-1"></i>Download .[[ f.ext ]]</a>
+        <a v-else href="{{ url_for('account.add_user') }}" class="btn btn-sm fd-btn-dl" title="A free account is needed"><i class="fa-solid fa-lock me-1"></i>Sign up to download</a>
+        <button type="button" class="btn btn-sm btn-outline-secondary" @click="copy(url(f), 'Feed URL copied.')"><i class="fa-regular fa-copy me-1"></i>URL</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" @click="show(f)"><i class="fa-solid fa-terminal me-1"></i>Commands</button>
+      </div>
+    </div>
+  </div>
+
+  {# commands, highlighted #}
+  <div class="card border-0 shadow-sm rounded-3 mb-4" id="fd-commands">
+    <div class="card-body p-4">
+      <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <h5 class="fw-bold mb-0"><i class="fa-solid fa-plug me-2 text-primary"></i>Plug it in</h5>
+        <div class="fd-tabs ms-auto">
+          <button v-for="t in tools" :key="t.id" type="button" class="fd-tab" :class="{ on: tool === t.id }" @click="tool = t.id">
+            <i :class="t.icon"></i>[[ t.label ]]
+          </button>
+        </div>
+      </div>
+      <p class="text-muted small mb-2">[[ current.help ]] Replace <code>YOUR_API_KEY</code> with the key from My account.</p>
+      <code-viewer :code="current.code" language="bash" :title="current.file" :show-lines="false" max-height="320px"></code-viewer>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-lg-6">
+      <div class="card border-0 shadow-sm rounded-3 h-100">
+        <div class="card-body p-4">
+          <h6 class="fw-bold mb-3"><i class="fa-solid fa-filter me-2 text-primary"></i>Filters</h6>
+          <div class="fd-filter"><code>since=2026-11-01</code><span>only rules created or changed since that date — incremental updates</span></div>
+          <div class="fd-filter"><code>tag=attack.t1059</code><span>only rules with this tag</span></div>
+          <div class="fd-filter"><code>source=signature-base</code><span>only rules from one source (a repository…)</span></div>
+          <div class="fd-filter"><code>output=json</code><span>JSON lines (one rule and its metadata per line), whatever the format</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card border-0 shadow-sm rounded-3 h-100">
+        <div class="card-body p-4">
+          <h6 class="fw-bold mb-3"><i class="fa-solid fa-scale-balanced me-2 text-primary"></i>Good to know</h6>
+          <ul class="fd-notes">
+            <li><i class="fa-solid fa-id-card"></i>Each rule keeps its licence, author and source, written above it: keep them when you share it, and follow the licence (attribution for DRL 1.1…).</li>
+            <li><i class="fa-solid fa-user-secret"></i>Rules marked TLP:RED or TLP:AMBER are never in a feed.</li>
+            <li><i class="fa-solid fa-rotate"></i>Polling? Send back the <code>ETag</code> in <code>If-None-Match</code>: nothing is downloaded when nothing changed.</li>
+            <li><i class="fa-solid fa-gavel"></i>Using the feeds means accepting <a href="/legal#feeds">these terms</a>. The whole API: <a href="/api/">/api/</a>.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block script %}
+<script type="module">
+import CodeViewer from '/static/js/components/code-viewer.js'
+import { create_message } from '/static/js/toaster.js'
+
+const FEEDS = {{ feeds | tojson }}
+const BASE = {{ base_url | tojson }}
+const { createApp, ref, computed } = Vue
+
+createApp({
+  delimiters: ['[[', ']]'],
+  components: { 'code-viewer': CodeViewer },
+  setup() {
+    const feeds = FEEDS
+    const url = (f) => `${BASE}/api/feed/${f.format}`
+    const kind = (style) => ({ yara: 'one .yar file', yaml: 'multi-document YAML', lines: 'one .rules file' }[style] || 'JSON lines')
+    const tools = [
+      { id: 'yara', label: 'YARA', icon: 'fa-solid fa-bug', file: 'yara.sh', help: 'Download the YARA feed and scan with it.',
+        code: `# download (or refresh) the feed\ncurl -fsS -H "X-API-KEY: YOUR_API_KEY" ${BASE}/api/feed/yara -o rulezet.yar\n\n# scan a folder\nyara -r rulezet.yar /path/to/scan\n\n# only what changed since a date\ncurl -fsS -H "X-API-KEY: YOUR_API_KEY" "${BASE}/api/feed/yara?since=2026-11-01" -o rulezet_new.yar` },
+      { id: 'suricata', label: 'Suricata', icon: 'fa-solid fa-network-wired', file: 'suricata.sh', help: 'suricata-update takes the feed as a source (the key goes in the URL).',
+        code: `suricata-update add-source rulezet "${BASE}/api/feed/suricata?apikey=YOUR_API_KEY"\nsuricata-update\n\n# or by hand\ncurl -fsS -H "X-API-KEY: YOUR_API_KEY" ${BASE}/api/feed/suricata -o rulezet.rules` },
+      { id: 'sigma', label: 'Sigma', icon: 'fa-solid fa-wave-square', file: 'sigma.sh', help: 'The Sigma feed is one multi-document YAML file: sigma-cli converts it for your SIEM.',
+        code: `curl -fsS -H "X-API-KEY: YOUR_API_KEY" ${BASE}/api/feed/sigma -o rulezet_sigma.yml\n\n# to your SIEM's language\nsigma convert -t splunk rulezet_sigma.yml\nsigma convert -t esql rulezet_sigma.yml` },
+      { id: 'cron', label: 'Daily refresh', icon: 'fa-solid fa-clock', file: 'crontab', help: 'Refresh every night; the ETag avoids downloading an unchanged feed.',
+        code: `# crontab -e\n15 3 * * * curl -fsS -H "X-API-KEY: YOUR_API_KEY" ${BASE}/api/feed/yara -o /etc/yara/rulezet.yar\n20 3 * * * suricata-update && systemctl reload suricata` },
+      { id: 'json', label: 'JSON / script', icon: 'fa-solid fa-code', file: 'json.sh', help: "Every format as JSON lines, with each rule's metadata — for a script or a SIEM.",
+        code: `curl -fsS -H "X-API-KEY: YOUR_API_KEY" "${BASE}/api/feed/wazuh?output=json" | jq -r '.title'\n\n# the list of feeds\ncurl -fsS -H "X-API-KEY: YOUR_API_KEY" ${BASE}/api/feed/` },
+    ]
+    const tool = ref('yara')
+    const current = computed(() => tools.find(t => t.id === tool.value))
+    async function copy(text, msg) {
+      try { await navigator.clipboard.writeText(text); create_message(msg, 'success-subtle') }
+      catch { create_message('Copy failed: select the text and copy it by hand.', 'danger-subtle') }
+    }
+    function show(f) {
+      tool.value = tools.some(t => t.id === f.format) ? f.format : 'json'
+      document.getElementById('fd-commands').scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    return { feeds, loggedIn: {{ logged_in | tojson }}, url, kind, tools, tool, current, copy, show }
+  },
+}).mount('#feeds-app')
+</script>
+{% endblock %}

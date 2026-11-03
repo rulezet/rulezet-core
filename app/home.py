@@ -809,7 +809,14 @@ def privacy_policy() -> render_template:
 # legal notice page
 @home_blueprint.route("/legal")
 def legal_notice() -> render_template:
-    return render_template("legal_notice.html")
+    # the rule feeds this instance imports, with their licences (setting feeds.sources): enabled ones only
+    from .core.utils.app_settings import get_setting
+    try:
+        feeds_in = [f for f in (get_setting('feeds.sources') or [])
+                    if isinstance(f, dict) and f.get('enabled', True) and f.get('license_ok', True)]
+    except Exception:
+        feeds_in = []
+    return render_template("legal_notice.html", feeds_in=feeds_in)
 
 # version
 @home_blueprint.route("/version")

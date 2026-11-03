@@ -8,7 +8,7 @@
 /* ── Top row ── */
 .footer-top {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 1.5rem;
@@ -204,6 +204,33 @@
     font-size: 0.8rem;
 }
 
+/* ── Link columns (Rulezet / Developers / Community) ── */
+.footer-cols {
+    display: flex;
+    gap: 2.5rem;
+    flex-wrap: wrap;
+}
+
+.footer-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 130px;
+}
+
+.footer-col__title {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0 0.75rem 0.35rem;
+}
+
+.footer-col .footer-nav__link {
+    padding: 0.2rem 0.75rem;
+}
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
     .footer-top {
@@ -222,5 +249,11 @@
 
     .footer-actions {
         justify-content: center;
+    }
+
+    .footer-cols {
+        justify-content: center;
+        gap: 1.5rem;
+        text-align: left;
     }
 }
