@@ -2,8 +2,9 @@
 seo_core.py — how search engines see this instance (setting seo): robots.txt, the sitemaps, the default
 title / description / keywords and the structured data (JSON-LD) of the pages.
 
-Indexing (seo.indexing): 'auto' = only the official instance (IS_OFFICIAL_INSTANCE, rulezet.org) is indexed,
+Indexing (seo.indexing): 'auto' = only the official instance (served at rulezet.org) is indexed,
 so self-hosted copies of the same rules never compete with it in search results; 'on' / 'off' to force.
+Official = served at rulezet.org (app/core/utils/official_instance.py), not an environment variable.
 Only what anyone may read is listed: active rules (never the ones tagged with seo.excluded_tags, TLP), public
 bundles, published public blog posts, CVE kits that have rules, ATT&CK techniques that have rules.
 """
@@ -30,7 +31,8 @@ def indexable() -> bool:
     mode = str(conf().get('indexing') or 'auto').lower()
     if mode in ('on', 'off'):
         return mode == 'on'
-    return bool(current_app.config.get('IS_OFFICIAL_INSTANCE'))
+    from app.core.utils.official_instance import is_official_instance
+    return is_official_instance()          # served at rulezet.org
 
 
 def page_size() -> int:

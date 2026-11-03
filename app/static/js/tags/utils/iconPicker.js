@@ -28,7 +28,9 @@ function loadChoices() {
 
 const IconPicker = {
     props: {
-        modelValue: { type: String, default: 'fa-tag' }
+        modelValue: { type: String, default: 'fa-tag' },
+        label: { type: String, default: 'Icon' },          // '' = no label (the form has its own)
+        color: { type: String, default: '' },              // preview colour (e.g. a workflow's colour)
     },
     emits: ['update:modelValue'],
     delimiters: ['[[', ']]'],
@@ -68,24 +70,19 @@ const IconPicker = {
     },
     template: `
     <div class="icon-picker-container position-relative">
-        <label class="form-label fw-bold small text-muted text-uppercase mb-1">Icon</label>
-        <div class="input-group shadow-sm rounded-3 cursor-pointer" @click="isOpen = !isOpen">
-            <span class="input-group-text border-0 bg-light">
-                <i :class="['fas', 'fa-' + current]" class="text-primary"></i>
-            </span>
-            <input type="text" class="form-control border-0 bg-light cursor-pointer"
-                :value="modelValue" readonly style="height: 45px;">
-            <span class="input-group-text border-0 bg-light">
-                <i class="fas" :class="isOpen ? 'fa-chevron-up' : 'fa-chevron-down'" style="font-size: 0.8rem;"></i>
-            </span>
-        </div>
+        <label v-if="label" class="form-label fw-bold small text-muted text-uppercase mb-1">[[ label ]]</label>
+        <button type="button" class="icon-picker-field" :class="{ 'is-open': isOpen }" @click="isOpen = !isOpen" :aria-expanded="isOpen">
+            <span class="icon-picker-preview" :style="color ? { '--ip-color': color } : {}"><i :class="['fas', 'fa-' + current]"></i></span>
+            <span class="icon-picker-name">fa-[[ current ]]</span>
+            <i class="fas icon-picker-caret" :class="isOpen ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+        </button>
 
         <div v-if="isOpen" class="card shadow-lg border-0 position-absolute w-100 mt-1 z-3 rounded-4 overflow-hidden icon-picker-panel"
              style="min-width: 260px;" @click.stop>
             <div class="p-2 border-bottom icon-picker-head">
                 <div class="input-group input-group-sm mb-2">
-                    <span class="input-group-text border-0 bg-light"><i class="fas fa-search opacity-50"></i></span>
-                    <input type="text" v-model="searchQuery" class="form-control border-0 bg-light"
+                    <span class="input-group-text icon-picker-search-icon"><i class="fas fa-search opacity-50"></i></span>
+                    <input type="text" v-model="searchQuery" class="form-control icon-picker-search"
                         placeholder="Search, or type any Font Awesome name…">
                 </div>
                 <div class="icon-picker-groups">

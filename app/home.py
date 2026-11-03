@@ -2,6 +2,7 @@ import json
 import re
 import os
 from flask import send_from_directory
+from app.core.utils.official_instance import is_official_instance
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, send_from_directory, abort
 from flask_login import current_user, login_required
 from flask import get_flashed_messages
@@ -1633,7 +1634,7 @@ def admin_settings_instance():
         'version':           cfg.version,
         'last_started_at':   cfg.last_started_at.strftime('%Y-%m-%d %H:%M:%S') if cfg.last_started_at else None,
         'created_at':        cfg.created_at.strftime('%Y-%m-%d %H:%M:%S') if cfg.created_at else None,
-        'is_official':       current_app.config.get('IS_OFFICIAL_INSTANCE', False),
+        'is_official':       is_official_instance(),
         'telemetry_url':     'https://rulezet.org/api/instance/register',
     })
 

@@ -1318,6 +1318,11 @@
                                         <button v-for="ic in WF_ICONS" :key="ic" type="button" class="wf-look__icon" :class="{ 'is-on': workflowForm.icon === ic }"
                                                 :title="ic" @click="workflowForm.icon = ic"><i class="fa-solid" :class="ic"></i></button>
                                     </div>
+                                    <!-- Any Font Awesome icon (the tags' icon picker): search the groups or type a name -->
+                                    <div class="wf-look__picker">
+                                        <icon-picker :model-value="workflowForm.icon || 'fa-diagram-project'" @update:model-value="v => workflowForm.icon = v"
+                                                     label="" :color="workflowForm.color || '#0d6efd'"></icon-picker>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -2034,6 +2039,7 @@
     import JobTracker from '/static/js/jobs/JobTracker.js';
     import WorkflowNotebook, { PinnedNotes } from '/static/js/admin/workflowNotebook.js';
     import SmartEditor from '/static/js/components/smart-editor.js';
+    import IconPicker from '/static/js/tags/utils/iconPicker.js';
     import RepoSelectionTable from '/static/js/rule/repoSelectionTable.js';
     import { gitProviderIcon, gitProviderLabel } from '/static/js/components/git-links.js';
     const OWNER_ME = {{ {'id': current_user.id, 'name': ((current_user.first_name or '') ~ ' ' ~ (current_user.last_name or '')).strip()} | tojson }};
@@ -2060,6 +2066,7 @@
             'job-tracker': JobTracker,
             'workflow-notebook': WorkflowNotebook,
             'smart-editor': SmartEditor,
+            'icon-picker': IconPicker,
             'calendar-view': CalendarView,
             'pinned-notes': PinnedNotes,
             'tags-displays-list': TagsDisplaysList,
@@ -2141,7 +2148,10 @@
                 !calHidden.cat.includes(calCategory(e)) && !(e.extendedProps.workflow_uuid && calHidden.wf.includes(e.extendedProps.workflow_uuid))));
             const calendarRef = ref(null);
             const calSide = ref(null);
-            const PALETTE = ['#0d6efd', '#6f42c1', '#d63384', '#fd7e14', '#20c997', '#0dcaf0', '#6610f2', '#198754', '#e35d6a', '#b08800'];
+            // Colours offered (setting workflows.colors, public) — these until it answers
+            const PALETTE = ref(['#0d6efd', '#6f42c1', '#d63384', '#fd7e14', '#20c997', '#0dcaf0', '#6610f2', '#198754', '#e35d6a', '#b08800']);
+            fetch('/api/config/settings/workflows.colors').then(r => r.ok ? r.json() : null)
+                .then(d => { if (d && Array.isArray(d.value) && d.value.length) PALETTE.value = d.value; }).catch(() => {});
             // Icons offered for a workflow (any Font Awesome name works server side)
             const WF_ICONS = ['fa-diagram-project', 'fa-database', 'fa-rotate', 'fa-cloud-arrow-down', 'fa-code-branch', 'fa-broom',
                               'fa-shield-halved', 'fa-bug', 'fa-tags', 'fa-chart-line', 'fa-envelope', 'fa-box-archive',
@@ -2152,7 +2162,7 @@
                 if (wfOf(uuid).color) return wfOf(uuid).color;
                 let h = 0;
                 for (const c of uuid || '') h = (h * 31 + c.charCodeAt(0)) >>> 0;
-                return PALETTE[h % PALETTE.length];
+                return PALETTE.value[h % PALETTE.value.length];
             }
             const wfTitle = (uuid) => (calWorkflows.value.find(w => w.uuid === uuid) || {}).title || 'Workflow';
             const STATUS_COLOR = { done: '#198754', failed: '#dc3545', running: '#0d6efd', pending: '#0d6efd', cancelled: '#6c757d' };

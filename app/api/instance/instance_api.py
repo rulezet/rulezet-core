@@ -12,7 +12,8 @@ class InstanceRegister(Resource):
     def post(self):
         # Only the official instance accepts registrations.
         # On any other self-hosted instance this endpoint is silent.
-        if not current_app.config.get('IS_OFFICIAL_INSTANCE'):
+        from app.core.utils.official_instance import is_official_instance
+        if not is_official_instance():          # served at rulezet.org
             return {'message': 'Not found'}, 404
 
         data = request.get_json(silent=True) or {}

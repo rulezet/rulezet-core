@@ -1,0 +1,28 @@
+{
+  "label": "Workflow colours",
+  "category": "Workflows",
+  "description": "Colours offered for a workflow (list, calendar). Any other colour can still be picked with the eye-dropper; the first ones are also the automatic colours of workflows that have none.",
+  "public": true,
+  "value": [
+    "#0d6efd",
+    "#6610f2",
+    "#6f42c1",
+    "#d63384",
+    "#dc3545",
+    "#e35d6a",
+    "#fd7e14",
+    "#f59f00",
+    "#b08800",
+    "#198754",
+    "#20c997",
+    "#0ca678",
+    "#0dcaf0",
+    "#1c7ed6",
+    "#495057",
+    "#868e96",
+    "#5c940d",
+    "#a61e4d",
+    "#862e9c",
+    "#364fc7"
+  ]
+}

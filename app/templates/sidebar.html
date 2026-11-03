@@ -176,7 +176,7 @@
                               <a href="/admin/roles/list" class="dr-nav__item {% if request.path.startswith('/admin/roles') %}active{% endif %}">
                                  <i class="fa-solid fa-user-shield"></i><span>Roles &amp; Permissions</span>
                               </a>
-                              {% if config.IS_OFFICIAL_INSTANCE %}
+                              {% if is_official %}
                               <a href="/account/admin/instances" class="dr-nav__item {% if request.path == '/account/admin/instances' %}active{% endif %}">
                                  <i class="fa-solid fa-earth-americas"></i><span>Instances</span>
                               </a>

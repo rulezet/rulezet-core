@@ -925,7 +925,7 @@ flask db upgrade</code></pre>
           <h2 class="section-title" id="federation-title">Self-Hosting &amp; Federation</h2>
           <p class="section-lead">Run privately for your team. Optionally pull community rules from rulezet.org when you want them.</p>
 
-          <p class="doc-p">A private Rulezet instance shares nothing by default. Your rules stay on your infrastructure. There is no telemetry other than an optional 24-hour ping that only the official rulezet.org instance sends (<span class="inline-code">IS_OFFICIAL_INSTANCE=true</span> in your env). You can run entirely air-gapped if needed.</p>
+          <p class="doc-p">A private Rulezet instance shares nothing by default. Your rules stay on your infrastructure. There is no telemetry other than an optional 24-hour ping to rulezet.org (the official instance is recognised by its domain, nothing to set). You can run entirely air-gapped if needed.</p>
 
           <h3 class="subsection-title">Connector federation</h3>
           <p class="doc-p">The connector system lets your instance pull rules from another Rulezet instance — typically the community instance at rulezet.org. It is pull-only and admin-only: your instance initiates the sync, the source never pushes to you.</p>

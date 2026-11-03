@@ -42,6 +42,8 @@ class Config:
     FLASK_URL = os.environ.get('FLASK_URL', '127.0.0.1')
     FLASK_PORT = int(os.environ.get('FLASK_PORT', 7009))
     INSTANCE_PUBLIC_URL  = os.environ.get('INSTANCE_PUBLIC_URL')   # e.g. https://myinstance.example.com
+    # Only read by the tests: the official instance is the one served at rulezet.org
+    # (app/core/utils/official_instance.py) — setting this to true elsewhere changes nothing.
     IS_OFFICIAL_INSTANCE = os.environ.get('IS_OFFICIAL_INSTANCE', 'false').lower() == 'true'
 
     # Path to a real `suricata` binary — enables "deep validation" of

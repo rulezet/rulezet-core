@@ -1,7 +1,7 @@
 {
   "label": "SEO — search engines",
   "category": "Instance",
-  "description": "How search engines see this instance: robots.txt, sitemap.xml, default title / description / keywords, structured data. indexing: auto = indexed only on the official instance (rulezet.org — IS_OFFICIAL_INSTANCE), off elsewhere so self-hosted copies never compete with it; on / off to force. Rules tagged with excluded_tags (TLP) are never listed in the sitemap.",
+  "description": "How search engines see this instance: robots.txt, sitemap.xml, default title / description / keywords, structured data. indexing: auto = indexed only on the official instance (served at rulezet.org — the domain decides, not a variable), off elsewhere so self-hosted copies never compete with it; on / off to force. Rules tagged with excluded_tags (TLP) are never listed in the sitemap.",
   "public": false,
   "value": {
     "indexing": "auto",

@@ -126,3 +126,4 @@
 .wcal-dialog { display: flex; flex-direction: column; overflow: hidden; max-height: calc(100vh - 48px); }
 .wcal-dialog > .tf-hero, .wcal-dialog > .modal-footer, .wcal-dialog > .rz-pills { flex-shrink: 0; }
 .wcal-dialog > .tf-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.wf-look__picker { margin-top: .6rem; max-width: 360px; }

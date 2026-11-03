@@ -7,6 +7,7 @@ from app.core.db_class.user import User
 from ... import db
 from ... import oauth
 from flask import Blueprint, jsonify, render_template, redirect, url_for, request, flash, session, current_app, abort
+from app.core.utils.official_instance import is_official_instance
 from .form import LoginForm, EditUserForm, AddNewUserForm, ForgotPasswordForm, ResetPasswordForm
 from ..rule import rule_core as RuleModel
 from . import account_core as AccountModel
@@ -114,7 +115,7 @@ def admin_instances():
     from sqlalchemy import func
     from app import db
     from app.core.db_class.connector import RemotePullLog
-    if not current_user.is_admin() or not current_app.config.get('IS_OFFICIAL_INSTANCE'):
+    if not current_user.is_admin() or not is_official_instance():
         abort(404)
     instances = RegisteredInstance.query.order_by(RegisteredInstance.last_seen.desc()).all()
     own_cfg   = InstanceConfig.query.first()
@@ -169,7 +170,7 @@ def admin_instances():
 def admin_instance_pulls(instance_uuid):
     from flask import current_app, abort, jsonify
     from app.core.db_class.connector import RemotePullLog
-    if not current_user.is_admin() or not current_app.config.get('IS_OFFICIAL_INSTANCE'):
+    if not current_user.is_admin() or not is_official_instance():
         abort(404)
     logs = (RemotePullLog.query
             .filter_by(instance_uuid=instance_uuid)

@@ -352,7 +352,7 @@ def create_app(start_worker=True):
         return {
             'badge_check_pending': badge_check_pending,
             'app_version': current_app.config.get('APP_VERSION', 'unknown'),
-            'is_official': current_app.config.get('IS_OFFICIAL_INSTANCE', False),
+            'is_official': _is_official(),
             'chatbot_enabled': chatbot_enabled,
             'mascot_enabled': mascot_enabled,
             'email_available': is_email_available(instance_cfg),
@@ -685,3 +685,9 @@ def _start_update_checker(app):
     t.start()
     
     
+
+
+def _is_official():
+    """Served at rulezet.org? (app/core/utils/official_instance.py)"""
+    from app.core.utils.official_instance import is_official_instance
+    return is_official_instance()

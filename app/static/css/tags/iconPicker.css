@@ -14,3 +14,13 @@
                      color: var(--text-color); border-radius: 8px; padding: .4rem .6rem; margin-bottom: .5rem; font-size: .8rem; flex-wrap: wrap; }
 .icon-picker-typed i { color: #0d6efd; font-size: 1.1rem; }
 .icon-picker-typed small { color: var(--subtle-text-color); margin-left: auto; }
+
+/* The field: a themed preview of the icon (works in dark mode — no Bootstrap bg-light) */
+.icon-picker-field { display: flex; align-items: center; gap: .65rem; width: 100%; min-height: 45px; padding: .35rem .75rem .35rem .4rem;
+    border: 1px solid var(--border-color); border-radius: 10px; background: var(--card-bg-color); color: var(--text-color); text-align: left; cursor: pointer; }
+.icon-picker-field:hover, .icon-picker-field.is-open { border-color: #0d6efd; }
+.icon-picker-preview { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; flex-shrink: 0; font-size: 1rem;
+    color: var(--ip-color, #0d6efd); background: color-mix(in srgb, var(--ip-color, #0d6efd) 14%, transparent); }
+.icon-picker-name { flex: 1; min-width: 0; font-family: var(--bs-font-monospace); font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-picker-caret { font-size: .75rem; color: var(--subtle-text-color); }
+.icon-picker-search-icon, .icon-picker-search { background: var(--light-bg-color); border-color: var(--border-color); color: var(--text-color); }
