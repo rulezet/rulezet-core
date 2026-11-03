@@ -344,3 +344,31 @@ class AdminWorkflowFile(db.Model):
             'uploader': self.uploader.get_username() if self.uploader else None,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
         }
+
+
+class AdminCalendarEntry(db.Model):
+    """A note or a reminder put on a day of the workflows calendar (e.g. "GitHub token expires").
+    A reminder notifies every admin when its date comes (notified_at set then, once)."""
+    __tablename__ = "admin_calendar_entry"
+
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid        = db.Column(db.String(36), index=True, unique=True)
+    kind        = db.Column(db.String(20), nullable=False, default='note')   # note | reminder
+    title       = db.Column(db.String(200), nullable=False)
+    content     = db.Column(db.Text, nullable=False, default='')
+    due_at      = db.Column(db.DateTime, nullable=False, index=True)         # UTC
+    notified_at = db.Column(db.DateTime, nullable=True)
+    channel     = db.Column(db.String(10), nullable=False, default='notif')    # reminder: notif | email | both
+    author_id   = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    created_at  = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    author = db.relationship("User")
+
+    def to_json(self):
+        return {
+            'uuid': self.uuid, 'kind': self.kind, 'title': self.title, 'content': self.content,
+            'due_at': self.due_at.replace(tzinfo=datetime.timezone.utc).isoformat() if self.due_at else None,
+            'notified_at': self.notified_at.strftime('%Y-%m-%d %H:%M') if self.notified_at else None,
+            'channel': self.channel or 'notif',
+            'author': self.author.get_username() if self.author else None,
+        }

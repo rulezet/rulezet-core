@@ -519,7 +519,8 @@ def workflow_templates():
 @task_scheduler_blueprint.route('/workflows/from_template', methods=['POST'])
 def create_workflow_from_template():
     data = request.get_json(silent=True) or {}
-    workflow, err = WorkflowSpec.create_from_template(data.get('key'), current_user, title=(data.get('title') or '').strip() or None)
+    workflow, err = WorkflowSpec.create_from_template(data.get('key'), current_user, title=(data.get('title') or '').strip() or None,
+                                                      answers=data.get('answers'))
     if err:
         return jsonify({"message": err, "toast_class": "danger-subtle"}), 400
     return _created(workflow, "Workflow created from a template", "admin.workflow_created")
@@ -893,7 +894,94 @@ def workflows_calendar():
         events.append({'kind': 'past', 'workflow_uuid': run.workflow.uuid, 'title': run.workflow.title,
                        'status': _launch_status(run), 'run_uuid': run.uuid, 'active': True,
                        'start': run.started_at.replace(tzinfo=datetime.timezone.utc).isoformat()})
+    # notes and reminders put on the calendar
+    from app.core.db_class.task_scheduler import AdminCalendarEntry
+    for entry in (AdminCalendarEntry.query.filter(AdminCalendarEntry.due_at >= naive(start),
+                                                  AdminCalendarEntry.due_at <= naive(end))
+                  .order_by(AdminCalendarEntry.due_at).limit(500).all()):
+        events.append({**entry.to_json(), 'start': entry.to_json()['due_at']})
     return jsonify({'events': events}), 200
+
+
+def _calendar_entry_fields(data):
+    """Validated fields of a calendar note / reminder, or (None, error)."""
+    import datetime
+    kind = data.get('kind')
+    if kind not in ('note', 'reminder'):
+        return None, 'Kind must be note or reminder.'
+    title = (data.get('title') or '').strip()
+    if not title:
+        return None, 'A title is required.'
+    try:
+        due = datetime.datetime.fromisoformat((data.get('due_at') or '').replace('Z', '+00:00'))
+    except ValueError:
+        return None, 'Invalid date.'
+    if due.tzinfo:
+        due = due.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    channel = data.get('channel') or 'notif'
+    if channel not in ('notif', 'email', 'both'):
+        return None, 'Channel must be notif, email or both.'
+    return {'kind': kind, 'channel': channel, 'title': title[:200], 'content': (data.get('content') or '')[:20000], 'due_at': due}, None
+
+
+@task_scheduler_blueprint.route('/calendar/entries', methods=['GET'])
+def list_calendar_entries():
+    """Notes / reminders already made (?kind=note|reminder), latest first, one per title —
+    offered to be put again on another day."""
+    from app.core.db_class.task_scheduler import AdminCalendarEntry
+    q = AdminCalendarEntry.query
+    if request.args.get('kind') in ('note', 'reminder'):
+        q = q.filter(AdminCalendarEntry.kind == request.args['kind'])
+    seen, entries = set(), []
+    for e in q.order_by(AdminCalendarEntry.due_at.desc()).limit(300).all():
+        if e.title.lower() in seen:
+            continue
+        seen.add(e.title.lower())
+        entries.append(e.to_json())
+    return jsonify({'entries': entries[:50]}), 200
+
+
+@task_scheduler_blueprint.route('/calendar/entries', methods=['POST'])
+def create_calendar_entry():
+    """A note or a reminder on a day of the calendar. Body: {kind, title, content, due_at (ISO, UTC)}."""
+    import uuid as _uuid
+    from app import db
+    from app.core.db_class.task_scheduler import AdminCalendarEntry
+    fields, err = _calendar_entry_fields(request.get_json(silent=True) or {})
+    if err:
+        return _err(err)
+    entry = AdminCalendarEntry(uuid=str(_uuid.uuid4()), author_id=current_user.id, **fields)
+    db.session.add(entry)
+    db.session.commit()
+    log_activity('admin.calendar_entry_created', f"{entry.kind.capitalize()} '{entry.title}' put on the calendar "
+                 f"for {entry.due_at:%Y-%m-%d %H:%M} UTC", target_type='admin_calendar_entry',
+                 target_uuid=entry.uuid, icon='fa-regular fa-calendar-plus')
+    return jsonify({'message': f'{entry.kind.capitalize()} added.', 'toast_class': 'success-subtle',
+                    'entry': entry.to_json()}), 201
+
+
+@task_scheduler_blueprint.route('/calendar/entries/<uuid>', methods=['PUT', 'DELETE'])
+def edit_calendar_entry(uuid):
+    from app import db
+    from app.core.db_class.task_scheduler import AdminCalendarEntry
+    entry = AdminCalendarEntry.query.filter_by(uuid=uuid).first()
+    if not entry:
+        return _err('Entry not found.', 404)
+    if request.method == 'DELETE':
+        db.session.delete(entry)
+        db.session.commit()
+        log_activity('admin.calendar_entry_deleted', f"{entry.kind.capitalize()} '{entry.title}' removed from the calendar",
+                     target_type='admin_calendar_entry', target_uuid=uuid, icon='fa-regular fa-calendar-minus')
+        return jsonify({'message': 'Removed.', 'toast_class': 'success-subtle'}), 200
+    fields, err = _calendar_entry_fields(request.get_json(silent=True) or {})
+    if err:
+        return _err(err)
+    if fields['due_at'] != entry.due_at or fields['kind'] != entry.kind:
+        entry.notified_at = None   # moved: the reminder goes out again at its new date
+    for k, v in fields.items():
+        setattr(entry, k, v)
+    db.session.commit()
+    return jsonify({'message': 'Saved.', 'toast_class': 'success-subtle', 'entry': entry.to_json()}), 200
 
 
 @task_scheduler_blueprint.route('/workflows/<uuid>/launch', methods=['POST'])

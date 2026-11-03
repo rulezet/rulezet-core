@@ -102,7 +102,7 @@
                     <button type="button" class="wcal-link" @click="calSelected = calSelected.length ? [] : calWorkflows.map(w => w.uuid)">
                         [[ calSelected.length ? 'None' : 'All' ]]</button>
                 </div>
-                <p class="wcal-hint">Drag a workflow onto a day or an hour — the checked ones go with it. Or click a day.</p>
+                <p class="wcal-hint">Drag a workflow onto a day or an hour — the checked ones go with it. Or click a day: schedule, add a note or a reminder.</p>
                 <div ref="calSide" class="wcal-list">
                     <div v-for="w in calWorkflows" :key="w.uuid" class="wcal-wf" :class="{ 'is-paused': !w.is_active, 'is-checked': calSelected.includes(w.uuid) }"
                          :data-uuid="w.uuid" :data-title="calSelected.includes(w.uuid) && calSelected.length > 1 ? calSelected.length + ' workflows' : w.title"
@@ -113,30 +113,91 @@
                             <span class="wcal-wf__title">[[ w.title ]]</span>
                             <span class="wcal-wf__sub">[[ w.first_task && w.first_task.trigger_mode !== 'after_task' ? triggerSummary(w.first_task) : 'no launch date' ]][[ w.is_active ? '' : ' · paused' ]]</span>
                         </span>
+                        <button type="button" class="wcal-wf__eye" :title="calHidden.wf.includes(w.uuid) ? 'Show it on the calendar' : 'Hide it from the calendar'"
+                                @click.stop="toggleCalHide('wf', w.uuid)" @mousedown.stop>
+                            <i class="fa-regular" :class="calHidden.wf.includes(w.uuid) ? 'fa-eye-slash' : 'fa-eye'"></i></button>
                         <i class="fa-solid fa-grip-vertical wcal-wf__grip"></i>
                     </div>
                     <p v-if="!calWorkflows.length" class="wcal-hint">No workflow yet.</p>
                 </div>
                 <button v-if="calSelected.length" type="button" class="btn btn-sm btn-primary rounded-pill w-100 mt-2" @click="openSchedule(null, calSelected)">
                     <i class="fa-regular fa-calendar-plus me-1"></i>Schedule the [[ calSelected.length ]] checked</button>
-                <div class="wcal-legend">
-                    <span><i class="wcal-legend__swatch" style="background:#0d6efd"></i>planned</span>
-                    <span><i class="wcal-legend__swatch" style="background:#198754"></i>done</span>
-                    <span><i class="wcal-legend__swatch" style="background:#dc3545"></i>failed</span>
-                    <span><i class="wcal-legend__swatch wcal-legend__swatch--paused"></i>paused</span>
+                <div class="wcal-filter">
+                    <div class="wcal-filter__head">
+                        <span>Show</span>
+                        <button v-if="calHiddenCount" type="button" class="wcal-link" @click="resetCalHidden">Show all ([[ calHiddenCount ]] hidden)</button>
+                    </div>
+                    <button v-for="c in CAL_CATEGORIES" :key="c.key" type="button" class="wcal-chip" :class="{ 'is-off': calHidden.cat.includes(c.key) }"
+                            :title="calHidden.cat.includes(c.key) ? 'Hidden — click to show' : 'Click to hide'" @click="toggleCalHide('cat', c.key)">
+                        <i class="wcal-legend__swatch" :class="c.swatchClass" :style="c.color ? { background: c.color } : {}"></i>[[ c.label ]]
+                        <span class="wcal-chip__n">[[ calCatCount(c.key) ]]</span>
+                    </button>
                 </div>
             </aside>
             <div class="wcal-main">
-                <calendar-view ref="calendarRef" :events="calEvents" :editable="true" :selectable="true" :droppable="true"
-                               @range="onCalRange" @select="onCalSelect" @drop="onCalDrop" @event-drop="onCalEventDrop" @event-click="onCalEventClick"></calendar-view>
+                <calendar-view ref="calendarRef" :events="calVisibleEvents" :editable="true" :selectable="true" :droppable="true"
+                               day-button="Add to this day — a workflow, a note, a reminder" :active-date="calOpenDay"
+                               @range="onCalRange" @select="onCalSelect" @day-button="d => calDay = d.date" @drop="onCalDrop" @event-drop="onCalEventDrop" @event-click="onCalEventClick"></calendar-view>
+
+                <!-- The day clicked: everything on it -->
+                <section v-if="calOpenDay" class="wcal-dayview" aria-live="polite">
+                    <header class="wcal-dayview__head">
+                        <div class="wcal-dayview__date">
+                            <span class="wcal-dayview__num">[[ calOpenDay.getDate() ]]</span>
+                            <div>
+                                <div class="fw-bold">[[ calOpenDay.toLocaleDateString([], { weekday: 'long', month: 'long', year: 'numeric' }) ]]</div>
+                                <div class="small text-muted">[[ calDayItems.length ? calDayItems.length + ' item' + (calDayItems.length > 1 ? 's' : '') : 'Nothing on this day' ]]
+                                    <template v-if="calDayHidden"> · [[ calDayHidden ]] hidden by the filters</template></div>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button type="button" class="btn btn-sm btn-outline-primary" @click="openSchedule(calOpenDay, calSelected)"><i class="fa-regular fa-calendar-plus me-1"></i>Schedule</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @click="openCalEntry('note', calOpenDay)"><i class="fa-solid fa-note-sticky me-1"></i>Note</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @click="openCalEntry('reminder', calOpenDay)"><i class="fa-solid fa-bell me-1"></i>Reminder</button>
+                            <button type="button" class="btn-close ms-1" aria-label="Close the day" @click="calOpenDay = null"></button>
+                        </div>
+                    </header>
+                    <ul v-if="calDayItems.length" class="wcal-dayview__list">
+                        <li v-for="e in calDayItems" :key="e.id" class="wcal-item" :class="'wcal-item--' + e.extendedProps.kind" :style="{ '--item-color': e.color }">
+                            <span class="wcal-item__time">[[ new Date(e.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) ]]</span>
+                            <span class="wcal-item__icon"><i class="fa-solid" :class="e.extendedProps.icon || 'fa-diagram-project'"></i></span>
+                            <div class="wcal-item__body">
+                                <div class="wcal-item__title">[[ e.extendedProps.title ]]
+                                    <span class="wcal-item__tag">[[ calItemLabel(e) ]]</span>
+                                </div>
+                                <div v-if="calMd[e.extendedProps.uuid]" class="wnb-md wcal-item__md" v-html="calMd[e.extendedProps.uuid]"></div>
+                            </div>
+                            <div class="wcal-item__actions">
+                                <button v-if="e.extendedProps.uuid && (e.extendedProps.kind === 'note' || e.extendedProps.kind === 'reminder')" type="button" class="btn btn-sm btn-light"
+                                        title="Edit" @click="openCalEntry(e.extendedProps.kind, e.extendedProps.due_at, e.extendedProps)"><i class="fa-solid fa-pen"></i></button>
+                                <button v-if="e.extendedProps.uuid && (e.extendedProps.kind === 'note' || e.extendedProps.kind === 'reminder')" type="button" class="btn btn-sm btn-light text-danger"
+                                        :title="'Delete this ' + e.extendedProps.kind" @click="deleteCalEntry(e.extendedProps)"><i class="fa-solid fa-trash"></i></button>
+                                <template v-else>
+                                    <a :href="'/admin/tasks/' + e.extendedProps.workflow_uuid" class="btn btn-sm btn-light" title="Open the workflow"><i class="fa-solid fa-arrow-right"></i></a>
+                                    <button type="button" class="btn btn-sm btn-light" title="More" @click="calPick = e"><i class="fa-solid fa-ellipsis"></i></button>
+                                </template>
+                            </div>
+                        </li>
+                    </ul>
+                    <p v-else class="wcal-dayview__empty"><i class="fa-regular fa-calendar me-1"></i>Free day — use the buttons above to put something on it.</p>
+                </section>
             </div>
         </div>
 
         <!-- Schedule: when the chosen workflows launch -->
         <div v-if="schedule.open" class="wcal-modal" @click.self="schedule.open = false">
-            <div class="wcal-modal__box" role="dialog" aria-modal="true">
-                <h5 class="fw-bold mb-1"><i class="fa-regular fa-calendar-plus me-2 text-primary"></i>Schedule [[ schedule.rows.length > 1 ? schedule.rows.length + ' workflows' : 'a workflow' ]]</h5>
-                <p class="text-muted small mb-3">Replaces the launch date of each one (its first task) — your time zone, [[ userTz ]].</p>
+            <div class="modal-content border-0 shadow-lg tf-modal wcal-dialog wcal-dialog--sm" role="dialog" aria-modal="true">
+                <div class="tf-hero">
+                    <i class="tf-hero__watermark fa-regular fa-calendar-plus"></i>
+                    <div class="tf-hero__icon"><i class="fa-regular fa-calendar-plus"></i></div>
+                    <div class="tf-hero__text">
+                        <div class="tf-hero__kicker">Calendar</div>
+                        <h5 class="tf-hero__title">Schedule [[ schedule.rows.length > 1 ? schedule.rows.length + ' workflows' : 'a workflow' ]]</h5>
+                        <div class="tf-hero__sub">Replaces the launch date of each one (its first task) — your time zone, [[ userTz ]]</div>
+                    </div>
+                    <button type="button" class="btn-close tf-hero__close" aria-label="Close" @click="schedule.open = false"></button>
+                </div>
+                <div class="modal-body tf-body">
                 <!-- One row per workflow, one after the other -->
                 <div v-if="schedule.rows.length > 1" class="wcal-spread mb-2">
                     <span class="small text-muted">One after the other, every</span>
@@ -157,6 +218,12 @@
                         <span v-if="dayIsFull(r, i)" class="wcal-row__full">[[ dayCount(r, i) ]] launches that day — [[ calMaxPerDay ]] max</span>
                     </div>
                 </div>
+                <p v-if="!schedule.rows.length" class="small text-muted mb-2"><i class="fa-solid fa-hand-pointer me-1"></i>Pick the workflow(s) to launch that day:</p>
+                <select class="form-select form-select-sm mb-3" :class="{ 'border-primary': !schedule.rows.length }" aria-label="Add a workflow"
+                        @change="addScheduleRow($event.target.value); $event.target.value = ''">
+                    <option value="">[[ schedule.rows.length ? '+ Add another workflow…' : 'Choose a workflow…' ]]</option>
+                    <option v-for="w in calWorkflows.filter(w => !schedule.rows.some(r => r.uuid === w.uuid))" :key="w.uuid" :value="w.uuid">[[ w.title ]][[ w.is_active ? '' : ' (paused)' ]]</option>
+                </select>
                 <div class="tf-segment mb-3 flex-wrap">
                     <button type="button" :class="{ 'is-on': schedule.repeat === 'once' }" @click="schedule.repeat = 'once'">Once</button>
                     <button type="button" :class="{ 'is-on': schedule.repeat === 'daily' }" @click="schedule.repeat = 'daily'">Every day</button>
@@ -168,30 +235,138 @@
                     <span class="tf-switch__track"><span class="tf-switch__thumb"></span></span>
                     <span>Also resume the paused ones</span>
                 </label>
-                <p class="small text-muted mb-0"><i class="fa-solid fa-circle-info me-1"></i>[[ scheduleSentence ]]</p>
-                <div class="d-flex justify-content-end gap-2 mt-3">
-                    <button type="button" class="btn btn-light rounded-pill" @click="schedule.open = false">Cancel</button>
-                    <button type="button" class="btn btn-primary rounded-pill px-4" :disabled="schedule.saving || !schedule.rows.length || schedule.rows.some(r => !r.date || !r.time) || schedule.rows.some((r, i) => dayIsFull(r, i))" @click="saveSchedule()">
+                <p v-if="scheduleSentence" class="small text-muted mb-0"><i class="fa-solid fa-circle-info me-1"></i>[[ scheduleSentence ]]</p>
+                </div>
+                <div class="modal-footer border-0 pt-0 px-4 pb-4">
+                    <button type="button" class="btn btn-outline-secondary" @click="schedule.open = false">Cancel</button>
+                    <button type="button" class="btn btn-primary" :disabled="schedule.saving || !schedule.rows.length || schedule.rows.some(r => !r.date || !r.time) || schedule.rows.some((r, i) => dayIsFull(r, i))" @click="saveSchedule()">
                         <span v-if="schedule.saving" class="spinner-border spinner-border-sm me-1"></span>Save</button>
                 </div>
             </div>
         </div>
 
+        <!-- A day clicked: what to put on it -->
+        <div v-if="calDay" class="wcal-modal" @click.self="calDay = null">
+            <div class="modal-content border-0 shadow-lg tf-modal wcal-dialog wcal-dialog--sm" role="dialog" aria-modal="true" aria-labelledby="calDayTitle">
+                <div class="tf-hero">
+                    <i class="tf-hero__watermark fa-regular fa-calendar"></i>
+                    <div class="tf-hero__icon"><i class="fa-regular fa-calendar-plus"></i></div>
+                    <div class="tf-hero__text">
+                        <div class="tf-hero__kicker">Calendar</div>
+                        <h5 id="calDayTitle" class="tf-hero__title">[[ calDay.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' }) ]]</h5>
+                        <div class="tf-hero__sub">What do you want to put on this day?</div>
+                    </div>
+                    <button type="button" class="btn-close tf-hero__close" aria-label="Close" @click="calDay = null"></button>
+                </div>
+                <div class="modal-body tf-body">
+                    <div class="wf-tpl-grid wcal-daymenu">
+                        <button type="button" class="wf-tpl" @click="openSchedule(calDay, calSelected); calDay = null">
+                            <span class="wf-tpl__icon"><i class="fa-solid fa-diagram-project"></i></span>
+                            <span class="wf-tpl__name">Schedule a workflow</span>
+                            <span class="wf-tpl__desc">[[ calSelected.length ? calSelected.length + ' checked in the list' : 'Pick the workflows to launch that day' ]]</span>
+                        </button>
+                        <button type="button" class="wf-tpl" @click="openCalEntry('note', calDay)">
+                            <span class="wf-tpl__icon"><i class="fa-solid fa-note-sticky"></i></span>
+                            <span class="wf-tpl__name">Add a note</span>
+                            <span class="wf-tpl__desc">Shown on the calendar, nothing is sent</span>
+                        </button>
+                        <button type="button" class="wf-tpl" @click="openCalEntry('reminder', calDay)">
+                            <span class="wf-tpl__icon"><i class="fa-solid fa-bell"></i></span>
+                            <span class="wf-tpl__name">Add a reminder</span>
+                            <span class="wf-tpl__desc">The admins are told at that date — a notification, an email or both</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- A note or a reminder: create or edit (one dialog per kind, the kind never changes once opened) -->
+        <div v-if="calEntry.open" class="wcal-modal" @click.self="calEntry.open = false">
+            <form :key="calEntry.kind" class="modal-content border-0 shadow-lg tf-modal wcal-dialog" :class="'wcal-dialog--' + calEntry.kind" role="dialog" aria-modal="true" aria-labelledby="calEntryHead" @submit.prevent="saveCalEntry">
+                <div class="tf-hero">
+                    <i class="tf-hero__watermark fa-solid" :class="calEntry.kind === 'reminder' ? 'fa-bell' : 'fa-note-sticky'"></i>
+                    <div class="tf-hero__icon"><i class="fa-solid" :class="calEntry.kind === 'reminder' ? 'fa-bell' : 'fa-note-sticky'"></i></div>
+                    <div class="tf-hero__text">
+                        <div class="tf-hero__kicker">Calendar · [[ calEntry.uuid ? 'edit' : 'new' ]]</div>
+                        <h5 id="calEntryHead" class="tf-hero__title">[[ calEntry.uuid ? 'Edit the' : 'Add a' ]] [[ calEntry.kind ]]</h5>
+                        <div class="tf-hero__sub">[[ calEntry.kind === 'reminder' ? 'The admins are told when the date comes' : 'Shown on the calendar, nothing is sent' ]]</div>
+                    </div>
+                    <button type="button" class="btn-close tf-hero__close" aria-label="Close" @click="calEntry.open = false"></button>
+                </div>
+                <div class="modal-body tf-body">
+                    <div v-if="!calEntry.uuid && calEntry.previous.length" class="wcal-reuse mb-3">
+                        <label class="form-label fw-semibold small" for="calEntryReuse"><i class="fa-solid fa-clone me-1"></i>Put back one you already made</label>
+                        <select id="calEntryReuse" class="form-select form-select-sm" @change="reuseCalEntry($event.target.value)">
+                            <option value="">Start from an empty [[ calEntry.kind ]]</option>
+                            <option v-for="p in calEntry.previous" :key="p.uuid" :value="p.uuid">[[ p.title ]] · [[ new Date(p.due_at).toLocaleDateString() ]]</option>
+                        </select>
+                        <div class="form-text">Its title, details[[ calEntry.kind === 'reminder' ? ', channel' : '' ]] and time of day are copied onto this date.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small" for="calEntryTitle">Title</label>
+                        <input id="calEntryTitle" v-model="calEntry.title" class="form-control" maxlength="200" required
+                               :placeholder="calEntry.kind === 'reminder' ? 'GitHub token expires' : 'Maintenance window'">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small" for="calEntryDate">Date <span class="text-muted fw-normal">· [[ userTz ]]</span></label>
+                        <input id="calEntryDate" v-model="calEntry.date" type="datetime-local" class="form-control" required>
+                    </div>
+                    <div v-if="calEntry.kind === 'reminder'" class="mb-3">
+                        <label class="form-label fw-semibold small d-block">Send it as</label>
+                        <div class="tf-segment">
+                            <button type="button" :class="{ 'is-on': calEntry.channel === 'notif' }" @click="calEntry.channel = 'notif'"><i class="fa-regular fa-bell me-1"></i>Notification</button>
+                            <button type="button" :class="{ 'is-on': calEntry.channel === 'email' }" @click="calEntry.channel = 'email'"><i class="fa-regular fa-envelope me-1"></i>Email</button>
+                            <button type="button" :class="{ 'is-on': calEntry.channel === 'both' }" @click="calEntry.channel = 'both'"><i class="fa-solid fa-layer-group me-1"></i>Both</button>
+                        </div>
+                        <div class="form-text">To every admin[[ calEntry.notified_at ? ' — already sent ' + calEntry.notified_at + ' UTC; moving it sends it again' : '' ]].</div>
+                    </div>
+                    <div class="mb-1">
+                        <label class="form-label fw-semibold small">Details <span class="text-muted fw-normal">· optional, markdown</span></label>
+                        <smart-editor v-model="calEntry.content" mode="markdown" min-height="160px" max-height="420px"
+                                      placeholder="Markdown: **bold**, lists, links, code…"></smart-editor>
+                    </div>
+                    <div v-if="calEntry.author" class="form-text">By [[ calEntry.author ]]</div>
+                </div>
+                <div class="modal-footer border-0 pt-0 px-4 pb-4">
+                    <button v-if="calEntry.uuid" type="button" class="btn btn-outline-danger me-auto" @click="deleteCalEntry"><i class="fa-solid fa-trash me-1"></i>Delete</button>
+                    <button type="button" class="btn btn-outline-secondary" @click="calEntry.open = false">Cancel</button>
+                    <button type="submit" class="btn btn-primary" :disabled="calEntry.saving"><i class="fa-solid fa-check me-1"></i>Save</button>
+                </div>
+            </form>
+        </div>
+
         <!-- A calendar event: what it is, what to do with it -->
         <div v-if="calPick" class="wcal-modal" @click.self="calPick = null">
-            <div class="wcal-modal__box" role="dialog" aria-modal="true" style="max-width:420px">
-                <h5 class="fw-bold mb-1">[[ calPick.title ]]</h5>
-                <p class="small text-muted mb-3">
-                    [[ new Date(calPick.start).toLocaleString() ]] ·
-                    <template v-if="calPick.extendedProps.kind === 'past'">launch [[ calPick.extendedProps.status ]]</template>
-                    <template v-else>[[ modeLabel(calPick.extendedProps.mode) ]][[ calPick.extendedProps.active ? '' : ' · paused' ]]</template>
-                </p>
-                <div class="d-flex flex-wrap gap-2">
-                    <a :href="'/admin/tasks/' + calPick.extendedProps.workflow_uuid" class="btn btn-sm btn-outline-primary rounded-pill"><i class="fa-solid fa-arrow-right me-1"></i>Open the workflow</a>
-                    <button type="button" class="btn btn-sm btn-outline-success rounded-pill" @click="calRunNow(calPick.extendedProps.workflow_uuid)"><i class="fa-solid fa-play me-1"></i>Run now</button>
-                    <button v-if="calPick.extendedProps.kind !== 'past'" type="button" class="btn btn-sm btn-outline-secondary rounded-pill"
-                            @click="openSchedule(new Date(calPick.start), [calPick.extendedProps.workflow_uuid], calPick.extendedProps.mode); calPick = null">
-                        <i class="fa-regular fa-calendar me-1"></i>Reschedule</button>
+            <div class="modal-content border-0 shadow-lg tf-modal wcal-dialog" role="dialog" aria-modal="true">
+                <div class="tf-hero">
+                    <i class="tf-hero__watermark fa-solid" :class="wfIcon(calPick.extendedProps.workflow_uuid)"></i>
+                    <div class="tf-hero__icon"><i class="fa-solid" :class="wfIcon(calPick.extendedProps.workflow_uuid)"></i></div>
+                    <div class="tf-hero__text">
+                        <div class="tf-hero__kicker">[[ calPick.extendedProps.kind === 'past' ? 'Launch ' + calPick.extendedProps.status : 'Planned launch' ]]</div>
+                        <h5 class="tf-hero__title">[[ calPick.extendedProps.title ]]</h5>
+                        <div class="tf-hero__sub">[[ new Date(calPick.start).toLocaleString() ]]<template v-if="calPick.extendedProps.kind !== 'past'"> · [[ modeLabel(calPick.extendedProps.mode) ]][[ calPick.extendedProps.active ? '' : ' · paused' ]]</template></div>
+                    </div>
+                    <button type="button" class="btn-close tf-hero__close" aria-label="Close" @click="calPick = null"></button>
+                </div>
+                <div class="modal-body tf-body">
+                    <div class="wf-tpl-grid wcal-actions">
+                        <a :href="'/admin/tasks/' + calPick.extendedProps.workflow_uuid" class="wf-tpl">
+                            <span class="wf-tpl__icon"><i class="fa-solid fa-arrow-right"></i></span>
+                            <span class="wf-tpl__name">Open the workflow</span>
+                            <span class="wf-tpl__desc">Its tasks, launches and notebook</span>
+                        </a>
+                        <button type="button" class="wf-tpl" @click="calRunNow(calPick.extendedProps.workflow_uuid)">
+                            <span class="wf-tpl__icon wcal-actions__run"><i class="fa-solid fa-play"></i></span>
+                            <span class="wf-tpl__name">Run now</span>
+                            <span class="wf-tpl__desc">Launch it right away, the schedule stays as it is</span>
+                        </button>
+                        <button v-if="calPick.extendedProps.kind !== 'past'" type="button" class="wf-tpl"
+                                @click="openSchedule(new Date(calPick.start), [calPick.extendedProps.workflow_uuid], calPick.extendedProps.mode); calPick = null">
+                            <span class="wf-tpl__icon"><i class="fa-regular fa-calendar"></i></span>
+                            <span class="wf-tpl__name">Reschedule</span>
+                            <span class="wf-tpl__desc">Pick another date or rhythm</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1208,7 +1383,40 @@
                     <button type="button" class="btn-close tf-hero__close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body tf-body">
-                    <div class="wf-tpl-grid">
+                    <!-- a template that asks its choices (its "ask") before creating the workflow -->
+                    <div v-if="asking" class="wf-ask">
+                        <div class="wf-ask__head">
+                            <span class="wf-tpl__icon"><i :class="asking.t.icon"></i></span>
+                            <div><div class="fw-bold">[[ asking.t.label ]]</div><div class="small text-muted">[[ asking.t.description ]]</div></div>
+                        </div>
+                        <div v-for="f in asking.t.ask" :key="f.task + f.key" class="wf-ask__field">
+                            <label class="form-label fw-semibold mb-1">[[ f.label ]] <span class="text-muted small fw-normal">· [[ f.task_title ]]</span></label>
+                            <div v-if="f.help" class="small text-muted mb-1">[[ f.help ]]</div>
+                            <template v-if="f.type === 'multiselect'">
+                                <input v-if="f.options.length > 8" type="search" class="form-control form-control-sm mb-2" placeholder="Filter…" v-model="asking.filter[f.task + f.key]">
+                                <div class="wf-ask__checks">
+                                    <label v-for="o in askFiltered(f)" :key="o.value" class="wf-ask__check">
+                                        <input type="checkbox" :value="o.value" v-model="asking.answers[f.task][f.key]"> [[ o.label ]]
+                                    </label>
+                                    <div v-if="!f.options.length" class="small text-muted">Nothing to choose from yet.</div>
+                                </div>
+                                <div class="small text-muted mt-1">[[ (asking.answers[f.task][f.key] || []).length ]] chosen</div>
+                            </template>
+                            <select v-else-if="f.type === 'select'" class="form-select form-select-sm" v-model="asking.answers[f.task][f.key]">
+                                <option v-for="o in f.options" :key="o.value" :value="o.value">[[ o.label ]]</option>
+                            </select>
+                            <div v-else-if="f.type === 'bool'" class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" :id="'ask-' + f.task + f.key" v-model="asking.answers[f.task][f.key]">
+                                <label class="form-check-label small" :for="'ask-' + f.task + f.key">Yes</label>
+                            </div>
+                            <input v-else type="text" class="form-control form-control-sm" v-model="asking.answers[f.task][f.key]">
+                        </div>
+                        <div class="d-flex gap-2 justify-content-end mt-3">
+                            <button type="button" class="btn btn-outline-secondary" @click="asking = null"><i class="fa-solid fa-arrow-left me-1"></i>Back</button>
+                            <button type="button" class="btn btn-primary" :disabled="templateBusy" @click="confirmTemplate()"><i class="fa-solid fa-wand-magic-sparkles me-1"></i>Create the workflow</button>
+                        </div>
+                    </div>
+                    <div v-else class="wf-tpl-grid">
                         <button v-for="t in templates" :key="t.key" type="button" class="wf-tpl" :disabled="templateBusy" @click="useTemplate(t)">
                             <span v-if="t.custom" class="wf-tpl__badge">Yours
                                 <i class="fa-solid fa-trash wf-tpl__del" title="Delete this template" @click.stop="deleteTemplate(t)"></i></span>
@@ -1696,6 +1904,8 @@
     import WorkflowRunTrace, { formatDuration } from '/static/js/admin/workflowRunTrace.js';
     import JobTracker from '/static/js/jobs/JobTracker.js';
     import WorkflowNotebook, { PinnedNotes } from '/static/js/admin/workflowNotebook.js';
+    import SmartEditor from '/static/js/components/smart-editor.js';
+    import { renderMarkdown } from '/static/js/sanitize.js';
     import CalendarView from '/static/js/components/calendar-view.js';
     import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js';
     import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js';
@@ -1716,6 +1926,7 @@
             'workflow-run-trace': WorkflowRunTrace,
             'job-tracker': JobTracker,
             'workflow-notebook': WorkflowNotebook,
+            'smart-editor': SmartEditor,
             'calendar-view': CalendarView,
             'pinned-notes': PinnedNotes,
             'tags-displays-list': TagsDisplaysList,
@@ -1759,6 +1970,42 @@
             const calEvents = ref([]);
             const calRange = ref(null);
             const calPick = ref(null);
+            const calDay = ref(null);
+            const calEntry = reactive({ open: false, uuid: null, kind: 'note', title: '', content: '', date: '', author: null, notified_at: null, channel: 'notif', saving: false, previous: [] });
+            // What the calendar shows (kept per browser)
+            const CAL_CATEGORIES = [
+                { key: 'planned', label: 'planned', color: '#0d6efd' },
+                { key: 'done', label: 'done', color: '#198754' },
+                { key: 'failed', label: 'failed', color: '#dc3545' },
+                { key: 'other', label: 'other launches', color: '#6c757d' },
+                { key: 'paused', label: 'paused', swatchClass: 'wcal-legend__swatch--paused' },
+                { key: 'note', label: 'notes', color: '#b08800' },
+                { key: 'reminder', label: 'reminders', color: '#e35d6a' },
+            ];
+            const calHidden = reactive((() => {
+                try {
+                    const v = JSON.parse(localStorage.getItem('rz.wcal.hidden') || '{}');
+                    return { cat: Array.isArray(v.cat) ? v.cat : [], wf: Array.isArray(v.wf) ? v.wf : [] };
+                } catch (e) { return { cat: [], wf: [] }; }
+            })());
+            function saveCalHidden() { try { localStorage.setItem('rz.wcal.hidden', JSON.stringify(calHidden)); } catch (e) { /* private mode */ } }
+            function toggleCalHide(kind, key) {
+                const list = calHidden[kind];
+                const i = list.indexOf(key);
+                if (i >= 0) list.splice(i, 1); else list.push(key);
+                saveCalHidden();
+            }
+            function resetCalHidden() { calHidden.cat.splice(0); calHidden.wf.splice(0); saveCalHidden(); }
+            const calHiddenCount = computed(() => calHidden.cat.length + calHidden.wf.length);
+            function calCategory(e) {
+                const p = e.extendedProps;
+                if (p.kind === 'note' || p.kind === 'reminder') return p.kind;
+                if (p.kind === 'past') return p.status === 'done' ? 'done' : p.status === 'failed' ? 'failed' : 'other';
+                return p.active ? 'planned' : 'paused';
+            }
+            const calCatCount = (key) => calEvents.value.filter(e => calCategory(e) === key).length;
+            const calVisibleEvents = computed(() => calEvents.value.filter(e =>
+                !calHidden.cat.includes(calCategory(e)) && !(e.extendedProps.workflow_uuid && calHidden.wf.includes(e.extendedProps.workflow_uuid))));
             const calendarRef = ref(null);
             const calSide = ref(null);
             const PALETTE = ['#0d6efd', '#6f42c1', '#d63384', '#fd7e14', '#20c997', '#0dcaf0', '#6610f2', '#198754', '#e35d6a', '#b08800'];
@@ -1795,6 +2042,12 @@
                 const res = await fetch('/admin/tasks/calendar?' + p);
                 if (!res.ok) return;
                 calEvents.value = ((await res.json()).events || []).map((e, i) => {
+                    if (e.kind === 'note' || e.kind === 'reminder') {
+                        const rem = e.kind === 'reminder';
+                        return { id: 'e' + e.uuid, title: e.title, start: e.start, color: rem ? '#e35d6a' : '#b08800', editable: true,
+                                 classNames: ['is-entry', rem && e.notified_at ? 'is-past' : ''].filter(Boolean),
+                                 extendedProps: { ...e, icon: rem ? 'fa-bell' : 'fa-note-sticky' } };
+                    }
                     const past = e.kind === 'past';
                     const color = past ? (STATUS_COLOR[e.status] || '#6c757d') : (e.active ? wfColor(e.workflow_uuid) : '#adb5bd');
                     return { id: (past ? 'r' : 'p') + i, title: (past ? (e.status === 'done' ? '✓ ' : e.status === 'failed' ? '✗ ' : '• ') : '▶ ') + e.title,
@@ -1812,7 +2065,7 @@
             // Schedule dialog
             const pad = (n) => String(n).padStart(2, '0');
             const toDateInput = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-            const schedule = reactive({ open: false, rows: [], repeat: 'once', spacing: 30, resume: true, saving: false });
+            const schedule = reactive({ open: false, rows: [], repeat: 'once', spacing: 30, resume: true, saving: false, day: null });
             const calMaxPerDay = ref(5);
             fetch('/api/config/settings/workflows.calendar_max_per_day').then(r => r.ok ? r.json() : null)
                 .then(d => { if (d && d.value) calMaxPerDay.value = Number(d.value) || 5; }).catch(() => {});
@@ -1822,7 +2075,14 @@
                 const time = hasTime ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : '03:00';
                 Object.assign(schedule, { open: true, saving: false, resume: true,
                     repeat: repeat && repeat !== 'cron' ? repeat : 'once',
-                    rows: [...new Set(uuids)].filter(Boolean).map(uuid => ({ uuid, date: toDateInput(d), time })) });
+                    day: { date: toDateInput(d), time },
+                rows: [...new Set(uuids)].filter(Boolean).map(uuid => ({ uuid, date: toDateInput(d), time })) });
+                spreadRows();
+            }
+            // A day clicked with nothing checked: the workflows are picked in the dialog
+            function addScheduleRow(uuid) {
+                if (!uuid || schedule.rows.some(r => r.uuid === uuid)) return;
+                schedule.rows.push({ uuid, ...(schedule.day || { date: toDateInput(new Date()), time: '03:00' }) });
                 spreadRows();
             }
             // Rows after the first: the first one's date / time + spacing × position
@@ -1893,13 +2153,96 @@
                     schedule.saving = false;
                 }
             }
-            function onCalSelect({ start }) { openSchedule(start, calSelected.value); }
+            // Click a day: its details open under the calendar; the hover "+" opens the add menu
+            const calOpenDay = ref(null);
+            const calMd = reactive({});     // entry uuid → rendered markdown
+            const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+            const onDay = (e) => calOpenDay.value && sameDay(new Date(e.start), calOpenDay.value);
+            const calDayItems = computed(() => calVisibleEvents.value.filter(onDay).sort((a, b) => new Date(a.start) - new Date(b.start)));
+            const calDayHidden = computed(() => calEvents.value.filter(onDay).length - calDayItems.value.length);
+            watch(calDayItems, async (items) => {
+                for (const e of items) {
+                    const p = e.extendedProps;
+                    if (!p.uuid || !(p.kind === 'note' || p.kind === 'reminder')) continue;
+                    calMd[p.uuid] = (p.content || '').trim() ? await renderMarkdown(p.content) : '';
+                }
+            });
+            function calItemLabel(e) {
+                const p = e.extendedProps;
+                if (p.kind === 'note') return 'note';
+                if (p.kind === 'reminder') return 'reminder · ' + ({ notif: 'notification', email: 'email', both: 'notification + email' }[p.channel] || 'notification') + (p.notified_at ? ' · sent' : '');
+                if (p.kind === 'past') return 'launch ' + p.status;
+                return modeLabel(p.mode) + (p.active ? '' : ' · paused');
+            }
+            function onCalSelect({ start }) {
+                calOpenDay.value = calOpenDay.value && sameDay(calOpenDay.value, start) ? null : start;
+                // wait for the panel to be drawn, then bring it into view
+                if (calOpenDay.value) nextTick(() => requestAnimationFrame(() =>
+                    document.querySelector('.wcal-dayview')?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
+            }
+            const pad2 = (n) => String(n).padStart(2, '0');
+            const toLocalInput = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+            function openCalEntry(kind, date, entry = null) {
+                const d = new Date(date);
+                // a whole day clicked (midnight): 09:00 is a better default
+                if (!entry && d.getHours() === 0 && d.getMinutes() === 0) d.setHours(9);
+                Object.assign(calEntry, { open: true, uuid: entry ? entry.uuid : null, kind, title: entry ? entry.title : '',
+                    content: entry ? entry.content : '', date: toLocalInput(d), author: entry ? entry.author : null,
+                    notified_at: entry ? entry.notified_at : null, channel: entry ? (entry.channel || 'notif') : 'notif', saving: false });
+                calEntry.previous = [];
+                calDay.value = null;
+                nextTick(() => document.getElementById('calEntryTitle')?.focus());
+                if (!entry) {
+                    fetch('/admin/tasks/calendar/entries?kind=' + kind).then(r => r.ok ? r.json() : { entries: [] })
+                        .then(d => { if (calEntry.open && !calEntry.uuid && calEntry.kind === kind) calEntry.previous = d.entries || []; })
+                        .catch(() => {});
+                }
+            }
+            // Copy an earlier note / reminder onto the chosen day, at its own time of day
+            function reuseCalEntry(uuid) {
+                const p = calEntry.previous.find(x => x.uuid === uuid);
+                if (!p) return;
+                const at = new Date(p.due_at), d = new Date(calEntry.date);
+                d.setHours(at.getHours(), at.getMinutes());
+                Object.assign(calEntry, { title: p.title, content: p.content || '', channel: p.channel || 'notif', date: toLocalInput(d) });
+            }
+            async function sendCalEntry(uuid, body) {
+                const res = await fetch('/admin/tasks/calendar/entries' + (uuid ? '/' + uuid : ''), {
+                    method: uuid ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }, body: JSON.stringify(body) });
+                const data = await res.json().catch(() => ({}));
+                return { ok: res.ok, data };
+            }
+            async function saveCalEntry() {
+                calEntry.saving = true;
+                try {
+                    const { ok, data } = await sendCalEntry(calEntry.uuid, { kind: calEntry.kind, channel: calEntry.channel, title: calEntry.title, content: calEntry.content,
+                                                                         due_at: new Date(calEntry.date).toISOString() });
+                    create_message(data.message || (ok ? 'Saved.' : 'Failed.'), ok ? 'success-subtle' : 'danger-subtle');
+                    if (ok) { calEntry.open = false; loadCalEvents(); }
+                } finally { calEntry.saving = false; }
+            }
+            // From the edit dialog (no argument) or straight from the day panel (the entry)
+            async function deleteCalEntry(entry) {
+                const e = entry && entry.uuid ? entry : { uuid: calEntry.uuid, kind: calEntry.kind, title: calEntry.title };
+                if (!window.confirm(`Delete the ${e.kind} "${e.title}"?`)) return;
+                const res = await fetch('/admin/tasks/calendar/entries/' + e.uuid, { method: 'DELETE', headers: { 'X-CSRFToken': csrfToken } });
+                const data = await res.json().catch(() => ({}));
+                create_message(data.message || (res.ok ? 'Removed.' : 'Failed.'), res.ok ? 'success-subtle' : 'danger-subtle');
+                if (res.ok) { calEntry.open = false; loadCalEvents(); }
+            }
             function onCalDrop({ date, el }) {
                 const dragged = el && el.dataset ? el.dataset.uuid : null;
                 openSchedule(date, [dragged, ...(calSelected.value.includes(dragged) ? calSelected.value : [])]);
             }
             async function onCalEventDrop({ event, start, revert }) {
                 const e = event.extendedProps;
+                if (e.kind === 'note' || e.kind === 'reminder') {
+                    const { ok, data } = await sendCalEntry(e.uuid, { kind: e.kind, channel: e.channel, title: e.title, content: e.content, due_at: start.toISOString() });
+                    if (!ok) { revert(); create_message(data.message || 'Failed.', 'danger-subtle'); return; }
+                    create_message(`"${e.title}" moved.`, 'success-subtle');
+                    loadCalEvents();
+                    return;
+                }
                 const was = new Date(e.start);
                 let launch;
                 if (e.mode === 'once') {
@@ -1919,7 +2262,11 @@
                 create_message(`"${e.title}" rescheduled.`, 'success-subtle');
                 await Promise.all([loadCalWorkflows(), loadCalEvents()]);
             }
-            function onCalEventClick({ event }) { calPick.value = event; }
+            function onCalEventClick({ event }) {
+                const e = event.extendedProps;
+                if (e.kind === 'note' || e.kind === 'reminder') { openCalEntry(e.kind, e.due_at, e); return; }
+                calPick.value = event;
+            }
             async function calRunNow(uuid) {
                 const res = await fetch(`/admin/tasks/workflows/${uuid}/run_now`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
                 const data = await res.json().catch(() => ({}));
@@ -2003,10 +2350,34 @@
                 }
                 return res.ok;
             }
+            // a template with questions ("ask"): its choices first, then the workflow is created with them
+            const asking = ref(null);
             async function useTemplate(t) {
+                if ((t.ask || []).length) {
+                    const answers = {};
+                    for (const f of t.ask) {
+                        answers[f.task] = answers[f.task] || {};
+                        answers[f.task][f.key] = Array.isArray(f.default) ? [...f.default] : (f.default ?? (f.type === 'multiselect' ? [] : ''));
+                    }
+                    asking.value = { t, answers, filter: {} };
+                    if (!document.getElementById('templatesModal').classList.contains('show')) openTemplates();
+                    return;
+                }
                 templateBusy.value = true;
                 try { await postAndOpen('/admin/tasks/workflows/from_template', { key: t.key }, 'Workflow created.'); }
                 finally { templateBusy.value = false; }
+            }
+            function askFiltered(f) {
+                const q = ((asking.value && asking.value.filter[f.task + f.key]) || '').toLowerCase();
+                return q ? f.options.filter(o => String(o.label).toLowerCase().includes(q)) : f.options;
+            }
+            async function confirmTemplate() {
+                if (!asking.value) return;
+                templateBusy.value = true;
+                try {
+                    await postAndOpen('/admin/tasks/workflows/from_template', { key: asking.value.t.key, answers: asking.value.answers }, 'Workflow created.');
+                    asking.value = null;
+                } finally { templateBusy.value = false; }
             }
             async function importWorkflowFile(e) {
                 const file = e.target.files && e.target.files[0];
@@ -3354,8 +3725,8 @@
             onUnmounted(() => stopLivePolling());
 
             return {
-                truncate, health, listView, setListView, calWorkflows, calSelected, calEvents, calPick, calendarRef, calSide, wfColor, wfTitle, wfIcon, WF_ICONS, PALETTE,
-                modeLabel, userTz, onCalRange, schedule, openSchedule, weekdayName, dayOfMonth, scheduleSentence, saveSchedule,
+                truncate, health, listView, setListView, calWorkflows, calSelected, calEvents, calPick, calendarRef, calDay, calEntry, openCalEntry, reuseCalEntry, calOpenDay, calDayItems, calDayHidden, calMd, calItemLabel, saveCalEntry, deleteCalEntry, CAL_CATEGORIES, calHidden, toggleCalHide, resetCalHidden, calHiddenCount, calCatCount, calVisibleEvents, calSide, wfColor, wfTitle, wfIcon, WF_ICONS, PALETTE,
+                modeLabel, userTz, onCalRange, schedule, openSchedule, addScheduleRow, weekdayName, dayOfMonth, scheduleSentence, saveSchedule,
                 spreadRows, dayCount, dayIsFull, calMaxPerDay,
                 onCalSelect, onCalDrop, onCalEventDrop, onCalEventClick, calRunNow, backupsInfo, loadBackupsInfo, fmtBytes, willBeDeleted, exportWorkflow, alertTaskCount, retryTaskCount, autoPausedCount, linkAlert, saveLinkAlert, taskAlert, ALERT_POINTS, notebook, noteOnRun, pinnedNotes, showPinned, share, openShare, shareAction, copyShare,
                 route, activeWorkflow, openWorkflow, backToWorkflows, runWorkflowNow,
@@ -3367,7 +3738,7 @@
                 workflows, workflowsLoading, workflowSearch, onWorkflowSearchInput,
                 workflowsPage, workflowsTotalPages, totalWorkflows,
                 fetchWorkflows, openCreateWorkflow, openEditWorkflow, deleteWorkflow,
-                templates, templateBusy, openTemplates, useTemplate, importWorkflowFile, duplicateWorkflow,
+                templates, templateBusy, openTemplates, useTemplate, asking, askFiltered, confirmTemplate, importWorkflowFile, duplicateWorkflow,
                 saveAsTemplate, deleteTemplate,
                 workflowForm, savingWorkflow, submitWorkflowForm, mailConfigured, currentUserEmail,
                 workflowFormInstance, onWorkflowLaunchChange, formatLocalDate,

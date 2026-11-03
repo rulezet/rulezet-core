@@ -10,6 +10,8 @@
  *   droppable    elements made draggable with makeDraggable() can be dropped on it
  *   height       CSS height or 'auto' (default)
  *   firstDay     0 = Sunday, 1 = Monday (default)
+ *   dayButton    a title: each day of the month view shows, on hover, a small "+" button with it
+ *   activeDate   a Date: that day is outlined (e.g. the day whose details are open)
  *
  * Emits:
  *   range        ({ start, end })        the visible dates changed — fetch the events for them
@@ -17,6 +19,7 @@
  *   event-click  ({ event, el })         event = { id, title, start, extendedProps }
  *   event-drop   ({ event, start, delta, revert })  call revert() to put it back
  *   drop         ({ date, allDay, el })  an external draggable was dropped
+ *   day-button   ({ date })              the hover button of a day was clicked (see dayButton)
  *
  * Exposed (ref): makeDraggable(containerEl, itemSelector) — the matching elements in the container can
  *   be dragged onto the calendar ('drop' gives the element back: put what you need on its dataset);
@@ -52,8 +55,10 @@ export default {
         droppable: { type: Boolean, default: false },
         height: { type: String, default: 'auto' },
         firstDay: { type: Number, default: 1 },
+        dayButton: { type: String, default: '' },
+        activeDate: { type: Date, default: null },
     },
-    emits: ['range', 'select', 'event-click', 'event-drop', 'drop'],
+    emits: ['range', 'select', 'event-click', 'event-drop', 'drop', 'day-button'],
     setup(props, { emit, expose }) {
         const el = ref(null);
         const failed = ref(false);
@@ -87,6 +92,7 @@ export default {
             setTimeout(clearMark, 0);
         }
 
+        const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
         const plain = (ev) => ({ id: ev.id, title: ev.title, start: ev.start, end: ev.end, allDay: ev.allDay,
                                  extendedProps: { ...ev.extendedProps } });
 
@@ -122,6 +128,24 @@ export default {
                     i.className = 'fa-solid ' + icon + ' cv-event-icon';
                     title.prepend(i);
                 },
+                // Hover button on each day (month view): never starts a selection
+                dayCellDidMount: (info) => {
+                    if (!props.dayButton) return;
+                    const frame = info.el.querySelector('.fc-daygrid-day-frame');
+                    if (!frame) return;
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'cv-day-btn';
+                    b.title = props.dayButton;
+                    b.setAttribute('aria-label', props.dayButton);
+                    b.innerHTML = '<i class="fa-solid fa-plus"></i>';
+                    const stop = (e) => e.stopPropagation();
+                    b.addEventListener('mousedown', stop);
+                    b.addEventListener('touchstart', stop, { passive: true });
+                    b.addEventListener('click', (e) => { e.stopPropagation(); emit('day-button', { date: info.date }); });
+                    frame.appendChild(b);
+                },
+                dayCellClassNames: (info) => (props.activeDate && sameDay(info.date, props.activeDate) ? ['cv-day-active'] : []),
                 eventDragStart: () => startTracking(),
                 eventDragStop: () => stopTracking(),
             });
@@ -132,6 +156,16 @@ export default {
             if (!calendar) return;
             calendar.removeAllEvents();
             calendar.addEventSource(events);
+        });
+
+        // Outline the active day without re-rendering the calendar
+        watch(() => props.activeDate, (d) => {
+            if (!el.value) return;
+            el.value.querySelectorAll('.cv-day-active').forEach(c => c.classList.remove('cv-day-active'));
+            if (!d) return;
+            const pad = (n) => String(n).padStart(2, '0');
+            const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            el.value.querySelectorAll(`[data-date="${iso}"].fc-daygrid-day, [data-date="${iso}"].fc-timegrid-col`).forEach(c => c.classList.add('cv-day-active'));
         });
 
         async function makeDraggable(container, itemSelector) {

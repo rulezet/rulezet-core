@@ -67,3 +67,51 @@
     color: var(--subtle-text-color); display: inline-flex; align-items: center; justify-content: center; font-size: .85rem; }
 .wf-look__icon:hover { color: var(--text-color); border-color: #0d6efd; }
 .wf-look__icon.is-on { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+
+/* Hide a workflow from the calendar */
+.wcal-wf__eye { border: 0; background: none; padding: 0 .2rem; color: var(--subtle-text-color); font-size: .75rem; opacity: .55; cursor: pointer; }
+.wcal-wf__eye:hover { opacity: 1; color: var(--text-color); }
+
+/* What the calendar shows */
+.wcal-filter { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .8rem; }
+.wcal-filter__head { width: 100%; display: flex; justify-content: space-between; align-items: center; font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--subtle-text-color); }
+.wcal-chip { display: inline-flex; align-items: center; gap: .3rem; border: 1px solid var(--border-color); background: var(--card-bg-color); color: var(--text-color); border-radius: 999px; padding: .1rem .5rem; font-size: .7rem; cursor: pointer; }
+.wcal-chip:hover { border-color: #0d6efd; }
+.wcal-chip.is-off { opacity: .45; text-decoration: line-through; }
+.wcal-chip__n { color: var(--subtle-text-color); font-variant-numeric: tabular-nums; }
+
+/* Note / reminder dialogs: the Templates modal's look (tf-modal) inside the calendar overlay */
+.wcal-dialog { width: 100%; max-width: 560px; max-height: calc(100vh - 32px); overflow-y: auto; }
+.wcal-dialog--sm { max-width: 720px; }
+.wcal-daymenu { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+/* Note (gold) and reminder (red): two dialogs, each with its own accent */
+.wcal-dialog--note .tf-hero::before { background: linear-gradient(90deg, #b08800, rgba(176, 136, 0, 0)); }
+.wcal-dialog--note .tf-hero__icon { background: rgba(176, 136, 0, .12); color: #b08800; }
+.wcal-dialog--reminder .tf-hero::before { background: linear-gradient(90deg, #e35d6a, rgba(227, 93, 106, 0)); }
+.wcal-dialog--reminder .tf-hero__icon { background: rgba(227, 93, 106, .12); color: #e35d6a; }
+
+/* The day clicked: everything on it, under the calendar */
+.wcal-dayview { margin-top: 1rem; border: 1px solid var(--border-color); border-radius: 14px; background: var(--card-bg-color); overflow: hidden; position: relative; }
+.wcal-dayview::before { content: ""; position: absolute; top: 0; left: 0; width: 80%; height: 3px; background: linear-gradient(90deg, #0d6efd, rgba(13, 110, 253, 0)); }
+.wcal-dayview__head { display: flex; justify-content: space-between; align-items: center; gap: .75rem; flex-wrap: wrap; padding: 1rem 1.2rem; border-bottom: 1px solid var(--border-color); }
+.wcal-dayview__date { display: flex; align-items: center; gap: .8rem; }
+.wcal-dayview__num { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-weight: 800; font-size: 1.2rem; background: rgba(13, 110, 253, .1); color: #0d6efd; }
+.wcal-dayview__list { list-style: none; margin: 0; padding: .4rem 0; }
+.wcal-dayview__empty { margin: 0; padding: 1.2rem; font-size: .85rem; color: var(--subtle-text-color); text-align: center; }
+.wcal-item { display: flex; align-items: flex-start; gap: .75rem; padding: .6rem 1.2rem; border-left: 3px solid var(--item-color, #0d6efd); margin: .15rem 0; }
+.wcal-item:hover { background: var(--light-bg-color); }
+.wcal-item__time { font-variant-numeric: tabular-nums; font-size: .78rem; color: var(--subtle-text-color); width: 3rem; flex-shrink: 0; padding-top: .15rem; }
+.wcal-item__icon { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0; font-size: .75rem;
+    color: var(--item-color, #0d6efd); background: color-mix(in srgb, var(--item-color, #0d6efd) 12%, transparent); }
+.wcal-item__body { flex: 1; min-width: 0; }
+.wcal-item__title { font-weight: 600; font-size: .88rem; overflow-wrap: anywhere; }
+.wcal-item__tag { font-weight: 500; font-size: .7rem; color: var(--subtle-text-color); margin-left: .4rem; }
+.wcal-item__md.wnb-md { padding: .3rem 0 0; font-size: .84rem; }
+.wcal-item__md > :last-child { margin-bottom: 0; }
+.wcal-item__actions { display: flex; gap: .25rem; flex-shrink: 0; opacity: .6; }
+.wcal-item:hover .wcal-item__actions, .wcal-item__actions:focus-within { opacity: 1; }
+
+/* A launch clicked: its actions as cards (like the Templates modal) */
+.wcal-actions { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .75rem; }
+.wcal-actions .wf-tpl { text-decoration: none; color: inherit; }
+.wcal-actions__run { color: #198754; background: rgba(25, 135, 84, .12); }

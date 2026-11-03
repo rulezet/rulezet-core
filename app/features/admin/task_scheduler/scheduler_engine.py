@@ -254,6 +254,7 @@ def tick(app, now=None):
            .all())
     _fire_due_retries(app, now)
     _enforce_timeouts(now)
+    _fire_due_reminders(now)
     for schedule in due:
         try:
             if (now - schedule.next_run_at).total_seconds() > MISFIRE_GRACE_SECONDS and schedule.catch_up:
@@ -270,6 +271,29 @@ def tick(app, now=None):
         except Exception as e:
             db.session.rollback()
             print(f"[task_scheduler] failed to fire schedule {schedule.uuid}: {e}")
+
+
+def _fire_due_reminders(now):
+    """Calendar reminders whose date has come: one notification to every admin, once."""
+    from app import db
+    from app.core.db_class.task_scheduler import AdminCalendarEntry
+    from app.features.notification.notification_core import notify_admins_calendar_reminder
+    try:
+        due = (AdminCalendarEntry.query
+               .filter(AdminCalendarEntry.kind == 'reminder', AdminCalendarEntry.notified_at.is_(None),
+                       AdminCalendarEntry.due_at <= now)
+               .limit(50).all())
+        for entry in due:
+            entry.notified_at = now
+            db.session.commit()
+            if entry.channel in ('notif', 'both'):
+                notify_admins_calendar_reminder(entry)
+            if entry.channel in ('email', 'both'):
+                from app.features.admin.task_scheduler.notifications import send_calendar_reminder_email
+                send_calendar_reminder_email(entry)
+    except Exception as e:
+        db.session.rollback()
+        print(f"[task_scheduler] reminders: {e}")
 
 
 def _fire_due_retries(app, now):

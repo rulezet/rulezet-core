@@ -607,6 +607,75 @@
           }
         ]
       }
+    },
+    "git_sources_updates": {
+      "label": "Git Sources updates",
+      "icon": "fa-brands fa-git-alt",
+      "description": "Every Sunday at 01:00 UTC: the Git Sources update check on the repositories you choose (or all of them), the changed rules accepted and the new rules added if you want — what is not is left for review on the Git Sources page; a notification if it fails. You choose when you use the template.",
+      "ask": [
+        {
+          "task": "update",
+          "option": "scope",
+          "label": "Which repositories?"
+        },
+        {
+          "task": "update",
+          "option": "repos",
+          "label": "Git Sources to update",
+          "help": "Used when \"The ones ticked below\" is chosen."
+        },
+        {
+          "task": "update",
+          "option": "auto_accept_update",
+          "label": "Accept the changed rules automatically",
+          "help": "Off: they wait for review on the Git Sources page. An update with invalid syntax is never accepted."
+        },
+        {
+          "task": "update",
+          "option": "auto_add_new_rule",
+          "label": "Add the new rules automatically"
+        }
+      ],
+      "spec": {
+        "title": "Git Sources updates",
+        "description": "Rules kept in step with their Git repositories — every Sunday at 01:00 UTC.",
+        "tasks": [
+          {
+            "ref": "update",
+            "title": "Check the Git Sources for updates",
+            "task_type": "git_sources_update",
+            "target_payload": {
+              "scope": "chosen",
+              "repos": [],
+              "auto_accept_update": false,
+              "auto_add_new_rule": false
+            },
+            "trigger": {
+              "trigger_mode": "weekly",
+              "days_of_week": [
+                6
+              ],
+              "hour": 1,
+              "minute": 0,
+              "timezone": "UTC"
+            }
+          },
+          {
+            "ref": "alert",
+            "title": "Tell the admins",
+            "task_type": "action_notify",
+            "trigger": {
+              "after": "update",
+              "condition": "failure"
+            },
+            "target_payload": {
+              "title": "{workflow}: {status}",
+              "message": "The Git Sources update failed: {failed_tasks}.",
+              "only_editor": false
+            }
+          }
+        ]
+      }
     }
   }
 }

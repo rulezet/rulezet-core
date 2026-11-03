@@ -218,6 +218,21 @@ TASK_TYPES = {
         'target_picker': 'format_filter_only',
         'format_key': 'formats',
     },
+    'git_sources_update': {
+        'label': 'Git Sources — check for updates (choose repositories)',
+        'icon': 'fa-brands fa-git-alt',
+        'job_type': 'git_sources_update',
+        'target_picker': 'none',
+        # the Git Sources page's "Check for updates", here: the same update check per repository, and
+        # its "Accept all" / "Add all new rules" when ticked; what is left waits on Git Sources for review
+        'extra_options': [
+            {'key': 'scope', 'type': 'select', 'label': 'Repositories', 'default': 'chosen',
+             'options': [{'value': 'chosen', 'label': 'The ones ticked below'}, {'value': 'all', 'label': 'Every Git Source'}]},
+            {'key': 'repos', 'type': 'multiselect', 'label': 'Git Sources', 'options_from': 'git_sources', 'default': []},
+            {'key': 'auto_accept_update', 'type': 'bool', 'label': 'Accept the changed rules (never an invalid one)', 'default': False},
+            {'key': 'auto_add_new_rule', 'type': 'bool', 'label': 'Add the new rules', 'default': False},
+        ],
+    },
     'github_sync_schedule_launch': {
         'label': 'Git updates — run a sync schedule now',
         'icon': 'fa-solid fa-rotate',
@@ -453,6 +468,10 @@ def _with_options(opt):
         opts = [{'value': s.uuid, 'label': s.title + ('' if s.is_active else ' (paused)')}
                 for s in GithubSyncSchedule.query.order_by(GithubSyncSchedule.title).all()]
         return {**opt, 'options': opts}
+    if opt.get('options_from') == 'git_sources':
+        from app.core.db_class.git import GithubRepo
+        return {**opt, 'options': [{'value': r.url, 'label': f"{r.url.split('://', 1)[-1]} ({r.rule_count} rules)"}
+                                   for r in GithubRepo.query.order_by(GithubRepo.url).all()]}
     if opt.get('options_from') == 'rule_feeds':
         from app.core.utils.app_settings import get_setting
         feeds = get_setting('feeds.sources') or []
@@ -511,6 +530,7 @@ _DESCRIPTIONS = {
     'suricata_deep_validate': 'Validates Suricata rules with the real Suricata engine, a batch per run, and records the result.',
     'gamification_recompute': 'Recomputes every user\'s points, level and badges; the leaderboard cache is reset at the end.',
     'github_sync_schedule_launch': 'Runs one Git sync schedule now: checks its repositories for updated and new rules, then accepts / adds them if the schedule says so — the same as its own timer.',
+    'git_sources_update': 'The Git Sources update check on the chosen repositories (or all): finds the rules changed upstream and the new ones; accepts / adds them when ticked (never an invalid update), otherwise they wait for review on the Git Sources page.',
     'feed_sync': 'Fetches one rule feed (setting feeds.sources: a git repository, a rules file over https or the VALHALLA API) and imports the rules that are new; bad rules are kept for review, existing ones skipped. Results in the Git import history.',
     'submodules_update': 'Pulls the latest commit of each chosen submodule from its git repository (git submodule update --init --remote --merge). Data (MISP taxonomies / galaxies, MITRE CTI): run the MISP / ATT&CK update tasks after it to load them. Code (rulezet-editor, rulezet-tester…): restart Rulezet to use it.',
     'action_email': 'Sends an email to the addresses given and/or the workflow\'s alert recipients; subject and message take {variables} (workflow, status, failed tasks, link…). Chain it after a task with "If it fails" or "If it succeeds".',

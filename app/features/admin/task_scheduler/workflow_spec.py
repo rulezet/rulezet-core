@@ -66,8 +66,57 @@ def serialize_templates():
             'description': t.get('description') or '', 'custom': bool(t.get('custom')),
             'tasks': [{'title': task.get('title') or '', 'icon': TASK_TYPES.get(task.get('task_type'), {}).get('icon', 'fa-solid fa-gear')}
                       for task in t['spec'].get('tasks') or [] if isinstance(task, dict)],
+            'ask': _ask_fields(t),
         })
     return out
+
+
+def _ask_fields(template):
+    """What a template asks when it is used (its "ask": [{task: ref, option: key, label?}]): each one
+    the option of that task's type, with its choices filled in now and the template's value as default."""
+    from app.features.admin.task_scheduler.task_types import TASK_TYPES, _with_options
+    tasks = {t.get('ref'): t for t in template['spec'].get('tasks') or [] if isinstance(t, dict)}
+    out = []
+    for a in template.get('ask') or []:
+        task = tasks.get(a.get('task')) if isinstance(a, dict) else None
+        if not task:
+            continue
+        opt = next((o for o in TASK_TYPES.get(task.get('task_type'), {}).get('extra_options', []) if o.get('key') == a.get('option')), None)
+        if not opt:
+            continue
+        opt = _with_options(opt)
+        current = (task.get('target_payload') or {}).get(opt['key'], opt.get('default'))
+        out.append({'task': task['ref'], 'task_title': task.get('title') or '', 'key': opt['key'],
+                    'label': a.get('label') or opt.get('label') or opt['key'], 'help': a.get('help') or '',
+                    'type': opt.get('type'), 'options': opt.get('options') or [], 'default': current})
+    return out
+
+
+def _apply_answers(template, answers):
+    """A copy of the template's spec with the answers to its questions written into its tasks
+    (only the asked options, only allowed values)."""
+    import copy
+    spec = copy.deepcopy(template['spec'])
+    if not isinstance(answers, dict):
+        return spec
+    fields = {(f['task'], f['key']): f for f in _ask_fields(template)}
+    for task in spec.get('tasks') or []:
+        for (ref, key), f in fields.items():
+            if task.get('ref') != ref or key not in (answers.get(ref) or {}):
+                continue
+            value = answers[ref][key]
+            allowed = {str(o.get('value')) for o in f['options']}
+            if f['type'] == 'multiselect':
+                value = [str(v) for v in value if str(v) in allowed] if isinstance(value, list) else []
+            elif f['type'] == 'select':
+                if str(value) not in allowed:
+                    continue
+            elif f['type'] == 'bool':
+                value = bool(value)
+            else:
+                value = str(value)[:2000]
+            task['target_payload'] = {**(task.get('target_payload') or {}), key: value}
+    return spec
 
 
 def _ordered_tasks(workflow):
@@ -203,11 +252,11 @@ def create_from_spec(spec, editor, title=None, root_paused=False, report=None):
     return workflow, None
 
 
-def create_from_template(key, editor, title=None):
+def create_from_template(key, editor, title=None, answers=None):
     template = templates().get(key)
     if not isinstance(template, dict) or not isinstance(template.get('spec'), dict):
         return None, 'Unknown template.'
-    return create_from_spec(template['spec'], editor, title=title, root_paused=True)
+    return create_from_spec(_apply_answers(template, answers), editor, title=title, root_paused=True)
 
 
 def save_as_template(workflow, editor, label=None, description=None):

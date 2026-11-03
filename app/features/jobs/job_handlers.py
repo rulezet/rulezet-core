@@ -1456,40 +1456,15 @@ def _safe_format(cls):
 
 
 def _feed_git_update(job, app, feed, user, label):
-    """A git feed already imported: the Git Sources update check (Update_class) — changed rules
-    updated (auto-accepted, invalid syntax refused), new rules added — as a Sync Schedule does."""
-    from app.features.rule.rule_core import (
-        get_updater_result, get_rule_update_list_filtered, accept_all_update,
-        get_valid_new_rules_by_sid, import_single_new_rule, resolve_new_rule_owner,
-    )
-    from app.features.rule.rule_from_github.update_rule import update_class as UpdateModel
+    """A git feed already imported: the Git Sources update check (_git_update_repo) — changed rules
+    updated (never an invalid one), new rules added (feed options auto_update / auto_add, default on)."""
     url = feed.get('url')
-    log_job(job, f'Checking {url} for changed and new rules…', level='info', event='start')
-    info = {'mode': 'by_url', 'repo_url': url, 'initiated_by': f'Rule feed — {label}', 'author': feed.get('author'),
-            'license': feed.get('license'), 'description': None}
-    session = UpdateModel.Update_class([url], user, info, mode='by_url', is_generic_source=False)
-    session.start()
-    UpdateModel.sessions.append(session)
-    if not session._save_done.wait(timeout=REPO_SYNC_TIMEOUT_SECONDS):
-        raise RuntimeError(f'the update check of {url} timed out')
-    result = get_updater_result(session.uuid)
-    if not result:
-        raise RuntimeError('the update check produced no result (see the server logs)')
-    accepted = 0
-    if feed.get('auto_update', True):
-        rule_list, count = get_rule_update_list_filtered(session.uuid)
-        if count:
-            accepted = sum(1 for r in rule_list if r.rule_syntax_valid)
-            accept_all_update(rule_list)          # never accepts an invalid-syntax update
-    added = 0
-    new_rules = get_valid_new_rules_by_sid(session.uuid)
-    owner = resolve_new_rule_owner(user, url, None)
-    for nr in new_rules:
-        ok, _ = import_single_new_rule(nr, user, owner)
-        added += 1 if ok else 0
-    log_activity('feed.sync', f"Rule feed '{label}': {accepted} updated, {added} new", target_type='feed',
+    out = _git_update_repo(job, url, user, f'Rule feed — {label}', feed.get('auto_update', True), feed.get('auto_add', True))
+    if out['error']:
+        raise RuntimeError(out['error'])
+    log_activity('feed.sync', f"Rule feed '{label}': {out['accepted'] or 0} updated, {out['added'] or 0} new", target_type='feed',
                  extra={'job_uuid': job.uuid}, is_public=True, icon='fa-solid fa-satellite-dish', actor_id=user.id)
-    log_job(job, f'Done — {accepted} rule(s) updated, {added} new rule(s) added.', level='success', event='done')
+    log_job(job, f"Done — {out['accepted'] or 0} rule(s) updated, {out['added'] or 0} new rule(s) added.", level='success', event='done')
 
 
 @register_handler('feed_sync')
@@ -5257,6 +5232,112 @@ def handle_rule_test_bulk(job, app):
 REPO_SYNC_TIMEOUT_SECONDS = 1800  # 30 min per repo — one hung repo must never block the rest of the schedule
 
 
+def _git_update_repo(job, repo_url, editor, initiated_by, auto_accept, auto_add, is_generic=False, owner_id=None):
+    """The Git Sources update check of one repository (Update_class, the same as the manual "Check for
+    updates"), then — when asked — the same "Accept all" (never an update with invalid syntax) and
+    "Add all new rules" as the buttons. Shared by Sync Schedules, the Workflows task
+    git_sources_update and git rule feeds. Returns {sid, error, updates, new, accepted, rejected, added}."""
+    from app.features.rule.rule_core import (
+        get_updater_result, get_rule_update_list_filtered, accept_all_update,
+        get_valid_new_rules_by_sid, import_single_new_rule, resolve_new_rule_owner,
+    )
+    from app.features.rule.rule_from_github.update_rule import update_class as UpdateModel
+    out = {'sid': None, 'error': None, 'updates': 0, 'new': 0, 'accepted': None, 'rejected': None, 'added': None}
+    log_job(job, f"Checking '{repo_url}'…", level='info', event='progress')
+    info = {'mode': 'by_url', 'repo_url': repo_url, 'initiated_by': initiated_by,
+            'author': (editor.last_name if editor else None), 'license': None, 'description': None}
+    session = UpdateModel.Update_class([repo_url], editor, info, mode='by_url', is_generic_source=is_generic)
+    session.start()
+    UpdateModel.sessions.append(session)
+    if not session._save_done.wait(timeout=REPO_SYNC_TIMEOUT_SECONDS):
+        out['error'] = f'Timed out after {REPO_SYNC_TIMEOUT_SECONDS}s.'
+        log_job(job, f"'{repo_url}' timed out.", level='error', event='progress')
+        return out
+    out['sid'] = session.uuid
+    if not get_updater_result(session.uuid):
+        out['error'] = 'Update session finished but produced no result (see server logs).'
+        log_job(job, f"'{repo_url}' produced no result.", level='error', event='progress')
+        return out
+    rule_list, count = get_rule_update_list_filtered(session.uuid)
+    out['updates'] = count
+    if auto_accept and count:
+        # accept_all_update force-rejects rule_syntax_valid == False rows — never an invalid update
+        out['accepted'] = sum(1 for r in rule_list if r.rule_syntax_valid)
+        out['rejected'] = sum(1 for r in rule_list if not r.rule_syntax_valid)
+        accept_all_update(rule_list)
+        log_job(job, f"'{repo_url}': auto-accepted {out['accepted']} update(s), auto-rejected {out['rejected']} "
+                     f"invalid-syntax update(s).", level='success', event='progress')
+    new_rules = get_valid_new_rules_by_sid(session.uuid)
+    out['new'] = len(new_rules)
+    if auto_add and new_rules:
+        # owner of the new rules: chosen for this repo, else the owner of the source's rules, else the editor
+        owner = resolve_new_rule_owner(editor, repo_url, owner_id)
+        added = 0
+        for nr in new_rules:
+            ok, _message = import_single_new_rule(nr, editor, owner)
+            added += 1 if ok else 0
+        out['added'] = added
+        log_job(job, f"'{repo_url}': auto-added {added}/{len(new_rules)} new rule(s).", level='success', event='progress')
+    elif auto_add:
+        out['added'] = 0
+    return out
+
+
+@register_handler('git_sources_update')
+def handle_git_sources_update(job, app):
+    """A Workflows task: the Git Sources update check, as on the Git Sources page, on the chosen
+    repositories (or every Git Source): changed rules found, accepted when asked (never an invalid
+    one); new rules found, added when asked. What is not accepted / added waits on the Git Sources
+    page for review. Payload: scope (chosen | all), repos [urls], auto_accept_update, auto_add_new_rule."""
+    from app.core.db_class.git import GithubRepo
+    from app.features.rule.rule_format.utils_format.utils_import_update import valider_repo_github
+    payload = job.payload or {}
+    editor = User.query.get(job.created_by)
+    if payload.get('scope') == 'all':
+        urls = [r.url for r in GithubRepo.query.order_by(GithubRepo.url).all()]
+    else:
+        known = {r.url for r in GithubRepo.query.all()}
+        urls = [u for u in (payload.get('repos') or []) if u in known]
+    if not urls or not editor:
+        msg = 'No Git Source chosen (or none exists any more).' if editor else 'The user who launched this task no longer exists.'
+        log_job(job, msg, level='error', event='failed')
+        job.status, job.error = 'failed', msg
+        db.session.commit()
+        return
+    auto_accept, auto_add = bool(payload.get('auto_accept_update')), bool(payload.get('auto_add_new_rule'))
+    job.total, job.done = len(urls), 0
+    db.session.commit()
+    log_job(job, f'Checking {len(urls)} Git Source(s) for updates…', level='info', event='start')
+    totals = {'updates': 0, 'new': 0, 'accepted': 0, 'added': 0, 'errors': 0}
+    for url in urls:
+        if _is_cancelled(job):
+            log_job(job, f'Cancelled at {job.done}/{job.total}.', level='warning', event='cancelled')
+            return
+        out = _git_update_repo(job, url, editor, f'Workflow — {job.title or "Git Sources update"}', auto_accept, auto_add,
+                               is_generic=not valider_repo_github(url))
+        totals['errors'] += 1 if out['error'] else 0
+        for k in ('updates', 'new', 'accepted', 'added'):
+            totals[k] += out.get(k) or 0
+        job.done += 1
+        db.session.commit()
+    waiting = []
+    if totals['updates'] - totals['accepted'] > 0:
+        waiting.append(f"{totals['updates'] - totals['accepted']} update(s)")
+    if totals['new'] - totals['added'] > 0:
+        waiting.append(f"{totals['new'] - totals['added']} new rule(s)")
+    log_activity('git.sources_update', f"Git Sources update: {totals['updates']} changed, {totals['new']} new "
+                                       f"({totals['accepted']} accepted, {totals['added']} added)",
+                 target_type='github_repo', extra={'job_uuid': job.uuid}, is_public=False, actor_id=editor.id)
+    log_job(job, f"Done — {len(urls)} source(s): {totals['updates']} changed rule(s), {totals['new']} new; "
+                 f"{totals['accepted']} accepted, {totals['added']} added"
+                 + (f"; waiting for review on the Git Sources page: {', '.join(waiting)}" if waiting else '')
+                 + (f"; {totals['errors']} source(s) failed" if totals['errors'] else '') + '.',
+            level='warning' if totals['errors'] else 'success', event='done')
+    if totals['errors'] == len(urls):
+        job.status, job.error = 'failed', 'Every Git Source failed (see the log).'
+        db.session.commit()
+
+
 @register_handler('github_sync_schedule_run')
 def handle_github_sync_schedule_run(job, app):
     """
@@ -5325,69 +5406,21 @@ def handle_github_sync_schedule_run(job, app):
             run_repo = GithubSyncRunRepo(run_id=run.id, repo_url=repo_cfg.repo_url, status='running')
             db.session.add(run_repo)
             db.session.commit()
-            log_job(job, f"Checking '{repo_cfg.repo_url}'…", level='info', event='progress')
 
-            info = {
-                "mode": "by_url",
-                "repo_url": repo_cfg.repo_url,
-                "initiated_by": f"Sync Schedule — {schedule.title}",
-                "author": (schedule.editor.last_name if schedule.editor else None),
-                "license": None,
-                "description": None,
-            }
-            update_session = UpdateModel.Update_class(
-                [repo_cfg.repo_url], schedule.editor, info, mode="by_url",
-                is_generic_source=repo_cfg.is_generic_source,
-            )
-            update_session.start()
-            UpdateModel.sessions.append(update_session)
-
-            finished = update_session._save_done.wait(timeout=REPO_SYNC_TIMEOUT_SECONDS)
-            if not finished:
+            out = _git_update_repo(job, repo_cfg.repo_url, schedule.editor, f"Sync Schedule — {schedule.title}",
+                                   repo_cfg.auto_accept_update, repo_cfg.auto_add_new_rule,
+                                   repo_cfg.is_generic_source, repo_cfg.new_rule_owner_id)
+            run_repo.update_result_uuid = out.get('sid')
+            if out['error']:
                 run_repo.status = 'error'
-                run_repo.error_message = f'Timed out after {REPO_SYNC_TIMEOUT_SECONDS}s.'
-                log_job(job, f"'{repo_cfg.repo_url}' timed out.", level='error', event='progress')
+                run_repo.error_message = out['error']
                 job.done = i + 1
                 db.session.commit()
                 continue
-
-            sid = update_session.uuid
-            run_repo.update_result_uuid = sid
-            result = get_updater_result(sid)
-            if not result:
-                run_repo.status = 'error'
-                run_repo.error_message = 'Update session finished but produced no result (see server logs).'
-                log_job(job, f"'{repo_cfg.repo_url}' produced no result.", level='error', event='progress')
-                job.done = i + 1
-                db.session.commit()
-                continue
-
-            if repo_cfg.auto_accept_update:
-                rule_list, count = get_rule_update_list_filtered(sid)
-                if count:
-                    # accept_all_update force-rejects rule_syntax_valid == False rows —
-                    # it never auto-accepts an invalid-syntax update, by design.
-                    run_repo.auto_accepted = sum(1 for r in rule_list if r.rule_syntax_valid)
-                    run_repo.auto_rejected = sum(1 for r in rule_list if not r.rule_syntax_valid)
-                    accept_all_update(rule_list)
-                    log_job(job, f"'{repo_cfg.repo_url}': auto-accepted {run_repo.auto_accepted} update(s), "
-                                 f"auto-rejected {run_repo.auto_rejected} invalid-syntax update(s).",
-                            level='success', event='progress')
-
-            if repo_cfg.auto_add_new_rule:
-                new_rules = get_valid_new_rules_by_sid(sid)
-                added = 0
-                # owner of the new rules: chosen for this repo, else the owner of the source's rules,
-                # else the schedule's editor (resolve_new_rule_owner)
-                owner = resolve_new_rule_owner(schedule.editor, repo_cfg.repo_url, repo_cfg.new_rule_owner_id)
-                for nr in new_rules:
-                    added_ok, _message = import_single_new_rule(nr, schedule.editor, owner)
-                    if added_ok:
-                        added += 1
-                run_repo.auto_added = added
-                if new_rules:
-                    log_job(job, f"'{repo_cfg.repo_url}': auto-added {added}/{len(new_rules)} new rule(s).",
-                            level='success', event='progress')
+            if out['accepted'] is not None:
+                run_repo.auto_accepted, run_repo.auto_rejected = out['accepted'], out['rejected']
+            if out['added'] is not None:
+                run_repo.auto_added = out['added']
 
             run_repo.status = 'done'
             job.done = i + 1

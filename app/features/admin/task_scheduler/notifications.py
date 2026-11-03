@@ -212,3 +212,50 @@ def send_point_alert(task, point, job):
         mail.send(msg)
     except Exception as e:
         print(f"[task_scheduler] alert on '{task.title}' failed: {e}")
+
+
+def send_calendar_reminder_email(entry):
+    """A reminder of the workflows calendar has come and asked for an email: one to every admin."""
+    from app.core.db_class.user import User
+    from app.core.utils.mail_status import is_email_available
+    if not is_email_available():
+        print("[task_scheduler] reminder email skipped: no mail server configured")
+        return
+    recipients = [u.email for u in User.query.filter_by(admin=True).all() if u.email]
+    if not recipients:
+        return
+    details = ''
+    if (entry.content or '').strip():
+        # markdown, rendered from the escaped text (no raw HTML from the note gets into the email)
+        try:
+            import markdown as _md
+            body = _md.markdown(str(escape(entry.content)), extensions=['extra', 'nl2br'])
+        except Exception:
+            body = f'<p style="white-space:pre-wrap;">{escape(entry.content)}</p>'
+        details = f'<div style="font-size:14px;margin-top:12px;">{body}</div>'
+    try:
+        msg = Message(f"[Rulezet] Reminder: {entry.title}", recipients=recipients)
+        msg.html = f"""
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eeeeee; border-radius: 12px; overflow: hidden;">
+            <div style="background-color: #2c3e50; padding: 24px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 20px;">Reminder</h1>
+            </div>
+            <div style="padding: 30px; line-height: 1.6; color: #333333; background-color: #ffffff;">
+                <p style="font-size: 16px;"><strong>{escape(entry.title)}</strong></p>
+                <p style="font-size: 13px; color: #7f8c8d;">Set for {entry.due_at:%Y-%m-%d %H:%M} UTC on the workflows calendar</p>
+                {details}
+                <div style="text-align:center;margin-top:24px;">
+                    <a href="/admin/tasks/?view=calendar"
+                       style="display:inline-block;padding:10px 24px;background:#0d6efd;color:#ffffff;text-decoration:none;border-radius:6px;font-size:14px;">
+                        Open the calendar
+                    </a>
+                </div>
+            </div>
+            <div style="background-color: #f8f9fa; padding: 16px; text-align: center; font-size: 12px; color: #bdc3c7; border-top: 1px solid #eeeeee;">
+                <p style="margin: 0;">You're receiving this because you are an administrator of this Rulezet instance.</p>
+            </div>
+        </div>
+        """
+        mail.send(msg)
+    except Exception as e:
+        print(f"[task_scheduler] failed to send reminder email: {e}")

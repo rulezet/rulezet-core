@@ -337,6 +337,23 @@ def notify_admins_github_token_invalid(reason=None):
         print(f"[notification_core] notify_admins_github_token_invalid error: {e}")
 
 
+def notify_admins_calendar_reminder(entry):
+    """A reminder of the workflows calendar has come: tell every admin."""
+    try:
+        body = (entry.content or '').strip()
+        notifs = [Notification(
+            user_id=uid, notif_type='calendar_reminder', title=f'Reminder: {entry.title}',
+            body=(body[:500] if body else f"Set for {entry.due_at.strftime('%Y-%m-%d %H:%M')} UTC on the workflows calendar."),
+            link='/admin/tasks/?view=calendar', icon='fa-solid fa-bell', is_read=False,
+            created_at=datetime.datetime.utcnow(),
+        ) for uid in _get_all_admin_ids()]
+        db.session.add_all(notifs)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[notification_core] notify_admins_calendar_reminder error: {e}")
+
+
 def notify_admins_new_version(latest_version, local_version, url):
     """One bell notification per admin when a newer Rulezet release is out — once per version
     (an admin who already got it for this version is not notified again)."""

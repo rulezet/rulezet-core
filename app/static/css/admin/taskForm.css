@@ -377,3 +377,10 @@
 .wf-card__tasks { cursor: default; }
 .wf-card__flow { display: inline-flex; flex-wrap: wrap; gap: .25rem; margin-left: .5rem; vertical-align: middle; }
 .wf-card__actions { display: flex; justify-content: flex-end; gap: .25rem; margin-top: auto; cursor: default; }
+
+/* ── Template questions (a template's "ask") ── */
+.wf-ask { display: flex; flex-direction: column; gap: 14px; }
+.wf-ask__head { display: flex; align-items: center; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); }
+.wf-ask__field { padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--light-bg-color); }
+.wf-ask__checks { max-height: 260px; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 12px; }
+.wf-ask__check { display: flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--text-color); }
