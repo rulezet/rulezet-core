@@ -1,0 +1,7 @@
+{
+  "label": "Sigma editor",
+  "category": "Editor",
+  "description": "Who may use the Sigma editor (app/modules/rulezet-editor, Sigma pack): \"off\" (nobody: no Sigma editor tab when creating a rule), \"admins\" (admins only, while you try it), \"everyone\" (every logged-in user). The YARA editor has its own setting (editor.access). Also set from Admin \u2192 Settings \u2192 Configuration \u2192 Application.",
+  "public": false,
+  "value": "everyone"
+}

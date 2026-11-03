@@ -27,14 +27,30 @@ def _login_required():
         return jsonify({'error': 'Log in to use the editor.'}), 401
     # the editor itself: only for who the admin allows (setting editor.access); the Samples tab of
     # rule pages also calls /editor-api/test, so tests are checked on their own setting below
-    if not request.path.startswith('/editor-api/test') and not SampleTests.can_use_editor(current_user):
-        return jsonify({'error': 'The rule editor is not available.'}), 403
+    if not request.path.startswith('/editor-api/test'):
+        # each format's editor has its own access setting (editor.access, editor.sigma_access)
+        fmt = _request_format()
+        allowed = SampleTests.can_use_editor(current_user, fmt) if fmt else \
+            any(SampleTests.can_use_editor(current_user, f) for f in SampleTests.EDITOR_ACCESS_SETTINGS)
+        if not allowed:
+            return jsonify({'error': f"The {'Sigma' if fmt == 'sigma' else 'YARA' if fmt else 'rule'} editor is not available."}), 403
     # tests on samples: only for who the admin allows (setting editor.test_access)
     if request.path.startswith('/editor-api/test') and not SampleTests.can_use_tests(current_user):
         if request.method == 'GET' and request.path.rstrip('/').endswith('/sets'):
             return jsonify({'available': False, 'sets': []})
         return jsonify({'error': 'Tests on samples are not available.'}), 403
     return None
+
+
+def _request_format():
+    """The rule format a request of the editor is about: the /<format>/… path, else ?format= or the
+    JSON body's format; None when it says none (assets, shared helpers)."""
+    parts = request.path.split('/')
+    if len(parts) > 2 and parts[2] in SampleTests.EDITOR_ACCESS_SETTINGS:
+        return parts[2]
+    fmt = request.args.get('format') or ((request.get_json(silent=True) or {}).get('format') if request.is_json else None)
+    fmt = str(fmt or '').lower()
+    return fmt if fmt in SampleTests.EDITOR_ACCESS_SETTINGS else None
 
 
 @editor_blueprint.post('/external-checks')

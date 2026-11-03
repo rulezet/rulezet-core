@@ -1722,12 +1722,14 @@ def admin_settings_editor_access():
         return jsonify({'error': 'Unauthorized'}), 403
     from .core.utils.activity_log import log_activity
     from .features.rule_tester import sample_test_core as SampleTests
-    mode = (request.get_json(silent=True) or {}).get('mode')
-    if mode not in SampleTests.TEST_ACCESS_MODES:
+    payload = request.get_json(silent=True) or {}
+    mode = payload.get('mode')
+    fmt = payload.get('format') or 'yara'
+    if mode not in SampleTests.TEST_ACCESS_MODES or fmt not in SampleTests.EDITOR_ACCESS_SETTINGS:
         return jsonify({'success': False, 'error': 'Unknown mode.'}), 400
-    SampleTests.set_editor_access(mode, user_id=current_user.id)
-    log_activity('admin.editor_access', f"YARA editor: {mode}", is_public=False)
-    return jsonify({'success': True, 'mode': mode})
+    SampleTests.set_editor_access(mode, user_id=current_user.id, fmt=fmt)
+    log_activity('admin.editor_access', f"{fmt.upper() if fmt == 'yara' else fmt.capitalize()} editor: {mode}", is_public=False)
+    return jsonify({'success': True, 'mode': mode, 'format': fmt})
 
 
 @home_blueprint.route('/admin/settings/chatbot_toggle', methods=['POST'])

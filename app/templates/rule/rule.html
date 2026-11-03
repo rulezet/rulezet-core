@@ -151,6 +151,8 @@
       <i class="fas fa-laptop-code"></i><span>YARA editor</span>
       <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill ms-1" style="font-size:.6rem;">BETA</span>
     </a>
+    {% endif %}
+    {% if can_use_sigma_editor %}{# setting editor.sigma_access #}
     <a href="#" class="dr-nav__item" :class="activeTab === 'sigma_editor' ? 'active' : ''" @click.prevent="activeTab = 'sigma_editor'">
       <i class="fas fa-wave-square"></i><span>Sigma editor</span>
       <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill ms-1" style="font-size:.6rem;">BETA</span>
@@ -358,8 +360,10 @@
         </div>
       </div>
     </div>
+    {% endif %}
 
     <!-- ── Tab : Sigma editor (same panel, format sigma) ── -->
+    {% if can_use_sigma_editor %}
     <div v-show="activeTab === 'sigma_editor'">
       <div class="card border-0 card_detail border-top shadow-lg mb-4" style="border-radius: 12px;">
         <div class="card-body p-4" style="position: relative; z-index: 1;">

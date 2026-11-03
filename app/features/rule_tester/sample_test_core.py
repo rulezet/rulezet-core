@@ -266,19 +266,24 @@ def record_saved_rule(rule, user):
 TEST_ACCESS_MODES = ('off', 'admins', 'everyone')
 
 
-def editor_access():
-    """Who may use the YARA editor (setting editor.access): off | admins | everyone."""
+# one access setting per editor format
+EDITOR_ACCESS_SETTINGS = {'yara': 'editor.access', 'sigma': 'editor.sigma_access'}
+
+
+def editor_access(fmt='yara'):
+    """Who may use the editor of this format (settings editor.access, editor.sigma_access):
+    off | admins | everyone."""
     from app.core.utils.app_settings import get_setting
     try:
-        mode = str(get_setting('editor.access') or 'everyone')
+        mode = str(get_setting(EDITOR_ACCESS_SETTINGS.get(fmt, 'editor.access')) or 'everyone')
     except Exception:
         mode = 'everyone'
     return mode if mode in TEST_ACCESS_MODES else 'everyone'
 
 
-def can_use_editor(user):
-    """May this user open the YARA editor (create and edit pages)?"""
-    mode = editor_access()
+def can_use_editor(user, fmt='yara'):
+    """May this user open the editor of this format (YARA: create and edit pages; Sigma: create page)?"""
+    mode = editor_access(fmt)
     if mode == 'everyone':
         return bool(user and getattr(user, 'is_authenticated', False))
     if mode == 'admins':
@@ -286,11 +291,11 @@ def can_use_editor(user):
     return False
 
 
-def set_editor_access(mode, user_id=None):
+def set_editor_access(mode, user_id=None, fmt='yara'):
     from app.core.utils.app_settings import set_setting
-    if mode not in TEST_ACCESS_MODES:
+    if mode not in TEST_ACCESS_MODES or fmt not in EDITOR_ACCESS_SETTINGS:
         raise ValueError(mode)
-    set_setting('editor.access', mode, user_id=user_id)
+    set_setting(EDITOR_ACCESS_SETTINGS[fmt], mode, user_id=user_id)
 
 
 def test_access():

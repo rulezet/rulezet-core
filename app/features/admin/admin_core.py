@@ -212,6 +212,11 @@ def _rule_tests_access():
     return test_access()
 
 
+def _sigma_editor_access():
+    from app.features.rule_tester.sample_test_core import editor_access
+    return editor_access('sigma')
+
+
 def _editor_access():
     from app.features.rule_tester.sample_test_core import editor_access
     return editor_access()
@@ -255,6 +260,7 @@ def get_app_config() -> dict:
             'environment': os.environ.get('FLASKENV', 'unknown'),
             'rule_tests_access': _rule_tests_access(),
             'editor_access': _editor_access(),
+            'sigma_editor_access': _sigma_editor_access(),
             'secret_key_set': bool(secret),
             # Nothing derived from the key itself (no prefix, no length).
             'secret_key_preview': '••••••••••••' if secret else 'not set',

@@ -491,6 +491,21 @@
                             <div class="small mb-2" style="color:var(--subtle-text-color);font-size:.75rem;">
                                 The YARA editor tab when creating and when editing a rule.
                             </div>
+                            <!-- Sigma editor: who may use it (setting editor.sigma_access) -->
+                            <div class="config-row">
+                                <div class="config-row__key">Sigma editor</div>
+                                <div class="config-row__value">
+                                    <div class="settings-segmented" role="radiogroup" aria-label="Sigma editor">
+                                        <button v-for="m in TEST_ACCESS" :key="m.id" type="button" role="radio"
+                                                :aria-checked="config.app.sigma_editor_access === m.id"
+                                                :class="{ on: config.app.sigma_editor_access === m.id }" :disabled="editorAccessSaving"
+                                                @click="setEditorAccess(m.id, 'sigma')"><i :class="m.icon"></i>[[ m.label ]]</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="small mb-2" style="color:var(--subtle-text-color);font-size:.75rem;">
+                                The Sigma editor tab when creating a rule.
+                            </div>
                             <!-- tests on samples: who may use them (setting editor.test_access) -->
                             <div class="config-row">
                                 <div class="config-row__key">Rule tests on samples</div>
@@ -504,7 +519,7 @@
                                 </div>
                             </div>
                             <div class="small mb-2" style="color:var(--subtle-text-color);font-size:.75rem;">
-                                The YARA editor's Test button, the test step when creating rules, and the Samples tab of rule pages.
+                                The Test button of the YARA and Sigma editors (Sigma: sample events), the test step when creating rules, and the Samples tab of rule pages.
                                 <b>Admins only</b> keeps it private while you try it; <b>Everyone</b> makes it public.
                             </div>
                         </div>
@@ -1708,15 +1723,17 @@ createApp({
         }
 
         const editorAccessSaving = ref(false)
-        async function setEditorAccess(mode) {
-            if (config.value.app.editor_access === mode) return
+        // one access per editor format: yara -> editor_access, sigma -> sigma_editor_access
+        async function setEditorAccess(mode, format = 'yara') {
+            const key = format === 'sigma' ? 'sigma_editor_access' : 'editor_access'
+            if (config.value.app[key] === mode) return
             editorAccessSaving.value = true
             try {
-                const data = await post('/admin/settings/editor_access', { mode })
+                const data = await post('/admin/settings/editor_access', { mode, format })
                 const { create_message } = await import('/static/js/toaster.js')
                 if (data.success) {
-                    config.value.app.editor_access = data.mode
-                    create_message(`YARA editor: ${TEST_ACCESS.find(m => m.id === data.mode).label}.`, 'success-subtle')
+                    config.value.app[key] = data.mode
+                    create_message(`${format === 'sigma' ? 'Sigma' : 'YARA'} editor: ${TEST_ACCESS.find(m => m.id === data.mode).label}.`, 'success-subtle')
                 } else {
                     create_message(data.error || 'Failed.', 'danger-subtle')
                 }
