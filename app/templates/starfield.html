@@ -229,6 +229,16 @@
     <div v-else-if="loading" class="sfl-empty"><i class="fa-solid fa-spinner fa-spin"></i></div>
     <template v-else-if="board">
         <div class="sfl-desc">[[ board.description ]] · [[ board.players ]] player[[ board.players === 1 ? '' : 's' ]]</div>
+        <details v-if="board.key === 'overall' && points" class="sfl-points">
+            <summary>How points are counted</summary>
+            <ul>
+                <li><b>[[ points.per_star ]]</b> per star (best run of each level) × difficulty:
+                    <span v-for="(m, d) in points.difficulty_multiplier" :key="d" class="sfl-chip">[[ DIFF_LABELS[d] || d ]] ×[[ m ]]</span></li>
+                <li><b>[[ points.per_level ]]</b> per level cleared, <b>[[ points.per_boss ]]</b> per boss beaten</li>
+                <li>1 per <b>[[ points.endless_per ]]</b> points of your best Endless run, 1 per <b>[[ points.kills_per ]]</b> kills</li>
+                <li><b>[[ points.per_combo ]]</b> per hit of your best combo, win rate % × <b>[[ points.win_rate_factor ]]</b> (from [[ points.win_rate_min_runs ]] campaign runs)</li>
+            </ul>
+        </details>
         <div v-if="!board.rows.length" class="sfl-empty">Nobody yet: play a run to be the first.</div>
         <table v-else class="sfl-table">
             <thead><tr><th class="sfl-rank">#</th><th>Pilot</th><th></th><th class="sfl-value">[[ board.label ]]</th></tr></thead>

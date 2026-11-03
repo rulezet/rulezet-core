@@ -21,6 +21,7 @@ createApp({
         const boards = ref([]);
         const ships = ref([]);
         const difficulties = ref([]);
+        const points = ref(null);
         const active = ref('');
         const ship = ref('');
         const difficulty = ref('');
@@ -38,6 +39,7 @@ createApp({
                 boards.value = data.boards || [];
                 ships.value = data.ships || [];
                 difficulties.value = data.difficulties || [];
+                points.value = data.points || null;
                 if (!boards.value.some(b => b.key === active.value)) active.value = boards.value[0] ? boards.value[0].key : '';
             } catch (e) {
                 error.value = 'The leaderboards could not be loaded.';
@@ -51,6 +53,6 @@ createApp({
         const medal = (rank) => ({ 1: 'sfl-gold', 2: 'sfl-silver', 3: 'sfl-bronze' }[rank] || '');
 
         onMounted(load);
-        return { loading, error, boards, ships, difficulties, active, ship, difficulty, board, load, show, medal, SHIP_LABELS, DIFF_LABELS };
+        return { points, loading, error, boards, ships, difficulties, active, ship, difficulty, board, load, show, medal, SHIP_LABELS, DIFF_LABELS };
     },
 }).mount('#sf-leaderboard');

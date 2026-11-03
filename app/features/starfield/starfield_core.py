@@ -217,11 +217,30 @@ def overview():
 
 # ── Leaderboards (public, under the game) ────────────────────────────────────────
 
-BOARD_KEYS = ('stars', 'levels', 'endless', 'total_score', 'kills', 'combo', 'win_rate', 'time')
+BOARD_KEYS = ('overall', 'stars', 'levels', 'endless', 'total_score', 'kills', 'combo', 'win_rate', 'time')
 
 
-def _board_value(p, key):
+def _points(p, w):
+    """The overall score of a player and its parts, with the weights of the setting."""
+    per_star = float(w.get('per_star', 100))
+    parts = {
+        'stars': round(sum(p['level_points'].values()) * per_star),
+        'levels': round(len(p['best_level_stars']) * float(w.get('per_level', 50))),
+        'bosses': round(len(p['bosses']) * float(w.get('per_boss', 150))),
+        'endless': round((p['best_endless']['score'] if p['best_endless'] else 0) / max(1.0, float(w.get('endless_per', 50)))),
+        'kills': round(p['kills'] / max(1.0, float(w.get('kills_per', 10)))),
+        'combo': round(p['max_combo'] * float(w.get('per_combo', 5))),
+        'win rate': round((100 * p['level_wins'] / p['level_runs']) * float(w.get('win_rate_factor', 2)))
+        if p['level_runs'] >= int(w.get('win_rate_min_runs', 5)) else 0,
+    }
+    return sum(parts.values()), parts
+
+
+def _board_value(p, key, weights=None):
     """(value, detail) a player is ranked by on this board."""
+    if key == 'overall':
+        total, parts = _points(p, weights or {})
+        return total, ' · '.join(f'{k} {v:,}' for k, v in parts.items() if v)
     if key == 'stars':
         return sum(p['best_level_stars'].values()), f"{len(p['best_level_stars'])} levels"
     if key == 'levels':
@@ -255,12 +274,14 @@ def leaderboards(ship=None, difficulty=None, me_user=None, me_player=None):
         query = query.filter(StarfieldRun.ship == ship)
     if difficulty in DIFFICULTIES:
         query = query.filter(StarfieldRun.difficulty == difficulty)
+    weights = conf.get('points') or {}
+    multipliers = weights.get('difficulty_multiplier') or {}
     players = {}
     for r in query.all():
         key = _player_key(r)
         p = players.setdefault(key, {'key': key, 'user_id': r.user_id, 'player_id': r.player_id, 'runs': 0, 'kills': 0,
                                      'time_s': 0, 'total_score': 0, 'max_combo': 0, 'level_runs': 0, 'level_wins': 0,
-                                     'best_level_stars': {}, 'best_endless': None})
+                                     'best_level_stars': {}, 'best_endless': None, 'level_points': {}, 'bosses': set()})
         p['runs'] += 1
         p['kills'] += r.kills or 0
         p['time_s'] += r.time_s or 0
@@ -272,6 +293,11 @@ def leaderboards(ship=None, difficulty=None, me_user=None, me_player=None):
                 p['level_wins'] += 1
                 k = f'{r.world}-{r.level_index}'
                 p['best_level_stars'][k] = max(p['best_level_stars'].get(k, 0), r.stars or 0)
+                # overall points: the stars of the best run of each level, weighted by its difficulty
+                mult = float(multipliers.get(r.difficulty or '', 1))
+                p['level_points'][k] = max(p['level_points'].get(k, 0), (r.stars or 0) * mult)
+                if r.level_kind == 'boss':
+                    p['bosses'].add(k)
         elif r.mode == 'endless' and (p['best_endless'] is None or (r.score or 0) > p['best_endless']['score']):
             p['best_endless'] = {'score': r.score or 0, 'wave': r.wave}
     names = _user_names([p['user_id'] for p in players.values() if p['user_id']])
@@ -287,7 +313,7 @@ def leaderboards(ship=None, difficulty=None, me_user=None, me_player=None):
         for p in players.values():
             if p['runs'] < int(b.get('min_runs') or 1):
                 continue
-            value, detail = _board_value(p, b['key'])
+            value, detail = _board_value(p, b['key'], weights)
             if value:
                 ranked.append((value, p, detail))
         ranked.sort(key=lambda x: (-x[0], x[1]['key']))
@@ -295,5 +321,5 @@ def leaderboards(ship=None, difficulty=None, me_user=None, me_player=None):
         mine = next((row(i + 1, p, v, d) for i, (v, p, d) in enumerate(ranked) if p['key'] == me), None)
         out.append({**{k: b.get(k) for k in ('key', 'label', 'icon', 'description', 'min_runs')},
                     'rows': rows, 'players': len(ranked), 'me': mine if mine and mine['rank'] > limit else None})
-    return {'boards': out, 'ships': list(SHIPS), 'difficulties': list(DIFFICULTIES)}
+    return {'boards': out, 'ships': list(SHIPS), 'difficulties': list(DIFFICULTIES), 'points': weights}
 

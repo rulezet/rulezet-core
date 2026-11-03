@@ -1,11 +1,18 @@
 {
   "label": "Starfield leaderboards",
   "category": "Starfield",
-  "description": "The leaderboards under the Starfield game (/starfield), one tab each, in this order: key (what is ranked: stars, levels, endless, total_score, kills, combo, win_rate, time — the server computes these), label, icon (Font Awesome), description, min_runs (a player needs at least that many runs to appear). Anyone may see them; anonymous players show as \"Pilot #xxxx\". limit = rows per board.",
+  "description": "The leaderboards under the Starfield game (/starfield), one tab each, in this order: key (what is ranked: stars, levels, endless, total_score, kills, combo, win_rate, time — the server computes these), label, icon (Font Awesome), description, min_runs (a player needs at least that many runs to appear). Anyone may see them; anonymous players show as \"Pilot #xxxx\". limit = rows per board. overall = one score in points from everything, with the weights of points (per_star × the difficulty's multiplier of the best run on each level, per_level cleared, per_boss beaten, endless_per = 1 point per that many endless points, kills_per = 1 point per that many kills, per_combo, win_rate_factor × the win rate % from 5 runs).",
   "public": false,
   "value": {
     "limit": 20,
     "boards": [
+      {
+        "key": "overall",
+        "label": "Overall",
+        "icon": "fa-solid fa-crown",
+        "description": "Points from everything: stars (more on harder difficulties), levels and bosses cleared, best Endless score, kills, best combo and win rate",
+        "min_runs": 1
+      },
       {
         "key": "stars",
         "label": "Stars",
@@ -62,6 +69,21 @@
         "description": "Time spent in runs",
         "min_runs": 1
       }
-    ]
+    ],
+    "points": {
+      "per_star": 100,
+      "difficulty_multiplier": {
+        "analyst": 1,
+        "hunter": 1.25,
+        "redteam": 1.5
+      },
+      "per_level": 50,
+      "per_boss": 150,
+      "endless_per": 50,
+      "kills_per": 10,
+      "per_combo": 5,
+      "win_rate_factor": 2,
+      "win_rate_min_runs": 5
+    }
   }
 }

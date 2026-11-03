@@ -28,3 +28,7 @@
 .sfl-empty { padding: 14px 0; text-align: center; color: var(--subtle-text-color); }
 .sfl-anon { color: var(--subtle-text-color); }
 @media (max-width: 576px) { .sfl { padding: 14px 12px; } .sfl-filters { margin-left: 0; width: 100%; } }
+.sfl-points { font-size: .82rem; color: var(--subtle-text-color); margin: 0 0 10px; }
+.sfl-points summary { cursor: pointer; color: #0d6efd; }
+.sfl-points ul { margin: 6px 0 0; padding-left: 18px; }
+.sfl-chip { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border-color); font-size: .75rem; }
