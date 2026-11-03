@@ -207,6 +207,16 @@
                         </div>
                     </div>
                     <div class="dt-toolbar-right">
+                        <div class="tf-segment tf-segment--sm mb-0" role="tablist" aria-label="View">
+                            <button type="button" :class="{ 'is-on': wfView === 'table' }" @click="setWfView('table')"><i class="fa-solid fa-table-list"></i>Table</button>
+                            <button type="button" :class="{ 'is-on': wfView === 'cards' }" @click="setWfView('cards')"><i class="fa-solid fa-grip"></i>Cards</button>
+                        </div>
+                        <button class="dt-toolbar-btn" @click="openAllWfTasks()" title="Show the tasks of every workflow">
+                            <i class="fa-solid fa-angles-down"></i><span>Open all</span>
+                        </button>
+                        <button class="dt-toolbar-btn" @click="closeAllWfTasks()" title="Hide every task list">
+                            <i class="fa-solid fa-angles-up"></i><span>Close all</span>
+                        </button>
                         <button class="dt-toolbar-btn" @click="openTemplates()" title="Ready-made workflows">
                             <i class="fa-solid fa-wand-magic-sparkles"></i><span>Templates</span>
                         </button>
@@ -244,28 +254,87 @@
                         </button>
                     </div>
                 </template>
+                <div v-else-if="wfView === 'cards'">
+                    <div class="wf-cards-sort">
+                        <span class="text-muted small">Sort by</span>
+                        <button v-for="c in wfSortColumns" :key="c.key" type="button" class="wfd-tasks-sort__btn"
+                                :class="{ 'is-on': wfSort.key === c.key }" @click="setWfSort(c.key)">
+                            [[ c.label ]] <i class="fa-solid" :class="sortIcon(wfSort, c.key)"></i>
+                        </button>
+                    </div>
+                    <div class="wf-cards">
+                        <div v-for="w in workflows" :key="w.uuid" class="wf-card" :class="{ 'is-off': !w.is_active }" @click="openWorkflow(w)">
+                            <div class="wf-card__head">
+                                <span class="wcal-wf__icon" :style="{ '--wf-color': wfColor(w.uuid) }"><i class="fa-solid" :class="wfIcon(w.uuid)"></i></span>
+                                <div class="wf-card__title">[[ w.title ]]</div>
+                                <span class="badge" :class="w.is_active ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
+                                    [[ w.is_active ? 'Active' : 'Paused' ]]</span>
+                            </div>
+                            <div v-if="w.description" class="wf-card__desc">[[ w.description ]]</div>
+                            <div class="wf-card__meta">
+                                <span v-if="w.is_active && w.launch_status && w.launch_status.will_run"><i class="fa-regular fa-clock"></i>[[ formatLocalDate(w.launch_status.next_run_at) ]]</span>
+                                <span v-else-if="w.is_active && w.launch_status" class="text-warning-emphasis" :title="w.launch_status.warning"><i class="fa-solid fa-triangle-exclamation"></i>Never runs</span>
+                                <span v-if="health && health.per_workflow[w.uuid] && health.per_workflow[w.uuid].rate != null"><i class="fa-solid fa-circle-check"></i>[[ health.per_workflow[w.uuid].rate ]]%</span>
+                                <span><i class="fa-regular fa-calendar"></i>[[ w.created_at ]]</span>
+                                <user-chip v-if="w.editor" :user-id="w.editor.id" :username="w.editor.name" :avatar="w.editor.avatar" size="xs"></user-chip>
+                            </div>
+                            <div v-if="health && health.per_workflow[w.uuid] && health.per_workflow[w.uuid].dots.length" class="wfh-dots">
+                                <span v-for="(d, i) in health.per_workflow[w.uuid].dots" :key="i" class="wfh-dot" :class="'wfh-dot--' + d.status"
+                                      :data-rz-pop-title="d.status" :data-rz-pop-text="d.at"></span>
+                            </div>
+                            <div class="wf-card__tasks" @click.stop>
+                                <button type="button" class="wf-tasks-toggle" :class="{ 'is-open': openWfTasks.has(w.uuid) }" @click="toggleWfTasks(w.uuid)" :aria-expanded="openWfTasks.has(w.uuid)">
+                                    <i class="fa-solid fa-chevron-right"></i>[[ w.active_task_count ]] / [[ w.task_count ]] tasks
+                                </button>
+                                <span v-if="!openWfTasks.has(w.uuid)" class="wf-card__flow">
+                                    <span v-for="t in (w.tasks_brief || [])" :key="t.uuid" class="wf-tasks-item__icon" :class="{ 'is-off': !t.is_active }" :title="t.title"><i :class="t.icon"></i></span>
+                                </span>
+                                <ol v-else-if="(w.tasks_brief || []).length" class="wf-tasks-list wf-tasks-list--col">
+                                    <li v-for="t in w.tasks_brief" :key="t.uuid" class="wf-tasks-item" :class="{ 'is-off': !t.is_active }" :title="t.type_label">
+                                        <span class="wf-tasks-item__icon"><i :class="t.icon"></i></span>
+                                        <span class="wf-tasks-item__title">[[ t.title ]]</span>
+                                        <span v-if="!t.is_active" class="wfd-tag">paused</span>
+                                    </li>
+                                </ol>
+                            </div>
+                            <div class="wf-card__actions" @click.stop>
+                                <button class="dt-action-btn" title="Edit" @click="openEditWorkflow(w)"><i class="fa-solid fa-pen"></i></button>
+                                <button class="dt-action-btn" title="Duplicate (tasks copied, first one paused)" @click="duplicateWorkflow(w)"><i class="fa-regular fa-clone"></i></button>
+                                <button class="dt-action-btn" title="Export as a .json file" @click="exportWorkflow(w)"><i class="fa-solid fa-file-export"></i></button>
+                                <button class="dt-action-btn" title="Save as a template" @click="saveAsTemplate(w)"><i class="fa-solid fa-bookmark"></i></button>
+                                <button class="dt-action-btn dt-action-btn--danger" title="Delete" @click="deleteWorkflow(w)"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div v-else class="dt-table-wrap">
                     <table class="dt-table">
                         <thead class="dt-thead">
                             <tr>
-                                <th class="dt-th">Title</th>
-                                <th class="dt-th text-center">Tasks</th>
+                                <th class="dt-th dt-th--sortable" :class="{ 'dt-th--sorted': wfSort.key === 'title' }" @click="setWfSort('title')">Title <i class="dt-sort-icon fa-solid" :class="sortIcon(wfSort, 'title')"></i></th>
+                                <th class="dt-th dt-th--sortable text-center" :class="{ 'dt-th--sorted': wfSort.key === 'tasks' }" @click="setWfSort('tasks')">Tasks <i class="dt-sort-icon fa-solid" :class="sortIcon(wfSort, 'tasks')"></i></th>
                                 <th class="dt-th">Editor</th>
-                                <th class="dt-th text-center">Status</th>
+                                <th class="dt-th dt-th--sortable text-center" :class="{ 'dt-th--sorted': wfSort.key === 'status' }" @click="setWfSort('status')">Status <i class="dt-sort-icon fa-solid" :class="sortIcon(wfSort, 'status')"></i></th>
                                 <th class="dt-th">Health</th>
                                 <th class="dt-th">Next launch</th>
-                                <th class="dt-th">Created</th>
+                                <th class="dt-th dt-th--sortable" :class="{ 'dt-th--sorted': wfSort.key === 'created_at' }" @click="setWfSort('created_at')">Created <i class="dt-sort-icon fa-solid" :class="sortIcon(wfSort, 'created_at')"></i></th>
                                 <th class="dt-th text-center">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="w in workflows" :key="w.uuid" class="dt-row" style="cursor:pointer;" @click="openWorkflow(w)">
+                            <template v-for="w in workflows" :key="w.uuid">
+                            <tr class="dt-row" style="cursor:pointer;" @click="openWorkflow(w)">
                                 <td class="dt-td">
                                     <div class="fw-bold d-flex align-items-center gap-2">
                                         <span class="wcal-wf__icon" :style="{ '--wf-color': wfColor(w.uuid) }"><i class="fa-solid" :class="wfIcon(w.uuid)"></i></span>[[ w.title ]]</div>
                                     <div class="text-muted" style="font-size:.78rem;" v-if="w.description">[[ w.description ]]</div>
                                 </td>
-                                <td class="dt-td text-center">[[ w.active_task_count ]] / [[ w.task_count ]]</td>
+                                <td class="dt-td text-center" @click.stop>
+                                    <button type="button" class="wf-tasks-toggle" :class="{ 'is-open': openWfTasks.has(w.uuid) }" @click="toggleWfTasks(w.uuid)"
+                                            :aria-expanded="openWfTasks.has(w.uuid)" :title="openWfTasks.has(w.uuid) ? 'Hide the tasks' : 'Show the tasks'">
+                                        <i class="fa-solid fa-chevron-right"></i>[[ w.active_task_count ]] / [[ w.task_count ]]
+                                    </button>
+                                </td>
                                 <td class="dt-td">
                                     <user-chip v-if="w.editor" :user-id="w.editor.id" :username="w.editor.name" :avatar="w.editor.avatar" size="xs"></user-chip>
                                     <span v-else>—</span>
@@ -312,6 +381,19 @@
                                     </div>
                                 </td>
                             </tr>
+                            <tr v-if="openWfTasks.has(w.uuid)" class="wf-tasks-row">
+                                <td class="dt-td" colspan="8">
+                                    <div v-if="!(w.tasks_brief || []).length" class="text-muted small">No task in this workflow yet.</div>
+                                    <ol v-else class="wf-tasks-list">
+                                        <li v-for="t in w.tasks_brief" :key="t.uuid" class="wf-tasks-item" :class="{ 'is-off': !t.is_active }" :title="t.type_label">
+                                            <span class="wf-tasks-item__icon"><i :class="t.icon"></i></span>
+                                            <span class="wf-tasks-item__title">[[ t.title ]]</span>
+                                            <span v-if="!t.is_active" class="wfd-tag">paused</span>
+                                        </li>
+                                    </ol>
+                                </td>
+                            </tr>
+                            </template>
                         </tbody>
                     </table>
                 </div>
@@ -557,12 +639,12 @@
                                 <th class="dt-th dt-th--checkbox">
                                     <input type="checkbox" class="dt-checkbox" :checked="isAllRunsSelected" @change="toggleAllRunsSelection" />
                                 </th>
-                                <th class="dt-th">Started</th>
-                                <th class="dt-th">Triggered by</th>
-                                <th class="dt-th text-center">Status</th>
-                                <th class="dt-th text-center">Tasks</th>
+                                <th class="dt-th dt-th--sortable" :class="{ 'dt-th--sorted': runSort.key === 'started_at' }" @click="setRunSort('started_at')">Started <i class="dt-sort-icon fa-solid" :class="sortIcon(runSort, 'started_at')"></i></th>
+                                <th class="dt-th dt-th--sortable" :class="{ 'dt-th--sorted': runSort.key === 'triggered_by' }" @click="setRunSort('triggered_by')">Triggered by <i class="dt-sort-icon fa-solid" :class="sortIcon(runSort, 'triggered_by')"></i></th>
+                                <th class="dt-th dt-th--sortable text-center" :class="{ 'dt-th--sorted': runSort.key === 'status' }" @click="setRunSort('status')">Status <i class="dt-sort-icon fa-solid" :class="sortIcon(runSort, 'status')"></i></th>
+                                <th class="dt-th dt-th--sortable text-center" :class="{ 'dt-th--sorted': runSort.key === 'done_count' }" @click="setRunSort('done_count')">Tasks <i class="dt-sort-icon fa-solid" :class="sortIcon(runSort, 'done_count')"></i></th>
                                 <th class="dt-th">Path</th>
-                                <th class="dt-th text-center">Duration</th>
+                                <th class="dt-th dt-th--sortable text-center" :class="{ 'dt-th--sorted': runSort.key === 'duration_seconds' }" @click="setRunSort('duration_seconds')">Duration <i class="dt-sort-icon fa-solid" :class="sortIcon(runSort, 'duration_seconds')"></i></th>
                                 <th class="dt-th text-center">Actions</th>
                             </tr>
                         </thead>
@@ -723,6 +805,13 @@
 
                     <!-- List view: every task with its trigger, figures and actions -->
                     <div v-else-if="taskViewMode === 'list'" class="wfd-tasks">
+                        <div class="wfd-tasks-sort">
+                            <span class="text-muted small">Sort by</span>
+                            <button v-for="c in taskSortColumns" :key="c.key" type="button" class="wfd-tasks-sort__btn"
+                                    :class="{ 'is-on': taskSort.key === c.key }" @click="setTaskSort(c.key)">
+                                [[ c.label ]] <i class="fa-solid" :class="sortIcon(taskSort, c.key)"></i>
+                            </button>
+                        </div>
                         <div v-for="s in filteredListSchedules" :key="s.uuid" class="wfd-task" :class="{ 'is-off': !s.is_active }">
                             <span class="wfd-task__icon" :class="'wfd-task__icon--' + (s.last_run_status || 'none')"><i :class="taskTypeIcon(s.task_type)"></i></span>
                             <div class="wfd-task__main">
@@ -1849,7 +1938,7 @@
                 workflowsLoading.value = true;
                 try {
                     workflowsPage.value = page || 1;
-                    const params = new URLSearchParams({ page: workflowsPage.value, per_page: 20, search: workflowSearch.value });
+                    const params = new URLSearchParams({ page: workflowsPage.value, per_page: 20, search: workflowSearch.value, sort: wfSort.key, dir: wfSort.dir });
                     const res = await fetch(`/admin/tasks/workflows?${params}`);
                     if (!res.ok) return;
                     const data = await res.json();
@@ -2092,11 +2181,77 @@
                 if (res.ok) refreshLists();
             }
             const runFilter = ref('all');
-            const filteredWorkflowRuns = computed(() =>
-                runFilter.value === 'all' ? workflowRuns.value : workflowRuns.value.filter(r => r.status === runFilter.value));
+            // Column sorting: a click on a header sorts by it, a second click reverses (fa-sort ↔ up / down)
+            function sortIcon(state, key) {
+                return state.key !== key ? 'fa-sort' : (state.dir === 'asc' ? 'fa-sort-up' : 'fa-sort-down');
+            }
+            function toggleSort(state, key) {
+                if (state.key === key) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+                else { state.key = key; state.dir = 'asc'; }
+            }
+            function compareBy(getter, dir) {
+                return (a, b) => {
+                    const x = getter(a), y = getter(b);
+                    if (x == null && y == null) return 0;
+                    if (x == null) return 1;          // empty values always last
+                    if (y == null) return -1;
+                    const r = (typeof x === 'number' && typeof y === 'number') ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true });
+                    return dir === 'asc' ? r : -r;
+                };
+            }
+            const wfSort = reactive({ key: 'created_at', dir: 'desc' });      // server side (paginated)
+            function setWfSort(key) { toggleSort(wfSort, key); fetchWorkflows(1); }
+            const wfSortColumns = [
+                { key: 'title', label: 'Title' }, { key: 'tasks', label: 'Tasks' },
+                { key: 'status', label: 'Status' }, { key: 'created_at', label: 'Created' },
+            ];
+            // Table / Cards view of the workflows list, remembered in this browser
+            let savedWfView = 'table';
+            try { savedWfView = localStorage.getItem('rz.workflows.view') || 'table'; } catch (e) { /* storage blocked */ }
+            const wfView = ref(savedWfView === 'cards' ? 'cards' : 'table');
+            function setWfView(v) {
+                wfView.value = v;
+                try { localStorage.setItem('rz.workflows.view', v); } catch (e) { /* storage blocked */ }
+            }
+            const runSort = reactive({ key: 'started_at', dir: 'desc' });
+            function setRunSort(key) { toggleSort(runSort, key); }
+            const RUN_SORT = {
+                started_at: r => r.started_at, status: r => r.status, done_count: r => r.done_count,
+                duration_seconds: r => r.duration_seconds,
+                triggered_by: r => (r.triggered_by ? r.triggered_by.name : 'Scheduler').toLowerCase(),
+            };
+            const taskSort = reactive({ key: 'order', dir: 'asc' });
+            const taskSortColumns = [
+                { key: 'order', label: 'Order' }, { key: 'title', label: 'Title' }, { key: 'type', label: 'Type' },
+                { key: 'next', label: 'Next run' }, { key: 'runs', label: 'Runs' }, { key: 'rate', label: 'Success' },
+            ];
+            function setTaskSort(key) { toggleSort(taskSort, key); }
+            const TASK_SORT = {
+                title: s => s.title.toLowerCase(), type: s => taskTypeLabel(s.task_type).toLowerCase(),
+                next: s => s.next_run_at || null, runs: s => (s.stats ? s.stats.runs : null),
+                rate: s => (s.stats ? s.stats.success_rate : null),
+            };
+            // Tasks of each workflow in the workflows table, collapsible (Open all / Close all)
+            const openWfTasks = ref(new Set());
+            function toggleWfTasks(uuid) {
+                const n = new Set(openWfTasks.value);
+                n.has(uuid) ? n.delete(uuid) : n.add(uuid);
+                openWfTasks.value = n;
+            }
+            function openAllWfTasks() { openWfTasks.value = new Set(workflows.value.map(w => w.uuid)); }
+            function closeAllWfTasks() { openWfTasks.value = new Set(); }
+
+            const filteredWorkflowRuns = computed(() => {
+                const runs = runFilter.value === 'all' ? workflowRuns.value : workflowRuns.value.filter(r => r.status === runFilter.value);
+                const get = RUN_SORT[runSort.key];
+                return get ? [...runs].sort(compareBy(get, runSort.dir)) : runs;
+            });
             const filteredListSchedules = computed(() => {
                 const q = (search.value || '').trim().toLowerCase();
-                return graphSchedules.value.filter(s => !q || s.title.toLowerCase().includes(q) || (s.task_type || '').includes(q));
+                const list = graphSchedules.value.filter(s => !q || s.title.toLowerCase().includes(q) || (s.task_type || '').includes(q));
+                const get = TASK_SORT[taskSort.key];
+                if (!get) return taskSort.dir === 'asc' ? list : [...list].reverse();   // 'order' = the workflow's own order
+                return [...list].sort(compareBy(get, taskSort.dir));
             });
 
             async function runWorkflowNow() {
@@ -3207,6 +3362,8 @@
                 runPreview, runPreviewLoading, askRunWorkflow, confirmRunWorkflow,
                 dashboard, loadDashboard, barHeight, toggleWorkflowActive, runFromHere, setTaskActive,
                 runFilter, filteredWorkflowRuns, filteredListSchedules,
+                sortIcon, wfSort, setWfSort, wfSortColumns, wfView, setWfView, runSort, setRunSort, taskSort, taskSortColumns, setTaskSort,
+                openWfTasks, toggleWfTasks, openAllWfTasks, closeAllWfTasks,
                 workflows, workflowsLoading, workflowSearch, onWorkflowSearchInput,
                 workflowsPage, workflowsTotalPages, totalWorkflows,
                 fetchWorkflows, openCreateWorkflow, openEditWorkflow, deleteWorkflow,

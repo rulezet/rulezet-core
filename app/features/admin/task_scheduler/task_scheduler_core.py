@@ -52,8 +52,12 @@ def get_workflow_list_page(page=1, per_page=20, search='', sort='created_at', di
         query = query.filter(db.or_(AdminWorkflow.title.ilike(like),
                                     AdminWorkflow.description.ilike(like),
                                     has_task))
+    task_count = (db.session.query(db.func.count(AdminTaskSchedule.id))
+                  .filter(AdminTaskSchedule.workflow_id == AdminWorkflow.id).scalar_subquery())
     sort_col = {
-        'title': AdminWorkflow.title,
+        'title': db.func.lower(AdminWorkflow.title),
+        'tasks': task_count,
+        'status': AdminWorkflow.is_active,
         'created_at': AdminWorkflow.created_at,
         'updated_at': AdminWorkflow.updated_at,
     }.get(sort, AdminWorkflow.created_at)

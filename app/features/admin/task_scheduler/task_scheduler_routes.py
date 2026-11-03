@@ -106,6 +106,17 @@ def config():
 
 # ─── Workflows (JSON API used by the Vue app) ─────────────────────────────────
 
+def _tasks_brief(workflow):
+    """The tasks of a workflow for the collapsible list of the workflows table: title + type icon."""
+    from app.features.admin.task_scheduler.task_types import TASK_TYPES
+    out = []
+    for t in sorted(workflow.tasks, key=lambda t: t.id):
+        tt = TASK_TYPES.get(t.task_type, {})
+        out.append({"uuid": t.uuid, "title": t.title, "task_type": t.task_type, "is_active": t.is_active,
+                    "icon": tt.get('icon', 'fa-solid fa-gear'), "type_label": tt.get('label', t.task_type)})
+    return out
+
+
 @task_scheduler_blueprint.route('/workflows', methods=['GET'])
 def list_workflows():
     page = request.args.get('page', 1, type=int)
@@ -116,7 +127,7 @@ def list_workflows():
 
     pagination = TaskSchedulerModel.get_workflow_list_page(page, per_page, search, sort, direction)
     return jsonify({
-        "workflows": [w.to_json() for w in pagination.items],
+        "workflows": [{**w.to_json(), "tasks_brief": _tasks_brief(w)} for w in pagination.items],
         "total": pagination.total,
         "total_pages": pagination.pages,
     }), 200
