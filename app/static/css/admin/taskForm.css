@@ -423,7 +423,8 @@
 .wf-card__desc.wf-desc { max-width: none; }
 
 /* Job ideas for later: a discreet light bulb in the workflows toolbar */
-.wf-ideas-btn { border: 0; background: none; color: var(--subtle-text-color); opacity: .35; padding: .2rem .4rem; font-size: .85rem; cursor: pointer; }
+.wf-ideas-corner { display: flex; justify-content: flex-end; margin-top: .4rem; }
+.wf-ideas-btn { border: 0; background: none; color: var(--subtle-text-color); opacity: .12; padding: .1rem .3rem; font-size: .7rem; cursor: pointer; }
 .wf-ideas-btn:hover, .wf-ideas-btn:focus-visible { opacity: 1; color: #b08800; }
 .wf-ideas-group + .wf-ideas-group { margin-top: 1rem; }
 .wf-ideas-group__title { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--subtle-text-color); display: flex; gap: .45rem; align-items: center; margin-bottom: .5rem; }

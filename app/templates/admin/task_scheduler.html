@@ -58,7 +58,7 @@
         </p>
     </div>
 
-    <div class="dr-nav mb-3" role="tablist">
+    <div data-tour="wf-nav" class="dr-nav mb-3" role="tablist">
         <span class="dr-nav__label" style="padding:.5rem .25rem;">Admin Task Scheduler</span>
         <span class="dr-nav__sep"></span>
         <!-- List / Calendar of the workflows -->
@@ -90,7 +90,7 @@
 
         <!-- Calendar: every workflow's launches, planned and past; drag a workflow on a day to schedule it -->
         <div v-if="listView === 'calendar'" class="wcal">
-            <aside class="wcal-side">
+            <aside data-tour="wf-cal-side" class="wcal-side">
                 <div class="wcal-side__head">
                     <span><i class="fa-solid fa-diagram-project me-1"></i>Workflows</span>
                     <button type="button" class="wcal-link" @click="calSelected = calSelected.length ? [] : calWorkflows.map(w => w.uuid)">
@@ -116,7 +116,7 @@
                 </div>
                 <button v-if="calSelected.length" type="button" class="btn btn-sm btn-primary rounded-pill w-100 mt-2" @click="openSchedule(null, calSelected)">
                     <i class="fa-regular fa-calendar-plus me-1"></i>Schedule the [[ calSelected.length ]] checked</button>
-                <div class="wcal-filter">
+                <div data-tour="wf-cal-filter" class="wcal-filter">
                     <div class="wcal-filter__head">
                         <span>Show</span>
                         <button v-if="calHiddenCount" type="button" class="wcal-link" @click="resetCalHidden">Show all ([[ calHiddenCount ]] hidden)</button>
@@ -128,7 +128,7 @@
                     </button>
                 </div>
             </aside>
-            <div class="wcal-main">
+            <div data-tour="wf-cal-main" class="wcal-main">
                 <calendar-view ref="calendarRef" :events="calVisibleEvents" :editable="true" :selectable="true" :droppable="true"
                                day-button="Add to this day — a workflow, a note, a reminder" :active-date="calOpenDay"
                                @range="onCalRange" @select="onCalSelect" @day-button="d => calDay = d.date" @drop="onCalDrop" @event-drop="onCalEventDrop" @event-click="onCalEventClick"></calendar-view>
@@ -372,7 +372,7 @@
             </div>
         </div>
 
-        <!-- Job ideas for later (setting workflows.future_ideas) -->
+        <!-- Job ideas for later (setting workflows.future_ideas): a near-invisible bulb at the very bottom of the list -->
         <div v-if="ideas" class="wcal-modal" @click.self="ideas = null">
             <div class="modal-content border-0 shadow-lg tf-modal wcal-dialog wcal-dialog--sm" role="dialog" aria-modal="true" aria-labelledby="ideasTitle">
                 <div class="tf-hero">
@@ -426,11 +426,11 @@
                     <div class="dt-toolbar-left">
                         <div class="dt-search">
                             <i class="fas fa-search dt-search-icon"></i>
-                            <input class="dt-search-input" type="text" placeholder="Search workflows…"
+                            <input data-tour="wf-search" class="dt-search-input" type="text" placeholder="Search workflows…"
                                 v-model="workflowSearch" @input="onWorkflowSearchInput" aria-label="Search workflows" />
                         </div>
                     </div>
-                    <div class="dt-toolbar-right">
+                    <div class="dt-toolbar-right" data-tour="wf-toolbar">
                         <div class="tf-segment tf-segment--sm mb-0" role="tablist" aria-label="View">
                             <button type="button" :class="{ 'is-on': wfView === 'table' }" @click="setWfView('table')"><i class="fa-solid fa-table-list"></i>Table</button>
                             <button type="button" :class="{ 'is-on': wfView === 'cards' }" @click="setWfView('cards')"><i class="fa-solid fa-grip"></i>Cards</button>
@@ -441,7 +441,6 @@
                         <button class="dt-toolbar-btn" @click="closeAllWfTasks()" title="Hide every task list">
                             <i class="fa-solid fa-angles-up"></i><span>Close all</span>
                         </button>
-                        <button type="button" class="wf-ideas-btn" @click="openIdeas()" title="Job ideas for later" aria-label="Job ideas for later"><i class="fa-regular fa-lightbulb"></i></button>
                         <button class="dt-toolbar-btn" @click="openTemplates()" title="Ready-made workflows">
                             <i class="fa-solid fa-wand-magic-sparkles"></i><span>Templates</span>
                         </button>
@@ -455,7 +454,7 @@
                     </div>
                 </div>
 
-                <div v-if="wfChecked.size" class="dt-bulk-bar wf-bulk mb-3">
+                <div data-tour="wf-bulk" v-if="wfChecked.size" class="dt-bulk-bar wf-bulk mb-3">
                     <span class="dt-bulk-count">[[ wfChecked.size ]] selected</span>
                     <div class="rz-pills">
                         <button type="button" class="rz-pill" style="--c:#fd7e14" :disabled="wfBulkBusy" @click="bulkWorkflows('stop')"><i class="fa-solid fa-stop me-1"></i>Stop</button>
@@ -496,7 +495,7 @@
                             [[ c.label ]] <i class="fa-solid" :class="sortIcon(wfSort, c.key)"></i>
                         </button>
                     </div>
-                    <div class="wf-cards">
+                    <div data-tour="wf-list" class="wf-cards">
                         <div v-for="w in workflows" :key="w.uuid" class="wf-card" :class="{ 'is-off': !w.is_active, 'is-checked': wfChecked.has(w.uuid) }" @click="openWorkflow(w)">
                             <div class="wf-card__head">
                                 <input type="checkbox" class="dt-checkbox" :checked="wfChecked.has(w.uuid)" @click.stop @change="toggleWfCheck(w.uuid)" :aria-label="'Select ' + w.title">
@@ -543,7 +542,7 @@
                         </div>
                     </div>
                 </div>
-                <div v-else class="dt-table-wrap">
+                <div v-else class="dt-table-wrap" data-tour="wf-table">
                     <table class="dt-table">
                         <thead class="dt-thead">
                             <tr>
@@ -643,6 +642,9 @@
                 <p class="text-center mt-3 text-muted">Total workflows: [[ totalWorkflows ]]</p>
             </div>
         </div>
+        <div v-if="listView === 'list'" class="wf-ideas-corner">
+            <button type="button" class="wf-ideas-btn" @click="openIdeas()" title="Job ideas for later" aria-label="Job ideas for later"><i class="fa-regular fa-lightbulb"></i></button>
+        </div>
     </template>
 
     <!-- ══════════════════════════ Level 2 — Workflow detail ══════════════════════════ -->
@@ -663,7 +665,7 @@
                     </div>
                     <div class="wfd-hero__desc" v-if="activeWorkflow.description">[[ activeWorkflow.description ]]</div>
                 </div>
-                <div class="wfd-hero__actions">
+                <div data-tour="wfd-actions" class="wfd-hero__actions">
                     <button v-if="isWorkflowRunning" class="btn btn-sm btn-outline-danger rounded-pill px-3" @click="stopWorkflow()"><i class="fa-solid fa-stop me-1"></i>Stop</button>
                     <button class="btn btn-sm btn-primary rounded-pill px-3 tf-submit" :disabled="!canRunWorkflow || workflowBusy" @click="askRunWorkflow()">
                         <span v-if="workflowBusy" class="spinner-border spinner-border-sm me-1"></span><i v-else class="fa-solid fa-play me-1"></i>Run
@@ -757,7 +759,7 @@
             <i class="fa-solid fa-triangle-exclamation me-1"></i>[[ neverRunsWarning ]]
         </div>
 
-        <div class="dr-nav mb-3" role="tablist">
+        <div class="dr-nav mb-3" role="tablist" data-tour="wfd-tabs">
             <a class="dr-nav__item" :class="{ active: detailTab === 'history' }" href="#" role="tab" @click.prevent="switchDetailTab('history')">
                 <i class="fa-solid fa-clock-rotate-left"></i><span>History</span>
             </a>
@@ -805,7 +807,7 @@
         </div>
 
         <!-- ── History tab (default): launch history first, detail on click ── -->
-        <div v-if="detailTab === 'history'" class="card border-0 shadow-sm rounded-3">
+        <div data-tour="wfd-history" v-if="detailTab === 'history'" class="card border-0 shadow-sm rounded-3">
             <div class="card-body p-3 p-md-4">
                 <div class="dt-toolbar mb-3">
                     <div class="dt-toolbar-left">
@@ -942,7 +944,7 @@
         </div>
 
         <!-- Notes (markdown), attached files and activity of this workflow — js/admin/workflowNotebook.js -->
-        <workflow-notebook v-if="detailTab === 'history' && activeWorkflow" ref="notebook" :key="activeWorkflow.uuid"
+        <workflow-notebook data-tour="wfd-notebook" v-if="detailTab === 'history' && activeWorkflow" ref="notebook" :key="activeWorkflow.uuid"
                            :workflow-uuid="activeWorkflow.uuid" :csrf-token="csrfToken" :runs="workflowRuns"
                            @changed="loadWorkflowRuns(workflowRunsPage)" @pinned="pinnedNotes = $event" @counts="c => Object.assign(activeWorkflow, c)"></workflow-notebook>
 

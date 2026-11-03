@@ -1,0 +1,91 @@
+{
+  "label": "Tutorial: Workflows (task scheduler)",
+  "category": "Tutorial",
+  "description": "Steps of the Tutorial button on the Workflows (task scheduler) page (endpoint task_scheduler.admin_panel). A step: target (CSS selector, empty = centred card), title, text (blank line = new paragraph, **bold**, `code`), roles (optional: anonymous, user, member, admin, perm:<key>), demo (rule / bundle: example shown when the target is missing). A step whose target is not on the screen is skipped.",
+  "public": false,
+  "value": {
+    "title": "Workflows",
+    "steps": [
+      {
+        "target": ".explorer-banner",
+        "title": "Workflows",
+        "text": "A **workflow** is a pipeline of admin jobs that runs on its own: data refreshes, backups, Git updates, feeds, quality scores, checks, notifications…\n\nIts **first task** is launched by a date (once, every day / week / month, or a cron expression); the next ones start **after** another task, on success, on failure or always. Each launch is kept with its logs, so you can see what ran, when, and why it failed.",
+        "roles": [
+          "admin"
+        ]
+      },
+      {
+        "target": "[data-tour=\"wf-nav\"]",
+        "title": "List or calendar",
+        "text": "**List**: every workflow, its health and its next launch.\n\n**Calendar**: the launches planned and the ones that happened, day by day — plus your notes and reminders. The admin nav (right) leads to the other admin pages.",
+        "roles": [
+          "admin"
+        ]
+      },
+      {
+        "target": "[data-tour=\"wf-toolbar\"]",
+        "title": "Create a workflow",
+        "text": "**New Workflow**: start empty and add tasks.\n\n**Templates**: ready-made workflows (data refresh, backups, Rulesets publication, rule feeds, Git updates…) created in one click with their tasks and links — the first task is **paused** until you check it. Some templates ask their choices first: **Git Sources updates** reuses a Git updater of Manage Git or creates one with the same form.\n\n**Import**: a `.json` exported from this page, here or on another instance.\n\nEach workflow can also be **duplicated**, **exported** or **saved as a template** from its row.",
+        "roles": [
+          "admin"
+        ]
+      },
+      {
+        "target": "[data-tour=\"wf-search\"]",
+        "title": "Search",
+        "text": "Finds workflows by title, description **and** by the tasks they contain.",
+        "roles": [
+          "admin"
+        ]
+      },
+      {
+        "target": "[data-tour=\"wf-table\"]",
+        "title": "The workflows",
+        "text": "Click a row to open the workflow. Click a column header to sort.\n\n**Tasks** unfolds the tasks with their icons. **Health**: one dot per recent launch (green done, red failed) and the success rate. **Next launch**: when it runs next — *Never runs* means no task can start on its own.\n\nA Git logo next to a title: the workflow runs Git updates (GitHub, GitLab…). The **switch** in Actions pauses / resumes the workflow; the other buttons edit, duplicate, export, save as a template, delete.",
+        "roles": [
+          "admin"
+        ]
+      },
+      {
+        "target": "[data-tour=\"wf-list\"]",
+        "title": "Cards",
+        "text": "The same workflows as cards — the Table / Cards switch is kept per browser.",
+        "roles": [
+          "admin"
+        ]
+      },
+      {
+        "target": "[data-tour=\"wf-bulk\"]",
+        "title": "Several at once",
+        "text": "Tick workflows to **stop** their running jobs, **pause** them or **delete** them together. Launching and resuming are done one workflow at a time on purpose.",
+        "roles": [
+          "admin"
+        ]
+      },
+      {
+        "target": "[data-tour=\"wf-cal-side\"]",
+        "title": "Calendar — schedule by drag and drop",
+        "text": "Drag a workflow onto a day or an hour to set its launch — the ticked ones come along, spread one after the other. Drag a planned launch to move it. A day has a maximum number of launches (setting `workflows.calendar_max_per_day`). The eye hides a workflow from the calendar.",
+        "roles": [
+          "admin"
+        ]
+      },
+      {
+        "target": "[data-tour=\"wf-cal-filter\"]",
+        "title": "Calendar — what is shown",
+        "text": "Hide categories when it gets crowded: planned, done, failed, paused launches, notes, reminders. Kept per browser; **Show all** brings everything back.",
+        "roles": [
+          "admin"
+        ]
+      },
+      {
+        "target": "[data-tour=\"wf-cal-main\"]",
+        "title": "Calendar — days, notes, reminders",
+        "text": "**Click a day**: everything on it opens under the calendar (launches, notes, reminders) with Edit / Delete.\n\nThe **+** at the bottom right of a day: schedule a workflow, add a **note** (markdown, nothing sent) or a **reminder** — at its date it sends a notification (to you or all admins), an email (to you or addresses you type) or both. Handy for a token that expires.\n\nClick a note or a reminder to read it; drag it to move it.",
+        "roles": [
+          "admin"
+        ]
+      }
+    ]
+  }
+}

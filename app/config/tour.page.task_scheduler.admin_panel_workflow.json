@@ -1,0 +1,51 @@
+{
+  "label": "Tutorial: Workflow detail",
+  "category": "Tutorial",
+  "description": "Steps of the Tutorial button on the Workflow detail page (endpoint task_scheduler.admin_panel_workflow). A step: target (CSS selector, empty = centred card), title, text (blank line = new paragraph, **bold**, `code`), roles (optional: anonymous, user, member, admin, perm:<key>), demo (rule / bundle: example shown when the target is missing). A step whose target is not on the screen is skipped.",
+  "public": false,
+  "value": {
+    "title": "A workflow",
+    "steps": [
+      {
+        "target": ".explorer-banner",
+        "title": "A workflow",
+        "text": "Its title, description and where you are. **Back to workflows** returns to the list.",
+        "roles": [
+          "admin"
+        ]
+      },
+      {
+        "target": "[data-tour=\"wfd-actions\"]",
+        "title": "Run, pause, share",
+        "text": "**Run** launches it now (a preview shows what will run). **Stop** stops a launch in progress.\n\nThe **Active / Paused** button: a paused workflow launches nothing on its own. **Share**: a read-only link to its history and notebook. **⋯**: edit, duplicate, export, save as a template, delete (you go back to the list).",
+        "roles": [
+          "admin"
+        ]
+      },
+      {
+        "target": "[data-tour=\"wfd-tabs\"]",
+        "title": "History and Tasks",
+        "text": "**History**: every launch, how it ended, how long it took, and the next ones planned.\n\n**Tasks**: the pipeline — what runs first, what runs after what (on success, failure or always), live progress and the logs of each task. Switch to the **canvas** to build it: add tasks, link them, set their trigger, retries, timeout and alerts.",
+        "roles": [
+          "admin"
+        ]
+      },
+      {
+        "target": "[data-tour=\"wfd-history\"]",
+        "title": "Launches",
+        "text": "Click a launch to see its path in the Tasks tab: which tasks ran, were skipped or failed, and their logs. Sort by any column; tick launches to delete their history.",
+        "roles": [
+          "admin"
+        ]
+      },
+      {
+        "target": "[data-tour=\"wfd-notebook\"]",
+        "title": "Notebook",
+        "text": "Markdown notes and files about this workflow — why it exists, how to fix it when it fails, a note on one launch. Pinned notes show at the top of the page.",
+        "roles": [
+          "admin"
+        ]
+      }
+    ]
+  }
+}
