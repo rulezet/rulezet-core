@@ -3,6 +3,7 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/starfield/starfield.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/starfield/leaderboard.css') }}">
 {% if is_admin %}<link rel="stylesheet" href="{{ url_for('static', filename='css/starfield/admin_scores.css') }}">{% endif %}
 {% endblock %}
 
@@ -205,6 +206,53 @@
     <p class="sf-footnote" id="sf-footnote"></p>
 </div>
 
+{# Leaderboards, for everyone: one tab per board (setting starfield.leaderboards). JS: static/js/starfield/leaderboard.js #}
+<section class="sfl" id="sf-leaderboard" v-cloak>
+    <div class="sfl-head">
+        <h3 class="sfl-title"><i class="fa-solid fa-ranking-star me-1"></i>Leaderboards</h3>
+        <div class="sfl-filters">
+            <select v-model="ship" @change="load" aria-label="Ship">
+                <option value="">Every ship</option>
+                <option v-for="s in ships" :key="s" :value="s">[[ SHIP_LABELS[s] || s ]]</option>
+            </select>
+            <select v-model="difficulty" @change="load" aria-label="Difficulty">
+                <option value="">Every difficulty</option>
+                <option v-for="d in difficulties" :key="d" :value="d">[[ DIFF_LABELS[d] || d ]]</option>
+            </select>
+        </div>
+    </div>
+    <div class="sfl-tabs" role="tablist">
+        <button v-for="b in boards" :key="b.key" type="button" role="tab" class="sfl-tab" :class="{ on: b.key === active }"
+                :aria-selected="b.key === active" @click="active = b.key"><i :class="b.icon"></i>[[ b.label ]]</button>
+    </div>
+    <div v-if="error" class="sfl-empty">[[ error ]]</div>
+    <div v-else-if="loading" class="sfl-empty"><i class="fa-solid fa-spinner fa-spin"></i></div>
+    <template v-else-if="board">
+        <div class="sfl-desc">[[ board.description ]] · [[ board.players ]] player[[ board.players === 1 ? '' : 's' ]]</div>
+        <div v-if="!board.rows.length" class="sfl-empty">Nobody yet: play a run to be the first.</div>
+        <table v-else class="sfl-table">
+            <thead><tr><th class="sfl-rank">#</th><th>Pilot</th><th></th><th class="sfl-value">[[ board.label ]]</th></tr></thead>
+            <tbody>
+                <tr v-for="r in board.rows" :key="board.key + r.rank" :class="{ 'sfl-me': r.me }">
+                    <td class="sfl-rank" :class="medal(r.rank)">[[ r.rank ]]</td>
+                    <td :class="{ 'sfl-anon': !r.registered }">[[ r.name ]]<span v-if="r.me" class="sfl-you">you</span></td>
+                    <td class="sfl-detail">[[ r.detail ]]</td>
+                    <td class="sfl-value">[[ show(board, r.value) ]]</td>
+                </tr>
+                <template v-if="board.me">
+                    <tr class="sfl-gap"><td colspan="4">⋯</td></tr>
+                    <tr class="sfl-me">
+                        <td class="sfl-rank">[[ board.me.rank ]]</td>
+                        <td>[[ board.me.name ]]<span class="sfl-you">you</span></td>
+                        <td class="sfl-detail">[[ board.me.detail ]]</td>
+                        <td class="sfl-value">[[ show(board, board.me.value) ]]</td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </template>
+</section>
+
 {% if is_admin %}
 {# Admin only (also checked server-side on every /starfield/admin route):
    every player's runs, in detail. JS: static/js/starfield/adminScores.js #}
@@ -380,6 +428,7 @@
 
 {% block script %}
 <script type="module" src="{{ url_for('static', filename='js/starfield/main.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='js/starfield/leaderboard.js') }}"></script>
 {% if is_admin %}
 <script type="module" src="{{ url_for('static', filename='js/starfield/adminScores.js') }}"></script>
 {% endif %}

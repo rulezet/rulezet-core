@@ -1,0 +1,67 @@
+{
+  "label": "Starfield leaderboards",
+  "category": "Starfield",
+  "description": "The leaderboards under the Starfield game (/starfield), one tab each, in this order: key (what is ranked: stars, levels, endless, total_score, kills, combo, win_rate, time — the server computes these), label, icon (Font Awesome), description, min_runs (a player needs at least that many runs to appear). Anyone may see them; anonymous players show as \"Pilot #xxxx\". limit = rows per board.",
+  "public": false,
+  "value": {
+    "limit": 20,
+    "boards": [
+      {
+        "key": "stars",
+        "label": "Stars",
+        "icon": "fa-solid fa-star",
+        "description": "Best stars earned on every campaign level, added up",
+        "min_runs": 1
+      },
+      {
+        "key": "levels",
+        "label": "Levels cleared",
+        "icon": "fa-solid fa-map",
+        "description": "Campaign levels won at least once",
+        "min_runs": 1
+      },
+      {
+        "key": "endless",
+        "label": "Endless",
+        "icon": "fa-solid fa-trophy",
+        "description": "Best score of a single Endless run",
+        "min_runs": 1
+      },
+      {
+        "key": "total_score",
+        "label": "Total score",
+        "icon": "fa-solid fa-sigma",
+        "description": "Score of every run, added up",
+        "min_runs": 1
+      },
+      {
+        "key": "kills",
+        "label": "Kills",
+        "icon": "fa-solid fa-burst",
+        "description": "Enemies destroyed, every run",
+        "min_runs": 1
+      },
+      {
+        "key": "combo",
+        "label": "Best combo",
+        "icon": "fa-solid fa-fire",
+        "description": "Longest combo in one run",
+        "min_runs": 1
+      },
+      {
+        "key": "win_rate",
+        "label": "Win rate",
+        "icon": "fa-solid fa-circle-check",
+        "description": "Share of campaign runs won (5 runs at least)",
+        "min_runs": 5
+      },
+      {
+        "key": "time",
+        "label": "Time played",
+        "icon": "fa-solid fa-stopwatch",
+        "description": "Time spent in runs",
+        "min_runs": 1
+      }
+    ]
+  }
+}

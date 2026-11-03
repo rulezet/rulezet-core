@@ -1,0 +1,30 @@
+/* Starfield leaderboards (static/js/starfield/leaderboard.js), under the game, for everyone */
+.sfl { max-width: 960px; margin: 24px auto 0; padding: 18px 20px; border-radius: 12px; border: 1px solid var(--border-color);
+    background: var(--card-bg-color); color: var(--text-color); }
+.sfl-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.sfl-title { margin: 0; font-size: 1.1rem; font-weight: 700; }
+.sfl-filters { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.sfl-filters select { font-size: .85rem; padding: 3px 8px; border-radius: 8px; border: 1px solid var(--border-color);
+    background: var(--light-bg-color); color: var(--text-color); }
+.sfl-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.sfl-tab { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: .85rem;
+    border: 1px solid var(--border-color); background: transparent; color: var(--subtle-text-color); cursor: pointer; }
+.sfl-tab:hover { border-color: #0d6efd; color: #0d6efd; }
+.sfl-tab.on { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+.sfl-desc { font-size: .85rem; color: var(--subtle-text-color); margin-bottom: 8px; }
+.sfl-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.sfl-table th { text-align: left; font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; color: var(--subtle-text-color);
+    padding: 6px 8px; border-bottom: 1px solid var(--border-color); }
+.sfl-table td { padding: 6px 8px; border-bottom: 1px solid var(--border-color); }
+.sfl-rank { width: 48px; font-weight: 700; text-align: center; }
+.sfl-gold { color: #d4a017; }
+.sfl-silver { color: #8a99a8; }
+.sfl-bronze { color: #b06d3b; }
+.sfl-value { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sfl-detail { color: var(--subtle-text-color); font-size: .8rem; }
+.sfl-me td { background: rgba(13, 110, 253, .1); }
+.sfl-me .sfl-you { margin-left: 6px; font-size: .7rem; padding: 0 6px; border-radius: 999px; background: #0d6efd; color: #fff; }
+.sfl-gap td { text-align: center; color: var(--subtle-text-color); padding: 2px; border-bottom: 0; }
+.sfl-empty { padding: 14px 0; text-align: center; color: var(--subtle-text-color); }
+.sfl-anon { color: var(--subtle-text-color); }
+@media (max-width: 576px) { .sfl { padding: 14px 12px; } .sfl-filters { margin-left: 0; width: 100%; } }

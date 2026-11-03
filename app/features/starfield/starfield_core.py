@@ -213,3 +213,87 @@ def overview():
         'top_endless': [dict(r.to_json(), name=names.get(r.user_id) if r.user_id else 'Anonymous',
                              key=_player_key(r)) for r in top_endless],
     }
+
+
+# ── Leaderboards (public, under the game) ────────────────────────────────────────
+
+BOARD_KEYS = ('stars', 'levels', 'endless', 'total_score', 'kills', 'combo', 'win_rate', 'time')
+
+
+def _board_value(p, key):
+    """(value, detail) a player is ranked by on this board."""
+    if key == 'stars':
+        return sum(p['best_level_stars'].values()), f"{len(p['best_level_stars'])} levels"
+    if key == 'levels':
+        return len(p['best_level_stars']), f"{sum(p['best_level_stars'].values())} stars"
+    if key == 'endless':
+        best = p['best_endless']
+        return (best['score'], f"wave {best['wave']}") if best else (None, '')
+    if key == 'total_score':
+        return p['total_score'], f"{p['runs']} run{'s' if p['runs'] != 1 else ''}"
+    if key == 'kills':
+        return p['kills'], f"{p['runs']} run{'s' if p['runs'] != 1 else ''}"
+    if key == 'combo':
+        return p['max_combo'] or None, ''
+    if key == 'win_rate':
+        level_runs = p['level_runs']
+        return (round(100 * p['level_wins'] / level_runs) if level_runs else None), f"{p['level_wins']} / {level_runs} won"
+    if key == 'time':
+        return p['time_s'], f"{p['runs']} run{'s' if p['runs'] != 1 else ''}"
+    return None, ''
+
+
+def leaderboards(ship=None, difficulty=None, me_user=None, me_player=None):
+    """Every board of the setting starfield.leaderboards: the top players (and the viewer's own row
+    when they are further down), runs filtered by ship / difficulty."""
+    from app.core.utils.app_settings import get_setting
+    conf = get_setting('starfield.leaderboards') or {}
+    limit = max(3, min(int(conf.get('limit') or 20), 100))
+    boards = [b for b in (conf.get('boards') or []) if b.get('key') in BOARD_KEYS]
+    query = StarfieldRun.query
+    if ship in SHIPS:
+        query = query.filter(StarfieldRun.ship == ship)
+    if difficulty in DIFFICULTIES:
+        query = query.filter(StarfieldRun.difficulty == difficulty)
+    players = {}
+    for r in query.all():
+        key = _player_key(r)
+        p = players.setdefault(key, {'key': key, 'user_id': r.user_id, 'player_id': r.player_id, 'runs': 0, 'kills': 0,
+                                     'time_s': 0, 'total_score': 0, 'max_combo': 0, 'level_runs': 0, 'level_wins': 0,
+                                     'best_level_stars': {}, 'best_endless': None})
+        p['runs'] += 1
+        p['kills'] += r.kills or 0
+        p['time_s'] += r.time_s or 0
+        p['total_score'] += r.score or 0
+        p['max_combo'] = max(p['max_combo'], r.max_combo or 0)
+        if r.mode == 'level':
+            p['level_runs'] += 1
+            if r.won:
+                p['level_wins'] += 1
+                k = f'{r.world}-{r.level_index}'
+                p['best_level_stars'][k] = max(p['best_level_stars'].get(k, 0), r.stars or 0)
+        elif r.mode == 'endless' and (p['best_endless'] is None or (r.score or 0) > p['best_endless']['score']):
+            p['best_endless'] = {'score': r.score or 0, 'wave': r.wave}
+    names = _user_names([p['user_id'] for p in players.values() if p['user_id']])
+    me = f'user:{me_user}' if me_user else (f'anon:{me_player}' if me_player and _ID_RE.match(me_player) else None)
+
+    def row(rank, p, value, detail):
+        name = names.get(p['user_id']) if p['user_id'] else f"Pilot #{(p['player_id'] or '')[:4]}"
+        return {'rank': rank, 'name': name, 'registered': bool(p['user_id']), 'value': value, 'detail': detail, 'me': p['key'] == me}
+
+    out = []
+    for b in boards:
+        ranked = []
+        for p in players.values():
+            if p['runs'] < int(b.get('min_runs') or 1):
+                continue
+            value, detail = _board_value(p, b['key'])
+            if value:
+                ranked.append((value, p, detail))
+        ranked.sort(key=lambda x: (-x[0], x[1]['key']))
+        rows = [row(i + 1, p, v, d) for i, (v, p, d) in enumerate(ranked[:limit])]
+        mine = next((row(i + 1, p, v, d) for i, (v, p, d) in enumerate(ranked) if p['key'] == me), None)
+        out.append({**{k: b.get(k) for k in ('key', 'label', 'icon', 'description', 'min_runs')},
+                    'rows': rows, 'players': len(ranked), 'me': mine if mine and mine['rank'] > limit else None})
+    return {'boards': out, 'ships': list(SHIPS), 'difficulties': list(DIFFICULTIES)}
+

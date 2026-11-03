@@ -36,6 +36,15 @@ def record_run():
     return jsonify({'success': True, 'uuid': run.uuid}), 201
 
 
+@starfield_blueprint.route('/starfield/leaderboard')
+def leaderboard():
+    """The public leaderboards under the game (setting starfield.leaderboards), filtered by
+    ?ship= and ?difficulty=; ?player= (this browser's anonymous id) marks the viewer's own row."""
+    me_user = current_user.id if current_user.is_authenticated else None
+    return jsonify(StarfieldModel.leaderboards(request.args.get('ship') or None, request.args.get('difficulty') or None,
+                                               me_user=me_user, me_player=request.args.get('player') or None))
+
+
 @starfield_blueprint.route('/starfield/admin/players')
 def admin_players():
     _require_admin()
