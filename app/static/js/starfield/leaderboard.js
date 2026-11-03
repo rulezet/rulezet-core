@@ -52,7 +52,37 @@ createApp({
         const show = (b, value) => (b.key === 'time' ? fmtTime(value) : b.key === 'win_rate' ? `${value} %` : Number(value).toLocaleString());
         const medal = (rank) => ({ 1: 'sfl-gold', 2: 'sfl-silver', 3: 'sfl-bronze' }[rank] || '');
 
-        onMounted(load);
+        // the viewer's place on the Overall board, shown on the game's results screens
+        function showMyRank() {
+            const overall = boards.value.find(b => b.key === 'overall');
+            const mine = overall && (overall.rows.find(r => r.me) || overall.me);
+            for (const el of document.querySelectorAll('[data-rank]')) {
+                if (!mine) { el.hidden = true; continue; }
+                el.hidden = false;
+                el.innerHTML = '';
+                const icon = document.createElement('i');
+                icon.className = 'fa-solid fa-crown';
+                el.append(icon, ` Overall rank #${mine.rank} of ${overall.players} · ${Number(mine.value).toLocaleString()} pts`);
+            }
+        }
+
+        onMounted(async () => {
+            await load();
+            const btn = document.getElementById('sf-btn-leaderboard');
+            if (btn) btn.addEventListener('click', () => {
+                if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+                document.getElementById('sf-leaderboard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+            // a run just recorded: the boards and the player's rank are fresh again
+            window.addEventListener('starfield:run-recorded', async () => {
+                // the overall board is the one players compare: show it after a run
+                active.value = 'overall';
+                ship.value = '';
+                difficulty.value = '';
+                await load();
+                showMyRank();
+            });
+        });
         return { points, loading, error, boards, ships, difficulties, active, ship, difficulty, board, load, show, medal, SHIP_LABELS, DIFF_LABELS };
     },
 }).mount('#sf-leaderboard');

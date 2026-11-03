@@ -299,3 +299,6 @@ kbd {
 .sf-stage.is-playing .sf-screen button, .sf-stage.is-playing .sf-topbtns button { cursor: pointer; }
 /* the controls reminder under the stage sits on the site's page background */
 .sf-footnote kbd { color: var(--text-color); background: var(--light-bg-color); border-color: var(--border-color); }
+
+/* the player's Overall rank on the results screens (static/js/starfield/leaderboard.js) */
+.sf-rank { margin: 8px 0 4px; font-weight: 700; color: #ffd166; text-align: center; letter-spacing: .02em; }

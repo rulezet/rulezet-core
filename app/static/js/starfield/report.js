@@ -28,6 +28,9 @@ export function reportRun(run) {
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.getElementById('csrf_token')?.value || '' },
             body: JSON.stringify({ player: playerId(), ...run }),
             keepalive: true,
+        }).then((res) => {
+            // the leaderboards under the game refresh and show the player's new rank (leaderboard.js)
+            if (res.ok) window.dispatchEvent(new CustomEvent('starfield:run-recorded'));
         }).catch(() => {});
     } catch { /* never break the game */ }
 }
