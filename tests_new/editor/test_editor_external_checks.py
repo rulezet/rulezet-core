@@ -23,9 +23,9 @@ def _post(client, text, tools=None):
 
 
 def test_for_editor_users_only_and_yara_only(clients):
-    assert set(_post(clients["user"], RULE).json["results"]) == {"yarax", "cccs", "yaraqa"}
+    assert set(_post(clients["user"], RULE).json["results"]) == {"yarax", "cccs", "yaraqa", "duplicates"}   # + "Already in Rulezet?"
     assert clients["anonymous"].post("/editor-api/external-checks", json={"text": RULE}).status_code == 401
-    other = clients["user"].post("/editor-api/external-checks", json={"format": "sigma", "text": "title: x"})
+    other = clients["user"].post("/editor-api/external-checks", json={"format": "suricata", "text": "alert ip any any -> any any (sid:1;)"})   # a format with no external check
     assert other.json == {"results": {}}
 
 

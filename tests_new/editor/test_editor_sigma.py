@@ -78,7 +78,7 @@ def _run_job(app, client, payload):
     from app.features.jobs.job_worker import run_next_job
     start = client.post("/editor-api/sigma/jobs", json=payload)
     assert start.status_code == 202
-    assert [s["id"] for s in start.json["steps"]] == ["existing", "syntax", "samples", "create"]
+    assert [s["id"] for s in start.json["steps"]] == ["existing", "syntax", "external", "samples", "create"]
     with app.app_context():
         run_next_job(app)
     return client.get(f"/editor-api/sigma/jobs/{start.json['uuid']}").json
@@ -117,9 +117,9 @@ def test_external_checks_for_sigma(clients):
     res = clients["user"].post("/editor-api/external-checks", json={"format": "sigma", "text": text, "tools": ["siem", "sigmahq"]})
     assert res.status_code == 200
     siem, hq = res.json["results"]["siem"], res.json["results"]["sigmahq"]
-    assert siem["available"] and any(w["message"] == "Splunk SPL" and "evil.exe" in w["element"] for w in siem["warnings"])
+    assert siem["available"] and any(o["label"] == "Splunk SPL" and o["ok"] and "evil.exe" in o["text"] for o in siem["outputs"])
     assert any("one value" in w["message"] for w in hq["warnings"])
-    assert any(w["message"].startswith("SigmaHQ file name: proc_creation_win_") for w in hq["warnings"])
+    assert any(i["message"].startswith("SigmaHQ file name: proc_creation_win_") for i in hq.get("infos", []))   # a note, not a warning
 
 
 CORR = ("title: Ed sigma many\nid: 1f0b2b8a-0f0e-4c63-9a5c-3d6b1c2e4f10\nstatus: test\ncorrelation:\n    type: event_count\n"

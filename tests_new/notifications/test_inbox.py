@@ -35,8 +35,10 @@ def test_folders_and_bulk(clients, users):
     assert _ids(cl.get("/notifications/inbox?folder=starred")) == [b.id]
     data = cl.get("/notifications/inbox?folder=unread&with_ids=1").get_json()
     assert sorted(data["matching_ids"]) == sorted([b.id, c.id]) and data["counts"]["unread"] == 2
-    cl.post("/notifications/bulk", json={"ids": [c.id], "action": "delete"})
-    assert db.session.get(Notification, c.id) is None
+    c_id = c.id                                    # read before the row goes (the object is expired after)
+    cl.post("/notifications/bulk", json={"ids": [c_id], "action": "delete"})
+    db.session.expire_all()
+    assert db.session.get(Notification, c_id) is None
     assert cl.post("/notifications/bulk", json={"ids": [b.id], "action": "nope"}).status_code == 400
 
 
