@@ -117,3 +117,7 @@
 .wcal-recipients__label { font-size: .78rem; font-weight: 600; min-width: 8.5rem; color: var(--subtle-text-color); }
 .wcal-recipients__row .form-control { flex-basis: 100%; }
 
+
+/* A note / reminder shown */
+.wcal-view__md.wnb-md { padding: 0; font-size: .9rem; max-height: 55vh; overflow-y: auto; }
+.wcal-view__md > :last-child { margin-bottom: 0; }

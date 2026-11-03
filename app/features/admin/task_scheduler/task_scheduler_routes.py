@@ -117,6 +117,31 @@ def _tasks_brief(workflow):
     return out
 
 
+def _git_source(workflow):
+    """A workflow that runs Git updates (a Git updater, or the Git Sources update task): the host of its
+    repositories — {provider, url, count} (provider 'generic' when they are on several hosts), else None."""
+    from app.core.db_class.git import GithubSyncSchedule, GithubRepo
+    urls, providers = [], set()
+    for t in workflow.tasks:
+        p = t.target_payload or {}
+        if t.task_type == 'github_sync_schedule_launch' and p.get('schedule_uuid'):
+            sc = GithubSyncSchedule.query.filter_by(uuid=p['schedule_uuid']).first()
+            for r in (sc.repos if sc else []):
+                urls.append(r.repo_url)
+                providers.add(r.git_provider or None)
+        elif t.task_type == 'git_sources_update':
+            repos = GithubRepo.query.limit(500).all() if p.get('scope') == 'all' else \
+                GithubRepo.query.filter(GithubRepo.url.in_(p.get('repos') or [])).all()
+            for r in repos:
+                urls.append(r.url)
+                providers.add(getattr(r, 'git_provider', None))
+    if not urls:
+        return None
+    providers.discard(None)
+    provider = providers.pop() if len(providers) == 1 else (None if not providers else 'generic')
+    return {'provider': provider, 'url': urls[0], 'count': len(urls)}
+
+
 @task_scheduler_blueprint.route('/workflows', methods=['GET'])
 def list_workflows():
     page = request.args.get('page', 1, type=int)
@@ -127,7 +152,7 @@ def list_workflows():
 
     pagination = TaskSchedulerModel.get_workflow_list_page(page, per_page, search, sort, direction)
     return jsonify({
-        "workflows": [{**w.to_json(), "tasks_brief": _tasks_brief(w)} for w in pagination.items],
+        "workflows": [{**w.to_json(), "tasks_brief": _tasks_brief(w), "git_source": _git_source(w)} for w in pagination.items],
         "total": pagination.total,
         "total_pages": pagination.pages,
     }), 200
@@ -511,6 +536,17 @@ def _created(workflow, message, action):
     return jsonify({"message": f"{message}.", "toast_class": "success-subtle", "workflow": workflow.to_json()}), 201
 
 
+@task_scheduler_blueprint.route('/future_ideas', methods=['GET'])
+def future_ideas():
+    """Job ideas not built yet (setting workflows.future_ideas) — the light bulb of the workflows page."""
+    from app.core.utils.app_settings import get_setting
+    try:
+        value = get_setting('workflows.future_ideas')
+    except KeyError:
+        value = []
+    return jsonify({'ideas': value if isinstance(value, list) else []}), 200
+
+
 @task_scheduler_blueprint.route('/templates', methods=['GET'])
 def workflow_templates():
     return jsonify(WorkflowSpec.serialize_templates()), 200
@@ -524,6 +560,16 @@ def create_workflow_from_template():
     if err:
         return jsonify({"message": err, "toast_class": "danger-subtle"}), 400
     return _created(workflow, "Workflow created from a template", "admin.workflow_created")
+
+
+@task_scheduler_blueprint.route('/workflows/from_git_updater', methods=['POST'])
+def create_workflow_from_git_updater():
+    """A workflow that runs a Git updater (template 'Git Sources updates'). Body: {schedule_uuid}."""
+    data = request.get_json(silent=True) or {}
+    workflow, err = WorkflowSpec.create_from_git_updater(data.get('schedule_uuid'), current_user)
+    if err:
+        return jsonify({"message": err, "toast_class": "danger-subtle"}), 400
+    return _created(workflow, "Workflow created around a Git updater (its own timer switched off)", "admin.workflow_created")
 
 
 @task_scheduler_blueprint.route('/workflows/<uuid>/export', methods=['GET'])

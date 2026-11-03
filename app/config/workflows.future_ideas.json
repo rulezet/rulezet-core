@@ -1,0 +1,116 @@
+{
+  "label": "Workflow jobs — ideas for later",
+  "category": "Workflows",
+  "description": "Job ideas not built yet, a reminder for the developers — shown behind the small light bulb of the workflows page. Edit freely: remove one once it is built.",
+  "public": false,
+  "value": [
+    {
+      "group": "Data & quality",
+      "icon": "fa-solid fa-flask",
+      "ideas": [
+        {
+          "title": "Similarity — rebuild the index",
+          "text": "Recompute TF-IDF + FAISS and the near-duplicate pairs; notify if new duplicates appeared. Weekly."
+        },
+        {
+          "title": "External checks on the whole library",
+          "text": "YARA-X / CCCS / yaraQA for YARA, pySigma / SigmaHQ / sigmalint for Sigma, results kept per rule, report of the worst. In batches."
+        },
+        {
+          "title": "Tests on samples — run again",
+          "text": "Rules changed since the last run go through rulezet-tester; new false positives / misses flagged. Needs the sandbox (not in the prod LXC yet)."
+        },
+        {
+          "title": "Rules broken by an engine update",
+          "text": "After a submodule / YARA / Suricata / pySigma update: validate everything again, report the rules that went from valid to invalid. Chains after 'Submodules — update'."
+        },
+        {
+          "title": "Dead references",
+          "text": "Check the reference: URLs of the rules (rate-limited), flag 404 and dead domains."
+        }
+      ]
+    },
+    {
+      "group": "Security & accounts",
+      "icon": "fa-solid fa-shield-halved",
+      "ideas": [
+        {
+          "title": "Tokens about to expire",
+          "text": "Read the expiry of GITHUB_TOKEN and the Git tokens (GitHub / GitLab API) and put a calendar reminder X days before."
+        },
+        {
+          "title": "Old API keys",
+          "text": "Keys unused for N months: list them, revoke them if the option is ticked."
+        },
+        {
+          "title": "Suspicious accounts",
+          "text": "Accounts created in a burst, bursts of reports / comments on one rule — to the admins."
+        }
+      ]
+    },
+    {
+      "group": "Cleanup",
+      "icon": "fa-solid fa-broom",
+      "ideas": [
+        {
+          "title": "Empty the trash",
+          "text": "Rules soft-deleted more than N days ago deleted for good (setting), an export first."
+        },
+        {
+          "title": "Old jobs and launches",
+          "text": "Purge the finished background jobs and the old workflow launch history (keep the last N)."
+        },
+        {
+          "title": "Orphan files",
+          "text": "Workflow attachments, old ZIP exports, temporary clones nothing points to."
+        }
+      ]
+    },
+    {
+      "group": "Community",
+      "icon": "fa-solid fa-users",
+      "ideas": [
+        {
+          "title": "Weekly digest by email",
+          "text": "New rules, most voted, new CVEs covered — to the users who opted in."
+        },
+        {
+          "title": "Proposals waiting",
+          "text": "Edit / Git proposals with no answer for N days: remind the rule owners, then the admins."
+        },
+        {
+          "title": "Reports waiting",
+          "text": "Reports untreated for more than 48 h sent back to the admins."
+        }
+      ]
+    },
+    {
+      "group": "Kits & coverage",
+      "icon": "fa-solid fa-chart-pie",
+      "ideas": [
+        {
+          "title": "New critical CVEs with no rule",
+          "text": "Cross the recent high-severity CVEs (Vulnerability-Lookup) with the rules, list the gaps — a 'rules wanted' page."
+        },
+        {
+          "title": "ATT&CK coverage snapshot",
+          "text": "Each month: techniques covered and by which formats, to plot the trend."
+        }
+      ]
+    },
+    {
+      "group": "Federation",
+      "icon": "fa-solid fa-network-wired",
+      "ideas": [
+        {
+          "title": "Connector health",
+          "text": "Test every connector (reachable, key valid, version) without pulling, alert if one is down."
+        },
+        {
+          "title": "Rulesets mirror check",
+          "text": "Compare the mirror repository with the database (rule count, last commit), alert on drift."
+        }
+      ]
+    }
+  ]
+}

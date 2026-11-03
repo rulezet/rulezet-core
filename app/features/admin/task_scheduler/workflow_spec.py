@@ -67,6 +67,7 @@ def serialize_templates():
             'tasks': [{'title': task.get('title') or '', 'icon': TASK_TYPES.get(task.get('task_type'), {}).get('icon', 'fa-solid fa-gear')}
                       for task in t['spec'].get('tasks') or [] if isinstance(task, dict)],
             'ask': _ask_fields(t),
+            'git_updater': bool(t.get('git_updater')),
         })
     return out
 
@@ -257,6 +258,104 @@ def create_from_template(key, editor, title=None, answers=None):
     if not isinstance(template, dict) or not isinstance(template.get('spec'), dict):
         return None, 'Unknown template.'
     return create_from_spec(_apply_answers(template, answers), editor, title=title, root_paused=True)
+
+
+def _git_updater_trigger(schedule):
+    trigger = {'trigger_mode': schedule.frequency, 'hour': schedule.hour, 'minute': schedule.minute,
+               'timezone': schedule.timezone or 'UTC'}
+    if schedule.frequency == 'weekly':
+        trigger['days_of_week'] = schedule.days_of_week_list() or [0]
+    elif schedule.frequency == 'monthly':
+        trigger['day_of_month'] = schedule.day_of_month or 1
+    elif schedule.frequency == 'cron':
+        trigger['cron_expr'] = schedule.cron_expr
+    return trigger
+
+
+def git_updater_tasks(schedule_uuid):
+    """The workflow tasks that run this Git updater (task 'github_sync_schedule_launch')."""
+    from app.core.db_class.task_scheduler import AdminTaskSchedule
+    return [t for t in AdminTaskSchedule.query.filter_by(task_type='github_sync_schedule_launch').all()
+            if (t.target_payload or {}).get('schedule_uuid') == schedule_uuid]
+
+
+def git_updater_workflows(schedule_uuids):
+    """{schedule uuid: {uuid, title}} of the workflow that runs it — for Manage Git's list."""
+    from app.core.db_class.task_scheduler import AdminTaskSchedule
+    wanted, out = set(schedule_uuids), {}
+    for t in AdminTaskSchedule.query.filter_by(task_type='github_sync_schedule_launch').all():
+        u = (t.target_payload or {}).get('schedule_uuid')
+        if u in wanted and u not in out and t.workflow:
+            out[u] = {'uuid': t.workflow.uuid, 'title': t.workflow.title}
+    return out
+
+
+def sync_git_updater(schedule):
+    """A Git updater changed on Manage Git: the workflows that run it take its new dates (their tasks
+    launched by time), and its own timer stays off — the workflow runs it, never twice. Returns the
+    number of workflow tasks updated (0 = not run by a workflow)."""
+    from app import db
+    from app.features.admin.task_scheduler.scheduler_engine import compute_next_run_at
+    tasks = git_updater_tasks(schedule.uuid)
+    if not tasks:
+        return 0
+    trigger = _git_updater_trigger(schedule)
+    for t in tasks:
+        if t.trigger_mode == 'after_task':
+            continue    # launched by another task of its workflow, not by a date
+        t.trigger_mode = trigger['trigger_mode']
+        t.hour, t.minute, t.timezone = trigger['hour'], trigger['minute'], trigger['timezone']
+        t.days_of_week = ','.join(str(d) for d in trigger.get('days_of_week', [])) or None
+        t.day_of_month = trigger.get('day_of_month')
+        t.cron_expr = trigger.get('cron_expr')
+        t.next_run_at = compute_next_run_at(t)
+    if schedule.is_active:
+        from app.features.rule.rule_from_github.sync_schedule.scheduler_engine import unregister_schedule
+        schedule.is_active = False
+        schedule.next_run_at = None
+        unregister_schedule(schedule.uuid)
+    db.session.commit()
+    return len(tasks)
+
+
+def create_from_git_updater(schedule_uuid, editor):
+    """A workflow that runs a Git updater (GithubSyncSchedule of Manage Git → Sync Schedules): one task
+    'github_sync_schedule_launch' at the updater's own rhythm, + a notification if it fails. The workflow takes
+    over the timer: the updater's own timer is switched off, so it never runs twice; its repositories and
+    per-repository settings stay on the updater (edited on Manage Git). Returns (workflow, error)."""
+    from app import db
+    from app.core.db_class.git import GithubSyncSchedule
+    schedule = GithubSyncSchedule.query.filter_by(uuid=schedule_uuid).first() if schedule_uuid else None
+    if not schedule:
+        return None, 'Git updater not found.'
+    if not schedule.repos:
+        return None, f'"{schedule.title}" has no repository.'
+    trigger = _git_updater_trigger(schedule)
+    spec = {
+        'title': f'Git updater — {schedule.title}'[:150],
+        'description': (f'Runs the Git updater "{schedule.title}" ({len(schedule.repos)} repositor'
+                        f'{"y" if len(schedule.repos) == 1 else "ies"}). Its repositories and what is accepted / added '
+                        f'automatically are set on Manage Git → Sync Schedules; its rhythm is the one of this workflow.'),
+        'tasks': [
+            {'ref': 'sync', 'title': f'Run "{schedule.title}"'[:150], 'task_type': 'github_sync_schedule_launch',
+             'target_payload': {'schedule_uuid': schedule.uuid}, 'trigger': trigger},
+            {'ref': 'alert', 'title': 'Tell the admins', 'task_type': 'action_notify',
+             'trigger': {'after': 'sync', 'condition': 'failure'},
+             'target_payload': {'title': '{workflow}: {status}', 'message': 'The Git updater failed: {failed_tasks}.',
+                                'only_editor': False}},
+        ],
+    }
+    # never paused: the workflow takes over the updater at its dates right away
+    workflow, err = create_from_spec(spec, editor, root_paused=False)
+    if err:
+        return None, err
+    if schedule.is_active:
+        from app.features.rule.rule_from_github.sync_schedule.scheduler_engine import unregister_schedule
+        schedule.is_active = False
+        schedule.next_run_at = None
+        unregister_schedule(schedule.uuid)
+        db.session.commit()
+    return workflow, None
 
 
 def save_as_template(workflow, editor, label=None, description=None):

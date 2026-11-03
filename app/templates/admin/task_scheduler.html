@@ -12,6 +12,10 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/calendar-view.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/workflowCalendar.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+<link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/rule/github/sync_schedule.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/github/git-host-filter.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/github/importer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/github/ruleOwnerPicker.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/workflowRunTrace.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/jobs/jobs.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
@@ -57,6 +61,14 @@
     <div class="dr-nav mb-3" role="tablist">
         <span class="dr-nav__label" style="padding:.5rem .25rem;">Admin Task Scheduler</span>
         <span class="dr-nav__sep"></span>
+        <!-- List / Calendar of the workflows -->
+        <template v-if="route === 'workflows'">
+            <a href="#" class="dr-nav__item" :class="{ active: listView === 'list' }" @click.prevent="setListView('list')">
+                <i class="fa-solid fa-list"></i><span>List</span></a>
+            <a href="#" class="dr-nav__item" :class="{ active: listView === 'calendar' }" @click.prevent="setListView('calendar')">
+                <i class="fa-regular fa-calendar"></i><span>Calendar</span></a>
+            <span class="dr-nav__sep"></span>
+        </template>
         {{ anav.admin_nav_toggle() }}
     </div>
     {{ anav.admin_nav_panel('task_scheduler') }}
@@ -64,19 +76,8 @@
     <!-- ══════════════════════════ Level 1 — Workflows ══════════════════════════ -->
     <template v-if="route === 'workflows'">
         <!-- Health board: what needs a look across every workflow (workflow_notes.health_board) -->
-        <div v-if="health && health.total" class="wfh mb-3">
-            <div class="wfh-kpi" :class="{ 'is-bad': health.failing.length }">
-                <span class="wfh-kpi__value">[[ health.failing.length ]]</span><span class="wfh-kpi__label"><i class="fa-solid fa-circle-xmark"></i>Last launch failed</span>
-            </div>
-            <div class="wfh-kpi" :class="{ 'is-run': health.running.length }">
-                <span class="wfh-kpi__value">[[ health.running.length ]]</span><span class="wfh-kpi__label"><i class="fa-solid fa-spinner"></i>Running now</span>
-            </div>
-            <div class="wfh-kpi" :class="{ 'is-warn': health.auto_paused.length }">
-                <span class="wfh-kpi__value">[[ health.auto_paused.length ]]</span><span class="wfh-kpi__label"><i class="fa-solid fa-plug-circle-xmark"></i>Tasks auto-paused</span>
-            </div>
-            <div class="wfh-kpi">
-                <span class="wfh-kpi__value">[[ health.total - health.paused ]]<small> / [[ health.total ]]</small></span><span class="wfh-kpi__label"><i class="fa-solid fa-circle-play"></i>Workflows active</span>
-            </div>
+        <!-- Only what needs a look: failed launches, auto-paused tasks -->
+        <div v-if="health && (health.failing.length || health.auto_paused.length)" class="wfh mb-3">
             <div v-if="health.failing.length || health.auto_paused.length" class="wfh-alerts">
                 <a v-for="f in health.failing" :key="'f' + f.uuid" :href="'/admin/tasks/' + f.uuid" class="wfh-alert is-bad">
                     <i class="fa-solid fa-circle-xmark"></i><strong>[[ f.title ]]</strong> failed on [[ f.at ]]
@@ -86,13 +87,6 @@
                 </a>
             </div>
         </div>
-        <!-- List / Calendar of the workflows -->
-        <nav class="dr-nav mb-3" role="tablist">
-            <a href="#" class="dr-nav__item" :class="{ active: listView === 'list' }" @click.prevent="setListView('list')">
-                <i class="fa-solid fa-list"></i><span>List</span></a>
-            <a href="#" class="dr-nav__item" :class="{ active: listView === 'calendar' }" @click.prevent="setListView('calendar')">
-                <i class="fa-regular fa-calendar"></i><span>Calendar</span></a>
-        </nav>
 
         <!-- Calendar: every workflow's launches, planned and past; drag a workflow on a day to schedule it -->
         <div v-if="listView === 'calendar'" class="wcal">
@@ -353,6 +347,56 @@
             </form>
         </div>
 
+        <!-- A note / reminder clicked on the calendar: its content first, Edit / Delete from there -->
+        <div v-if="calView" class="wcal-modal" @click.self="calView = null">
+            <div class="modal-content border-0 shadow-lg tf-modal wcal-dialog" :class="'wcal-dialog--' + calView.kind" role="dialog" aria-modal="true" aria-labelledby="calViewTitle">
+                <div class="tf-hero">
+                    <i class="tf-hero__watermark fa-solid" :class="calView.kind === 'reminder' ? 'fa-bell' : 'fa-note-sticky'"></i>
+                    <div class="tf-hero__icon"><i class="fa-solid" :class="calView.kind === 'reminder' ? 'fa-bell' : 'fa-note-sticky'"></i></div>
+                    <div class="tf-hero__text">
+                        <div class="tf-hero__kicker">[[ calView.kind === 'reminder' ? 'Reminder' : 'Note' ]] · [[ new Date(calView.due_at).toLocaleString([], { dateStyle: 'full', timeStyle: 'short' }) ]]</div>
+                        <h5 id="calViewTitle" class="tf-hero__title">[[ calView.title ]]</h5>
+                        <div v-if="calView.kind === 'reminder'" class="tf-hero__sub">[[ calItemLabel({ extendedProps: calView }).replace('reminder · ', '') ]]</div>
+                    </div>
+                    <button type="button" class="btn-close tf-hero__close" aria-label="Close" @click="calView = null"></button>
+                </div>
+                <div class="modal-body tf-body">
+                    <div v-if="calViewHtml" class="wnb-md wcal-view__md" v-html="calViewHtml"></div>
+                    <p v-else class="text-muted small mb-0"><i class="fa-regular fa-file-lines me-1"></i>No details.</p>
+                    <p v-if="calView.author" class="small text-muted mt-3 mb-0">By [[ calView.author ]]</p>
+                </div>
+                <div class="rz-pills px-4 pb-4">
+                    <button type="button" class="rz-pill" style="--c:#0d6efd" @click="openCalEntry(calView.kind, calView.due_at, calView); calView = null"><i class="fa-solid fa-pen me-1"></i>Edit</button>
+                    <button type="button" class="rz-pill" style="--c:#dc3545" @click="deleteCalEntry(calView).then(ok => { if (ok) calView = null })"><i class="fa-solid fa-trash me-1"></i>Delete</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Job ideas for later (setting workflows.future_ideas) -->
+        <div v-if="ideas" class="wcal-modal" @click.self="ideas = null">
+            <div class="modal-content border-0 shadow-lg tf-modal wcal-dialog wcal-dialog--sm" role="dialog" aria-modal="true" aria-labelledby="ideasTitle">
+                <div class="tf-hero">
+                    <i class="tf-hero__watermark fa-regular fa-lightbulb"></i>
+                    <div class="tf-hero__icon"><i class="fa-regular fa-lightbulb"></i></div>
+                    <div class="tf-hero__text">
+                        <div class="tf-hero__kicker">Not built yet</div>
+                        <h5 id="ideasTitle" class="tf-hero__title">Job ideas for later</h5>
+                        <div class="tf-hero__sub">A reminder — edit the list on <a href="/admin/configuration#workflows.future_ideas">Admin → Configuration</a></div>
+                    </div>
+                    <button type="button" class="btn-close tf-hero__close" aria-label="Close" @click="ideas = null"></button>
+                </div>
+                <div class="modal-body tf-body">
+                    <p v-if="!ideas.length" class="text-muted small mb-0">No idea noted.</p>
+                    <section v-for="g in ideas" :key="g.group" class="wf-ideas-group">
+                        <h6 class="wf-ideas-group__title"><i :class="g.icon || 'fa-regular fa-lightbulb'"></i>[[ g.group ]]</h6>
+                        <ul class="wf-ideas-list">
+                            <li v-for="i in g.ideas" :key="i.title"><b>[[ i.title ]]</b><span>[[ i.text ]]</span></li>
+                        </ul>
+                    </section>
+                </div>
+            </div>
+        </div>
+
         <!-- A calendar event: what it is, what to do with it -->
         <div v-if="calPick" class="wcal-modal" @click.self="calPick = null">
             <div class="modal-content border-0 shadow-lg tf-modal wcal-dialog" role="dialog" aria-modal="true">
@@ -397,6 +441,7 @@
                         <button class="dt-toolbar-btn" @click="closeAllWfTasks()" title="Hide every task list">
                             <i class="fa-solid fa-angles-up"></i><span>Close all</span>
                         </button>
+                        <button type="button" class="wf-ideas-btn" @click="openIdeas()" title="Job ideas for later" aria-label="Job ideas for later"><i class="fa-regular fa-lightbulb"></i></button>
                         <button class="dt-toolbar-btn" @click="openTemplates()" title="Ready-made workflows">
                             <i class="fa-solid fa-wand-magic-sparkles"></i><span>Templates</span>
                         </button>
@@ -456,11 +501,12 @@
                             <div class="wf-card__head">
                                 <input type="checkbox" class="dt-checkbox" :checked="wfChecked.has(w.uuid)" @click.stop @change="toggleWfCheck(w.uuid)" :aria-label="'Select ' + w.title">
                                 <span class="wcal-wf__icon" :style="{ '--wf-color': wfColor(w.uuid) }"><i class="fa-solid" :class="wfIcon(w.uuid)"></i></span>
-                                <div class="wf-card__title">[[ w.title ]]</div>
+                                <div class="wf-card__title">[[ w.title ]]
+                                    <span v-if="w.git_source" class="wf-git-badge" :title="gitSourceTitle(w.git_source)"><i :class="gitProviderIcon(w.git_source.url, w.git_source.provider)"></i></span></div>
                                 <span class="badge" :class="w.is_active ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
                                     [[ w.is_active ? 'Active' : 'Paused' ]]</span>
                             </div>
-                            <div v-if="w.description" class="wf-card__desc">[[ w.description ]]</div>
+                            <div v-if="w.description" class="wf-card__desc wf-desc" :title="w.description">[[ w.description ]]</div>
                             <div class="wf-card__meta">
                                 <span v-if="w.is_active && w.launch_status && w.launch_status.will_run"><i class="fa-regular fa-clock"></i>[[ formatLocalDate(w.launch_status.next_run_at) ]]</span>
                                 <span v-else-if="w.is_active && w.launch_status" class="text-warning-emphasis" :title="w.launch_status.warning"><i class="fa-solid fa-triangle-exclamation"></i>Never runs</span>
@@ -518,8 +564,9 @@
                                 <td class="dt-td dt-td--checkbox" @click.stop><input type="checkbox" class="dt-checkbox" :checked="wfChecked.has(w.uuid)" @change="toggleWfCheck(w.uuid)" :aria-label="'Select ' + w.title"></td>
                                 <td class="dt-td">
                                     <div class="fw-bold d-flex align-items-center gap-2">
-                                        <span class="wcal-wf__icon" :style="{ '--wf-color': wfColor(w.uuid) }"><i class="fa-solid" :class="wfIcon(w.uuid)"></i></span>[[ w.title ]]</div>
-                                    <div class="text-muted" style="font-size:.78rem;" v-if="w.description">[[ w.description ]]</div>
+                                        <span class="wcal-wf__icon" :style="{ '--wf-color': wfColor(w.uuid) }"><i class="fa-solid" :class="wfIcon(w.uuid)"></i></span>[[ w.title ]]
+                                        <span v-if="w.git_source" class="wf-git-badge" :title="gitSourceTitle(w.git_source)"><i :class="gitProviderIcon(w.git_source.url, w.git_source.provider)"></i></span></div>
+                                    <div class="wf-desc" v-if="w.description" :title="w.description">[[ w.description ]]</div>
                                 </td>
                                 <td class="dt-td text-center" @click.stop>
                                     <button type="button" class="wf-tasks-toggle" :class="{ 'is-open': openWfTasks.has(w.uuid) }" @click="toggleWfTasks(w.uuid)"
@@ -563,7 +610,10 @@
                                 <td class="dt-td">[[ w.created_at ]]</td>
                                 <td class="dt-td text-center" @click.stop>
                                     <div class="dt-actions justify-content-center">
-                                        <button class="dt-action-btn" title="Open" @click="openWorkflow(w)"><i class="fa-solid fa-arrow-right"></i></button>
+                                        <label class="tf-switch wf-row-switch" :title="w.is_active ? 'Active — click to pause' : 'Paused — click to resume'">
+                                            <input type="checkbox" :checked="w.is_active" :disabled="wfToggling.has(w.uuid)" @change="toggleWfRow(w, $event)" :aria-label="(w.is_active ? 'Pause ' : 'Resume ') + w.title">
+                                            <span class="tf-switch__track"><span class="tf-switch__thumb"></span></span>
+                                        </label>
                                         <button class="dt-action-btn" title="Edit" @click="openEditWorkflow(w)"><i class="fa-solid fa-pen"></i></button>
                                         <button class="dt-action-btn" title="Duplicate (tasks copied, first one paused)" @click="duplicateWorkflow(w)"><i class="fa-regular fa-clone"></i></button>
                                         <button class="dt-action-btn" title="Export as a .json file (to import here or on another instance)" @click="exportWorkflow(w)"><i class="fa-solid fa-file-export"></i></button>
@@ -1400,7 +1450,64 @@
                 </div>
                 <div class="modal-body tf-body">
                     <!-- a template that asks its choices (its "ask") before creating the workflow -->
-                    <div v-if="asking" class="wf-ask">
+                    <!-- template 'Git Sources updates': reuse a Git updater or create one (same form as Manage Git → Sync Schedules) -->
+                    <div v-if="gitAsk" class="wf-ask">
+                        <div class="wf-ask__head">
+                            <span class="wf-tpl__icon"><i :class="gitAsk.t.icon"></i></span>
+                            <div><div class="fw-bold">[[ gitAsk.t.label ]]</div>
+                                <div class="small text-muted">The workflow runs a Git updater at its rhythm; launches and logs show in the workflow. The updater's own timer is switched off, so it never runs twice.</div></div>
+                        </div>
+                        <div v-if="gitAsk.step === 'choose'" class="wf-tpl-grid">
+                            <button type="button" class="wf-tpl" @click="gitAskStep('existing')">
+                                <span class="wf-tpl__icon"><i class="fa-solid fa-rotate"></i></span>
+                                <span class="wf-tpl__name">Use a Git updater I already have</span>
+                                <span class="wf-tpl__desc">It keeps its repositories, settings and rhythm — it just runs from the workflow now</span>
+                            </button>
+                            <button type="button" class="wf-tpl" @click="gitAskStep('new')">
+                                <span class="wf-tpl__icon"><i class="fa-solid fa-plus"></i></span>
+                                <span class="wf-tpl__name">Create a new one</span>
+                                <span class="wf-tpl__desc">Title, rhythm, repositories and what is accepted / added — the same form as Manage Git</span>
+                            </button>
+                        </div>
+                        <template v-else-if="gitAsk.step === 'existing'">
+                            <div v-if="gitAsk.loading" class="text-muted small py-3"><span class="spinner-border spinner-border-sm me-2"></span>Loading the Git updaters…</div>
+                            <div v-else-if="!gitAsk.schedules.length" class="text-muted small py-3">No Git updater yet — <a href="#" @click.prevent="gitAskStep('new')">create one</a>.</div>
+                            <div v-else class="wf-git-list">
+                                <label v-for="sc in gitAsk.schedules" :key="sc.uuid" class="wf-git-item" :class="{ 'is-on': gitAsk.pick === sc.uuid }">
+                                    <input type="radio" name="gitUpdaterPick" :value="sc.uuid" v-model="gitAsk.pick">
+                                    <span class="wf-git-item__body">
+                                        <span class="fw-semibold">[[ sc.title ]]</span>
+                                        <span class="small text-muted">[[ sc.repo_count ]] repositor[[ sc.repo_count === 1 ? 'y' : 'ies' ]] · [[ triggerSummary({ trigger_mode: sc.frequency, days_of_week: sc.days_of_week, day_of_month: sc.day_of_month, hour: sc.hour, minute: sc.minute, cron_expr: sc.cron_expr, timezone: sc.timezone }) ]]
+                                            · [[ sc.is_active ? 'active' : 'paused' ]]</span>
+                                    </span>
+                                </label>
+                            </div>
+                        </template>
+                        <template v-else-if="gitAsk.step === 'new'">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" for="gitNewTitle">Title</label>
+                                <input id="gitNewTitle" type="text" class="form-control" v-model="gitAsk.title" placeholder="e.g. Weekly threat-intel sync">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" for="gitNewDesc">Description <span class="text-muted fw-normal small">· optional</span></label>
+                                <textarea id="gitNewDesc" class="form-control" rows="2" v-model="gitAsk.description"></textarea>
+                            </div>
+                            <div class="rounded-3 border p-3 mb-3" style="background:var(--light-bg-color);">
+                                <div class="fw-bold mb-2" style="font-size:.85rem;">Recurrence</div>
+                                <schedule-recurrence-picker :key="'git' + gitAsk.instance" :initial="gitAsk.recurrenceInitial" @recurrence-change="r => gitAsk.recurrence = r"></schedule-recurrence-picker>
+                            </div>
+                            <div class="rounded-3 border p-3" style="background:var(--light-bg-color);">
+                                <div class="fw-bold mb-2" style="font-size:.85rem;">Repositories</div>
+                                <repo-selection-table :key="'git' + gitAsk.instance" :owner-me="OWNER_ME" @selection-change="r => gitAsk.repos = r"></repo-selection-table>
+                            </div>
+                        </template>
+                        <div class="d-flex gap-2 justify-content-end mt-3">
+                            <button type="button" class="btn btn-outline-secondary" @click="gitAsk.step === 'choose' ? (gitAsk = null) : (gitAsk.step = 'choose')"><i class="fa-solid fa-arrow-left me-1"></i>Back</button>
+                            <button v-if="gitAsk.step !== 'choose'" type="button" class="btn btn-primary" :disabled="templateBusy || (gitAsk.step === 'existing' && !gitAsk.pick) || (gitAsk.step === 'new' && !gitAsk.title.trim())" @click="confirmGitAsk()">
+                                <span v-if="templateBusy" class="spinner-border spinner-border-sm me-1"></span><i v-else class="fa-solid fa-wand-magic-sparkles me-1"></i>Create the workflow</button>
+                        </div>
+                    </div>
+                    <div v-else-if="asking" class="wf-ask">
                         <div class="wf-ask__head">
                             <span class="wf-tpl__icon"><i :class="asking.t.icon"></i></span>
                             <div><div class="fw-bold">[[ asking.t.label ]]</div><div class="small text-muted">[[ asking.t.description ]]</div></div>
@@ -1921,6 +2028,9 @@
     import JobTracker from '/static/js/jobs/JobTracker.js';
     import WorkflowNotebook, { PinnedNotes } from '/static/js/admin/workflowNotebook.js';
     import SmartEditor from '/static/js/components/smart-editor.js';
+    import RepoSelectionTable from '/static/js/rule/repoSelectionTable.js';
+    import { gitProviderIcon, gitProviderLabel } from '/static/js/components/git-links.js';
+    const OWNER_ME = {{ {'id': current_user.id, 'name': ((current_user.first_name or '') ~ ' ' ~ (current_user.last_name or '')).strip()} | tojson }};
     import { renderMarkdown } from '/static/js/sanitize.js';
     import CalendarView from '/static/js/components/calendar-view.js';
     import TagsDisplaysList from '/static/js/tags/tagsDisplaysList.js';
@@ -1937,6 +2047,7 @@
             'pagination-component': PaginationComponent,
             'user-chip': UserChip,
             'schedule-recurrence-picker': ScheduleRecurrencePicker,
+            'repo-selection-table': RepoSelectionTable,
             'task-workflow-graph': TaskWorkflowGraph,
             'task-canvas': TaskCanvas,
             'workflow-run-trace': WorkflowRunTrace,
@@ -2248,11 +2359,12 @@
             // From the edit dialog (no argument) or straight from the day panel (the entry)
             async function deleteCalEntry(entry) {
                 const e = entry && entry.uuid ? entry : { uuid: calEntry.uuid, kind: calEntry.kind, title: calEntry.title };
-                if (!window.confirm(`Delete the ${e.kind} "${e.title}"?`)) return;
+                if (!window.confirm(`Delete the ${e.kind} "${e.title}"?`)) return false;
                 const res = await fetch('/admin/tasks/calendar/entries/' + e.uuid, { method: 'DELETE', headers: { 'X-CSRFToken': csrfToken } });
                 const data = await res.json().catch(() => ({}));
                 create_message(data.message || (res.ok ? 'Removed.' : 'Failed.'), res.ok ? 'success-subtle' : 'danger-subtle');
                 if (res.ok) { calEntry.open = false; loadCalEvents(); }
+                return res.ok;
             }
             function onCalDrop({ date, el }) {
                 const dragged = el && el.dataset ? el.dataset.uuid : null;
@@ -2286,9 +2398,17 @@
                 create_message(`"${e.title}" rescheduled.`, 'success-subtle');
                 await Promise.all([loadCalWorkflows(), loadCalEvents()]);
             }
+            // A note / reminder clicked: shown (markdown rendered), Edit / Delete from there
+            const calView = ref(null);
+            const calViewHtml = ref('');
+            async function showCalEntry(e) {
+                calView.value = e;
+                calViewHtml.value = '';
+                if ((e.content || '').trim()) calViewHtml.value = await renderMarkdown(e.content);
+            }
             function onCalEventClick({ event }) {
                 const e = event.extendedProps;
-                if (e.kind === 'note' || e.kind === 'reminder') { openCalEntry(e.kind, e.due_at, e); return; }
+                if (e.kind === 'note' || e.kind === 'reminder') { showCalEntry(e); return; }
                 calPick.value = event;
             }
             async function calRunNow(uuid) {
@@ -2376,7 +2496,52 @@
             }
             // a template with questions ("ask"): its choices first, then the workflow is created with them
             const asking = ref(null);
+            // Template 'Git Sources updates' (flag git_updater): reuse a Git updater or create one
+            const gitAsk = ref(null);
+            // Job ideas for later (setting workflows.future_ideas, read through the admin route)
+            const ideas = ref(null);
+            async function openIdeas() {
+                const res = await fetch('/admin/tasks/future_ideas');
+                ideas.value = res.ok ? ((await res.json()).ideas || []) : [];
+            }
+            const gitSourceTitle = (g) => (g.provider === 'generic' ? 'Git' : gitProviderLabel(g.url, g.provider))
+                + ` — runs Git updates (${g.count} repositor${g.count === 1 ? 'y' : 'ies'})`;
+            async function gitAskStep(step) {
+                const g = gitAsk.value;
+                g.step = step;
+                if (step === 'new') { g.instance++; return; }
+                g.loading = true;
+                try {
+                    const res = await fetch('/rule/github/schedule/list?per_page=100');
+                    g.schedules = res.ok ? ((await res.json()).schedules || []).filter(s => s.repo_count > 0) : [];
+                    if (g.schedules.length === 1) g.pick = g.schedules[0].uuid;
+                } finally { g.loading = false; }
+            }
+            async function confirmGitAsk() {
+                const g = gitAsk.value;
+                templateBusy.value = true;
+                try {
+                    let uuid = g.pick;
+                    if (g.step === 'new') {
+                        const r = g.repos || {};
+                        const res = await fetch('/rule/github/schedule/create', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                            body: JSON.stringify({ title: g.title, description: g.description, is_active: true, ...(g.recurrence || {}),
+                                repo_mode: r.repo_mode, repo_filters: r.repo_filters, selected_repo_urls: r.selected_repo_urls,
+                                excluded_repo_urls: r.excluded_repo_urls, repo_settings: r.repo_settings, default_repo_settings: r.default_repo_settings }) });
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok) { create_message(data.message || 'The Git updater could not be created.', 'danger-subtle'); return; }
+                        uuid = data.schedule.uuid;
+                    }
+                    if (await postAndOpen('/admin/tasks/workflows/from_git_updater', { schedule_uuid: uuid }, 'Workflow created.')) gitAsk.value = null;
+                } finally { templateBusy.value = false; }
+            }
             async function useTemplate(t) {
+                if (t.git_updater) {
+                    gitAsk.value = { t, step: 'choose', schedules: [], loading: false, pick: null, title: '', description: '', instance: 0,
+                                     recurrenceInitial: { frequency: 'weekly', days_of_week: [6], hour: 1, minute: 0, timezone: 'UTC' }, recurrence: null, repos: null };
+                    if (!document.getElementById('templatesModal').classList.contains('show')) openTemplates();
+                    return;
+                }
                 if ((t.ask || []).length) {
                     const answers = {};
                     for (const f of t.ask) {
@@ -2545,6 +2710,20 @@
             function barHeight(b) {
                 const max = Math.max(1, ...(dashboard.value?.bars || []).map(x => x.duration_seconds || 0));
                 return b.duration_seconds ? Math.max(12, Math.round(100 * b.duration_seconds / max)) : 12;
+            }
+            // The Active / Paused switch of a row of the workflows table
+            const wfToggling = ref(new Set());
+            async function toggleWfRow(w, ev) {
+                const want = ev.target.checked;
+                wfToggling.value.add(w.uuid);
+                try {
+                    const res = await fetch(`/admin/tasks/workflows/${w.uuid}/set_active`, { method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }, body: JSON.stringify({ is_active: want }) });
+                    const data = await res.json().catch(() => ({}));
+                    create_message(data.message || 'Failed.', res.ok ? 'success-subtle' : 'danger-subtle');
+                    if (res.ok) { w.is_active = data.is_active; fetchWorkflows(workflowsPage.value); }
+                    else ev.target.checked = w.is_active;
+                } finally { wfToggling.value.delete(w.uuid); }
             }
             async function toggleWorkflowActive() {
                 const w = activeWorkflow.value;
@@ -2819,7 +2998,10 @@
                 const res = await fetch(`/admin/tasks/workflows/${w.uuid}/delete`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
                 const data = await res.json();
                 create_message(data.message, res.ok ? 'success-subtle' : 'danger-subtle');
-                if (res.ok) fetchWorkflows(1);
+                if (!res.ok) return;
+                wfChecked.value.delete(w.uuid);
+                // deleted from its own page: back to the list
+                if (route.value !== 'workflows') backToWorkflows(); else fetchWorkflows(1);
             }
 
             // ── Level 2: Tasks within the active workflow ───────────────────────
@@ -3777,7 +3959,7 @@
             onUnmounted(() => stopLivePolling());
 
             return {
-                truncate, health, listView, setListView, calWorkflows, calSelected, calEvents, calPick, calendarRef, calDay, wfChecked, wfBulkBusy, wfAllChecked, toggleWfCheck, toggleAllWf, bulkWorkflows, calEntry, openCalEntry, reuseCalEntry, calOpenDay, calDayItems, calDayHidden, calMd, calItemLabel, saveCalEntry, deleteCalEntry, CAL_CATEGORIES, calHidden, toggleCalHide, resetCalHidden, calHiddenCount, calCatCount, calVisibleEvents, calSide, wfColor, wfTitle, wfIcon, WF_ICONS, PALETTE,
+                truncate, health, listView, setListView, calWorkflows, calSelected, calEvents, calPick, calendarRef, calDay, calView, calViewHtml, showCalEntry, ideas, openIdeas, gitAsk, gitAskStep, gitSourceTitle, gitProviderIcon, confirmGitAsk, OWNER_ME, wfToggling, toggleWfRow, wfChecked, wfBulkBusy, wfAllChecked, toggleWfCheck, toggleAllWf, bulkWorkflows, calEntry, openCalEntry, reuseCalEntry, calOpenDay, calDayItems, calDayHidden, calMd, calItemLabel, saveCalEntry, deleteCalEntry, CAL_CATEGORIES, calHidden, toggleCalHide, resetCalHidden, calHiddenCount, calCatCount, calVisibleEvents, calSide, wfColor, wfTitle, wfIcon, WF_ICONS, PALETTE,
                 modeLabel, userTz, onCalRange, schedule, openSchedule, addScheduleRow, weekdayName, dayOfMonth, scheduleSentence, saveSchedule,
                 spreadRows, dayCount, dayIsFull, calMaxPerDay,
                 onCalSelect, onCalDrop, onCalEventDrop, onCalEventClick, calRunNow, backupsInfo, loadBackupsInfo, fmtBytes, willBeDeleted, exportWorkflow, alertTaskCount, retryTaskCount, autoPausedCount, linkAlert, saveLinkAlert, taskAlert, ALERT_POINTS, notebook, noteOnRun, pinnedNotes, showPinned, share, openShare, shareAction, copyShare,

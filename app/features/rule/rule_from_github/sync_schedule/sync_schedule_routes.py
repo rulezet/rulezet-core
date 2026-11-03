@@ -42,8 +42,10 @@ def schedule_list():
     direction = request.args.get('dir', 'desc', type=str)
 
     pagination = SyncScheduleModel.get_schedule_list_page(page, per_page, search, sort, direction)
+    from app.features.admin.task_scheduler.workflow_spec import git_updater_workflows
+    in_workflows = git_updater_workflows([s.uuid for s in pagination.items])
     return jsonify({
-        "schedules": [s.to_json() for s in pagination.items],
+        "schedules": [{**s.to_json(), "workflow": in_workflows.get(s.uuid)} for s in pagination.items],
         "total": pagination.total,
         "total_pages": pagination.pages,
     }), 200
@@ -93,8 +95,11 @@ def schedule_update(uuid):
                  target_type="github_sync_schedule",
                  target_uuid=schedule.uuid,
                  icon="fa-brands fa-github")
+    # Run by a workflow: the workflow takes the new dates, the schedule's own timer stays off
+    from app.features.admin.task_scheduler.workflow_spec import sync_git_updater
+    in_workflow = sync_git_updater(schedule)
     return jsonify({
-        "message": "Sync Schedule updated.",
+        "message": "Sync Schedule updated." + (" Its workflow takes the new dates (it runs it, so its own timer stays off)." if in_workflow else ""),
         "toast_class": "success-subtle",
         "schedule": schedule.to_json(),
     }), 200
@@ -150,6 +155,13 @@ def schedule_bulk_set_active():
     count = SyncScheduleModel.bulk_set_active_schedules(
         mode, data.get('filters'), data.get('selected_uuids'), data.get('excluded_uuids'), is_active
     )
+    if is_active:
+        # the ones run by a workflow keep their own timer off (never twice)
+        from app.core.db_class.git import GithubSyncSchedule
+        from app.features.admin.task_scheduler.workflow_spec import sync_git_updater
+        for sc in GithubSyncSchedule.query.filter_by(is_active=True).all():
+            if sync_git_updater(sc):
+                count = max(0, count - 1)
 
     verb = 'activated' if is_active else 'paused'
     log_activity("github.sync_schedule_bulk_set_active",

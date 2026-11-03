@@ -611,7 +611,7 @@
     "git_sources_updates": {
       "label": "Git Sources updates",
       "icon": "fa-brands fa-git-alt",
-      "description": "Every Sunday at 01:00 UTC: the Git Sources update check on the repositories you choose (or all of them), the changed rules accepted and the new rules added if you want — what is not is left for review on the Git Sources page; a notification if it fails. You choose when you use the template.",
+      "description": "A Git updater (Manage Git → Sync Schedules) run by a workflow: reuse one you already made — it keeps its repositories, settings and rhythm, its runs and logs now show in the workflow — or create a new one with the same form. A notification if it fails.",
       "ask": [
         {
           "task": "update",
@@ -675,7 +675,8 @@
             }
           }
         ]
-      }
+      },
+      "git_updater": true
     }
   }
 }

@@ -279,8 +279,9 @@ const RepoSelectionTable = {
                     </tr>
                 </thead>
                 <tbody v-if="!loading && repos.length > 0">
-                    <tr v-for="repo in repos" :key="repo.url" class="dt-row">
-                        <td class="dt-td dt-td--checkbox">
+                    <tr v-for="repo in repos" :key="repo.url" class="dt-row dt-row--selectable" :class="{ 'is-checked': isRepoChecked(repo.url) }"
+                        @click="updateSelection(repo.url, !isRepoChecked(repo.url))">
+                        <td class="dt-td dt-td--checkbox" @click.stop>
                             <input type="checkbox" class="dt-checkbox" :checked="isRepoChecked(repo.url)"
                                 @change="updateSelection(repo.url, $event.target.checked)" />
                         </td>

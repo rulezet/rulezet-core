@@ -734,13 +734,17 @@
                                     <td class="dt-td">[[ s.next_run_at || '—' ]]</td>
                                     <td class="dt-td">[[ s.last_run_at || 'Never' ]]</td>
                                     <td class="dt-td text-center">
-                                        <span class="badge" :class="s.is_active ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
+                                        <a v-if="s.workflow" :href="'/admin/tasks/' + s.workflow.uuid" class="badge bg-primary-subtle text-primary-emphasis text-decoration-none" @click.stop
+                                   :title="'Run by the workflow \u201c' + s.workflow.title + '\u201d — its dates are the ones of this schedule; its own timer stays off'">
+                                    <i class="fa-solid fa-diagram-project me-1"></i>In a workflow</a>
+                                <span v-else class="badge" :class="s.is_active ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
                                             [[ s.is_active ? 'Active' : 'Paused' ]]
                                         </span>
                                     </td>
                                     <td class="dt-td text-center">
                                         <div class="dt-actions justify-content-center">
                                             <button class="dt-action-btn" title="Run now" @click="runScheduleNow(s)"><i class="fa-solid fa-play"></i></button>
+                                {% if current_user.is_admin() %}<button class="dt-action-btn" title="Create a workflow from it — the workflow runs it from now on (its own timer is switched off), launches and logs in Workflows" @click="workflowFromSchedule(s)"><i class="fa-solid fa-diagram-project"></i></button>{% endif %}
                                             <button class="dt-action-btn" title="Edit" @click="openEditSchedule(s)"><i class="fa-solid fa-pen"></i></button>
                                             <button class="dt-action-btn dt-action-btn--danger" title="Delete" @click="deleteSchedule(s)"><i class="fa-solid fa-trash"></i></button>
                                         </div>
@@ -763,12 +767,16 @@
                                 <div class="small mb-1"><i class="fa-brands fa-git-alt me-1"></i>[[ s.repo_count ]] repo(s)</div>
                                 <div class="small mb-1"><i class="fa-solid fa-clock me-1"></i>[[ frequencySummary(s) ]]</div>
                                 <div class="small mb-1">Next run: [[ s.next_run_at || '—' ]]</div>
-                                <span class="badge" :class="s.is_active ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
+                                <a v-if="s.workflow" :href="'/admin/tasks/' + s.workflow.uuid" class="badge bg-primary-subtle text-primary-emphasis text-decoration-none" @click.stop
+                                   :title="'Run by the workflow \u201c' + s.workflow.title + '\u201d — its dates are the ones of this schedule; its own timer stays off'">
+                                    <i class="fa-solid fa-diagram-project me-1"></i>In a workflow</a>
+                                <span v-else class="badge" :class="s.is_active ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
                                     [[ s.is_active ? 'Active' : 'Paused' ]]
                                 </span>
                             </div>
                             <div class="dt-card-footer">
                                 <button class="dt-action-btn" title="Run now" @click="runScheduleNow(s)"><i class="fa-solid fa-play"></i></button>
+                                {% if current_user.is_admin() %}<button class="dt-action-btn" title="Create a workflow from it — the workflow runs it from now on (its own timer is switched off), launches and logs in Workflows" @click="workflowFromSchedule(s)"><i class="fa-solid fa-diagram-project"></i></button>{% endif %}
                                 <button class="dt-action-btn" title="Edit" @click="openEditSchedule(s)"><i class="fa-solid fa-pen"></i></button>
                                 <button class="dt-action-btn dt-action-btn--danger" title="Delete" @click="deleteSchedule(s)"><i class="fa-solid fa-trash"></i></button>
                             </div>
@@ -1369,6 +1377,18 @@
                 create_message(data.message, data.toast_class)
             }
 
+            // Admins: a workflow that runs this Git updater (Admin → Workflows); its own timer is switched off
+            async function workflowFromSchedule(s) {
+                if (!window.confirm(`Create a workflow that runs "${s.title}"?\n\nThe workflow takes over its timer (same rhythm): this schedule's own timer is switched off so it never runs twice. Its repositories and settings stay here.`)) return
+                const res = await fetch('/admin/tasks/workflows/from_git_updater', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ schedule_uuid: s.uuid }),
+                })
+                const data = await res.json().catch(() => ({}))
+                create_message(data.message || (res.ok ? 'Workflow created.' : 'Failed.'), res.ok ? 'success-subtle' : 'danger-subtle')
+                if (res.ok && data.workflow) window.location.href = '/admin/tasks/' + data.workflow.uuid
+            }
+
             async function deleteSchedule(s) {
                 if (!confirm(`Delete Sync Schedule "${s.title}"? This cannot be undone.`)) return
                 const res = await fetch(`/rule/github/schedule/${s.uuid}/delete`, {
@@ -1676,7 +1696,7 @@
                 scheduleSortDir,
                 setScheduleSort,
                 scheduleSortIcon,
-                runScheduleNow,
+                runScheduleNow, workflowFromSchedule,
                 deleteSchedule,
                 savingSchedule,
                 scheduleForm,
