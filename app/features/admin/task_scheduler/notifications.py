@@ -215,13 +215,16 @@ def send_point_alert(task, point, job):
 
 
 def send_calendar_reminder_email(entry):
-    """A reminder of the workflows calendar has come and asked for an email: one to every admin."""
+    """A reminder of the workflows calendar has come and asked for an email: to its author or to the addresses given."""
     from app.core.db_class.user import User
     from app.core.utils.mail_status import is_email_available
     if not is_email_available():
         print("[task_scheduler] reminder email skipped: no mail server configured")
         return
-    recipients = [u.email for u in User.query.filter_by(admin=True).all() if u.email]
+    if entry.email_to == 'custom':
+        recipients = [a.strip() for a in (entry.emails or '').split(',') if a.strip()]
+    else:
+        recipients = [entry.author.email] if entry.author and entry.author.email else []
     if not recipients:
         return
     details = ''
@@ -252,7 +255,7 @@ def send_calendar_reminder_email(entry):
                 </div>
             </div>
             <div style="background-color: #f8f9fa; padding: 16px; text-align: center; font-size: 12px; color: #bdc3c7; border-top: 1px solid #eeeeee;">
-                <p style="margin: 0;">You're receiving this because you are an administrator of this Rulezet instance.</p>
+                <p style="margin: 0;">You're receiving this because a reminder of the Rulezet workflows calendar was set to this address.</p>
             </div>
         </div>
         """

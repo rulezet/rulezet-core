@@ -359,6 +359,9 @@ class AdminCalendarEntry(db.Model):
     due_at      = db.Column(db.DateTime, nullable=False, index=True)         # UTC
     notified_at = db.Column(db.DateTime, nullable=True)
     channel     = db.Column(db.String(10), nullable=False, default='notif')    # reminder: notif | email | both
+    notif_to    = db.Column(db.String(10), nullable=False, default='admins')   # notification to: me (author) | admins
+    email_to    = db.Column(db.String(10), nullable=False, default='me')       # email to: me (author) | custom
+    emails      = db.Column(db.Text, nullable=True)                            # custom: addresses, comma separated
     author_id   = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
     created_at  = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
@@ -370,5 +373,7 @@ class AdminCalendarEntry(db.Model):
             'due_at': self.due_at.replace(tzinfo=datetime.timezone.utc).isoformat() if self.due_at else None,
             'notified_at': self.notified_at.strftime('%Y-%m-%d %H:%M') if self.notified_at else None,
             'channel': self.channel or 'notif',
+            'notif_to': self.notif_to or 'admins', 'email_to': self.email_to or 'me',
+            'emails': self.emails or '',
             'author': self.author.get_username() if self.author else None,
         }

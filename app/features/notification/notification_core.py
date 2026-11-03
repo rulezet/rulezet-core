@@ -346,7 +346,7 @@ def notify_admins_calendar_reminder(entry):
             body=(body[:500] if body else f"Set for {entry.due_at.strftime('%Y-%m-%d %H:%M')} UTC on the workflows calendar."),
             link='/admin/tasks/?view=calendar', icon='fa-solid fa-bell', is_read=False,
             created_at=datetime.datetime.utcnow(),
-        ) for uid in _get_all_admin_ids()]
+        ) for uid in ([entry.author_id] if entry.notif_to == 'me' and entry.author_id else _get_all_admin_ids())]
         db.session.add_all(notifs)
         db.session.commit()
     except Exception as e:

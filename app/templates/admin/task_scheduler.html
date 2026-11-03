@@ -318,7 +318,25 @@
                             <button type="button" :class="{ 'is-on': calEntry.channel === 'email' }" @click="calEntry.channel = 'email'"><i class="fa-regular fa-envelope me-1"></i>Email</button>
                             <button type="button" :class="{ 'is-on': calEntry.channel === 'both' }" @click="calEntry.channel = 'both'"><i class="fa-solid fa-layer-group me-1"></i>Both</button>
                         </div>
-                        <div class="form-text">To every admin[[ calEntry.notified_at ? ' — already sent ' + calEntry.notified_at + ' UTC; moving it sends it again' : '' ]].</div>
+                        <div class="wcal-recipients">
+                            <div v-if="calEntry.channel !== 'email'" class="wcal-recipients__row">
+                                <span class="wcal-recipients__label"><i class="fa-regular fa-bell me-1"></i>Notification to</span>
+                                <div class="tf-segment tf-segment--sm">
+                                    <button type="button" :class="{ 'is-on': calEntry.notif_to === 'me' }" @click="calEntry.notif_to = 'me'">Me</button>
+                                    <button type="button" :class="{ 'is-on': calEntry.notif_to === 'admins' }" @click="calEntry.notif_to = 'admins'">All admins</button>
+                                </div>
+                            </div>
+                            <div v-if="calEntry.channel !== 'notif'" class="wcal-recipients__row">
+                                <span class="wcal-recipients__label"><i class="fa-regular fa-envelope me-1"></i>Email to</span>
+                                <div class="tf-segment tf-segment--sm">
+                                    <button type="button" :class="{ 'is-on': calEntry.email_to === 'me' }" @click="calEntry.email_to = 'me'">My email</button>
+                                    <button type="button" :class="{ 'is-on': calEntry.email_to === 'custom' }" @click="calEntry.email_to = 'custom'; $nextTick(() => $refs.calEmails && $refs.calEmails.focus())">Another address</button>
+                                </div>
+                                <input v-if="calEntry.email_to === 'custom'" ref="calEmails" id="calEntryEmails" v-model="calEntry.emails" type="text" class="form-control form-control-sm mt-2"
+                                       placeholder="ops@example.org, other@example.org" aria-label="Email addresses" required>
+                            </div>
+                        </div>
+                        <div v-if="calEntry.notified_at" class="form-text">Already sent [[ calEntry.notified_at ]] UTC — moving it sends it again.</div>
                     </div>
                     <div class="mb-1">
                         <label class="form-label fw-semibold small">Details <span class="text-muted fw-normal">· optional, markdown</span></label>
@@ -1971,7 +1989,7 @@
             const calRange = ref(null);
             const calPick = ref(null);
             const calDay = ref(null);
-            const calEntry = reactive({ open: false, uuid: null, kind: 'note', title: '', content: '', date: '', author: null, notified_at: null, channel: 'notif', saving: false, previous: [] });
+            const calEntry = reactive({ open: false, uuid: null, kind: 'note', title: '', content: '', date: '', author: null, notified_at: null, channel: 'notif', notif_to: 'admins', email_to: 'me', emails: '', saving: false, previous: [] });
             // What the calendar shows (kept per browser)
             const CAL_CATEGORIES = [
                 { key: 'planned', label: 'planned', color: '#0d6efd' },
@@ -2170,7 +2188,11 @@
             function calItemLabel(e) {
                 const p = e.extendedProps;
                 if (p.kind === 'note') return 'note';
-                if (p.kind === 'reminder') return 'reminder · ' + ({ notif: 'notification', email: 'email', both: 'notification + email' }[p.channel] || 'notification') + (p.notified_at ? ' · sent' : '');
+                if (p.kind === 'reminder') {
+                    const n = 'notification to ' + (p.notif_to === 'me' ? 'me' : 'all admins');
+                    const m = 'email to ' + (p.email_to === 'custom' ? (p.emails || 'an address') : 'me');
+                    return 'reminder · ' + ({ notif: n, email: m, both: n + ' + ' + m }[p.channel] || n) + (p.notified_at ? ' · sent' : '');
+                }
                 if (p.kind === 'past') return 'launch ' + p.status;
                 return modeLabel(p.mode) + (p.active ? '' : ' · paused');
             }
@@ -2188,7 +2210,9 @@
                 if (!entry && d.getHours() === 0 && d.getMinutes() === 0) d.setHours(9);
                 Object.assign(calEntry, { open: true, uuid: entry ? entry.uuid : null, kind, title: entry ? entry.title : '',
                     content: entry ? entry.content : '', date: toLocalInput(d), author: entry ? entry.author : null,
-                    notified_at: entry ? entry.notified_at : null, channel: entry ? (entry.channel || 'notif') : 'notif', saving: false });
+                    notified_at: entry ? entry.notified_at : null, channel: entry ? (entry.channel || 'notif') : 'notif',
+                    notif_to: entry ? (entry.notif_to || 'admins') : 'admins', email_to: entry ? (entry.email_to || 'me') : 'me',
+                    emails: entry ? (entry.emails || '') : '', saving: false });
                 calEntry.previous = [];
                 calDay.value = null;
                 nextTick(() => document.getElementById('calEntryTitle')?.focus());
@@ -2204,7 +2228,8 @@
                 if (!p) return;
                 const at = new Date(p.due_at), d = new Date(calEntry.date);
                 d.setHours(at.getHours(), at.getMinutes());
-                Object.assign(calEntry, { title: p.title, content: p.content || '', channel: p.channel || 'notif', date: toLocalInput(d) });
+                Object.assign(calEntry, { title: p.title, content: p.content || '', channel: p.channel || 'notif', notif_to: p.notif_to || 'admins',
+                                          email_to: p.email_to || 'me', emails: p.emails || '', date: toLocalInput(d) });
             }
             async function sendCalEntry(uuid, body) {
                 const res = await fetch('/admin/tasks/calendar/entries' + (uuid ? '/' + uuid : ''), {
@@ -2215,7 +2240,8 @@
             async function saveCalEntry() {
                 calEntry.saving = true;
                 try {
-                    const { ok, data } = await sendCalEntry(calEntry.uuid, { kind: calEntry.kind, channel: calEntry.channel, title: calEntry.title, content: calEntry.content,
+                    const { ok, data } = await sendCalEntry(calEntry.uuid, { kind: calEntry.kind, channel: calEntry.channel, notif_to: calEntry.notif_to,
+                                                                         email_to: calEntry.email_to, emails: calEntry.emails, title: calEntry.title, content: calEntry.content,
                                                                          due_at: new Date(calEntry.date).toISOString() });
                     create_message(data.message || (ok ? 'Saved.' : 'Failed.'), ok ? 'success-subtle' : 'danger-subtle');
                     if (ok) { calEntry.open = false; loadCalEvents(); }
@@ -2237,7 +2263,7 @@
             async function onCalEventDrop({ event, start, revert }) {
                 const e = event.extendedProps;
                 if (e.kind === 'note' || e.kind === 'reminder') {
-                    const { ok, data } = await sendCalEntry(e.uuid, { kind: e.kind, channel: e.channel, title: e.title, content: e.content, due_at: start.toISOString() });
+                    const { ok, data } = await sendCalEntry(e.uuid, { kind: e.kind, channel: e.channel, notif_to: e.notif_to, email_to: e.email_to, emails: e.emails, title: e.title, content: e.content, due_at: start.toISOString() });
                     if (!ok) { revert(); create_message(data.message || 'Failed.', 'danger-subtle'); return; }
                     create_message(`"${e.title}" moved.`, 'success-subtle');
                     loadCalEvents();

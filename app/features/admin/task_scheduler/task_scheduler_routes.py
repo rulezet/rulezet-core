@@ -921,7 +921,23 @@ def _calendar_entry_fields(data):
     channel = data.get('channel') or 'notif'
     if channel not in ('notif', 'email', 'both'):
         return None, 'Channel must be notif, email or both.'
-    return {'kind': kind, 'channel': channel, 'title': title[:200], 'content': (data.get('content') or '')[:20000], 'due_at': due}, None
+    notif_to = data.get('notif_to') or 'admins'
+    email_to = data.get('email_to') or 'me'
+    if notif_to not in ('me', 'admins') or email_to not in ('me', 'custom'):
+        return None, 'Invalid recipients.'
+    emails = ''
+    if kind == 'reminder' and channel in ('email', 'both') and email_to == 'custom':
+        import re
+        addrs = [a.strip() for a in re.split(r'[,;\s]+', data.get('emails') or '') if a.strip()]
+        bad = [a for a in addrs if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', a)]
+        if not addrs:
+            return None, 'Enter the email address to send the reminder to.'
+        if bad:
+            return None, f'Invalid email address: {bad[0]}'
+        if len(addrs) > 20:
+            return None, 'At most 20 email addresses.'
+        emails = ', '.join(addrs)
+    return {'kind': kind, 'channel': channel, 'notif_to': notif_to, 'email_to': email_to, 'emails': emails, 'title': title[:200], 'content': (data.get('content') or '')[:20000], 'due_at': due}, None
 
 
 @task_scheduler_blueprint.route('/calendar/entries', methods=['GET'])

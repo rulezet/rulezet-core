@@ -115,3 +115,9 @@
 .wcal-actions { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .75rem; }
 .wcal-actions .wf-tpl { text-decoration: none; color: inherit; }
 .wcal-actions__run { color: #198754; background: rgba(25, 135, 84, .12); }
+
+/* Reminder recipients, under "Send it as" */
+.wcal-recipients { margin-top: .6rem; padding: .7rem .8rem; border-radius: 10px; border: 1px dashed var(--border-color); display: flex; flex-direction: column; gap: .6rem; }
+.wcal-recipients__row { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .75rem; }
+.wcal-recipients__label { font-size: .78rem; font-weight: 600; min-width: 8.5rem; color: var(--subtle-text-color); }
+.wcal-recipients__row .form-control { flex-basis: 100%; }
