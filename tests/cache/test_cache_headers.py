@@ -24,3 +24,17 @@ def test_versioned_static_stays_public(client):
     _login(client)
     r = client.get('/static/css/core.css?v=1')
     assert r.headers['Cache-Control'] == 'public, max-age=31536000, immutable'
+
+
+def test_uploads_are_sandboxed(app, client):
+    import os
+    path = os.path.join(app.root_path, 'static', 'uploads', 'blog', '_test_sandbox.svg')
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as f:
+        f.write('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')
+    try:
+        r = client.get('/static/uploads/blog/_test_sandbox.svg')
+        assert 'sandbox' in r.headers['Content-Security-Policy']
+        assert r.headers['X-Content-Type-Options'] == 'nosniff'
+    finally:
+        os.remove(path)

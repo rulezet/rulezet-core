@@ -17,7 +17,7 @@ class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_GET(self):
         hits[self.path] = hits.get(self.path, 0) + 1
-        body = f"{self.path} hit {hits[self.path]}\n".encode()
+        body = f"{self.path} hit {hits[self.path]} host={self.headers.get('X-Forwarded-Host')}\n".encode()
         self.send_response(200)
         self.send_header('Content-Type', 'text/plain')
         if 'cookie=1' in self.path:
@@ -96,5 +96,27 @@ echo "$H" | grep -qi '^x-content-type-options: nosniff' || fail "static without 
 curl -s -D - -o /dev/null -H 'Accept-Encoding: gzip' "http://127.0.0.1:18080/static/$CSS" | tr -d '\r' | grep -qi '^content-encoding: gzip' || fail "static CSS not gzipped"
 get http://127.0.0.1:18080/static/does/not/exist.js | grep -q "/static/does/not/exist.js hit 1" || fail "missing static file did not fall back to the app"
 echo "✔ static files from disk (immutable when versioned, gzip, nosniff), fallback to the app"
+
+# 6. Cache poisoning: a forged X-Forwarded-Host never reaches the page others get
+get -H 'X-Forwarded-Host: evil.example' http://127.0.0.1:18080/rule/poison | grep -q "host=evil.example" || fail "backend did not see the header"
+get http://127.0.0.1:18080/rule/poison | grep -q "evil.example" && fail "poisoned page served to everybody"
+echo "✔ X-Forwarded-Host / -Proto are part of the cache key (no poisoning)"
+
+# 7. Uploads sandboxed, dotfiles never served, security headers on static
+mkdir -p app/static/uploads/blog && UP="app/static/uploads/blog/_nginx_test.svg"
+echo '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>' > "$UP"; chmod o+r "$UP"
+H="$(curl -s -o /dev/null -D - http://127.0.0.1:18080/static/uploads/blog/_nginx_test.svg | tr -d '\r')"; rm -f "$UP"
+echo "$H" | grep -qi '^content-security-policy:.*sandbox' || fail "uploads without the CSP sandbox"
+echo "$H" | grep -qi '^x-content-type-options: nosniff' || fail "uploads without nosniff"
+[ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/static/uploads/nope.svg)" = 404 ] || fail "missing upload not 404"
+[ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/static/.gitignore)" = 404 ] || fail "dotfile served"
+for u in '/static/../../etc/passwd' '/static/%2e%2e/%2e%2e/etc/passwd' '/static/css/..%2f..%2f..%2fetc/passwd'; do
+    curl -s --path-as-is "http://127.0.0.1:18080$u" | grep -q 'root:' && fail "path traversal: $u"
+done
+H="$(curl -s -o /dev/null -D - "http://127.0.0.1:18080/static/$CSS" | tr -d '\r')"
+for h in 'x-frame-options: SAMEORIGIN' "content-security-policy: frame-ancestors 'self'" 'referrer-policy: strict-origin-when-cross-origin'; do
+    echo "$H" | grep -qi "^$h" || fail "static without $h"
+done
+echo "✔ uploads sandboxed (CSP), no dotfile, no traversal, security headers on static files"
 
 echo "All nginx cache checks passed."

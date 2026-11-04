@@ -80,7 +80,9 @@ __FORWARD_HEADERS__
 
     # Micro-cache for every proxied location below (static files are read from disk)
     proxy_cache rz_cache;
-    proxy_cache_key "$scheme$request_method$host$request_uri";
+    # Every header the app builds links from is in the key (ProxyFix trusts X-Forwarded-Host / -Proto):
+    # a forged X-Forwarded-Host can never put its links into the page everybody else gets.
+    proxy_cache_key "$scheme|$request_method|$host|$http_x_forwarded_host|$http_x_forwarded_proto|$request_uri";
     proxy_cache_valid 200 301 302 60s;
     proxy_cache_valid 404 10s;
     proxy_cache_bypass $rz_cache_bypass;
@@ -92,12 +94,31 @@ __FORWARD_HEADERS__
 
     # JS/CSS/images: served by nginx straight from disk (no Python thread), never rate-limited.
     # A file nginx cannot read (permissions, generated later…) falls back to the app.
+    # Same security headers as the app sends (app/__init__.py set_security_headers).
     location /static/ {
         root __APP_DIR__;
         try_files $uri @rulezet_static;
         add_header Cache-Control $rz_static_cache always;
         add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Content-Security-Policy "frame-ancestors 'self'" always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
         access_log off;
+    }
+    # Files people upload (avatars, blog images…): a sandbox, so an uploaded SVG / HTML can never run a script
+    location /static/uploads/ {
+        root __APP_DIR__;
+        try_files $uri =404;
+        add_header Cache-Control "public, max-age=3600" always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Content-Security-Policy "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox; frame-ancestors 'self'" always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+        access_log off;
+    }
+    # No dotfile is ever served from static (.gitkeep, editor leftovers…)
+    location ~ ^/static/(.*/)?\. {
+        return 404;
     }
     location @rulezet_static {
         proxy_cache off;

@@ -138,5 +138,55 @@ Standard library only — runs on the server without the venv.
 - `tests/cache/test_cache_headers.py` — anonymous rule page not private + `Vary: Cookie`; signed-in rule page,
   home, rule list private; versioned static stays public.
 
+#### Found while testing: every anonymous page created a session
+`base.html` calls `csrf_token()` on every page → for a visitor without a cookie, Flask-Session
+created a **`flask_sessions` row + `Set-Cookie` on every hit** (crawlers included: one DB write per page),
+and nginx can never cache an answer with `Set-Cookie`. So the micro-cache would only have helped the API.
+
+Fix — `app/core/utils/anon_csrf.py`:
+- anonymous visitor **without** a session → the token is derived from a raw value shared by all
+  anonymous visitors (`HMAC(SECRET_KEY, "rz-anon-csrf:<day>")`, today or yesterday accepted);
+  the session is dropped before it is saved → **no cookie, no DB row, page cacheable**;
+- on their first POST the session is created with that raw value → Flask-WTF validates as usual;
+- **kept as before** (own random value): signed-in users, visitors who already have a session,
+  account pages (`login`, `add_user`, `verify`, `forgot_password`, `reset_password`, `oidc_login`).
+
+#### 🔒 Security review — step 1
+| Risk | Answer | Checked by |
+|---|---|---|
+| A signed-in page in the shared cache | bypass on session / remember cookie, API key, Authorization; app adds `Cache-Control: private` to every signed-in answer; nginx never stores `Set-Cookie` / `private` answers | `test_nginx_cache.sh` §2–3, `test_cache_headers.py` |
+| **Cache poisoning** (forged `X-Forwarded-Host` / `-Proto`, trusted by ProxyFix when a proxy is in front, builds links in the page) | both headers are part of the cache key | `test_nginx_cache.sh` §6 |
+| Static files from nginx lose the app's security headers | `nosniff`, `X-Frame-Options`, `frame-ancestors`, `Referrer-Policy` set by nginx | `test_nginx_cache.sh` §7 |
+| Uploaded SVG / HTML in `/static/uploads/` running a script | `Content-Security-Policy: …; sandbox` on uploads (nginx **and** app — stricter than before) | `test_nginx_cache.sh` §7, `test_uploads_are_sandboxed` |
+| Dotfiles / path traversal from disk | dotfiles → 404, `root` limited to `app/static`, traversal attempts checked | `test_nginx_cache.sh` §7 |
+| Shared anonymous CSRF value known to anyone | only ever for **anonymous** actions (nothing tied to an account); never on account pages (no login CSRF: the shared token cannot log in); a session holding it swaps it for its own on sign-in or on an account page; **refused when the POST comes from another site** (`Origin` / `Referer` not ours, or `Origin: null`); disabled when `SECRET_KEY` is empty | `test_anon_csrf.py` (no cookie, POST ok, bad / missing token refused, login page own token, shared token cannot log in, token rotated after sign-in, cross-site refused, no secret) |
+| Cache filled with unique URLs (DoS) | `max_size=1g`, `inactive=10m`, rate limits still apply before the cache | — |
+| Stale page after an edit | 60 s at most for anonymous visitors (signed-in users always live) | — |
+
 **To deploy:** `sudo bash deploy/setup_nginx.sh` (re-generates the config), then `nginx -t && systemctl reload nginx`.
 Check: `curl -sI https://rulezet.org/rule/detail_rule/1 | grep -i x-cache` twice → `MISS` then `HIT`.
+
+### ✅ Step 4 — Rule generations (`app/core/utils/cache_versions.py`) — done before 2 and 3, which use it
+- `rule_key(kind, rule_id, *parts)` → `rz:rule:<kind>:<id>:<rule gen>:<bulk gen>[:<hash>]`
+- `rules_key(kind, *parts)` → `rz:rules:<kind>:<global gen>:<hash>` (lists, searches, stats)
+- **Bumped automatically on commit** (SQLAlchemy `after_flush` / `after_commit`): a change to a `Rule` row
+  or to **any row with a `rule_id`** (votes, comments, tags, history, bundle links, proposals…) bumps that
+  rule + the global generation. `query.update()` / `delete()` on a rule table (soft-delete batches, bulk jobs)
+  bump the *bulk* generation, part of every rule key. Rollback → nothing bumped.
+- A generation is a unique value (`time_ns`), never a counter: evicted → comes back new, an old entry can
+  never become valid again. Stored in the shared `cache` (Redis in prod): site, API and worker all see it.
+- No manual invalidation to remember anywhere.
+
+**Tests:** `tests/cache/test_cache_versions.py` — stable keys, edit → new rule + list key, a vote (row with
+`rule_id`) → new rule key, other rules untouched, rollback bumps nothing, bulk update → every key new,
+evicted generation never brings old entries back. **7 pass.** (`tests/cache/conftest.py` gives these tests a
+real SimpleCache — the suite runs with NullCache.)
+
+#### 🔒 Security review — step 4
+| Risk | Answer |
+|---|---|
+| Stale data shown after a change made outside the ORM (raw SQL on a connection) | not bumped → bounded by the entry's own timeout; every write path in the app goes through the session |
+| Cache growing without end | one generation key per rule (no expiry), entries themselves always have a timeout |
+| A cache failure breaking a commit | every cache call is wrapped: a failing cache = no bump, never an exception |
+
+**Regression run:** `tests/cache tests/account tests/home` → **90 passed**.

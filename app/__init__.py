@@ -80,7 +80,11 @@ def create_app(start_worker=True):
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxy_count, x_proto=proxy_count, x_host=proxy_count)
 
     db.init_app(app)
+    from app.core.utils import cache_versions
+    cache_versions.init_app(app)     # rule generations bumped on commit (versioned cache keys)
     csrf.init_app(app)
+    from app.core.utils import anon_csrf
+    anon_csrf.init_app(app)          # anonymous pages without a session (cacheable), docs/future/caching.md
     migrate.init_app(app, db, render_as_batch=True)
     login_manager.login_view = "account.login"
     login_manager.init_app(app)
@@ -226,6 +230,10 @@ def create_app(start_worker=True):
         # URLs keep Flask's default (revalidate every time).
         if request.endpoint == 'static' and request.args.get('v') and response.status_code == 200:
             response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+        # Files people upload: a sandbox, an uploaded SVG / HTML can never run a script (same as nginx)
+        if request.endpoint == 'static' and request.path.startswith('/static/uploads/'):
+            response.headers['Content-Security-Policy'] = ("default-src 'none'; img-src 'self' data:; "
+                                                           "style-src 'unsafe-inline'; sandbox; frame-ancestors 'self'")
         return response
 
     @app.after_request
