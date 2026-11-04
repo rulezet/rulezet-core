@@ -37,7 +37,16 @@
     <!-- Neutral state until we know whether this session is still running or
          already finished — otherwise a session that was already done flashes
          the progress bar for a frame before switching to the results. -->
-    <div v-if="!pageReady" class="text-center py-5">
+    <!-- The check is gone: never saved and no longer running (the server restarted during the scan —
+         a check lives in the server's memory until it is saved at the end). Say it instead of staying at 0. -->
+    <div v-if="scanLost" class="text-center py-5">
+        <i class="fa-solid fa-plug-circle-xmark text-warning" style="font-size:2rem;"></i>
+        <p class="fw-semibold mt-3 mb-1">This update check is no longer running</p>
+        <p class="text-muted small mb-3">Rulezet restarted while it was checking, so it stopped before saving its results. Nothing was changed in your rules — start the check again.</p>
+        <a href="/rule/github/manage" class="btn btn-primary btn-sm rounded-pill"><i class="fa-solid fa-rotate me-1"></i>Back to Git Sources</a>
+    </div>
+
+    <div v-else-if="!pageReady" class="text-center py-5">
         <span class="spinner-border text-primary" role="status"></span>
         <p class="text-muted small mt-3 mb-0">Loading update check…</p>
     </div>
@@ -1382,8 +1391,11 @@
                     rulesLoading.value = false
                 }
             }
+            const scanLost = ref(false)
+            let _pollErrors = 0
             function pollScan() {
                 $.getJSON('/rule/update_loading_status/{{sid}}', async function (data) {
+                    _pollErrors = 0
                     if (data) {
                         _appendLogEntries(data)
                         result_data.value  = data
@@ -1421,6 +1433,15 @@
                                 .catch(() => {})
                         }
                     }
+                }).fail(function (xhr) {
+                    // 404: the check is neither running nor saved (server restarted) — say so.
+                    // Anything else (network blip, the server restarting right now): try again a few times.
+                    if (xhr.status === 404 || ++_pollErrors > 15) {
+                        scanLost.value = true
+                        pageReady.value = true
+                    } else {
+                        setTimeout(pollScan, 3000)
+                    }
                 });
             }
 
@@ -1444,6 +1465,7 @@
                 result_data,
                 is_finished,
                 pageReady,
+                scanLost,
                 goto,
                 gotoRuleDetail,
                 goToTab,
