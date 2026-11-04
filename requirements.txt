@@ -9,13 +9,13 @@
     # via rulezet-core
 aiofiles==25.1.0
     # via rulezet-core
-alembic==1.18.4
+alembic==1.20.1
     # via flask-migrate
 aniso8601==10.0.1
     # via flask-restx
-annotated-doc==0.0.4
+annotated-doc==0.0.5
     # via typer
-annotated-types==0.7.0
+annotated-types==0.8.0
     # via pydantic
 anthropic==0.107.1
     # via
@@ -30,7 +30,7 @@ anyio==4.16.0
     #   openai
 apscheduler==3.11.3
     # via rulezet-core
-argcomplete==3.6.3
+argcomplete==3.7.2
     # via zeekscript
 args==0.1.0
     # via clint
@@ -61,14 +61,14 @@ certifi==2026.10.23
     #   httpx
     #   pysigma-backend-kusto
     #   requests
-cffi==2.1.0
+cffi==2.1.1
     # via
     #   brotlicffi
     #   cryptography
     #   weasyprint
-charset-normalizer==3.4.7
+charset-normalizer==3.5.2
     # via requests
-click==8.4.1
+click==8.5.0
     # via
     #   flask
     #   huggingface-hub
@@ -81,19 +81,19 @@ colorama==0.4.6
     #   nova-hunting
     #   pytest
     #   tqdm
-cryptography==50.0.1
+cryptography==50.0.2
     # via
     #   authlib
     #   joserfc
     #   pyvelociraptor
     #   rulezet-core
-cssselect2==0.9.0
+cssselect2==0.10.1
     # via weasyprint
 cuda-bindings==13.3.1 ; python_full_version < '3.15' and sys_platform == 'linux'
     # via torch
 cuda-pathfinder==1.5.5 ; python_full_version < '3.15' and sys_platform == 'linux'
     # via cuda-bindings
-cuda-toolkit==13.2.2 ; sys_platform == 'linux'
+cuda-toolkit==13.4.3 ; sys_platform == 'linux'
     # via torch
 defusedxml==0.7.1
     # via pysigma-backend-sumologic
@@ -115,7 +115,7 @@ dotenv==0.9.9
     # via rulezet-core
 email-validator==2.3.0
     # via rulezet-core
-faiss-cpu==1.14.2
+faiss-cpu==1.15.1
     # via rulezet-core
 filelock==4.2.6
     # via
@@ -151,7 +151,7 @@ flask-sqlalchemy==3.1.1
     #   rulezet-core
 flask-wtf==1.3.0
     # via rulezet-core
-fonttools==4.63.0
+fonttools==4.68.0
     # via weasyprint
 fsspec==2026.9.0
     # via
@@ -163,20 +163,20 @@ gitpython==3.2.1
     # via
     #   cccs-yara
     #   rulezet-core
-greenlet==3.5.1 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
+greenlet==3.5.6 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
     # via sqlalchemy
-grpcio==1.83.1
+grpcio==1.85.1
     # via
     #   grpcio-tools
     #   pyvelociraptor
     #   rulezet-core
-grpcio-tools==1.83.1
+grpcio-tools==1.85.1
     # via pyvelociraptor
-gunicorn==26.0.0
+gunicorn==26.2.0
     # via rulezet-core
 h11==0.16.0
     # via httpcore
-hf-xet==1.5.0 ; platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'
+hf-xet==1.8.0 ; platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'
     # via huggingface-hub
 httpcore==1.0.9
     # via httpx
@@ -190,7 +190,7 @@ huggingface-hub==1.18.0
     #   sentence-transformers
     #   tokenizers
     #   transformers
-idna==3.18
+idna==3.20
     # via
     #   anyio
     #   email-validator
@@ -202,7 +202,7 @@ importlib-resources==7.1.0
     # via
     #   flask-restx
     #   pysigma-backend-secops
-iniconfig==2.3.0
+iniconfig==2.3.1
     # via pytest
 itsdangerous==2.2.0
     # via
@@ -213,15 +213,15 @@ jinja2==3.1.6
     #   flask
     #   pysigma
     #   torch
-jiter==0.15.0
+jiter==0.18.0
     # via
     #   anthropic
     #   openai
-joblib==1.5.3
+joblib==1.6.0
     # via scikit-learn
 joserfc==1.7.7
     # via authlib
-jq==1.12.0
+jq==1.13.0
     # via pysigma
 jsonschema==4.26.0
     # via
@@ -232,11 +232,11 @@ jsonschema-specifications==2025.9.1
     # via jsonschema
 mako==1.4.3
     # via alembic
-markdown==3.10.2
+markdown==3.11.2
     # via rulezet-core
 markdown-it-py==4.2.0
     # via rich
-markupsafe==3.0.3
+markupsafe==3.0.4
     # via
     #   flask
     #   jinja2
@@ -245,55 +245,55 @@ markupsafe==3.0.3
     #   wtforms
 mdurl==0.1.2
     # via markdown-it-py
-mpmath==1.3.0
+mpmath==1.4.1
     # via sympy
 msc-pyparser==1.2.2
     # via rulezet-core
-msgspec==0.21.1
+msgspec==0.22.0
     # via flask-session
-narwhals==2.22.1
+narwhals==2.28.0
     # via scikit-learn
-networkx==3.6.1
+networkx==3.7
     # via torch
-nova-hunting==0.1.4
+nova-hunting==0.3.1
     # via rulezet-core
-numpy==2.4.6
+numpy==2.5.4
     # via
     #   faiss-cpu
     #   scikit-learn
     #   scipy
     #   sentence-transformers
     #   transformers
-nvidia-cublas==13.4.1.3 ; sys_platform == 'linux'
+nvidia-cublas==13.8.2.12 ; sys_platform == 'linux'
     # via
     #   cuda-toolkit
     #   nvidia-cudnn-cu13
     #   nvidia-cusolver
 nvidia-cuda-cccl==13.3.4.3.1 ; sys_platform == 'linux'
     # via nvidia-nvshmem-cu13
-nvidia-cuda-cupti==13.2.86 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
+nvidia-cuda-cupti==13.4.92 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
     # via cuda-toolkit
-nvidia-cuda-nvrtc==13.2.86 ; sys_platform == 'linux'
+nvidia-cuda-nvrtc==13.4.92 ; sys_platform == 'linux'
     # via
     #   cuda-toolkit
     #   nvidia-cublas
-nvidia-cuda-runtime==13.2.86 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
+nvidia-cuda-runtime==13.4.92 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
     # via cuda-toolkit
-nvidia-cudnn-cu13==9.26.0.51 ; sys_platform == 'linux'
+nvidia-cudnn-cu13==9.27.0.42 ; sys_platform == 'linux'
     # via torch
-nvidia-cufft==12.2.0.57 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
+nvidia-cufft==12.4.0.43 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
     # via cuda-toolkit
-nvidia-cufile==1.17.1.22 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
+nvidia-cufile==1.19.1.55 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
     # via cuda-toolkit
-nvidia-cusolver==12.2.0.11 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
+nvidia-cusolver==12.3.5.3 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
     # via cuda-toolkit
-nvidia-cusparse==12.7.10.12 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
+nvidia-cusparse==12.8.6.72 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
     # via
     #   cuda-toolkit
     #   nvidia-cusolver
-nvidia-cusparselt-cu13==0.8.1 ; sys_platform == 'linux'
+nvidia-cusparselt-cu13==0.10.0 ; sys_platform == 'linux'
     # via torch
-nvidia-nccl-cu13==2.30.7 ; sys_platform == 'linux'
+nvidia-nccl-cu13==2.32.3 ; sys_platform == 'linux'
     # via torch
 nvidia-nvjitlink==13.4.92 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
     # via
@@ -301,9 +301,9 @@ nvidia-nvjitlink==13.4.92 ; (platform_machine == 'aarch64' and sys_platform == '
     #   nvidia-cufft
     #   nvidia-cusolver
     #   nvidia-cusparse
-nvidia-nvshmem-cu13==3.7.2 ; sys_platform == 'linux'
+nvidia-nvshmem-cu13==3.8.0 ; sys_platform == 'linux'
     # via torch
-nvidia-nvtx==13.2.86 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
+nvidia-nvtx==13.4.92 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')
     # via cuda-toolkit
 openai==1.109.1
     # via
@@ -320,39 +320,39 @@ packaging==26.3
     #   transformers
 pillow==13.0.0
     # via weasyprint
-pluggy==1.6.0
+pluggy==1.7.0
     # via pytest
 ply==3.11
     # via msc-pyparser
 plyara==2.2.8
     # via cccs-yara
-protobuf==7.36.1
+protobuf==7.36.2
     # via grpcio-tools
 psutil==7.2.2
     # via rulezet-core
-psycopg2-binary==2.9.12
+psycopg2-binary==2.9.13
     # via rulezet-core
-pycparser==3.0 ; implementation_name != 'PyPy'
+pycparser==3.12 ; implementation_name != 'PyPy'
     # via cffi
-pydantic==2.13.4
+pydantic==2.14.2
     # via
     #   anthropic
     #   openai
-pydantic-core==2.46.4
+pydantic-core==2.50.2
     # via pydantic
-pydyf==0.12.1
+pydyf==0.13.0
     # via weasyprint
-pygments==2.20.0
+pygments==2.21.0
     # via
     #   pytest
     #   rich
 pymisp==2.5.34.1
     # via rulezet-core
-pyparsing==3.3.2
+pyparsing==3.3.3
     # via
     #   pysigma
     #   sigmalint-cli
-pyphen==0.17.2
+pyphen==0.18.1
     # via weasyprint
 pysigma==1.4.0
     # via
@@ -373,9 +373,9 @@ pysigma-backend-secops==1.0.0
     # via rulezet-core
 pysigma-backend-splunk==2.1.0
     # via rulezet-core
-pysigma-backend-sumologic==0.2.3
+pysigma-backend-sumologic==0.2.5
     # via rulezet-core
-pytest==9.0.3
+pytest==9.2.0
     # via rulezet-core
 python-baseconv==1.2.2
     # via cccs-yara
@@ -383,7 +383,7 @@ python-dateutil==2.9.0.post0
     # via
     #   pymisp
     #   rulezet-core
-python-dotenv==1.2.2
+python-dotenv==1.2.4
     # via dotenv
 pytz==2026.6
     # via stix2
@@ -400,7 +400,7 @@ pyyaml==6.0.3
     #   rulezet-core
     #   sigmalint-cli
     #   transformers
-rapidfuzz==3.14.5
+rapidfuzz==3.14.6
     # via rulezet-core
 redis==8.1.0
     # via rulezet-core
@@ -409,7 +409,7 @@ referencing==0.37.0
     #   flask-restx
     #   jsonschema
     #   jsonschema-specifications
-regex==2026.5.9
+regex==2026.9.29
     # via transformers
 requests==2.34.2
     # via
@@ -423,21 +423,21 @@ rich==15.0.0
     # via
     #   sigmalint-cli
     #   typer
-rpds-py==2026.5.1
+rpds-py==2026.9.1
     # via
     #   jsonschema
     #   referencing
 ruamel-yaml==0.19.1
     # via sigmalint-cli
-safetensors==0.7.0
+safetensors==0.8.0
     # via transformers
 schedule==1.2.2
     # via rulezet-core
-scikit-learn==1.9.0
+scikit-learn==1.9.1
     # via
     #   rulezet-core
     #   sentence-transformers
-scipy==1.17.1
+scipy==1.18.1
     # via
     #   scikit-learn
     #   sentence-transformers
@@ -461,7 +461,7 @@ sniffio==1.3.1
     # via
     #   anthropic
     #   openai
-sqlalchemy==2.0.50
+sqlalchemy==2.1.6
     # via
     #   alembic
     #   flask-sqlalchemy
@@ -474,7 +474,7 @@ suricataparser==1.0.0
     # via rulezet-core
 sympy==1.14.0
     # via torch
-threadpoolctl==3.6.0
+threadpoolctl==3.7.0
     # via scikit-learn
 tinycss2==1.5.1
     # via
@@ -482,29 +482,29 @@ tinycss2==1.5.1
     #   weasyprint
 tinyhtml5==2.1.0
     # via weasyprint
-tokenizers==0.22.2
+tokenizers==0.23.3
     # via
     #   sentence-transformers
     #   transformers
 torch==2.15.0
     # via sentence-transformers
-tqdm==4.68.1
+tqdm==4.70.1
     # via
     #   huggingface-hub
     #   openai
     #   sentence-transformers
     #   transformers
-transformers==5.10.2
+transformers==5.22.1
     # via
     #   nova-hunting
     #   sentence-transformers
-tree-sitter==0.25.2
+tree-sitter==0.26.0
     # via zeekscript
-tree-sitter-zeek==0.2.15
+tree-sitter-zeek==0.2.16
     # via zeekscript
 triton==3.9.0 ; python_full_version < '3.16' and sys_platform == 'linux'
     # via torch
-typer==0.25.1
+typer==0.27.3
     # via
     #   huggingface-hub
     #   sigmalint-cli
@@ -528,17 +528,17 @@ typing-extensions==4.16.0
     #   sqlalchemy
     #   torch
     #   typing-inspection
-typing-inspection==0.4.2
+typing-inspection==0.4.4
     # via pydantic
-tzdata==2026.3 ; sys_platform == 'win32'
+tzdata==2026.6 ; sys_platform == 'win32'
     # via tzlocal
-tzlocal==5.4.4
+tzlocal==5.4.5
     # via apscheduler
 urllib3==2.8.0
     # via requests
 weasyprint==70.0
     # via rulezet-core
-webencodings==0.5.1
+webencodings==0.6.1
     # via
     #   cssselect2
     #   tinycss2
@@ -549,9 +549,9 @@ werkzeug==3.1.9
     #   flask-login
     #   flask-restx
     #   rulezet-core
-wrapt==2.2.1
+wrapt==2.5.2
     # via deprecated
-wtforms==3.2.2
+wtforms==3.3.1
     # via
     #   flask-wtf
     #   rulezet-core
