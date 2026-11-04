@@ -125,6 +125,13 @@ __FORWARD_HEADERS__
         proxy_pass http://rulezet_site;
     }
 
+    # CVE → rules lookup, called heavily by the vulnerability-lookup tool: NEVER rate-limited
+    # (no limit_req here, whatever the dry-run state). Same backend, same answer format.
+    location = /api/rule/public/search_rules_by_cve {
+        access_log /var/log/nginx/rulezet-api.access.log rz_timed;
+        proxy_pass http://rulezet_api;
+    }
+
     # REST API → its own gunicorn process and its own log.
     location /api/ {
         access_log /var/log/nginx/rulezet-api.access.log rz_timed;

@@ -10,6 +10,8 @@
 #   bash deploy/nginx_switch.sh dry-run   back to "log only"
 #   bash deploy/nginx_switch.sh maintenance on|off   show / stop the "being updated" page to everyone
 #   bash deploy/nginx_switch.sh maintenance-install  (re)install that page after a git pull
+#   bash deploy/nginx_switch.sh refresh   re-generate the config from the template after an update,
+#                                         keeping its values (ports, limits, proxy, dry-run); rollback if nginx -t fails
 set -euo pipefail
 cd "$(dirname "$0")/.."
 STATE=/etc/nginx/rulezet.state
@@ -146,6 +148,32 @@ maintenance)
         off) rm -f "$MAINT_DIR/on" && echo "✔ Maintenance page off — Rulezet is served again." ;;
         *)   die "Usage: bash deploy/nginx_switch.sh maintenance on|off" ;;
     esac
+    ;;
+refresh)
+    env_get() { grep -E "^$1=" .env | tail -n1 | cut -d= -f2- | tr -d '"'"'" || true; }
+    COOKIE="$(env_get SESSION_COOKIE_NAME)"; COOKIE="${COOKIE:-session}"
+    NEW="$(mktemp)"; OLD="$SITE_CONF.before-refresh"
+    set +e
+    python3 deploy/nginx/refresh_config.py deploy/nginx/rulezet.conf.template "$SITE_CONF" "$NEW" \
+        --app-dir "$(pwd)/app" --session-cookie "$COOKIE"
+    rc=$?
+    set -e
+    [ $rc -eq 3 ] && { rm -f "$NEW"; echo "✔ nginx config already up to date."; exit 0; }
+    [ $rc -eq 0 ] || { rm -f "$NEW"; die "Could not re-generate the config (nothing changed)."; }
+    install_maintenance
+    mkdir -p /var/cache/nginx/rulezet && chown www-data: /var/cache/nginx/rulezet 2>/dev/null || true
+    d="$(pwd)/app/static"; while [ "$d" != "/" ]; do chmod o+x "$d" 2>/dev/null || true; d="$(dirname "$d")"; done
+    chmod -R o+rX "$(pwd)/app/static" 2>/dev/null || true
+    cp "$SITE_CONF" "$OLD"
+    cp "$NEW" "$SITE_CONF"; rm -f "$NEW"
+    if nginx -t 2>/dev/null; then
+        systemctl is-active --quiet nginx && systemctl reload nginx
+        echo "✔ nginx config refreshed from the template (previous one: $OLD)."
+    else
+        cp "$OLD" "$SITE_CONF"
+        nginx -t
+        die "nginx rejected the new config — the previous one is back, nothing changed."
+    fi
     ;;
 maintenance-install)
     install_maintenance

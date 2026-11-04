@@ -5,6 +5,8 @@
 {% block head %}
 <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/admin/settings.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/help-tip.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account/user_detail.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/cache.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -53,6 +55,9 @@
         </a>
         <a class="dr-nav__item" data-bs-toggle="tab" href="#pane-instance" role="tab" @click="loadInstance">
             <i class="fa-solid fa-fingerprint"></i><span>Instance</span>
+        </a>
+        <a class="dr-nav__item" data-bs-toggle="tab" href="#pane-cache" role="tab" @click="cacheOpened = true">
+            <i class="fa-solid fa-gauge-high"></i><span>Cache</span><span class="dr-nav__badge">expert</span>
         </a>
         <span class="dr-nav__sep"></span>
         {{ anav.admin_nav_toggle() }}
@@ -120,22 +125,6 @@
                             </div>
                         </div>
                     </div>
-                </div>
-
-                <!-- Caches -->
-                <div class="rounded-3 border p-3 mb-4 d-flex flex-wrap align-items-center gap-3" style="background:var(--light-bg-color);">
-                    <i class="fa-solid fa-broom text-primary"></i>
-                    <div class="flex-grow-1" style="min-width:220px;">
-                        <div class="fw-semibold" style="font-size:.9rem;">Caches</div>
-                        <div class="text-muted" style="font-size:.8rem;">
-                            Home figures (formats, platforms, git repositories…), ATT&amp;CK and CVE stats, cached pages and list answers.
-                            Clear them after a job that changes many rules (e.g. References &amp; metadata) to see the new numbers right away.
-                        </div>
-                    </div>
-                    <button class="btn btn-sm btn-outline-primary" :disabled="cacheClearing" @click="clearCaches">
-                        <span v-if="cacheClearing" class="spinner-border spinner-border-sm me-1"></span>
-                        <i v-else class="fa-solid fa-rotate me-1"></i>Clear all caches
-                    </button>
                 </div>
 
                 <!-- Disk + Memory + DB -->
@@ -1282,6 +1271,13 @@
 
         </div><!-- /pane-instance -->
 
+        <!-- ══════════════════════════════════════════════════════
+             TAB — CACHE (expert): static/js/admin/cachePanel.js, app/features/admin/cache/
+        ══════════════════════════════════════════════════════ -->
+        <div class="tab-pane fade" id="pane-cache" role="tabpanel">
+            <cache-panel v-if="cacheOpened"></cache-panel>
+        </div>
+
     </div><!-- /tab-content -->
 
     <!-- ── Submodule Detail Modal ── -->
@@ -1397,6 +1393,7 @@
 {% block script %}
 <script type="module">
 import HelpTip from '/static/js/components/help-tip.js'
+import CachePanel from '/static/js/admin/cachePanel.js'
 const { createApp, ref, computed, reactive, onMounted } = Vue
 
 createApp({
@@ -1458,7 +1455,6 @@ createApp({
         const instanceLoaded    = ref(false)
         const instanceInitSaving = ref(false)
         const chatbotToggleSaving = ref(false)
-        const cacheClearing = ref(false)
 
         /* ── CSRF ── */
         function csrf() {
@@ -1472,18 +1468,6 @@ createApp({
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
                 body: JSON.stringify(body),
             }).then(r => r.json())
-        }
-
-        /* ── Caches ── */
-        async function clearCaches() {
-            cacheClearing.value = true
-            try {
-                const data = await post('/admin/settings/cache/clear', {})
-                const { create_message } = await import('/static/js/toaster.js')
-                create_message(data.message || (data.success ? 'Caches cleared.' : 'Failed.'), data.success ? 'success-subtle' : 'danger-subtle')
-            } finally {
-                cacheClearing.value = false
-            }
         }
 
         /* ── System ── */
@@ -1855,7 +1839,9 @@ createApp({
         loadSubmodules()
 
         // the open tab follows the address (?tab=config…): a reload or a shared link opens the same one
-        const TAB_LOADERS = { system: null, submodules: loadSubmodules, config: loadConfig, instance: loadInstance }
+        const cacheOpened = ref(false)      // the Cache tab loads its data only when opened
+        const TAB_LOADERS = { system: null, submodules: loadSubmodules, config: loadConfig, instance: loadInstance,
+                              cache: () => { cacheOpened.value = true } }
         onMounted(() => {
             const tabs = document.getElementById('settingsTabs')
             tabs.addEventListener('shown.bs.tab', (e) => {
@@ -1877,7 +1863,7 @@ createApp({
         return {
             MATRIX_FIELDS, matrixEdit, matrixTesting, matrixResult, saveMatrix, testMatrix,
             emailToggleSaving, toggleEmailFeatures, TEST_ACCESS, testAccessSaving, setTestAccess, editorAccessSaving, setEditorAccess,
-            system, systemLoading, cacheClearing, clearCaches,
+            system, systemLoading,
             packages, packagesLoading, pkgSearch, filteredPackages, loadPackages,
             createPkgJob, confirmPkgUninstall, pkgToUninstall, doPkgUninstall,
             submodules, submodulesLoading, selectedSubs, selectedSub, lastJobMsg,
@@ -1897,9 +1883,9 @@ createApp({
             saveEnvKey,
             testEmailRecipient, testEmailSending, testEmailResult, sendTestEmail,
             instance, instanceLoading, instanceInitSaving, loadInstance, initInstance, copyText,
-            chatbotToggleSaving, toggleChatbotEnabled,
+            chatbotToggleSaving, toggleChatbotEnabled, cacheOpened,
         }
     }
-}).mount('#settings-app')
+}).component('cache-panel', CachePanel).mount('#settings-app')
 </script>
 {% endblock %}

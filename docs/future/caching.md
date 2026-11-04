@@ -190,3 +190,137 @@ real SimpleCache — the suite runs with NullCache.)
 | A cache failure breaking a commit | every cache call is wrapped: a failing cache = no bump, never an exception |
 
 **Regression run:** `tests/cache tests/account tests/home` → **90 passed**.
+
+### ✅ Step 2 — Rule page (`app/core/utils/page_cache.py`, `app/features/rule/rule.py`)
+- **Anonymous visitors: the whole page** — `anonymous_page(rule_key('page', id, host, path+query), render)`.
+  Served / stored only when the page is the same for every anonymous visitor: GET, nobody signed in, no API key,
+  a session holding nothing but the shared anonymous CSRF value (no flash message, no per-visitor token).
+  Kept `cache.rule_page_seconds` (30 min), always below the CSRF token lifetime (`WTF_CSRF_TIME_LIMIT` − 10 min).
+- **Everybody: the shared parts** — `_rule_detail_parts()`: MISP object + event, Velociraptor artifact,
+  risk flags, mirror links, metadata display, public tab counts (similarity, history, proposals, scope, links).
+  Kept `cache.rule_parts_seconds` (10 min) — bounds what depends on other rules (SID collisions) or settings.
+- **Always live** (depend on the viewer): the JSON tab (`is_favorited`), the user's vote, bundle count
+  (private bundles), test / AI-analysis / sample counts, sample results.
+- Header `X-App-Cache: HIT / MISS` on cached answers.
+
+**Tests:** `tests/cache/test_rule_page_cache.py` — MISS then HIT, other `?tab=` = other entry, an edit gives
+a fresh page with the new title, signed-in user never gets the shared page (and gets `private`), a visitor
+with a flash message gets a live page (and nothing of theirs is stored), shared parts computed once for a
+signed-in user + an anonymous one. **5 pass.**
+
+### ✅ Step 3 — Public API (`page_cache.api_cached`, `app/api/rule/rule_public_api.py`)
+- `@api_cached('detail', rule_arg='rule_id')` on `/api/rule/public/detail/<id>` (follows that rule's version),
+  `@api_cached('search')` / `('search_page')` on `search` / `searchPage` (follow every rule change).
+  Kept `cache.api_seconds` (5 min). Only 200 answers are stored.
+- **ETag + 304**: every answer of these endpoints carries a strong ETag; `If-None-Match` → `304`, empty body.
+- Never cached: a call with `X-API-KEY`, `Authorization` or a signed-in session.
+
+**Tests:** `tests/cache/test_api_cache.py` — detail MISS → HIT → MISS after an edit (new title), ETag → 304,
+search / searchPage per query + refreshed by any rule change, 404 never stored, API key bypasses,
+a rule in the trash is a 404.
+
+#### 🔒 Security review — steps 2 & 3
+| Risk | Answer | Checked by |
+|---|---|---|
+| One visitor's page (flash message, CSRF token of their own session, their name) served to others | whole-page cache only when the session holds nothing but the shared anonymous value; checked again after rendering before storing | `test_visitor_with_a_flash_message_gets_a_live_page` |
+| A signed-in user getting the anonymous copy (missing their rights / buttons) or the reverse | signed-in → never read, never stored | `test_signed_in_never_gets_the_shared_page` |
+| Viewer-dependent values in the shared parts (private bundles, private AI analyses, visible tests, favourite) | those stay live, listed above; only values identical for every viewer are shared | code review + `test_shared_parts_computed_once_for_everybody` |
+| Host-dependent links (Velociraptor `base_url`, API `next` URLs) mixed between hosts | host is part of every key | — |
+| A CSRF token in a cached page outliving its validity | page kept at most token lifetime − 10 min | `_max_timeout` |
+| API answer built for a key holder served to the public | `X-API-KEY` / `Authorization` / session → no cache | `test_errors_and_keys_are_never_cached` |
+| **Found during review:** `/api/rule/public/detail/<id>` returned rules that are in the **trash** | now 404 (and never cached) | `test_deleted_rule_not_served_by_the_api` |
+
+### ✅ Admin control — Admin → Settings → **Cache** tab (expert) — `/admin/settings?tab=cache`
+`app/features/admin/cache/` (`cache_core.py`, `cache_routes.py` — JSON status + actions; `/admin/cache`
+redirects to the tab), component `static/js/admin/cachePanel.js` (loaded only when the tab is opened),
+`static/css/admin/cache.css`. Not in the admin navs: it lives in Settings. The old *Caches* box of the System
+tab (same action as *Empty both caches*) and its route `/admin/settings/cache/clear` were removed.
+- **Status**: backend (Redis: keys + memory; warns when the cache is not shared between processes), app cache
+  on / off, share of anonymous pages and of shared parts / API answers served from the cache (hit / miss counters).
+- **Settings** (Admin → Configuration, category *Cache*, files `app/config/cache.*.json`):
+  `cache.enabled`, `cache.rule_page_seconds` (1800), `cache.rule_parts_seconds` (600), `cache.api_seconds` (300).
+- **Actions** (each logged: `cache.refresh_rules`, `cache.refresh_rule`, `cache.clear_all`, `cache.reset_stats`):
+  refresh every rule, refresh one rule, empty both caches (with a confirmation), reset the counters.
+- **Admins only** (`before_request`: anonymous → login, signed-in non-admin → 403, POST included).
+
+### ✅ Workflows
+- Task types `cache_refresh_rules` (*Caches — refresh every rule page*) and `cache_warm_rules`
+  (*Caches — warm the most voted rule pages*, option `limit`, default 200, at most 5000; renders as an anonymous
+  visitor at `INSTANCE_PUBLIC_URL` so the warmed key is the one real visitors read). Handlers in `job_handlers.py`.
+- Template **Cache maintenance** (`workflows.templates.json` → `cache_maintenance`): daily 04:00 UTC refresh →
+  (if it succeeds) warm 200 → log line.
+- The existing `clear_caches` task and the *Weekly maintenance* template are unchanged.
+
+**Tests:** `tests/cache/test_cache_admin.py` — admin only (anonymous redirect, user 403 on page and action),
+page + status, every action (+ bad / unknown input, activity log written), hit ratio counted, `cache.enabled` off →
+live pages, both workflow tasks (refresh changes keys, warm makes the next visit a HIT), template valid
+(known task types, `after` references exist, daily trigger).
+
+### ✅ Documentation
+- In the app: *Full documentation* → chapter 25 *Administration* → **Cache & performance**.
+- This file: plan, progress, tests, security reviews.
+
+#### 🔒 Security review — admin & workflows
+| Risk | Answer |
+|---|---|
+| A non-admin emptying the cache (slows the site) or reading its state | `before_request` admin check on the whole blueprint, POST with CSRF |
+| Warm task used to hammer the site | runs in the worker, in-process (no HTTP), capped at 5000 rules |
+| Untraceable changes | every action in the activity log with the admin's name |
+
+### ✅ `/api/rule/public/search_rules_by_cve` — never restricted
+Called heavily by the **vulnerability-lookup** tool, which depends on its exact answer format.
+- nginx: its own exact `location =` **without `limit_req`** — never rate-limited, whatever the dry-run state.
+  It still goes through the 60 s micro-cache (only faster, same answer).
+- App: route, parameters and JSON format untouched; its existing 60 s `memory_cache` kept; no `api_cached` on it.
+- **Test:** `test_nginx_cache.sh` §8 — with real limits on (1 r/s, burst 25), 40 CVE lookups in a row → no 429,
+  while 40 calls to another API route do get 429.
+
+### ✅ User page — Activity data (`/account/user_activity_stats/<id>`)
+Loaded every rule of the user as full objects on each visit (thousands for a big contributor). Now only the 4 columns
+used, and the answer from the shared cache: `rules_key('user_activity', id)` (any rule change → fresh), setting
+`cache.user_activity_seconds` (300 s, bounds bundle votes). Same answer as before.
+**Tests:** `tests/cache/test_user_activity_cache.py` — a vote shows at once, cached answer = live answer, login + 404 kept.
+
+### ✅ Workflow task — Similar rules (`similar_rules_scan`)
+Runs **exactly** the analysis of Admin → Similar rules (same `Similarity_class`, same parameters as its buttons):
+*New rules only* → `{mode: new_only}`, *Every rule* → `{mode: all}`. The run shows in that page's history; the task
+waits for it (polls its status like the progress page — that is also what lets it save its figures), never more than
+6 h, and returns at once if the run ended early (nothing to scan, error).
+**Found during review:** `/rule/similar_rules/update` was open to any signed-in user — including the GET that
+**wipes every similarity pair** (and a GET has no CSRF protection). Now: whole-instance runs (GET, `all`, `new_only`)
+admins only; a signed-in user may only refresh one rule (the button of the rule page).
+**Tests:** `tests/cache/test_similar_rules_task.py` — registered, same parameters as the page for both scopes, does not
+wait for a run that ended, bad scope fails, who may launch what.
+
+### ✅ Freshness — "always the latest rules"
+| Change | What visitors see |
+|---|---|
+| Rule edited, voted, commented, tagged, linked, bundled | that rule's page, parts and API answer: **at once** (new key at commit) |
+| New rule, deleted rule, any rule change | lists, searches, API search, user activity: **at once** (global generation) |
+| Bulk jobs (tags, ATT&CK, similarity, soft-delete batches, imports) — `query.update()`, `bulk_insert_mappings` | every rule key: **at once** (bulk generation) |
+| A deploy (new code / templates) | **at once**: the keys hold the git commit (`code_version`); dev (debug) also the process start |
+| nginx micro-cache, anonymous visitors only | at most **60 s** later |
+| Home figures, ATT&CK / CVE stats (not versioned) | their own timeouts, or the `clear_caches` task |
+
+### ✅ Workflows that clear the caches — still right
+`clear_caches` is the last task of the templates *Weekly maintenance*, *Bad rules cleanup*, *Threat intel refresh*,
+*Rules enrichment*, *Quality refresh*. Still useful and kept: it resets what is **not** versioned (home figures, ATT&CK /
+CVE stats, leaderboard) — rule pages no longer need it (they refresh themselves). Nothing to change in them.
+Note: emptying the cache also forgets "update notice dismissed" and the generations (they come back as new values: safe).
+
+### ✅ Deploy — `manage.py deploy` / `nginx_switch.sh refresh`
+- `bash deploy/nginx_switch.sh refresh` (root): re-generates the nginx config from the template **keeping the values of
+  the config in place** (server name, ports, rate limits, real-IP / forwarded headers, dry-run state) —
+  `deploy/nginx/refresh_config.py`; creates `/var/cache/nginx/rulezet`, makes `app/static` readable by nginx, tests the
+  new config with `nginx -t`, reloads, **puts the previous one back if nginx rejects it**. Re-running `setup_nginx.sh`
+  is not needed (it would stop nginx).
+- `manage.py deploy` (= start-prod) calls it after the update when nginx is set up and it runs as root; otherwise prints
+  the command. Never fatal for the deploy.
+- The app cache needs nothing at deploy: keys hold the code version.
+**Tests:** `tests/cache/test_nginx_refresh.py` — same template = no change, values (incl. dry-run off, real IP, app dir)
+kept when the template changes, foreign / missing config refused.
+
+### 🔒 Admin-only check (all routes)
+`tests/cache/test_admin_only_routes.py` — `/admin/cache`, `/admin/cache/status`, `/admin/cache/action`,
+`/admin/settings` (+ system, config, instance), `/rule/github/settings/cache` (+ clear, pull): anonymous → redirect,
+signed-in user → 403, and a non-admin `clear_all` empties nothing. **11 pass.**

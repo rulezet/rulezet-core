@@ -70,3 +70,32 @@ def test_evicted_generation_never_brings_old_entries_back(app, real_cache):
         page = cv.rule_key('page', r.id)
         real_cache.delete(f'rz:gen:rule:{r.id}')
         assert cv.rule_key('page', r.id) != page
+
+
+def test_bulk_insert_mappings_bumps(app, real_cache):
+    """The tag / ATT&CK / similarity jobs write with bulk_insert_mappings (no session event)."""
+    from app.core.db_class.rule import RuleVote
+    with app.app_context():
+        r = _rule()
+        page, lst = cv.rule_key('page', r.id), cv.rules_key('list')
+        db.session.bulk_insert_mappings(RuleVote, [{'user_id': r.user_id, 'rule_id': r.id, 'vote_type': 'up'}])
+        db.session.commit()
+        assert cv.rule_key('page', r.id) != page
+        assert cv.rules_key('list') != lst
+
+
+def test_a_new_rule_refreshes_the_lists(app, real_cache):
+    import uuid
+    with app.app_context():
+        lst = cv.rules_key('list')
+        r = _rule()
+        db.session.add(Rule(title='brand new', format='yara', to_string='rule x { condition: true }', user_id=r.user_id,
+                            uuid=str(uuid.uuid4()), vote_up=0, vote_down=0, is_deleted=False))
+        db.session.commit()
+        assert cv.rules_key('list') != lst
+
+
+def test_keys_hold_the_code_version(app, real_cache):
+    with app.app_context():
+        assert cv.code_version() in cv.rule_key('page', 1)
+        assert cv.code_version() in cv.rules_key('list')

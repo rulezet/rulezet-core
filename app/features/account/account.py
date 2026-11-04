@@ -1783,42 +1783,52 @@ def platform_tag_configs_delete(config_id):
 def get_user_activity_stats(user_id):
     if not AccountModel.get_user(user_id):
         return jsonify({"error": "User not found"}), 404
-    user_rules = RuleModel.get_all_rules_by_user(user_id)
-    user_bundles = BundleModel.get_all_bundles_by_user(user_id)
-    
+    # Same for every viewer: from the shared cache, new key on any rule change (cache_versions),
+    # setting cache.user_activity_seconds bounds the bundle figures (docs/future/caching.md)
+    from app.core.utils.cache_versions import rules_key
+    from app.core.utils.page_cache import cached_value, seconds
+    return jsonify(cached_value(rules_key('user_activity', user_id), lambda: _user_activity_stats(user_id),
+                                timeout=seconds('cache.user_activity_seconds', 300)))
 
-    formats_counts = Counter([r.format for r in user_rules if r.format])
-    
 
-    timeline_data = Counter([r.creation_date.strftime('%Y-%m') for r in user_rules if r.creation_date])
+def _user_activity_stats(user_id):
+    """Votes, formats and timeline of a user's rules and bundles — only the 4 columns needed
+    (a big contributor has thousands of rules: never load them whole)."""
+    from app.core.db_class.rule import Rule as _Rule
+    from app.core.db_class.bundle import Bundle as _Bundle
+    from app.features.rule.rule_core import _active
+    rules = _active().filter(_Rule.user_id == user_id).with_entities(
+        _Rule.format, _Rule.creation_date, _Rule.vote_up, _Rule.vote_down).all()
+    bundles = _Bundle.query.filter_by(user_id=user_id).with_entities(_Bundle.vote_up, _Bundle.vote_down).all()
+
+    formats_counts = Counter([r.format for r in rules if r.format])
+    timeline_data = Counter([r.creation_date.strftime('%Y-%m') for r in rules if r.creation_date])
     sorted_timeline = dict(sorted(timeline_data.items()))
 
+    r_likes = sum(r.vote_up or 0 for r in rules)
+    r_dislikes = sum(r.vote_down or 0 for r in rules)
+    b_likes = sum(b.vote_up or 0 for b in bundles)
+    b_dislikes = sum(b.vote_down or 0 for b in bundles)
 
-    r_likes = sum(r.vote_up or 0 for r in user_rules)
-    r_dislikes = sum(r.vote_down or 0 for r in user_rules)
-    b_likes = sum(b.vote_up or 0 for b in user_bundles)
-    b_dislikes = sum(b.vote_down or 0 for b in user_bundles)
-
-    
     total_votes = r_likes + r_dislikes + b_likes + b_dislikes
     # None (not 100) when there's nothing to evaluate — defaulting to 100
     # made a brand new user with zero votes look like a proven top
     # contributor, which isn't a real trust score, just an absence of data.
     trust_score = round((r_likes + b_likes) / total_votes * 100, 1) if total_votes > 0 else None
 
-    return jsonify({
+    return {
         "activity_stats": {
             "rules_likes": r_likes,
             "rules_dislikes": r_dislikes,
             "bundles_likes": b_likes,
             "bundles_dislikes": b_dislikes,
-            "total_rules": len(user_rules),
-            "total_bundles": len(user_bundles),
+            "total_rules": len(rules),
+            "total_bundles": len(bundles),
             "trust_score": trust_score
         },
         "format_distribution": dict(formats_counts),
         "timeline": sorted_timeline
-    })
+    }
 
 @account_blueprint.route('/user_edit_proposals/<int:user_id>')
 @login_required

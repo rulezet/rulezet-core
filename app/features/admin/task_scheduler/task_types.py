@@ -327,6 +327,32 @@ TASK_TYPES = {
         'job_type': 'clear_caches',
         'target_picker': 'none',
     },
+    'similar_rules_scan': {
+        'label': 'Similar rules — run the analysis (as on Admin → Similar rules)',
+        'icon': 'fa-solid fa-clone',
+        'job_type': 'similar_rules_scan',
+        'target_picker': 'none',
+        'extra_options': [
+            {'key': 'scope', 'type': 'select', 'label': 'Rules to scan', 'default': 'new_only',
+             'options': [{'value': 'new_only', 'label': 'New rules only (never scanned before)'},
+                         {'value': 'all', 'label': 'Every rule (full scan)'}]},
+        ],
+    },
+    'cache_refresh_rules': {
+        'label': 'Caches — refresh every rule page (lists, API answers)',
+        'icon': 'fa-solid fa-arrows-rotate',
+        'job_type': 'cache_refresh_rules',
+        'target_picker': 'none',
+    },
+    'cache_warm_rules': {
+        'label': 'Caches — warm the most voted rule pages',
+        'icon': 'fa-solid fa-fire',
+        'job_type': 'cache_warm_rules',
+        'target_picker': 'none',
+        'extra_options': [
+            {'key': 'limit', 'type': 'number', 'label': 'Rule pages to warm (most voted first, at most 5000)', 'default': 200},
+        ],
+    },
     'git_cache_pull': {
         'label': 'Git clone cache — pull every kept clone',
         'icon': 'fa-solid fa-code-pull-request',
@@ -541,6 +567,9 @@ _DESCRIPTIONS = {
     'db_backup_rotate': 'Makes a new backup, checks it (pg_restore can read it), then deletes the oldest automatic backups (rulezet_<date>.dump) so N remain — never fewer than 3, never the new one, never a dump named by hand. If anything fails, nothing is deleted and every admin is alerted.',
     'repo_quality': 'Scores every Git source 0-100 from its rules: their average quality score, imports that failed (bad rules), valid and licensed rules, last sync, conflicts. Shown in Git Sources and on each source. Run it after Rule Quality Score.',
     'clear_caches': 'Empties the caches (home figures, ATT&CK / CVE stats, cached pages, leaderboard) so what the workflow changed shows right away. Put it last.',
+    'similar_rules_scan': 'Runs the similar-rules analysis exactly like the buttons of Admin → Similar rules: "New rules only" scans the rules never scanned before (cheap, good every night), "Every rule" scans them all. The run shows in that page\'s history and the task waits for it to finish.',
+    'cache_refresh_rules': 'Gives every rule page, rule list and public API answer a fresh cache entry (nothing is deleted: old entries are never read again and expire on their own). Rules already refresh themselves when they change — use it after a change made outside Rulezet (database restore, script) or before warming.',
+    'cache_warm_rules': 'Renders the most voted rule pages as an anonymous visitor, so the first visitors and crawlers get them from the cache. Uses INSTANCE_PUBLIC_URL as the address (the cache key holds it).',
     'ai_rule_analysis': 'Asks the AI agent to write an analysis report for rules that have none (a batch per run), published or kept private.',
 }
 for _key, _text in _DESCRIPTIONS.items():

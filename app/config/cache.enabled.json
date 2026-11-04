@@ -1,0 +1,7 @@
+{
+  "label": "App cache",
+  "category": "Cache",
+  "description": "Rulezet's own cache: whole rule pages for anonymous visitors, the parts of a rule page that are the same for everyone (MISP export, Velociraptor, risk flags, counts) and public API answers. Off = every page computed live (nginx's 60 s micro-cache is separate, see Admin \u2192 Cache).",
+  "public": false,
+  "value": true
+}

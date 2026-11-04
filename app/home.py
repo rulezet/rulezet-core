@@ -1381,20 +1381,6 @@ def dismiss_update_notice():
     return jsonify({'success': True})
 
 
-@home_blueprint.route('/admin/settings/cache/clear', methods=['POST'])
-@login_required
-def admin_settings_cache_clear():
-    """Empty every cache (the shared one: home figures, ATT&CK / CVE stats, cached pages; and this
-    process's memory cache: list / search answers): everything is computed again on the next visit."""
-    if not current_user.is_admin():
-        return jsonify({'success': False, 'message': 'Unauthorized'}), 403
-    from app import memory_cache
-    cache.clear()
-    memory_cache.clear()
-    log_activity('admin.cache_clear', 'Cleared every cache (home figures, stats, cached pages)')
-    return jsonify({'success': True, 'message': 'Caches cleared: every page and figure is computed again on its next visit.'})
-
-
 @home_blueprint.route('/admin/settings/packages', methods=['GET'])
 @login_required
 def admin_settings_packages():

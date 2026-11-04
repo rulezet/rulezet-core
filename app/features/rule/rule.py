@@ -22,6 +22,8 @@ from app.features.rule.rule_format.main_format import  parse_rule_by_format, pro
 from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, generic_repo_metadata, get_github_branches, get_github_host, get_github_rate_limit_status, get_github_repo_live_info, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
 
 from app import db, cache, memory_cache
+from app.core.utils.cache_versions import rule_key, rules_key
+from app.core.utils.page_cache import anonymous_page, cached_value, seconds
 from . import rule_core as RuleModel
 from ..bundle import bundle_core as BundleModel
 from .rule_from_github.import_rule import session_class as SessionModel
@@ -1068,20 +1070,56 @@ def _rule_bundle_count(rule_id):
     return len(_BundleModel.get_bundles_by_rule(rule_id))
 
 
-def _nav_counts(rule_id):
+def _public_nav_counts(rule_id):
+    """Tab counts that are the same for every viewer (cached with the rule's other parts)."""
     return {
-        'bundle_count':        _rule_bundle_count(rule_id),
         'similarity_count':    _rule_similarity_count(rule_id),
         'history_count':       _rule_history_count(rule_id),
         'proposal_count':      _rule_proposal_count(rule_id),
         'proposal_pending_count': _rule_proposal_count(rule_id, pending=True),
         'scope_count':         _rule_scope_count(rule_id),
-        'test_count':          _rule_test_count(rule_id),
-        'ai_analysis_count':   _rule_ai_analysis_count(rule_id),
         'linked_rules_count':  _rule_linked_rules_count(rule_id),
+    }
+
+
+def _nav_counts(rule_id, public=None):
+    """All tab counts: the public ones (given, or computed) + those that depend on the viewer."""
+    return {
+        **(public if public is not None else _public_nav_counts(rule_id)),
+        'bundle_count':        _rule_bundle_count(rule_id),           # private bundles: viewer
+        'test_count':          _rule_test_count(rule_id),             # visible tests: viewer
+        'ai_analysis_count':   _rule_ai_analysis_count(rule_id),      # private analyses: viewer
         # -1: the Samples tab is hidden (tests not enabled for this viewer, setting editor.test_access)
         'sample_tests_count':  SampleTests.rule_sample_count(rule_id) if SampleTests.can_use_tests(current_user) else -1,
     }
+
+
+def _rule_detail_parts(rule):
+    """Everything on the rule page that is the same for every viewer — computed once per rule version
+    (cache_versions: any change to the rule or a row about it gives a new key), 10 min at most
+    (risk flags also look at other rules, mirror links at the settings)."""
+    def compute():
+        misp_object = get_rule_misp_object(rule.id) or None
+        misp_event = get_rule_misp_event(rule.id) or None
+        velociraptor = None
+        if (rule.format or '').lower() in VELOCIRAPTOR_SUPPORTED_FORMATS:
+            try:
+                velociraptor = generate_velociraptor_artifact(rule, base_url=request.host_url)
+            except Exception as e:
+                # Format was already confirmed supported above, so any exception here
+                # is a real generator bug, not an expected "unsupported format" case —
+                # don't let it disappear silently.
+                print(f"[rule] Velociraptor artifact generation failed for rule {rule.id}: {e}")
+        from app.features.admin.rule_mirror.rule_mirror_core import get_mirror_github_urls
+        return {
+            'rule_misp_object': misp_object, 'rule_misp_event': misp_event,
+            'rule_velociraptor_artifact': velociraptor,
+            'rule_risk': RuleModel.get_rule_risk_flags(rule),
+            'mirror_github_urls': get_mirror_github_urls(rule),
+            'rule_metadata': display_metadata(rule.extra_metadata),
+            'counts': _public_nav_counts(rule.id),
+        }
+    return cached_value(rule_key('detail_parts', rule.id, request.host_url), compute, timeout=seconds('cache.rule_parts_seconds', 600))
 
 
 @rule_blueprint.route("/detail_rule/<int:rule_id>", methods=['GET'])
@@ -1090,6 +1128,36 @@ def detail_rule(rule_id)-> render_template:
     rule = RuleModel.get_rule(rule_id)
     if not rule:
         return render_template("404.html")
+    if rule.is_deleted:
+        return render_template("rule/rule_in_trash.html", rule=rule)
+    # Anonymous visitors: the whole page from the cache (same for all of them, new key on any change)
+    return anonymous_page(rule_key('page', rule.id, request.host_url, request.full_path),
+                          lambda: _render_detail_rule(rule),
+                          timeout=seconds('cache.rule_page_seconds', 1800))
+
+
+def _render_detail_rule(rule):
+    parts = _rule_detail_parts(rule)
+    rule_to_json = json.dumps(rule.to_json_detail(), indent=4)      # has the viewer's own "favorited"
+    if not rule_to_json:
+        rule_to_json = "No json format for this rule"
+    active_tab = request.args.get('tab', 'detail')
+    current_user_vote = None
+    if current_user.is_authenticated:
+        from app.core.db_class.rule import RuleVote as _RV
+        _rv = _RV.query.filter_by(rule_id=rule.id, user_id=current_user.id).first()
+        current_user_vote = _rv.vote_type if _rv else None
+    return render_template("rule/detail_rule/detail_rule.html", rule=rule, rule_content=rule.to_string,
+                           card=_rule_card(rule),
+                           rule_misp_object=parts['rule_misp_object'], rule_misp_event=parts['rule_misp_event'],
+                           rule_velociraptor_artifact=parts['rule_velociraptor_artifact'],
+                           rule_to_json=rule_to_json, active_tab=active_tab,
+                           current_user_vote=current_user_vote, rule_risk=parts['rule_risk'],
+                           mirror_github_urls=parts['mirror_github_urls'],
+                           sample_result=SampleTests.latest_result(rule) if SampleTests.can_use_tests(current_user) else None,
+                           can_use_tests=SampleTests.can_use_tests(current_user),
+                           rule_metadata=parts['rule_metadata'],
+                           **_nav_counts(rule.id, public=parts['counts']))
     if rule.is_deleted:
         return render_template("rule/rule_in_trash.html", rule=rule)
     
@@ -6410,8 +6478,18 @@ def similar_update():
         except Exception as _e:
             print(f"[rule] notify_admins_session_started (similarity) error: {_e}")
 
+    # Whole-instance runs (GET wipes every pair, 'all' / 'new_only' scan every rule) are admin work;
+    # anyone signed in may only refresh one rule's similar rules (button on the rule page).
+    if not current_user.is_admin():
+        data = request.get_json(silent=True) or {}
+        ids = data.get('selected_ids') if isinstance(data, dict) else None
+        if request.method != "POST" or data.get('mode') != 'partial' or not isinstance(ids, list) or len(ids) != 1 \
+                or not isinstance(ids[0], int):
+            return {"message": "Only an admin can run the similarity analysis on many rules.",
+                    "toast_class": "danger-subtle"}, 403
+
     if request.method == "POST":
-        data = request.json
+        data = request.get_json(silent=True) or {}
         similar_session = SimilarityModel.Similarity_class(current_user, "Update similar rules", mode="filter", params=data)
         # Append before start(): start() spawns the background thread
         # immediately, and a fast-finishing run (small target set) can reach

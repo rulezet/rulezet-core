@@ -1366,7 +1366,21 @@ def _start_prod_steps() -> None:
         _ensure_editor()
         ok("rulezet-editor and rulezet-tester installed")
         _ensure_sandbox()
+        _refresh_nginx()
     _start_production(6, 6, "production")
+
+
+def _refresh_nginx() -> None:
+    """nginx in front (deploy/setup_nginx.sh was run): bring its config in step with the template
+    (cache, static files, rate-limit exceptions…) keeping its values — never fatal for the deploy.
+    The page cache needs nothing here: its keys hold the code version, a deploy starts fresh pages."""
+    if not Path("/etc/nginx/rulezet.state").exists():
+        return
+    if os.geteuid() != 0:
+        warn("nginx config not refreshed (needs root): sudo bash deploy/nginx_switch.sh refresh")
+        return
+    r = subprocess.run(["bash", str(ROOT / "deploy" / "nginx_switch.sh"), "refresh"], capture_output=True, text=True)
+    (ok if r.returncode == 0 else warn)((r.stdout.strip().splitlines() or ["nginx refresh: no output"])[-1])
 
 
 def cmd_restart_prod() -> None:

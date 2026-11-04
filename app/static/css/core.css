@@ -1157,22 +1157,23 @@ textarea:focus {
   background-color: transparent !important;
 }
 
+/* Back to top: Rulezy (the mascot, images/rulezy/) with a small arrow bubble; flies up on click */
 #scrollToTopBtn {
   position: fixed;
-  bottom: 30px;
-  right: 30px;
-  width: 52px;
-  height: 52px;
-  background: linear-gradient(135deg, #0d6efd, #0a58ca);
-  color: white;
-  border: none;
+  bottom: 26px;
+  right: 26px;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  background: var(--card-bg-color, #fff);
+  border: 1px solid var(--border-color, rgba(0, 0, 0, .08));
   border-radius: 50%;
   cursor: pointer;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  font-size: 19px;
-  box-shadow: 0 4px 14px rgba(13, 110, 253, 0.35);
+  overflow: visible;
+  box-shadow: 0 4px 14px rgba(13, 110, 253, 0.25);
   z-index: 1000;
   opacity: 0;
   visibility: hidden;
@@ -1187,23 +1188,43 @@ textarea:focus {
   transition: opacity .3s ease, transform .3s ease, box-shadow .25s ease;
 }
 
-#scrollToTopBtn i {
-  transform: rotate(-45deg);
+#scrollToTopBtn .stt-rulezy {
+  height: 56px;
+  width: auto;
+  margin-bottom: 4px;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .18));
+  transition: transform .3s ease;
+  pointer-events: none;
+}
+
+#scrollToTopBtn .stt-arrow {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0d6efd, #0a58ca);
+  color: #fff;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(13, 110, 253, .4);
   transition: transform .3s ease;
 }
 
 #scrollToTopBtn:hover {
-  transform: translateY(-5px) scale(1.08);
-  box-shadow: 0 8px 22px rgba(13, 110, 253, 0.45);
+  transform: translateY(-5px) scale(1.06);
+  box-shadow: 0 8px 22px rgba(13, 110, 253, 0.4);
 }
 
-#scrollToTopBtn:hover i {
-  transform: rotate(0deg) translateY(-2px);
-}
+#scrollToTopBtn:hover .stt-rulezy { transform: translateY(-3px) rotate(-4deg); }
+#scrollToTopBtn:hover .stt-arrow  { transform: translateY(-3px); }
 
-/* Launch burst on click */
-#scrollToTopBtn.is-launching i {
-  animation: rocketLaunch .7s ease forwards;
+/* Launch on click: Rulezy flies up */
+#scrollToTopBtn.is-launching .stt-rulezy {
+  animation: rulezyLaunch .7s ease forwards;
 }
 
 #scrollToTopBtn.is-launching::after {
@@ -1211,15 +1232,15 @@ textarea:focus {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: rgba(255, 255, 255, .5);
+  background: rgba(13, 110, 253, .25);
   animation: rocketRing .7s ease forwards;
   pointer-events: none;
 }
 
-@keyframes rocketLaunch {
-  0%   { transform: rotate(0deg) translateY(0);    opacity: 1; }
-  35%  { transform: rotate(0deg) translateY(-8px); opacity: 1; }
-  100% { transform: rotate(0deg) translateY(-38px); opacity: 0; }
+@keyframes rulezyLaunch {
+  0%   { transform: translateY(0);     opacity: 1; }
+  35%  { transform: translateY(-8px);  opacity: 1; }
+  100% { transform: translateY(-46px); opacity: 0; }
 }
 
 @keyframes rocketRing {
@@ -1228,7 +1249,7 @@ textarea:focus {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #scrollToTopBtn, #scrollToTopBtn i, #scrollToTopBtn.is-launching i, #scrollToTopBtn.is-launching::after {
+  #scrollToTopBtn, #scrollToTopBtn .stt-rulezy, #scrollToTopBtn.is-launching .stt-rulezy, #scrollToTopBtn.is-launching::after {
     animation: none !important;
     transition: opacity .15s ease !important;
   }

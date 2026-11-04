@@ -1,0 +1,7 @@
+{
+  "label": "Rule page \u2014 anonymous visitors (seconds)",
+  "category": "Cache",
+  "description": "How long a whole rule page is kept for anonymous visitors. Any change to the rule (edit, vote, comment, tag\u2026) gives a fresh page at once, whatever this value. Capped below the CSRF token lifetime.",
+  "public": false,
+  "value": 1800
+}

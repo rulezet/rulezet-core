@@ -1,0 +1,7 @@
+{
+  "label": "Public API answers (seconds)",
+  "category": "Cache",
+  "description": "How long public API answers (rule detail, search) are kept. A change to a rule refreshes them at once.",
+  "public": false,
+  "value": 300
+}

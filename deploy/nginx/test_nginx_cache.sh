@@ -37,8 +37,8 @@ python3 - "$ROOT/deploy/nginx/rulezet.conf.template" "$WORK/rulezet.conf" <<'PY'
 import re, sys
 s = open(sys.argv[1]).read()
 for k, v in {'__SERVER_NAME__': '_', '__SITE_PORT__': '18081', '__API_PORT__': '18081', '__SITE_RATE__': '100r/s',
-             '__SITE_BURST__': '100', '__API_RATE__': '100r/s', '__API_BURST__': '100', '__REAL_IP__': '',
-             '__FORWARD_HEADERS__': '', '__APP_DIR__': '/srv/app', '__SESSION_COOKIE__': 'session', '__DRY_RUN__': 'on'}.items():
+             '__SITE_BURST__': '100', '__API_RATE__': '1r/s', '__API_BURST__': '25', '__REAL_IP__': '',
+             '__FORWARD_HEADERS__': '', '__APP_DIR__': '/srv/app', '__SESSION_COOKIE__': 'session', '__DRY_RUN__': 'off'}.items():
     s = s.replace(k, v)
 s = s.replace('listen 80 default_server;', 'listen 18080 default_server;').replace('listen [::]:80 default_server;', '')
 assert not re.search(r'__[A-Z_]+__', s)
@@ -118,5 +118,12 @@ for h in 'x-frame-options: SAMEORIGIN' "content-security-policy: frame-ancestors
     echo "$H" | grep -qi "^$h" || fail "static without $h"
 done
 echo "✔ uploads sandboxed (CSP), no dotfile, no traversal, security headers on static files"
+
+# 8. Rate limits enforced on the API (1 r/s, burst 25 here)… but never on the CVE lookup (vulnerability-lookup tool)
+codes=""; for i in $(seq 40); do codes+="$(curl -s -o /dev/null -w '%{http_code} ' "http://127.0.0.1:18080/api/rule/public/search_rules_by_cve?cve_ids=CVE-2021-$i")"; done
+echo "$codes" | grep -q 429 && fail "search_rules_by_cve was rate-limited"
+codes=""; for i in $(seq 40); do codes+="$(curl -s -o /dev/null -w '%{http_code} ' "http://127.0.0.1:18080/api/rule/public/detail/$i")"; done
+echo "$codes" | grep -q 429 || fail "other API routes are not rate-limited any more"
+echo "✔ search_rules_by_cve never rate-limited (40 calls in a row), other API routes still are"
 
 echo "All nginx cache checks passed."

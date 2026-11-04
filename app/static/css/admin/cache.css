@@ -1,0 +1,13 @@
+/* Admin → Cache (templates/admin/cache.html) */
+.cache-warn { color: #fd7e14; text-transform: none; }
+.cache-table td { border-color: var(--border-color); color: var(--text-color); background: transparent; }
+.cache-action {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding: .75rem 0; border-bottom: 1px solid var(--border-color);
+}
+.cache-action:last-child { border-bottom: 0; }
+.cache-id { width: 7rem; }
+.cache-confirm {
+    padding: .6rem .9rem; margin: .25rem 0 .5rem; border-radius: 10px;
+    border-left: 3px solid #dc3545; background: rgba(220, 53, 69, .07); font-size: .875rem;
+}

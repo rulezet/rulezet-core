@@ -35,6 +35,36 @@ def _now():
     return str(time.time_ns())
 
 
+def _code_version():
+    """The deployed code (git commit): a new deploy never serves pages rendered by the old templates.
+    In debug (dev, auto-reload) the process start time too, so an edited template shows at once."""
+    import os
+    import subprocess
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    try:
+        v = subprocess.run(['git', '-C', root, 'rev-parse', '--short=12', 'HEAD'], capture_output=True,
+                           text=True, timeout=5).stdout.strip()
+    except Exception:
+        v = ''
+    return v or 'nogit'
+
+
+CODE_VERSION = _code_version()
+
+
+def code_version():
+    from flask import current_app
+    try:
+        if current_app.debug:
+            return f'{CODE_VERSION}-{_STARTED}'
+    except Exception:
+        pass
+    return CODE_VERSION
+
+
+_STARTED = str(int(time.time()))
+
+
 def _get(key):
     c = _cache()
     try:
@@ -87,12 +117,12 @@ def _digest(parts):
 def rule_key(kind, rule_id, *parts):
     """Key of a value about one rule: changes whenever that rule (or anything with its rule_id) changes."""
     extra = f':{_digest(parts)}' if parts else ''
-    return f'rz:rule:{kind}:{int(rule_id)}:{rule_gen(rule_id)}:{bulk_gen()}{extra}'
+    return f'rz:rule:{kind}:{int(rule_id)}:{rule_gen(rule_id)}:{bulk_gen()}:{code_version()}{extra}'
 
 
 def rules_key(kind, *parts):
     """Key of a value about many rules (lists, searches, stats): changes on any rule change."""
-    return f'rz:rules:{kind}:{global_gen()}:{_digest(parts)}'
+    return f'rz:rules:{kind}:{global_gen()}:{code_version()}:{_digest(parts)}'
 
 
 # ── Automatic bumps ─────────────────────────────────────────────────────────
@@ -145,7 +175,7 @@ def _rule_tables():
 
 
 def _do_orm_execute(state):
-    if not (state.is_update or state.is_delete):
+    if not (state.is_update or state.is_delete or state.is_insert):
         return
     try:
         table = state.statement.table.name
@@ -153,6 +183,28 @@ def _do_orm_execute(state):
         table = None
     if table is None or table in _rule_tables():
         state.session.info['rz_touched_bulk'] = True
+
+
+def _wrap_bulk(name):
+    """session.bulk_insert_mappings / bulk_save_objects / bulk_update_mappings skip every session event
+    (used by the tag / ATT&CK / similarity jobs): mark the bulk generation when they write a rule table."""
+    from sqlalchemy.orm import Session
+    original = getattr(Session, name)
+
+    def wrapper(self, mapper_or_objects, *args, **kwargs):
+        try:
+            if name == 'bulk_save_objects':
+                mapper_or_objects = list(mapper_or_objects)          # may be a generator: read it once
+                tables = {o.__table__.name for o in mapper_or_objects if hasattr(o, '__table__')}
+            else:
+                tables = {mapper_or_objects.__table__.name} if hasattr(mapper_or_objects, '__table__') else set()
+            if tables & _rule_tables():
+                self.info['rz_touched_bulk'] = True
+        except Exception:
+            pass
+        return original(self, mapper_or_objects, *args, **kwargs)
+    wrapper.__wrapped__ = original
+    setattr(Session, name, wrapper)
 
 
 _installed = False
@@ -167,4 +219,6 @@ def init_app(app):
     event.listen(Session, 'after_commit', _after_commit)
     event.listen(Session, 'after_rollback', _after_rollback)
     event.listen(Session, 'do_orm_execute', _do_orm_execute)
+    for name in ('bulk_insert_mappings', 'bulk_save_objects', 'bulk_update_mappings'):
+        _wrap_bulk(name)
     _installed = True

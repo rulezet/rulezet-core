@@ -877,6 +877,79 @@ def handle_clear_caches(job, app):
             level='success', event='done')
 
 
+@register_handler('similar_rules_scan')
+def handle_similar_rules_scan(job, app):
+    """A Workflows task: the similar-rules analysis of Admin → Similar rules, same code and same
+    parameters as its buttons ('New rules only' → {mode: new_only}, 'Full scan' → {mode: all}).
+    Waits for the run (it works in threads), polling its status like the progress page does —
+    status() is also what lets the run finish and save its figures. Payload: {scope}."""
+    import time
+    from app.core.db_class.user import User
+    from app.features.rule.utils.similar_rules import similarity_class as SimilarityModel
+    scope = (job.payload or {}).get('scope') or 'new_only'
+    if scope not in ('new_only', 'all'):
+        return _action_fail(job, f'Unknown scope {scope!r} (new_only or all).')
+    user = db.session.get(User, job.created_by) if job.created_by else None
+    if user is None:
+        user = User.query.filter_by(admin=True).order_by(User.id).first()
+    if user is None:
+        return _action_fail(job, 'No user to run the analysis as.')
+    params = {'mode': scope, 'selected_ids': []} if scope == 'all' else {'mode': 'new_only'}
+    session = SimilarityModel.Similarity_class(user, 'Update similar rules (workflow)', mode='filter', params=params)
+    SimilarityModel.sessions.append(session)
+    session.start()
+    log_job(job, f'Similarity analysis started ({"every rule" if scope == "all" else "new rules only"}) — '
+                 f'/rule/similar_loading/{session.uuid}', event='progress')
+    deadline = time.time() + 6 * 3600
+    st = session.status()
+    while not st.get('stopped') and time.time() < deadline:
+        if session.stopped and session not in SimilarityModel.sessions:
+            break                          # ended on its own (nothing to scan, or an error) — never wait 6 h for it
+        time.sleep(2)
+        st = session.status()
+        job.total, job.done = st.get('total_jobs') or 0, st.get('complete') or 0
+        db.session.commit()
+    if not st.get('stopped') and time.time() >= deadline:
+        session.stop()
+        return _action_fail(job, 'The similarity analysis did not finish within 6 hours — stopped.')
+    if session.status_message.startswith('Error'):
+        return _action_fail(job, f'Similarity analysis failed: {session.status_message}')
+    job.total = job.done = max(1, st.get('total_jobs') or 0)
+    db.session.commit()
+    log_job(job, f"Similarity analysis done: {st.get('total', 0)} rule(s) scanned, "
+                 f"{st.get('similar_pairs_found', 0)} new similar pair(s).", level='success', event='done')
+
+
+@register_handler('cache_refresh_rules')
+def handle_cache_refresh_rules(job, app):
+    """A Workflows task: every rule page / list / API answer gets a new cache key (Admin → Cache)."""
+    from app.features.admin.cache import cache_core
+    cache_core.refresh_all_rules()
+    job.total = job.done = 1
+    db.session.commit()
+    log_job(job, 'Rule caches refreshed: every rule page and list is computed again on its next visit.',
+            level='success', event='done')
+
+
+@register_handler('cache_warm_rules')
+def handle_cache_warm_rules(job, app):
+    """A Workflows task: render the most voted rule pages as an anonymous visitor (fills the page cache).
+    Payload: {limit}."""
+    from app.features.admin.cache import cache_core
+    from app.core.utils.page_cache import enabled
+    if not enabled():
+        job.total = job.done = 0
+        db.session.commit()
+        log_job(job, 'App cache is off (setting cache.enabled): nothing to warm.', level='warning', event='done')
+        return
+    limit = (job.payload or {}).get('limit') or 200
+    done, failed = cache_core.warm_rules(limit)
+    job.total, job.done = done + failed, done
+    db.session.commit()
+    log_job(job, f'{done} rule page(s) warmed' + (f', {failed} failed' if failed else '') + '.',
+            level='success' if not failed else 'warning', event='done')
+
+
 # ─── Workflows actions: email, notification, log, webhook (not jobs on rules) ──
 # Their messages take {variables} — see app/features/admin/task_scheduler/actions.py.
 

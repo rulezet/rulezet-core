@@ -175,6 +175,8 @@ def create_app(start_worker=True):
     from app.features.admin.task_scheduler.workflow_share_routes import workflow_share_blueprint
     app.register_blueprint(workflow_share_blueprint, url_prefix='/workflow/shared')
     app.register_blueprint(rule_mirror_blueprint)
+    from app.features.admin.cache.cache_routes import cache_admin_blueprint
+    app.register_blueprint(cache_admin_blueprint)          # /admin/cache
     app.register_blueprint(media_blueprint)
     app.register_blueprint(media_static_blueprint)
     app.register_blueprint(app_settings_blueprint)

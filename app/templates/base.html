@@ -262,7 +262,8 @@
                 {% include 'macros/_flashes.html' %}
                 <!-- Scroll to top -->
                 <button id="scrollToTopBtn" title="Scroll to top" aria-label="Back to top">
-                    <i class="fa-solid fa-rocket"></i>
+                    <img src="{{ url_for('static', filename='images/rulezy/simple.png') }}" alt="" class="stt-rulezy" width="38" height="56">
+                    <span class="stt-arrow" aria-hidden="true"><i class="fa-solid fa-chevron-up"></i></span>
                 </button>
 
                 {% block content %}

@@ -10,6 +10,7 @@ from flask_restx import Resource, Namespace
 from app.api.utils.rule_validation import *
 
 from app import cache, memory_cache
+from app.core.utils.page_cache import api_cached
 from app.core.utils import utils
 from app.features.misp.rule.misp_object import get_rule_misp_object
 from ...features.rule import rule_core as RuleModel
@@ -58,6 +59,7 @@ curl -G "http://127.0.0.1:7009/api/rule/public/searchPage" \
 @rule_public_ns.route('/searchPage')
 class SearchRulePage(Resource):
 
+    @api_cached('search_page')
     @rule_public_ns.doc(params={
         "search": "Keyword to search in rule title",
         "author": "Filter rules by author",
@@ -177,6 +179,7 @@ curl -G "http://127.0.0.1:7009/api/rule/public/search" \
 """
 )
 class SearchRule(Resource):
+    @api_cached('search')
     @rule_public_ns.doc(params={
     "search": "Keyword to search in rule title",
     "author": "Filter rules by author",
@@ -335,13 +338,14 @@ curl -X GET "http://127.0.0.1:7009/api/rule/public/detail/6"
 """
 )
 class DetailRule(Resource):
+    @api_cached('detail', rule_arg='rule_id')
     def get(self, rule_id):
         """
         Get the details of a rule by its ID.
         """
-        # Retrieve rule
+        # Retrieve rule (a rule in the trash is not public any more)
         rule = RuleModel.get_rule(rule_id)
-        if not rule:
+        if not rule or rule.is_deleted:
             return {"message": "Rule not found"}, 404
 
         # Retrieve author

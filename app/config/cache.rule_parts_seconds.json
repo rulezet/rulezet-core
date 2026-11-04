@@ -1,0 +1,7 @@
+{
+  "label": "Rule page \u2014 shared parts (seconds)",
+  "category": "Cache",
+  "description": "How long the parts of a rule page that are the same for everyone are kept (MISP object / event, Velociraptor artifact, risk flags, mirror links, public counts). A change to the rule refreshes them at once; this bounds what depends on other rules or on the settings.",
+  "public": false,
+  "value": 600
+}

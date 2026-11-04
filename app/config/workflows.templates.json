@@ -677,6 +677,52 @@
         ]
       },
       "git_updater": true
+    },
+    "cache_maintenance": {
+      "label": "Cache maintenance",
+      "icon": "fa-solid fa-gauge-high",
+      "description": "Every night: refresh every rule page in the cache, then warm the 200 most voted ones so crawlers and the first visitors get them at once. Ends with a log line.",
+      "spec": {
+        "title": "Cache maintenance",
+        "description": "Fresh, warm rule pages every morning — 04:00 UTC (Admin → Cache).",
+        "tasks": [
+          {
+            "ref": "refresh",
+            "title": "Refresh rule caches",
+            "task_type": "cache_refresh_rules",
+            "trigger": {
+              "trigger_mode": "daily",
+              "hour": 4,
+              "minute": 0,
+              "timezone": "UTC"
+            }
+          },
+          {
+            "ref": "warm",
+            "title": "Warm the most voted rule pages",
+            "task_type": "cache_warm_rules",
+            "target_payload": {
+              "limit": 200
+            },
+            "trigger": {
+              "after": "refresh",
+              "condition": "success"
+            }
+          },
+          {
+            "ref": "log",
+            "title": "Log it",
+            "task_type": "action_log",
+            "target_payload": {
+              "message": "Cache maintenance done ({status})."
+            },
+            "trigger": {
+              "after": "warm",
+              "condition": "always"
+            }
+          }
+        ]
+      }
     }
   }
 }

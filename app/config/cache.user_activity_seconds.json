@@ -1,0 +1,7 @@
+{
+  "label": "User page \u2014 activity data (seconds)",
+  "category": "Cache",
+  "description": "How long a user page's Activity Overview (votes, formats, timeline) is kept. A change to any rule refreshes it at once; bundle votes show after this delay at most.",
+  "public": false,
+  "value": 300
+}
