@@ -7,7 +7,7 @@
     "weekly_maintenance": {
       "label": "Weekly maintenance",
       "icon": "fa-solid fa-screwdriver-wrench",
-      "description": "Every Sunday night: pull the git clones, resync Git Sources, look again for links between rules, try the bad rules again, re-read references & metadata, recompute the leaderboard, clear the caches, then re-scores the rules and the Git sources.",
+      "description": "Every Sunday night: pull the git clones, resync Git Sources, look again for links between rules, find similar rules among the new ones, try the bad rules again, re-read references & metadata, recompute the leaderboard, clear the caches, then re-scores the rules and the Git sources.",
       "spec": {
         "title": "Weekly maintenance",
         "description": "Keeps rules, links, metadata and figures fresh — every Sunday at 02:00 UTC.",
@@ -51,6 +51,18 @@
             }
           },
           {
+            "ref": "similar",
+            "title": "Similar rules — new rules",
+            "task_type": "similar_rules_scan",
+            "target_payload": {
+              "scope": "new_only"
+            },
+            "trigger": {
+              "after": "relink",
+              "condition": "always"
+            }
+          },
+          {
             "ref": "bad",
             "title": "Bad rules — retry & link",
             "task_type": "bad_rules_retry",
@@ -61,7 +73,7 @@
               "link_dependencies": true
             },
             "trigger": {
-              "after": "relink",
+              "after": "similar",
               "condition": "always"
             }
           },

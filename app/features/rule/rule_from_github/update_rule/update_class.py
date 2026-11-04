@@ -108,6 +108,30 @@ class Update_class:
     # ------------------ MAIN METHODS ------------------
 
     def start(self):
+        """Returns at once: cloning / pulling the repository and reading every file (format detection
+        of thousands of YAML files can take a minute) run in a background thread, so the "Update"
+        click redirects to the progress page right away instead of waiting for the whole preparation
+        (the request used to take 60 s+ on a big repository). status() reports 'preparing' meanwhile.
+        Callers that wait for the end (Sync Schedules, workflows) wait on _save_done as before."""
+        self.preparing = True
+        app_obj = current_app._get_current_object()
+        Thread(target=self._prepare_and_run, args=[app_obj], daemon=True).start()
+
+    def _prepare_and_run(self, app_obj):
+        with app_obj.app_context():
+            try:
+                ready = self._prepare()
+            except Exception as e:
+                ready = False
+                if not self._save_done.is_set():
+                    self._finalize_with_error(f"Could not prepare the update check: {e}")
+            finally:
+                self.preparing = False
+            if ready:
+                self._spawn_workers()
+
+    def _prepare(self):
+        """Fills the queue (was the body of start()). False = finished early with an error."""
         cp = 0
         if self.mode == "by_url":
             cp = 0
@@ -121,7 +145,7 @@ class Update_class:
                 # check's result instead of raising out of the request (500)
                 # or out of a Sync Schedule run (aborting every later repo).
                 self._finalize_with_error(f"Could not access the repository: {e}")
-                return
+                return False
 
             self.local_repo_path = repo_dir
 
@@ -148,7 +172,7 @@ class Update_class:
                     success = True
                 except Exception as e:
                     self._finalize_with_error(f"Could not access or update the repository: {e}")
-                    return
+                    return False
 
             sha_after = get_repo_head_sha(repo_dir)
             changed_files = None  # None = unknown/first run -> re-check everything
@@ -327,7 +351,9 @@ class Update_class:
     
         else:
             self.total = cp
+        return True
 
+    def _spawn_workers(self):
         for _ in range(self.thread_count):
             worker = Thread(
                 target=self.process,
@@ -358,6 +384,14 @@ class Update_class:
     # ------------------ STATUS ------------------
 
     def status(self):
+        if getattr(self, 'preparing', False):
+            # Cloning / reading the repository: nothing to count yet, and never stop() now
+            # (it would wait 30 s for an end that cannot come before the workers exist).
+            return {
+                "id": self.uuid, "total": 0, "complete": 0, "remaining": 1, "stopped": False,
+                "preparing": True, "found": 0, "updated": 0, "skipped": 0, "not_found": 0, "bad_rules": 0,
+                "rules": [], "new_rules": [], "unprocessed_rules": [],
+            }
         if self.jobs.empty():
             self.stop()
 

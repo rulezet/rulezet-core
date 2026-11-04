@@ -115,3 +115,15 @@ def test_cache_maintenance_template():
         after = x['trigger'].get('after')
         assert after is None or after in refs
     assert tasks[0]['trigger']['trigger_mode'] == 'daily'
+
+
+def test_weekly_maintenance_finds_similar_rules():
+    from app.features.admin.task_scheduler.task_types import TASK_TYPES
+    tasks = json.load(open('app/config/workflows.templates.json'))['value']['weekly_maintenance']['spec']['tasks']
+    refs = [x['ref'] for x in tasks]
+    sim = next(x for x in tasks if x['task_type'] == 'similar_rules_scan')
+    assert sim['target_payload'] == {'scope': 'new_only'} and sim['trigger']['after'] == 'relink'
+    assert next(x for x in tasks if x['ref'] == 'bad')['trigger']['after'] == 'similar'
+    for x in tasks:                                   # the chain is still whole
+        assert x['task_type'] in TASK_TYPES
+        assert x['trigger'].get('after') in (None, *refs)

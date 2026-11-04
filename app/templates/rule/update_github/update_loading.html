@@ -1401,8 +1401,10 @@
                         result_data.value  = data
                         progressDone.value  = data['complete']
                         progressTotal.value = data['total']
-                        progress.value = Math.round((data['complete'] / data['total']) * 100)
-                        status_site.value = 'Processed ' + data['complete'] + ' of ' + data['total'] + ' rules'
+                        progress.value = data['total'] ? Math.round((data['complete'] / data['total']) * 100) : 0
+                        status_site.value = data['preparing']
+                            ? 'Getting the repository and reading its files…'
+                            : 'Processed ' + data['complete'] + ' of ' + data['total'] + ' rules'
                         if (data['remaining'] > 0) {
                             // Only reveal the progress bar once we know for sure
                             // the session is still running — otherwise an
