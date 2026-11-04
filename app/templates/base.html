@@ -261,9 +261,14 @@
                 {% endif %}
                 {% include 'macros/_flashes.html' %}
                 <!-- Scroll to top -->
-                <button id="scrollToTopBtn" title="Scroll to top" aria-label="Back to top">
+                {# Rulezy when the instance shows the mascot, else the rocket (same setting as the AI pages) #}
+                <button id="scrollToTopBtn" class="{{ 'stt--mascot' if mascot_enabled else 'stt--icon' }}" title="Scroll to top" aria-label="Back to top">
+                    {% if mascot_enabled %}
                     <img src="{{ url_for('static', filename='images/rulezy/simple.png') }}" alt="" class="stt-rulezy" width="38" height="56">
                     <span class="stt-arrow" aria-hidden="true"><i class="fa-solid fa-chevron-up"></i></span>
+                    {% else %}
+                    <i class="fa-solid fa-rocket stt-rocket"></i>
+                    {% endif %}
                 </button>
 
                 {% block content %}

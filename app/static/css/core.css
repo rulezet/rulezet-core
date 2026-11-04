@@ -1222,6 +1222,20 @@ textarea:focus {
 #scrollToTopBtn:hover .stt-rulezy { transform: translateY(-3px) rotate(-4deg); }
 #scrollToTopBtn:hover .stt-arrow  { transform: translateY(-3px); }
 
+/* Mascot off (instance setting): the blue rocket */
+#scrollToTopBtn.stt--icon {
+  width: 52px;
+  height: 52px;
+  align-items: center;
+  border: none;
+  background: linear-gradient(135deg, #0d6efd, #0a58ca);
+  color: #fff;
+  font-size: 19px;
+}
+#scrollToTopBtn .stt-rocket { transform: rotate(-45deg); transition: transform .3s ease; }
+#scrollToTopBtn:hover .stt-rocket { transform: rotate(0deg) translateY(-2px); }
+#scrollToTopBtn.is-launching .stt-rocket { animation: rulezyLaunch .7s ease forwards; }
+
 /* Launch on click: Rulezy flies up */
 #scrollToTopBtn.is-launching .stt-rulezy {
   animation: rulezyLaunch .7s ease forwards;
