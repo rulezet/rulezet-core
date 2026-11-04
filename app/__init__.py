@@ -229,6 +229,23 @@ def create_app(start_worker=True):
         return response
 
     @app.after_request
+    def _private_when_signed_in(response):
+        from flask_login import current_user
+        # A page built for a signed-in user (their name, rights, votes…) must never sit in a shared
+        # cache: nginx's micro-cache and any proxy skip "private" answers (docs/future/caching.md).
+        try:
+            signed_in = current_user.is_authenticated
+        except Exception:
+            signed_in = False
+        if signed_in and request.endpoint != 'static':
+            cc = response.headers.get('Cache-Control', '')
+            if 'private' not in cc and 'no-store' not in cc:
+                response.headers['Cache-Control'] = ', '.join(x for x in ['private', cc.replace('public', '').strip(' ,')] if x)
+        if 'Cookie' not in response.headers.get('Vary', '') and request.endpoint != 'static':
+            response.vary.add('Cookie')
+        return response
+
+    @app.after_request
     def set_security_headers(response):
         # Stops a browser from ever re-interpreting a served file (e.g. a
         # blog attachment) as HTML/SVG based on sniffed content instead of

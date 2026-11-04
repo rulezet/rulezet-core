@@ -24,6 +24,33 @@ limit_req_log_level warn;
 log_format rz_timed '$remote_addr - [$time_local] "$request" $status $body_bytes_sent '
                     '$request_time "$http_user_agent"';
 
+# ── Caching (docs/future/caching.md) ───────────────────────────────────────
+# Micro-cache: anonymous GET pages / public API answers kept 60 s, so crawlers, AI agents and
+# many visitors on the same rule page cost one Python render per minute instead of one per hit.
+# Never cached: a request with a session / remember cookie, an API key or an Authorization header;
+# a response with Set-Cookie (so any page that touches the session, e.g. a form with a CSRF token)
+# or with Cache-Control private / no-store (the app sends "private" for every signed-in answer).
+proxy_cache_path /var/cache/nginx/rulezet levels=1:2 keys_zone=rz_cache:50m max_size=1g inactive=10m use_temp_path=off;
+map $http_cookie $rz_cookie_bypass {
+    default 0;
+    "~*(^|;\s*)(__SESSION_COOKIE__|remember_token)=" 1;
+}
+map "$rz_cookie_bypass$http_x_api_key$http_authorization" $rz_cache_bypass {
+    "0"     0;
+    default 1;
+}
+# Versioned static URLs (?v=<mtime>, app/core/utils/static_versions.py) never change: one year.
+map $arg_v $rz_static_cache {
+    ""      "public, max-age=3600";
+    default "public, max-age=31536000, immutable";
+}
+
+gzip on;
+gzip_proxied any;
+gzip_vary on;
+gzip_min_length 1024;
+gzip_types text/css application/javascript text/javascript application/json text/plain text/xml application/xml image/svg+xml;
+
 upstream rulezet_site { server 127.0.0.1:__SITE_PORT__; keepalive 16; }
 upstream rulezet_api  { server 127.0.0.1:__API_PORT__;  keepalive 16; }
 
@@ -51,8 +78,29 @@ __FORWARD_HEADERS__
     proxy_read_timeout    180s;   # > gunicorn's 120 s timeout
     proxy_send_timeout    180s;
 
-    # JS/CSS/images: many small requests per page — never rate-limited.
+    # Micro-cache for every proxied location below (static files are read from disk)
+    proxy_cache rz_cache;
+    proxy_cache_key "$scheme$request_method$host$request_uri";
+    proxy_cache_valid 200 301 302 60s;
+    proxy_cache_valid 404 10s;
+    proxy_cache_bypass $rz_cache_bypass;
+    proxy_no_cache     $rz_cache_bypass;
+    proxy_cache_lock on;                                          # 100 hits on a cold page = 1 render
+    proxy_cache_use_stale updating error timeout http_502 http_503 http_504;   # also covers restarts
+    proxy_cache_background_update on;
+    add_header X-Cache-Status $upstream_cache_status always;
+
+    # JS/CSS/images: served by nginx straight from disk (no Python thread), never rate-limited.
+    # A file nginx cannot read (permissions, generated later…) falls back to the app.
     location /static/ {
+        root __APP_DIR__;
+        try_files $uri @rulezet_static;
+        add_header Cache-Control $rz_static_cache always;
+        add_header X-Content-Type-Options nosniff always;
+        access_log off;
+    }
+    location @rulezet_static {
+        proxy_cache off;
         proxy_pass http://rulezet_site;
     }
 

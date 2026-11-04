@@ -99,6 +99,7 @@ echo "==> Writing the config…"
 [ -f "$ALLOWLIST" ] || printf '# One line per IP never rate-limited, e.g.\n# 203.0.113.7 1;\n' > "$ALLOWLIST"
 SERVER_NAME="$SERVER_NAME www.$SERVER_NAME _" \
 SITE_PORT="$SITE_PORT" API_PORT="$API_PORT" \
+APP_DIR="$ROOT/app" SESSION_COOKIE="$(env_get SESSION_COOKIE_NAME | grep . || echo session)" \
 SITE_RATE="${SITE_RATE:-30r/s}" SITE_BURST="${SITE_BURST:-200}" \
 API_RATE="${API_RATE:-20r/s}" API_BURST="${API_BURST:-100}" \
 REAL_IP_BLOCK="$REAL_IP_BLOCK" FORWARD_BLOCK="$FORWARD_BLOCK" \
@@ -107,7 +108,7 @@ import os, sys
 s = open(sys.argv[1]).read()
 for key, env in [('__SERVER_NAME__', 'SERVER_NAME'), ('__SITE_PORT__', 'SITE_PORT'), ('__API_PORT__', 'API_PORT'),
                  ('__SITE_RATE__', 'SITE_RATE'), ('__SITE_BURST__', 'SITE_BURST'),
-                 ('__API_RATE__', 'API_RATE'), ('__API_BURST__', 'API_BURST'),
+                 ('__API_RATE__', 'API_RATE'), ('__APP_DIR__', 'APP_DIR'), ('__SESSION_COOKIE__', 'SESSION_COOKIE'), ('__API_BURST__', 'API_BURST'),
                  ('__REAL_IP__', 'REAL_IP_BLOCK'), ('__FORWARD_HEADERS__', 'FORWARD_BLOCK')]:
     s = s.replace(key, os.environ[env])
 s = s.replace('__DRY_RUN__', 'on')          # always start in dry-run
@@ -116,7 +117,11 @@ assert not re.search(r'__[A-Z_]+__', s), 'unreplaced placeholder'
 open(sys.argv[2], 'w').write(s)
 PY
 # the "Rulezet is being updated" page the config includes (deploy/nginx/maintenance.*)
-mkdir -p /var/www/rulezet-maintenance /etc/nginx/snippets
+mkdir -p /var/www/rulezet-maintenance /etc/nginx/snippets /var/cache/nginx/rulezet
+chown www-data: /var/cache/nginx/rulezet 2>/dev/null || true
+# nginx (www-data) reads app/static itself: every folder above it must be traversable
+d="$ROOT/app/static"; while [ "$d" != "/" ]; do chmod o+x "$d" 2>/dev/null || true; d="$(dirname "$d")"; done
+chmod -R o+rX "$ROOT/app/static" 2>/dev/null || true
 cp "$ROOT/deploy/nginx/maintenance.html" /var/www/rulezet-maintenance/maintenance.html
 cp "$ROOT/deploy/nginx/maintenance.conf" /etc/nginx/snippets/rulezet-maintenance.conf
 ln -sf "$SITE_CONF" /etc/nginx/sites-enabled/rulezet
