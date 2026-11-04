@@ -509,7 +509,7 @@ typer==0.25.1
     #   huggingface-hub
     #   sigmalint-cli
     #   transformers
-types-pyyaml==6.0.12.20260518
+types-pyyaml==6.0.12.20261030
     # via pysigma
 typing-extensions==4.16.0
     # via
