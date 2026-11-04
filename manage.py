@@ -1113,7 +1113,11 @@ def _run_gunicorn_with_worker(flaskenv: str, port: str, reload: bool = False) ->
     host = os.environ.get("GUNICORN_BIND_HOST", "0.0.0.0").strip() or "0.0.0.0"
     api_port = os.environ.get("API_PORT", "").strip()
     api_proc = None
+    site_proc = None
     try:
+        for p in (port, api_port):
+            if p:
+                _wait_port_free(host, p)
         if api_port:
             info(f"API process on {host}:{api_port} (route /api/ to it in nginx)")
             api_proc = _spawn(_gunicorn_cmd(f"{host}:{api_port}", os.environ.get("API_GUNICORN_THREADS", "8"), "api", reload),
@@ -1128,14 +1132,70 @@ def _run_gunicorn_with_worker(flaskenv: str, port: str, reload: bool = False) ->
         _SPIN.stop()
         _say("\n\033[0;37m  · Server stopped.\033[0m")
     finally:
-        for name, proc in (("API process", api_proc), ("background worker process", worker_proc)):
+        # The web process too: on CTRL+C gunicorn finishes its requests first and a busy thread (a git
+        # update check, a similarity run) can keep it alive — manage.py used to exit without it, and the
+        # next start found port 7009 still taken ("Connection in use"). Wait for it, then force it.
+        for name, proc, grace in (("web process", site_proc, 35), ("API process", api_proc, 35),
+                                  ("background worker process", worker_proc, 10)):
             if proc is not None and proc.poll() is None:
                 info(f"Stopping {name}…")
                 proc.terminate()
                 try:
-                    proc.wait(timeout=10)
+                    proc.wait(timeout=grace)
                 except subprocess.TimeoutExpired:
+                    warn(f"{name} still running after {grace}s — killing it")
                     proc.kill()
+                    proc.wait(timeout=5)
+
+
+def _port_holder(port: str) -> str:
+    """'pid 1234: gunicorn: master [...]' for whoever listens on the port, '' if unknown."""
+    try:
+        out = subprocess.run(["ss", "-Hltnp", f"( sport = :{port} )"], capture_output=True, text=True, timeout=5).stdout
+    except Exception:
+        return ""
+    import re
+    m = re.search(r'pid=(\d+)', out)
+    if not m:
+        return ""
+    pid = m.group(1)
+    try:
+        cmd = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace").strip()
+    except OSError:
+        cmd = "?"
+    return f"pid {pid}: {cmd[:120]}"
+
+
+def _wait_port_free(host: str, port: str, timeout: int = 45) -> None:
+    """An old Rulezet still finishing its requests (or left behind) holds the port: wait for it, then
+    stop with a clear message instead of gunicorn's 'Connection in use' loop and a half-started server."""
+    import socket
+    import time as _time
+
+    def free() -> bool:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                s.bind((host, int(port)))
+                return True
+            except OSError:
+                return False
+
+    if free():
+        return
+    holder = _port_holder(port)
+    info(f"Port {port} is still taken{f' ({holder})' if holder else ''} — waiting up to {timeout}s for it to close…")
+    deadline = _time.time() + timeout
+    while _time.time() < deadline:
+        _time.sleep(1)
+        if free():
+            ok(f"Port {port} free")
+            return
+    holder = _port_holder(port) or "unknown process"
+    error(f"Port {port} is still used by {holder}.")
+    info("Another Rulezet is running (another screen: 'screen -ls'), or an old one did not stop.")
+    info(f"Stop it:  kill <pid>   (still there after 10 s: kill -9 <pid>), then start again.")
+    raise SystemExit(1)
 
 
 def _ensure_editor() -> None:
