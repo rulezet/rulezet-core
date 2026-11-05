@@ -45,12 +45,6 @@ map $arg_v $rz_static_cache {
     default "public, max-age=31536000, immutable";
 }
 
-gzip on;
-gzip_proxied any;
-gzip_vary on;
-gzip_min_length 1024;
-gzip_types text/css application/javascript text/javascript application/json text/plain text/xml application/xml image/svg+xml;
-
 upstream rulezet_site { server 127.0.0.1:__SITE_PORT__; keepalive 16; }
 upstream rulezet_api  { server 127.0.0.1:__API_PORT__;  keepalive 16; }
 
@@ -63,6 +57,14 @@ __REAL_IP__
     # Rulezet has no upload size limit of its own (rule/bundle imports) —
     # nginx's default (1 MB) would break them.
     client_max_body_size 200m;
+
+    # Compression in the server block: Debian's nginx.conf already sets "gzip on;" at http level
+    # (a second one there = "gzip directive is duplicate", nginx refuses the whole config)
+    gzip on;
+    gzip_proxied any;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/css application/javascript text/javascript application/json text/plain text/xml application/xml image/svg+xml;
 
     access_log /var/log/nginx/rulezet-site.access.log rz_timed;
     error_log  /var/log/nginx/rulezet.error.log warn;
