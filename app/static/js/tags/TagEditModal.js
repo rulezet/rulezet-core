@@ -87,7 +87,7 @@ const TagEditModal = {
                         </div>
 
                         <div class="col-md-5">
-                            <icon-picker v-model="editTag.icon"></icon-picker>
+                            <icon-picker v-model="editTag.icon" all-icons></icon-picker>
                         </div>
 
                         <div class="col-12">

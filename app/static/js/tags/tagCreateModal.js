@@ -135,7 +135,7 @@ const TagCreateModal = {
                         </div>
 
                         <div class="col-md-5">
-                            <icon-picker v-model="newTag.icon"></icon-picker>
+                            <icon-picker v-model="newTag.icon" all-icons></icon-picker>
                         </div>
 
                         <div class="col-md-12">

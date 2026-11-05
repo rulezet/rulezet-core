@@ -102,12 +102,14 @@ const IconPicker = {
         const more = Vue.ref(0);         // icons of "Every icon" hidden by MAX_SHOWN
         const filtered = Vue.computed(() => {
             const q = clean(searchQuery.value);
+            const raw = searchQuery.value.trim().toLowerCase();
             const out = [];
             if (group.value !== ALL_GROUP) {
                 for (const g of choices.value) {
                     if (group.value && g.group !== group.value) continue;
-                    const icons = g.icons.filter(i => !q || i.includes(q));
-                    if (icons.length) out.push({ group: g.group, icons });
+                    const names = g.names || {};   // optional {icon: name} (flags: country names), searched too
+                    const icons = g.icons.filter(i => !q || i.includes(q) || (names[i] && names[i].toLowerCase().includes(raw)));
+                    if (icons.length) out.push({ group: g.group, icons, names });
                 }
             }
             more.value = 0;
@@ -168,7 +170,7 @@ const IconPicker = {
                     <div class="icon-picker-group-name">[[ g.group ]]</div>
                     <div class="icon-picker-grid">
                         <button v-for="icon in g.icons" :key="g.group + icon" type="button" class="icon-picker-btn"
-                                :class="{ 'is-on': current === icon }" @click="selectIcon(icon)" :title="'fa-' + icon">
+                                :class="{ 'is-on': current === icon }" @click="selectIcon(icon)" :title="(g.names && g.names[icon]) || 'fa-' + icon">
                             <i :class="['fas', 'fa-' + icon]"></i>
                         </button>
                     </div>
