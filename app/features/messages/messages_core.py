@@ -34,6 +34,7 @@ from app import db
 from app.core.db_class.message import Channel, ChannelMember, ChannelMessage, ChannelReaction
 from app.core.db_class.user import User
 from app.core.utils.app_settings import setting
+from app.core.utils.colors import readable_text_color
 
 REACTIONS = setting('messages.reactions')   # app/config/messages.reactions.json
 LIMITS = setting('messages.limits')         # app/config/messages.limits.json
@@ -553,7 +554,8 @@ def people(user, q=None, org=None, channel=None, page=1, per_page=30, ids_only=F
     return {
         'users': [{**user_json(u), 'username': u.get_username(),
                    'orgs': [{'id': o.id, 'name': o.name, 'text': o.label or o.name, 'color': o.color or '#6f42c1',
-                             'icon': o.icon or 'fa-building'} for o in u.organisations],
+                             'icon': o.icon or 'fa-building',
+                             'text_color': readable_text_color(o.color or '#6f42c1')} for o in u.organisations],
                    'in_channel': u.id in in_channel} for u in rows],
         'total': total, 'page': page, 'pages': max(1, -(-total // per_page)),
         'orgs': [{'id': o.id, 'name': o.name, 'mine': o.id in my_orgs}

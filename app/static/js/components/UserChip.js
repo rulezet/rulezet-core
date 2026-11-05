@@ -215,7 +215,7 @@ const UserChip = defineComponent({
           <span v-for="o in tooltipData.organisations" :key="o.id" class="badge"
                 :data-rz-pop-title="o.name" data-rz-pop-text="Organisation" :data-rz-pop-url="o.website || null"
                 :data-rz-pop-icon="o.icon" :data-rz-pop-color="o.color"
-                :style="{ background: o.color, color: '#fff', fontWeight: 600 }">
+                :style="{ background: o.color, color: o.text_color || '#fff', fontWeight: 600 }">
             <i class="fa-solid me-1" :class="o.icon"></i>[[ o.text ]]
           </span>
         </div>

@@ -175,7 +175,7 @@ export default {
                 <span class="pp-name">
                     <b>[[ u.username ]]</b>
                     <span class="pp-orgs">
-                        <span v-for="o in u.orgs" :key="o.id" class="pp-org-badge" :style="{ '--c': o.color }"><i :class="'fa-solid ' + o.icon"></i>[[ o.text ]]</span>
+                        <span v-for="o in u.orgs" :key="o.id" class="pp-org-badge" :style="{ '--c': o.text_color === '#000' ? 'var(--subtle-text-color)' : o.color }"><i :class="'fa-solid ' + o.icon"></i>[[ o.text ]]</span>
                         <span v-if="u.is_admin" class="chat-tag chat-tag--admin">Admin</span>
                     </span>
                 </span>

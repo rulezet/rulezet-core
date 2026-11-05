@@ -247,7 +247,7 @@ export default {
                         <span v-if="isSelf(user)" class="badge bg-info text-dark">
                             <i class="fas fa-user-check me-1"></i>You
                         </span>
-                        <span v-for="o in (user.organisations || [])" :key="'org' + o.id" class="ul-org-chip" :style="{ background: o.color }"
+                        <span v-for="o in (user.organisations || [])" :key="'org' + o.id" class="ul-org-chip" :style="{ background: o.color, color: o.text_color }"
                               :data-rz-pop-title="o.name" data-rz-pop-text="Organisation" :data-rz-pop-url="o.website || null"
                               :data-rz-pop-icon="o.icon" :data-rz-pop-color="o.color"><i class="fas me-1" :class="o.icon"></i>{{ o.text }}</span>
                         <span v-if="user.identity_verified" class="ul-identity-badge" data-rz-pop-title="Verified by an admin" data-rz-pop-text="An admin checked this person is who they claim to be." data-rz-pop-icon="fa-user-check" data-rz-pop-color="#0d6efd">
@@ -436,7 +436,7 @@ export default {
                                     </a>
                                     <span class="ul-table-username">@{{ user.username || user.first_name }}</span>
                                     <span v-if="user.organisations && user.organisations.length" class="ul-org-chips">
-                                        <span v-for="o in user.organisations" :key="o.id" class="ul-org-chip" :style="{ background: o.color }"
+                                        <span v-for="o in user.organisations" :key="o.id" class="ul-org-chip" :style="{ background: o.color, color: o.text_color }"
                                               :data-rz-pop-title="o.name" data-rz-pop-text="Organisation" :data-rz-pop-url="o.website || null"
                                               :data-rz-pop-icon="o.icon" :data-rz-pop-color="o.color">
                                             <i class="fas me-1" :class="o.icon"></i>{{ o.text }}

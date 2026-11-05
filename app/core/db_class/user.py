@@ -8,6 +8,7 @@ from werkzeug.security import check_password_hash
 from werkzeug.security import generate_password_hash
 import datetime
 from app.core.db_class.common import _gen_uuid
+from app.core.utils.colors import readable_text_color
 
 
 #############
@@ -211,7 +212,8 @@ class Organisation(db.Model):
     def to_json(self):
         return {'id': self.id, 'name': self.name, 'website': self.website,
                 'color': self.color or '#6f42c1', 'icon': self.icon or 'fa-building',
-                'label': self.label or '', 'text': self.label or self.name}
+                'label': self.label or '', 'text': self.label or self.name,
+                'text_color': readable_text_color(self.color or '#6f42c1')}
 
 
 class UserIdentityVerification(db.Model):

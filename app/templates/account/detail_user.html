@@ -95,7 +95,7 @@
                                 </span>
                                 {% endif %}
                                 {% for org in user.organisations %}
-                                <span class="ud-profile-badge ud-profile-badge--org" style="background: {{ org.color }};" data-rz-pop-title="{{ org.name }}" data-rz-pop-text="Organisation"{% if org.website %} data-rz-pop-url="{{ org.website }}"{% endif %} data-rz-pop-icon="{{ org.icon }}" data-rz-pop-color="{{ org.color }}">
+                                <span class="ud-profile-badge ud-profile-badge--org" style="background: {{ org.color }}; color: {{ org.text_color }};" data-rz-pop-title="{{ org.name }}" data-rz-pop-text="Organisation"{% if org.website %} data-rz-pop-url="{{ org.website }}"{% endif %} data-rz-pop-icon="{{ org.icon }}" data-rz-pop-color="{{ org.color }}">
                                     <i class="fas {{ org.icon }} me-1"></i>{% if org.website %}<a href="{{ org.website }}" target="_blank" rel="noopener noreferrer" class="text-reset text-decoration-none">{{ org.text }}</a>{% else %}{{ org.text }}{% endif %}
                                 </span>
                                 {% endfor %}

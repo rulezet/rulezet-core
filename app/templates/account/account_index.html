@@ -218,7 +218,7 @@
                     </span>
                     {% endif %}
                     {% for org in current_user.organisations %}{% set o = org.to_json() %}
-                    <span class="ud-profile-badge ud-profile-badge--org" style="background: {{ o.color }};" data-rz-pop-title="{{ o.name }}" data-rz-pop-text="Organisation"{% if o.website %} data-rz-pop-url="{{ o.website }}"{% endif %} data-rz-pop-icon="{{ o.icon }}" data-rz-pop-color="{{ o.color }}">
+                    <span class="ud-profile-badge ud-profile-badge--org" style="background: {{ o.color }}; color: {{ o.text_color }};" data-rz-pop-title="{{ o.name }}" data-rz-pop-text="Organisation"{% if o.website %} data-rz-pop-url="{{ o.website }}"{% endif %} data-rz-pop-icon="{{ o.icon }}" data-rz-pop-color="{{ o.color }}">
                         <i class="fas {{ o.icon }} me-1"></i>{% if o.website %}<a href="{{ o.website }}" target="_blank" rel="noopener noreferrer" class="text-reset text-decoration-none">{{ o.text }}</a>{% else %}{{ o.text }}{% endif %}
                     </span>
                     {% endfor %}

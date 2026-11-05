@@ -167,7 +167,7 @@
                             <div v-else class="ul-org-list mb-3">
                                 <label v-for="o in organisations" :key="o.id" class="ul-org-pick">
                                     <input type="checkbox" class="form-check-input m-0" :value="o.id" v-model="orgSelected">
-                                    <span class="ul-org-chip" :style="{ background: o.color }"><i class="fas me-1" :class="o.icon"></i>[[ o.text ]]</span>
+                                    <span class="ul-org-chip" :style="{ background: o.color, color: o.text_color }"><i class="fas me-1" :class="o.icon"></i>[[ o.text ]]</span>
                                     <span v-if="o.label" class="text-muted small">[[ o.name ]]</span>
                                 </label>
                             </div>
@@ -188,7 +188,7 @@
                             <div v-else class="ul-org-list">
                                 <template v-for="o in organisations" :key="o.id">
                                 <div class="ul-org-row">
-                                    <span class="ul-org-chip" :style="{ background: o.color }"><i class="fas me-1" :class="o.icon"></i>[[ o.text ]]</span>
+                                    <span class="ul-org-chip" :style="{ background: o.color, color: o.text_color }"><i class="fas me-1" :class="o.icon"></i>[[ o.text ]]</span>
                                     <span class="fw-semibold" v-if="o.label">[[ o.name ]]</span>
                                     <a v-if="o.website" :href="o.website" target="_blank" rel="noopener" class="small text-truncate" style="max-width:160px;">[[ o.website ]]</a>
                                     <span class="text-muted small ms-auto">[[ o.members ]] member<span v-if="o.members !== 1">s</span></span>
@@ -200,7 +200,7 @@
                                 <div v-if="orgEdit && orgEdit.id === o.id" class="ul-org-edit">
                                     <div class="d-flex align-items-center gap-2 mb-2">
                                         <span class="small text-muted">Preview</span>
-                                        <span class="ul-org-chip" :style="{ background: orgEdit.color }"><i class="fas me-1" :class="orgEdit.icon || 'fa-building'"></i>[[ orgEdit.label || orgEdit.name ]]</span>
+                                        <span class="ul-org-chip" :style="{ background: orgEdit.color, color: readableTextColor(orgEdit.color) }"><i class="fas me-1" :class="orgEdit.icon || 'fa-building'"></i>[[ orgEdit.label || orgEdit.name ]]</span>
                                     </div>
                                     <div class="row g-2">
                                         <div class="col-sm-6"><label class="form-label small mb-1">Name</label>
@@ -209,7 +209,7 @@
                                             <input v-model="orgEdit.label" class="form-control form-control-sm" maxlength="40"></div>
                                         <div class="col-12"><label class="form-label small mb-1">Website</label>
                                             <input v-model="orgEdit.website" class="form-control form-control-sm" maxlength="256" placeholder="https://…"></div>
-                                        <div class="col-sm-7"><icon-picker v-model="orgEdit.icon"></icon-picker></div>
+                                        <div class="col-sm-7"><icon-picker v-model="orgEdit.icon" all-icons></icon-picker></div>
                                         <div class="col-sm-5"><label class="form-label small mb-1">Colour</label>
                                             <div class="d-flex gap-1">
                                                 <input type="color" class="form-control form-control-color" v-model="orgEdit.color" style="width:45px;">
@@ -283,6 +283,7 @@
     import PaginationComponent from '/static/js/rule/paginationComponent.js'
     import UserChip            from '/static/js/components/UserChip.js'
     import IconPicker          from '/static/js/tags/utils/iconPicker.js'
+    import { readableTextColor } from '/static/js/utils/color.js'
 
     const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }}
 
@@ -529,7 +530,7 @@
             }
 
             return {
-                userListRef,
+                userListRef, readableTextColor,
                 adminTarget,  adminWorking,  onToggleAdmin,  confirmToggleAdmin,
                 deleteTarget, deleteWorking, onDeleteUser,   confirmDeleteUser,
                 idTarget, idVerified, idHistory, idJustification, idLoading, idWorking, onIdentity, saveIdentity,

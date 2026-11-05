@@ -424,6 +424,7 @@
     padding: .1rem .45rem; border-radius: 999px;
     font-size: .66rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     color: #fff; background: #6f42c1;   /* background: the organisation's colour, set inline */
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.12);   /* edge for a white / very light colour (text colour set inline: black or white) */
 }
 .ul-org-list { max-height: 45vh; overflow-y: auto; }
 .ul-org-row { display: flex; align-items: center; gap: .5rem; padding: .35rem 0; border-bottom: 1px solid var(--border-color); font-size: .85rem; }
