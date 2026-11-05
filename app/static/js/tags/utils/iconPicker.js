@@ -61,6 +61,38 @@ const IconPicker = {
     setup(props, { emit }) {
         const searchQuery = Vue.ref('');
         const isOpen = Vue.ref(false);
+        // The panel is teleported to <body> with position:fixed so a modal (overflow / z-index) never hides it
+        const fieldEl = Vue.ref(null);
+        const panelEl = Vue.ref(null);
+        const panelStyle = Vue.ref({});
+        const place = () => {
+            if (!fieldEl.value) return;
+            const r = fieldEl.value.getBoundingClientRect();
+            const h = props.allIcons ? 460 : 360;
+            const below = window.innerHeight - r.bottom;
+            const up = below < h && r.top > below;
+            panelStyle.value = {
+                position: 'fixed', zIndex: 2100, left: r.left + 'px', width: Math.max(r.width, 260) + 'px',
+                ...(up ? { bottom: (window.innerHeight - r.top + 4) + 'px' } : { top: (r.bottom + 4) + 'px' }),
+            };
+        };
+        const onDocDown = (e) => {
+            if (fieldEl.value?.contains(e.target) || panelEl.value?.contains(e.target)) return;
+            isOpen.value = false;
+        };
+        Vue.watch(isOpen, (open) => {
+            if (open) {
+                place();
+                window.addEventListener('scroll', place, true);
+                window.addEventListener('resize', place);
+                document.addEventListener('mousedown', onDocDown);
+            } else {
+                window.removeEventListener('scroll', place, true);
+                window.removeEventListener('resize', place);
+                document.removeEventListener('mousedown', onDocDown);
+            }
+        });
+        Vue.onBeforeUnmount(() => { isOpen.value = false; });
         const group = Vue.ref('');
         loadChoices();
         if (props.allIcons) loadAllIcons();
@@ -102,19 +134,20 @@ const IconPicker = {
         };
         const current = Vue.computed(() => (props.modelValue || 'fa-tag').replace(/^fa-/, ''));
 
-        return { searchQuery, isOpen, group, groups, filtered, typed, selectIcon, current, more, total: Vue.computed(() => allIcons.value.length) };
+        return { fieldEl, panelEl, panelStyle, searchQuery, isOpen, group, groups, filtered, typed, selectIcon, current, more, total: Vue.computed(() => allIcons.value.length) };
     },
     template: `
     <div class="icon-picker-container position-relative">
         <label v-if="label" class="form-label fw-bold small text-muted text-uppercase mb-1">[[ label ]]</label>
-        <button type="button" class="icon-picker-field" :class="{ 'is-open': isOpen }" @click="isOpen = !isOpen" :aria-expanded="isOpen">
+        <button ref="fieldEl" type="button" class="icon-picker-field" :class="{ 'is-open': isOpen }" @click="isOpen = !isOpen" :aria-expanded="isOpen">
             <span class="icon-picker-preview" :style="color ? { '--ip-color': color } : {}"><i :class="['fas', 'fa-' + current]"></i></span>
             <span class="icon-picker-name">fa-[[ current ]]</span>
             <i class="fas icon-picker-caret" :class="isOpen ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
         </button>
 
-        <div v-if="isOpen" class="card shadow-lg border-0 position-absolute w-100 mt-1 z-3 rounded-4 overflow-hidden icon-picker-panel"
-             style="min-width: 260px;" @click.stop>
+        <teleport to="body">
+        <div v-if="isOpen" ref="panelEl" class="card shadow-lg border-0 rounded-4 overflow-hidden icon-picker-panel"
+             :style="panelStyle" @click.stop>
             <div class="p-2 border-bottom icon-picker-head">
                 <div class="input-group input-group-sm mb-2">
                     <span class="input-group-text icon-picker-search-icon"><i class="fas fa-search opacity-50"></i></span>
@@ -144,6 +177,7 @@ const IconPicker = {
                 <div v-if="!filtered.length && !typed" class="text-center py-3 text-muted small">No icons found.</div>
             </div>
         </div>
+        </teleport>
     </div>
     `
 };

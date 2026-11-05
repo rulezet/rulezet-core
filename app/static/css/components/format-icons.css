@@ -1,0 +1,19 @@
+/* Rule format logos usable as icons: <i class="fa-solid fa-format-yara"> (tag / workflow icon pickers, setting tags.icon_choices) */
+[class*="fa-format-"]::before { content: '' !important; display: inline-block; width: 1.15em; height: 1.15em; vertical-align: -.2em; background: center / contain no-repeat; }
+.fa-format-atr::before { background-image: url('../../images/formats/atr.svg'); }
+.fa-format-crs::before { background-image: url('../../images/formats/crs.png'); }
+.fa-format-elastic::before { background-image: url('../../images/formats/elastic.png'); }
+.fa-format-kql::before { background-image: url('../../images/formats/kql.png'); }
+.fa-format-kunai::before { background-image: url('../../images/formats/kunai.svg'); }
+.fa-format-nova::before { background-image: url('../../images/formats/nova.png'); }
+.fa-format-nse::before { background-image: url('../../images/formats/nse.png'); }
+.fa-format-plum::before { background-image: url('../../images/formats/plum.png'); }
+.fa-format-rulezet::before { background-image: url('../../images/formats/rulezet.png'); }
+.fa-format-sagan::before { background-image: url('../../images/formats/sagan.png'); }
+.fa-format-sigma::before { background-image: url('../../images/formats/sigma.svg'); }
+.fa-format-splunk::before { background-image: url('../../images/formats/splunk.png'); }
+.fa-format-suricata::before { background-image: url('../../images/formats/suricata.png'); }
+.fa-format-wazuh::before { background-image: url('../../images/formats/wazuh.png'); }
+.fa-format-xdr::before { background-image: url('../../images/formats/xdr.svg'); }
+.fa-format-yara::before { background-image: url('../../images/formats/yara.png'); }
+.fa-format-zeek::before { background-image: url('../../images/formats/zeek.png'); }
