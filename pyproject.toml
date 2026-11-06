@@ -71,7 +71,7 @@ dependencies = [
     "scikit-learn>=1.9.0",
     "faiss-cpu>=1.14.2",
     "rapidfuzz>=3.14.5",
-    "anthropic>=0.67.0,<1",              # same SDK major as the AI code was written for
+    "anthropic>=0.67.0,<3",              # same SDK major as the AI code was written for
     "openai>=1.107.1,<2",                # idem (2.x changes the client API)
     # tests (CI, manage.py test)
     "pytest>=9.0.3",
