@@ -216,7 +216,14 @@ cd app/modules/rulezet-editor && npm test           # editor (JS)
 cd app/modules/rulezet-tester && pytest             # tester
 ```
 
-Never run two pytest processes in the same checkout (they share the SQLite file).
+Both suites create their app, SQLite schema and baseline data once per run. Each
+test uses a transaction that is rolled back afterwards, including changes made by
+`db.session.commit()` inside requests. App settings and login throttling are reset
+between tests too. Tests that need independent commits across worker contexts use
+`@pytest.mark.independent_db` to restore a SQLite snapshot instead; they also reuse
+the schema and seed data. Database and session files live in pytest's temporary directory,
+separately for each suite and worker; `instance/rulezet-test.sqlite` is not used.
+Tests that touch other shared checkout files should still be run sequentially.
 
 ---
 

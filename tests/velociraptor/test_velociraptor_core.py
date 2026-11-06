@@ -35,6 +35,10 @@ def server(app, admin):
             client_cert="-----BEGIN CERTIFICATE-----\nCLIENT\n-----END CERTIFICATE-----",
             client_key="-----BEGIN PRIVATE KEY-----\nSECRET\n-----END PRIVATE KEY-----",
         )
+        # Load expired attributes before a test opens a nested app context.
+        # Otherwise reading s.uuid there starts this outer session's savepoint
+        # inside the test's savepoint, which disappears when that context exits.
+        db.session.refresh(s)
         yield s
         existing = VelociraptorServer.query.filter_by(uuid=s.uuid).first()
         if existing:

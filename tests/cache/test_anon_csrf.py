@@ -6,13 +6,19 @@ import pytest
 from app.core.utils import anon_csrf
 
 
-@pytest.fixture
-def csrf_app(app):
-    app.config['WTF_CSRF_ENABLED'] = True
-
+@pytest.fixture(scope="session")
+def _app(_test_app_factory, _legacy_seed):
+    # Register the probe route once, before this app handles its first request.
+    app = _test_app_factory(_legacy_seed)
     @app.route('/_test_anon_post', methods=['POST'])
     def _test_anon_post():
         return 'ok'
+    return app
+
+
+@pytest.fixture
+def csrf_app(app):
+    app.config['WTF_CSRF_ENABLED'] = True
     return app
 
 

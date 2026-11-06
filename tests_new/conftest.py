@@ -1,7 +1,7 @@
 """Shared fixtures — see docs/design/test_restructure.md.
 
-The app and its tables are built once per run; every test then starts from an
-empty, freshly seeded database (FLASKENV=testing, SQLite) and runs inside the
+The app, tables and baseline data are built once per run; every test rolls
+back to that baseline (FLASKENV=testing, SQLite) and runs inside the
 app context, so the objects it creates stay usable after requests (reload
 them with `reload(obj)` to see what a request changed).
 
@@ -22,7 +22,7 @@ import pytest
 sys.path.append(os.getcwd())
 os.environ.setdefault("FLASKENV", "testing")
 
-from app import create_app, db  # noqa: E402
+from app import db  # noqa: E402
 from app.core.utils.init_db import insert_default_formats  # noqa: E402
 from tests_new.helpers.users import _password_hash, make_user  # noqa: E402
 
@@ -31,13 +31,15 @@ collect_ignore_glob = ["_template/*"]
 
 
 @pytest.fixture(scope="session")
-def _app():
-    """The Flask app and its tables, built once per run."""
-    app = create_app(start_worker=False)
-    app.config.update({
-        "TESTING": True,
-        "SERVER_NAME": f"{app.config.get('FLASK_URL')}:{app.config.get('FLASK_PORT')}",
-    })
+def _app(_test_app_factory):
+    """The Flask app, schema and baseline data, built once per run."""
+    def seed():
+        from app.features.roles.roles_core import seed_default_permissions_and_roles
+        seed_default_permissions_and_roles()
+        default_user = _seed_default_user()
+        _seed_default_tags(created_by=default_user)
+
+    app = _test_app_factory(seed)
     # Tests run inside one app context (so their objects stay usable), and a
     # request reuses the app context already pushed — so Flask's `g`, where
     # Flask-Login caches the logged-in user, would leak from one request to
@@ -49,40 +51,15 @@ def _app():
             delattr(g, name)
     app.before_request_funcs.setdefault(None, []).insert(0, _fresh_request_globals)
 
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
     return app
 
 
-def _empty_all_tables():
-    for table in reversed(db.metadata.sorted_tables):
-        db.session.execute(table.delete())
-    db.session.commit()
-    # settings changed by a test (app_setting rows) are cached in memory: forget them with the rows,
-    # or the next tests keep running with them (e.g. editor.access left on "admins")
-    from app.core.utils.app_settings import clear_cache
-    clear_cache()
-
-
 @pytest.fixture
-def app(_app):
-    """The app with an empty database, seeded like a real instance."""
-    with _app.app_context():
-        _empty_all_tables()
-        from app.features.roles.roles_core import seed_default_permissions_and_roles
-        seed_default_permissions_and_roles()
-        default_user = _seed_default_user()   # author of rules imported without an owner
-        _seed_default_tags(created_by=default_user)
-
-        # The login brute-force guard is per process and keyed by IP — every
-        # test client is 127.0.0.1, so each test starts with a clean slate.
-        from app.features.account import account as _account
-        _account._login_failures.clear()
-
-        yield _app
-
-        db.session.remove()
+def app(_app, _db_transaction):
+    """A clean baseline and an app context for the duration of the test."""
+    with _db_transaction(_app):
+        with _app.app_context():
+            yield _app
 
 
 def _seed_default_user():
