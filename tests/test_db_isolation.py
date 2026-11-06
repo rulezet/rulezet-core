@@ -64,13 +64,17 @@ def test_session_rollback_preserves_prior_commits(_app, isolate_database):
 
 def test_failed_test_restores_database_and_config(_app, isolate_database):
     original_secret = _app.config["SECRET_KEY"]
-    with pytest.raises(RuntimeError, match="simulated test failure"):
+    try:
         with isolate_database(_app), _app.app_context():
             _app.config["SECRET_KEY"] = "changed"
             _app.config["TEST_ONLY_SETTING"] = True
             User.query.filter_by(email="t@t.t").one().first_name = "Changed"
             db.session.commit()
             raise RuntimeError("simulated test failure")
+    except RuntimeError as error:
+        assert str(error) == "simulated test failure"
+    else:
+        pytest.fail("Database isolation must propagate the test failure")
 
     with isolate_database(_app), _app.app_context():
         assert _app.config["SECRET_KEY"] == original_secret
