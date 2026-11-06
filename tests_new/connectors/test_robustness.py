@@ -612,7 +612,13 @@ ODD_SYNC_PARAMS = [
     "since=garbage", "since=", "since=9999-99-99", "since=2025-01-01T00:00:00%2B05:00",
     "date_from=garbage", "date_to=garbage", "date_from=2025-13-45", "date_from=2025-01-01T00:00:00Z",
     "tags=tlp:clear&tag_mode=XOR", "tags=tlp:clear&tag_exclude=maybe", "formats=,,,", "author=%25", "cve=%25%25",
-    "attacks=,", "uuids=,,,", "uuids=" + ",".join(str(uuid.uuid4()) for _ in range(500)), "count_only=maybe",
+    "attacks=,", "uuids=,,,",
+    # Workers collect independently: both the input and its test ID must be stable.
+    pytest.param(
+        "uuids=" + ",".join(str(uuid.uuid5(uuid.NAMESPACE_URL, f"rulezet-test-{i}")) for i in range(500)),
+        id="500-unknown-uuids",
+    ),
+    "count_only=maybe",
     *[f"author={i}" for i in INJECTIONS], "formats=" + "a" * 5_000,
 ]
 

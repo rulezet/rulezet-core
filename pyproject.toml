@@ -103,6 +103,9 @@ script_location = "%(here)s/migrations"
 # tests_new/ is the rework in progress (docs/design/test_restructure.md) —
 # run it explicitly: `FLASKENV=testing pytest tests_new`.
 testpaths = ["tests"]
+markers = [
+    "independent_db: restore a SQLite snapshot for tests requiring independent commits across worker contexts",
+]
 filterwarnings = [
     "error",
     "ignore::UserWarning",

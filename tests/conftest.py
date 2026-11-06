@@ -1,44 +1,35 @@
+"""Legacy seed data, reused with per-test transaction isolation."""
 import sys
 import os
 
 
 sys.path.append(os.getcwd())
 
-from app import create_app, db
 from app.core.utils.init_db import create_admin_test, create_default_user, create_rule_test, create_user_test
 import pytest
 
-@pytest.fixture
-def app():
-    os.environ.setdefault("FLASKENV", "testing")
-    # No test relies on the live background worker, telemetry, update-checker,
-    # or sync-schedule threads actually ticking — they call handlers/functions
-    # directly and assert DB state synchronously. Leaving them running just
-    # means every test process has a worker thread polling the same SQLite
-    # file every 2s for the whole suite, which occasionally collides with a
-    # test's own write and raises "database is locked" (seen in full-suite
-    # runs, never in isolated single-file runs).
-    app = create_app(start_worker=False)
-    app.config.update({
-        "TESTING": True,
-        "SERVER_NAME": f"{app.config.get('FLASK_URL')}:{app.config.get('FLASK_PORT')}"
-    })
-    
 
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
+@pytest.fixture(scope="session")
+def _legacy_seed():
+    def seed():
         create_user_test()
         create_admin_test()
         create_rule_test()
-        create_default_user() # for the rule with no author
+        create_default_user()  # for the rule with no author
 
-    # The login brute-force guard is per process, keyed by IP — every test
-    # client is 127.0.0.1, so start each test with a clean slate.
-    from app.features.account import account as _account
-    _account._login_failures.clear()
+    return seed
 
-    yield app
+
+@pytest.fixture(scope="session")
+def _app(_test_app_factory, _legacy_seed):
+    return _test_app_factory(_legacy_seed)
+
+
+@pytest.fixture
+def app(_app, _db_transaction):
+    with _db_transaction(_app):
+        yield _app
+
 
 @pytest.fixture()
 def client(app):
@@ -48,5 +39,3 @@ def client(app):
 @pytest.fixture()
 def runner(app):
     return app.test_cli_runner()
-    
-

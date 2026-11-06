@@ -106,7 +106,8 @@ seen it. Every test follows the same conventions:
   changing a permission is a one-line diff, readable by anyone.
 - **Assert the effect, not just the status code**: what the DB contains after
   the call, what the response contains (or must not leak).
-- **Deterministic and isolated**: fresh DB per test, no ordering dependency,
+- **Deterministic and isolated**: fresh baseline per test (session-scoped schema
+  and seed data, per-test transaction rollback), no ordering dependency,
   no `sleep`, no real network (mocks), no reliance on data left by another
   test.
 - **Fast**: a feature's four files run in seconds; anything slow gets a
