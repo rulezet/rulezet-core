@@ -379,7 +379,7 @@ pytest==9.0.3
     # via rulezet-core
 python-baseconv==1.2.2
     # via cccs-yara
-python-dateutil==2.9.0.post0
+python-dateutil==3.0.0
     # via
     #   pymisp
     #   rulezet-core
