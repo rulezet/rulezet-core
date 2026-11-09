@@ -313,6 +313,7 @@ def test_delete_a_proposal_removes_it(clients, users):
 
 # ── Checking a repository for updates ─────────────────────────────────────────
 
+@pytest.mark.independent_db
 def test_an_upstream_change_becomes_a_pending_update_not_an_overwrite(clients, github):
     url = _imported_repo(github, clients["admin"], {"rules/a.yar": yara_rule("rule_a")})
     rule = Rule.query.one()
@@ -329,6 +330,7 @@ def test_an_upstream_change_becomes_a_pending_update_not_an_overwrite(clients, g
     assert _the_check().uuid == response.get_json()["session_uuid"]
 
 
+@pytest.mark.independent_db
 def test_an_unchanged_repository_has_no_pending_update(clients, github):
     url = _imported_repo(github, clients["admin"], {"rules/a.yar": yara_rule("rule_a")})
 
@@ -339,6 +341,7 @@ def test_an_unchanged_repository_has_no_pending_update(clients, github):
     assert count(RuleUpdateHistory, message=PENDING) == 0
 
 
+@pytest.mark.independent_db
 def test_a_rule_added_upstream_waits_as_a_new_rule(clients, github):
     url = _imported_repo(github, clients["admin"], {"rules/a.yar": yara_rule("rule_a")})
     github.commit(url, {"rules/b.yar": yara_rule("rule_b")})
@@ -350,6 +353,7 @@ def test_a_rule_added_upstream_waits_as_a_new_rule(clients, github):
     assert count(Rule) == 1
 
 
+@pytest.mark.independent_db
 def test_an_invalid_upstream_change_is_recorded_as_invalid_and_the_rule_kept(clients, github):
     url = _imported_repo(github, clients["admin"], {"rules/a.yar": yara_rule("rule_a")})
     rule = Rule.query.one()
@@ -362,6 +366,7 @@ def test_an_invalid_upstream_change_is_recorded_as_invalid_and_the_rule_kept(cli
     assert (status.update_available, status.rule_syntax_valid) == (True, False)
 
 
+@pytest.mark.independent_db
 def test_a_rule_removed_upstream_is_reported_not_found(clients, github):
     url = _imported_repo(github, clients["admin"], {"rules/a.yar": yara_rule("rule_a"), "rules/b.yar": yara_rule("rule_b")})
     github.commit(url, delete=["rules/b.yar"])
@@ -386,6 +391,7 @@ def test_a_rule_in_the_trash_is_not_checked(clients, users, github):
     assert count(RuleStatus, rule_id=str(rule.id)) == 0
 
 
+@pytest.mark.independent_db
 def test_a_check_of_a_branch_only_looks_at_that_branch(clients, github):
     url = github.repo("acme/rules", {"rules/a.yar": yara_rule("rule_a")})
     github.branch(url, "dev", {"rules/b.yar": yara_rule("rule_b")})
@@ -398,6 +404,7 @@ def test_a_check_of_a_branch_only_looks_at_that_branch(clients, github):
     assert _the_check().to_json_list()["info"]["branch"] == "dev"
 
 
+@pytest.mark.independent_db
 def test_check_my_own_rule_creates_a_pending_update(clients, users, github):
     url = github.repo("acme/rules", {"rules/a.yar": _v2("rule_a")})
     rule = make_github_rule(users.owner, url, path="rules/a.yar", title="rule_a", content=yara_rule("rule_a"))
@@ -410,6 +417,7 @@ def test_check_my_own_rule_creates_a_pending_update(clients, users, github):
     assert _the_check().mode == "by_rule"
 
 
+@pytest.mark.independent_db
 def test_check_rules_drops_the_ones_you_do_not_own(clients, users, github):
     url = github.repo("acme/rules", {"rules/a.yar": _v2("mine"), "rules/b.yar": _v2("theirs")})
     mine = make_github_rule(users.owner, url, path="rules/a.yar", title="mine", content=yara_rule("mine"))
@@ -711,6 +719,7 @@ def _run_schedule(clients, schedule, app):
     return _run(handle_github_sync_schedule_run, job, app)
 
 
+@pytest.mark.independent_db
 def test_a_sync_schedule_run_checks_each_repository_and_leaves_updates_pending(clients, users, github, app):
     url = _imported_repo(github, clients["admin"], {"rules/a.yar": yara_rule("rule_a")})
     rule = Rule.query.one()
@@ -729,6 +738,7 @@ def test_a_sync_schedule_run_checks_each_repository_and_leaves_updates_pending(c
     assert count(Rule) == 1 and count(NewRule) == 1
 
 
+@pytest.mark.independent_db
 def test_a_sync_schedule_run_with_auto_accept_and_auto_add_updates_the_rules(clients, users, github, app):
     url = _imported_repo(github, clients["admin"], {"rules/a.yar": yara_rule("rule_a")})
     rule = Rule.query.one()
@@ -743,6 +753,7 @@ def test_a_sync_schedule_run_with_auto_accept_and_auto_add_updates_the_rules(cli
     assert (run_repo.auto_accepted, run_repo.auto_added) == (1, 1)
 
 
+@pytest.mark.independent_db
 def test_a_sync_schedule_run_reports_a_repository_it_cannot_reach_and_checks_the_others(clients, users, github, app):
     url = _imported_repo(github, clients["admin"], {"rules/a.yar": yara_rule("rule_a")})
     github.commit(url, {"rules/a.yar": _v2("rule_a")})

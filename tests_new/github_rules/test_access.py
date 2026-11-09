@@ -117,6 +117,7 @@ def test_delete_an_import_from_the_history(role, expected, as_role, users):
 # ── Checking for updates ──────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("role, expected", matrix(MANAGER))
+@pytest.mark.independent_db
 def test_check_updates_of_a_repository(role, expected, as_role, github, users):
     url = _sample_repo(github)
     rule = make_github_rule(users.owner, url, path="rules/sample.yar", title="sample_rule",
@@ -131,6 +132,7 @@ def test_check_updates_of_a_repository(role, expected, as_role, github, users):
 
 
 @pytest.mark.parametrize("role, expected", matrix(OWNER_OR_MANAGER))
+@pytest.mark.independent_db
 def test_check_updates_of_a_rule(role, expected, as_role, github, users):
     url = _sample_repo(github)
     rule = make_github_rule(users.owner, url, path="rules/sample.yar", title="sample_rule",

@@ -26,10 +26,9 @@ def test_only_a_known_format_and_never_docs_or_code(app):
 def test_file_without_extension_imported_in_the_forced_format(app, users, tmp_path):
     (tmp_path / "my_rules").write_text(YARA)                 # no extension: no format claims it
     (tmp_path / "README.md").write_text(YARA)                # a doc file: never read, even forced
-    with app.app_context():
-        info = {"origin": "zip_upload", "url": "zip_upload", "repo_url": "forced format test", "license": "MIT"}
-        _, imported, _ = asyncio.run(M.extract_rule_from_repo(str(tmp_path), info, users.owner))
-        assert imported == 0                                  # without the option: skipped as before
-        _, imported, _ = asyncio.run(M.extract_rule_from_repo(str(tmp_path), {**info, "force_format": "yara"}, users.owner))
-        assert imported == 1
-        assert Rule.query.filter(Rule.to_string.contains("forced_format_test")).count() == 1
+    info = {"origin": "zip_upload", "url": "zip_upload", "repo_url": "forced format test", "license": "MIT"}
+    _, imported, _ = asyncio.run(M.extract_rule_from_repo(str(tmp_path), info, users.owner))
+    assert imported == 0                                  # without the option: skipped as before
+    _, imported, _ = asyncio.run(M.extract_rule_from_repo(str(tmp_path), {**info, "force_format": "yara"}, users.owner))
+    assert imported == 1
+    assert Rule.query.filter(Rule.to_string.contains("forced_format_test")).count() == 1
