@@ -13,12 +13,12 @@ export const W = 1280;
 export const H = 720;
 export const TAU = Math.PI * 2;
 
-// ── FontAwesome 6 Free (solid) glyphs, drawn on the canvas with fillText ──
+// ── Font Awesome 7 Free (solid) glyphs, drawn on the canvas with fillText ──
 export const FA = {
     bug: '', robot: '', skull: '', lock: '', bolt: '',
     shield: '', heart: '', secret: '', envelope: '', fish: '',
     network: '', chip: '', bomb: '', keyboard: '', ghost: '',
-    virus: '若', coins: '', eyeSlash: '', crosshairs: '', gem: '',
+    virus: '', coins: '', eyeSlash: '', crosshairs: '', gem: '',
     gift: '', fire: '', magnet: '', star: '', flag: '',
     eye: '', satellite: '', biohazard: '', key: '', sun: '',
 };

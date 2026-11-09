@@ -122,7 +122,7 @@
     font-size: .84rem; line-height: 1.45; color: var(--subtle-text-color);
 }
 .why-feature__list li::before {
-    content: "\f00c"; font-family: "Font Awesome 6 Free"; font-weight: 900;
+    content: "\f00c"; font-family: "Font Awesome 7 Free"; font-weight: 900;
     position: absolute; left: 0; top: 1px;
     font-size: .7rem; color: #198754;
 }

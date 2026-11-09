@@ -5,7 +5,7 @@
 import { W, H, TAU, FA } from './data.js';
 import { tr } from './i18n.js';
 
-const FA_FONT = "'Font Awesome 6 Free'";
+const FA_FONT = "'Font Awesome 7 Free'";   // the family name of fontawesome-7.3.1/css/solid.css
 let faReady = false;
 if (typeof document !== 'undefined' && document.fonts && document.fonts.load) {
     document.fonts.load(`900 32px ${FA_FONT}`).then(() => { faReady = true; }).catch(() => {});

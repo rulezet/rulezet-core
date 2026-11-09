@@ -336,7 +336,7 @@ body.bfv-open { overflow: hidden; }
 }
 .bfv-ext-link::after {
     content: "\f35d";
-    font-family: "Font Awesome 6 Free";
+    font-family: "Font Awesome 7 Free";
     font-weight: 900;
     font-size: .65em;
     margin-left: 4px;
