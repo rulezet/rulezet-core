@@ -332,6 +332,8 @@ psutil==7.2.2
     # via rulezet-core
 psycopg2-binary==2.9.12
     # via rulezet-core
+pyatr==0.5.0
+    # via rulezet-core
 pycparser==3.0 ; implementation_name != 'PyPy'
     # via cffi
 pydantic==2.13.4
@@ -394,6 +396,7 @@ pyyaml==6.0.3
     #   cccs-yara
     #   huggingface-hub
     #   nova-hunting
+    #   pyatr
     #   pysigma
     #   pysigma-backend-sumologic
     #   pyvelociraptor
@@ -410,7 +413,9 @@ referencing==0.37.0
     #   jsonschema
     #   jsonschema-specifications
 regex==2026.5.9
-    # via transformers
+    # via
+    #   pyatr
+    #   transformers
 requests==2.34.2
     # via
     #   nova-hunting
