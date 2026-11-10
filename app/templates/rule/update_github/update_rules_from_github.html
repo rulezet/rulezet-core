@@ -64,7 +64,7 @@
     <nav class="dr-nav">
         <a href="#" class="dr-nav__item" :class="{ active: panel === 'updates' }" @click.prevent="panel = 'updates'">
             <i class="fa-solid fa-code-pull-request"></i><span>Updates to review</span>
-            <span class="dr-nav__badge" :class="{ 'dr-nav__badge--alert': stats.ready > 0 && panel !== 'updates' }">[[ stats.total ]]</span>
+            <span class="dr-nav__badge" :class="{ 'dr-nav__badge--alert': stats.total > 0 }">[[ stats.total ]]</span>
         </a>
         <a href="#" class="dr-nav__item" :class="{ active: panel === 'repos' }" @click.prevent="panel = 'repos'">
             <i class="fa-solid fa-code-branch"></i><span>Out-of-date repositories</span>
