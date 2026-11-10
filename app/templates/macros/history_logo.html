@@ -1,54 +1,82 @@
 {% extends 'base.html' %}
 {% block title %}The story of Rulezet — Rulezet{% endblock %}
 
-{% block script %}
-<script type="module" src="{{ url_for('static', filename='js/history/history_lightbox.js') }}"></script>
-{% endblock %}
-
 {% block head %}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/history/history_logo.css') }}">
 {% endblock %}
 
-{% set milestones = [
+{#
+  The story of Rulezet, in three chapters that follow the same thread:
+    1. How it grew      — the rules shared on Rulezet since its launch (chart)
+    2. Watch it grow    — every commit of every Rulezet project (video)
+    3. Step by step     — the milestones, with the logos and screenshots of each era
+#}
+{% set steps = [
     {
-        'era': 'Inception', 'period': 'An internship at CIRCL', 'color': '#0d6efd', 'icon': 'fa-seedling',
-        'title': 'It all started with an internship at CIRCL',
-        'image': 'image/Rulezet.png', 'screenshot': false,
-        'text': 'Rulezet began as an internship at CIRCL, from a problem every analyst knows: detection rules are everywhere. They live in thousands of git repositories, blog posts, gists and vendor PDFs, written in many formats, copied again and again, often outdated — and there is no way to tell a good rule from a broken one. The internship set out to answer one question: what if there was a single open place to find, check and improve them? This first logo was drawn before the platform even existed.',
-        'points': ['Rules scattered across thousands of sources', 'Many formats, no common way to check them', 'Duplicates and outdated copies everywhere', 'The goal: one open place for every detection rule'],
+        'date': 'Spring 2025', 'color': '#0d6efd', 'icon': 'fa-lightbulb',
+        'title': 'An idea at CIRCL',
+        'image': 'image/Rulezet.png', 'image_kind': 'First logo',
+        'text': 'Rulezet began with an idea of Alexandre Dulaunoy, head of CIRCL, taken up as an internship project. The problem every analyst knows: detection rules are everywhere — thousands of git repositories, blog posts, gists and vendor reports — in many formats, copied again and again, often outdated, with no way to tell a good rule from a broken one. The question: what if there was one open place to find, check and improve them?',
+        'points': ['The idea of Alexandre Dulaunoy, head of CIRCL', 'An internship project to answer it', 'First formats: YARA and Sigma'],
     },
     {
-        'era': 'Development', 'period': 'Growth phase', 'color': '#198754', 'icon': 'fa-code-branch',
-        'title': 'Refining the vision',
-        'image': 'image/logo_rulezet_bg.png', 'screenshot': false,
-        'text': 'As the internship ended, the platform showed enough promise to become a dedicated project. It grew to more rule formats — Sigma, Suricata, Zeek, Snort — with structured metadata, a REST API and version history for rule content. This logo came with the move from prototype to a system handling real detection work.',
-        'points': ['Multi-format support (Sigma, Suricata, Zeek, Snort)', 'REST API with API keys', 'Structured metadata and CVE tagging', 'PostgreSQL backend for production'],
+        'date': 'July 2025', 'color': '#198754', 'icon': 'fa-rocket',
+        'title': 'v1.0 — Rulezet goes public',
+        'image': 'image/logo_rulezet_bg.png', 'image_kind': 'Logo of the first releases',
+        'text': 'The first public release. Rules are imported straight from git repositories, more formats join — Suricata, Zeek and others — and a REST API opens Rulezet to scripts and other tools.',
+        'points': ['Import from GitHub repositories', 'More rule formats', 'REST API with API keys'],
     },
     {
-        'era': 'Interface v1', 'period': 'First UI', 'color': '#0dcaf0', 'icon': 'fa-desktop',
-        'title': 'The first dashboard',
-        'image': 'image/rulezet_home.png', 'screenshot': true,
-        'text': 'The first interface shipped the essentials: create, edit and delete rules, a rule viewer, a search bar, tags and exports. Deliberately minimal — built to validate the data model before investing in the experience — it laid the foundations for everything that followed.',
-        'points': ['Full create / edit / delete of rules', 'Basic tag management', 'Rule export', 'First public deployment'],
+        'date': 'Dec 2025 – Feb 2026', 'color': '#0dcaf0', 'icon': 'fa-desktop',
+        'title': 'A real interface, a better catalogue',
+        'image': 'image/rulezet_home.png', 'image_kind': 'Interface of the time', 'screenshot': true,
+        'text': 'Releases 1.2 to 1.4 turn the catalogue into a place you can actually explore: taxonomies and tags, precise search, and a home page to discover rules.',
+        'points': ['Taxonomies, tags and filters', 'Advanced discovery', 'The first full interface'],
     },
     {
-        'era': 'Modernisation', 'period': 'Brand redesign', 'color': '#fd7e14', 'icon': 'fa-shield-halved',
-        'title': 'The shield and the magnifying glass',
-        'image': 'image/logo.png', 'screenshot': false,
-        'text': 'A full brand redesign marked the shift to a community platform. The logo — a shield with a magnifying glass — says what Rulezet is for: protection and active analysis. A symbol that stands on its own in slides, documentation and on the public instance at rulezet.org.',
-        'points': ['A real brand identity', 'Community-driven roadmap', 'MITRE ATT&CK integration', 'Public instance at rulezet.org'],
+        'date': 'April 2026', 'color': '#e8590c', 'icon': 'fa-star',
+        'title': 'Thomas Patzke and Sigma',
+        'text': 'Thomas Patzke, the creator of Sigma, contributes full pySigma validation: every Sigma rule is checked the way the Sigma project itself checks it — and Sigma rules pour in.',
+        'points': ['Full pySigma validation', 'A wave of Sigma rules', 'Galaxies, jobs and profiles (v1.5)'],
     },
     {
-        'era': 'Interface v2', 'period': 'Current platform', 'color': '#6f42c1', 'icon': 'fa-wand-magic-sparkles',
+        'date': 'June 2026', 'color': '#fd7e14', 'icon': 'fa-shield-halved',
+        'title': 'A new identity, a federated platform',
+        'image': 'image/logo.png', 'image_kind': 'The shield and the magnifying glass',
+        'text': 'Rulezet instances start syncing their rules with each other (v1.5.2), and v1.6 brings a new architecture and a new chapter — under the logo everyone knows today: a shield for protection, a magnifying glass for analysis.',
+        'points': ['Sync between Rulezet instances', 'A new architecture (v1.6)', 'The community\'s voice: votes, comments, proposals'],
+    },
+    {
+        'date': 'August 2026', 'color': '#6f42c1', 'icon': 'fa-hammer',
+        'title': 'Rebuilt on stronger foundations',
+        'text': 'Théo Geffe rebuilds Rulezet on stronger foundations — and a big wave of new rules follows. Rulezet shakes hands with MISP and Velociraptor (v1.7.0), and scheduling, assignments and quality scores arrive.',
+        'points': ['A sturdier core', 'MISP and Velociraptor', 'Schedules, assignments, quality scores'],
+    },
+    {
+        'date': 'September 2026', 'color': '#d63384', 'icon': 'fa-brain',
+        'title': 'Éric Leblond, Suricata and AI',
+        'text': 'With Éric Leblond, Suricata rules become trusted citizens of Rulezet (v1.7.3), and Rulezet gets a brain: AI analysis, a rule fixer and a rule generator (v1.7.2).',
+        'points': ['Trusted Suricata rules', 'AI analysis, fixer and generator', 'New formats, stronger validation'],
+    },
+    {
+        'date': 'October – November 2026', 'color': '#0a58ca', 'icon': 'fa-wand-magic-sparkles',
         'title': 'A modern detection hub',
-        'image': 'image/rulezet_home_final.png', 'screenshot': true,
-        'text': 'Today\'s interface is built from shared Vue.js components, with dark mode and a modular feature system. Bundles package related detections, the ATT&CK matrix shows coverage at a glance, and connectors sync rules between Rulezet instances.',
-        'points': ['Shared Vue.js components, dark mode', 'Bundles with a drag-and-drop structure editor', 'ATT&CK matrix and coverage', 'Sync between Rulezet instances'],
+        'image': 'image/rulezet_home_final.png', 'image_kind': 'Interface today', 'screenshot': true,
+        'text': 'Bundles grow up with releases, forks and merge requests; a real editor for YARA and Sigma; rules from any git host; messages and a real inbox. Rulezet becomes the place where detection rules are shared, checked and improved together.',
+        'points': ['Bundle releases, forks and merge requests', 'The YARA and Sigma editor', 'Any git host, messages and inbox'],
+    },
+    {
+        'date': 'Today', 'color': '#0d6efd', 'icon': 'fa-flag-checkered', 'today': true,
+        'title': 'One logo, a whole family',
+        'image': 'images/projects/rulezet-family.png', 'image_kind': 'The Rulezet family',
+        'text': 'The magnifying glass is now shared by every Rulezet project — the editor, the tester, the rulesets, the cast… each with its own icon inside. And Rulezy, the mascot, guides you through the site.',
+        'points': [],
     },
 ] %}
 
 {% block content %}
-<div class="container mt-4 mb-5">
+<div class="container mt-4 mb-5 hl-page">
 
     <!-- ── Banner ── -->
     <div class="explorer-banner mb-4">
@@ -65,110 +93,137 @@
             <div><h2 class="fw-bold mb-1">The story of Rulezet</h2><div class="banner-accent"></div></div>
         </div>
         <p class="text-muted mb-0" style="max-width:640px;font-size:.95rem;">
-            From an internship prototype to a community platform for detection rules — told through its logos and interfaces.
+            From an idea at CIRCL to a community platform for detection rules — in three chapters.
         </p>
     </div>
 
-    <!-- ── Logos at a glance ── -->
-    <div class="hl-strip mb-5">
-        {% for m in milestones %}
-        <a class="hl-strip__item" href="#step-{{ loop.index }}" style="--c:{{ m.color }}">
-            <span class="hl-strip__img{% if m.screenshot %} hl-strip__img--shot{% endif %}"><img src="{{ url_for('static', filename=m.image) }}" alt="" loading="lazy"></span>
-            <span class="hl-strip__num">{{ loop.index }}</span>
-            <span class="hl-strip__era">{{ m.era }}</span>
-        </a>
-        {% if not loop.last %}<i class="fa-solid fa-chevron-right hl-strip__sep" aria-hidden="true"></i>{% endif %}
-        {% endfor %}
-    </div>
+    <!-- chapters at a glance -->
+    <nav class="hl-chapters mb-5" aria-label="Chapters">
+        <a href="#chapter-1"><span>1</span>How it grew</a>
+        <a href="#chapter-2"><span>2</span>Watch it grow</a>
+        <a href="#chapter-3"><span>3</span>Step by step</a>
+    </nav>
 
-    <!-- ── The story in motion (video made from every commit, gource) ── -->
-    <section class="hl-video mb-5" id="video">
-        <div class="hl-video__player">
-            <video controls preload="none" playsinline
-                   poster="{{ url_for('static', filename='video/rulezet-history.jpg') }}">
-                <source src="{{ url_for('static', filename='video/rulezet-history.mp4') }}" type="video/mp4">
-                Your browser can't play this video — <a href="{{ url_for('static', filename='video/rulezet-history.mp4') }}">download it</a>.
-            </video>
+    <!-- ── 1. How it grew ── -->
+    <section class="hl-chapter" id="chapter-1">
+        <header class="hl-chapter__head">
+            <span class="hl-chapter__num">1</span>
+            <div>
+                <h3 class="hl-chapter__title">How it grew</h3>
+                <p class="hl-chapter__sub">Every detection rule shared on Rulezet since its launch — and the moments that made it grow.</p>
+            </div>
+        </header>
+        <div class="hl-panel" id="hl-growth" v-cloak>
+            <div class="d-flex justify-content-end mb-2">
+                <div class="hl-toggle" role="group">
+                    <button type="button" :class="{ active: view === 'total' }" @click="view = 'total'"><i class="fa-solid fa-chart-area me-1"></i>Total</button>
+                    <button type="button" :class="{ active: view === 'added' }" @click="view = 'added'"><i class="fa-solid fa-chart-column me-1"></i>Per month</button>
+                </div>
+            </div>
+            <div v-if="loading" class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+            <rules-growth-chart v-else-if="info && info.labels.length" :data="info" :view="view"></rules-growth-chart>
+            <div v-else class="text-center text-muted py-4">No rules yet.</div>
         </div>
-        <aside class="hl-video__info">
-            <span class="hl-era" style="--c:#0d6efd"><i class="fa-solid fa-film me-1"></i>The story in motion</span>
-            <h3 class="hl-card__title mt-2">Every commit of every Rulezet project</h3>
-            <p class="hl-card__text">
-                It starts with the mess: detection rules scattered across repos, gists, blogs and pastes. Then every
-                change ever made to Rulezet and its sister projects grows into a living tree — each branch a folder,
-                each dot a file, each figure a contributor. Captions mark the releases along the way.
-            </p>
-            <div class="hl-video__stats">
-                <div><b>1,671</b><span>commits</span></div>
-                <div><b>9</b><span>projects</span></div>
-                <div><b>15</b><span>contributors</span></div>
-                <div><b>19</b><span>months</span></div>
-            </div>
-            <div class="hl-video__repos">
-                {% for r in ['core', 'editor', 'tester', 'cast', 'validation', 'sample-rules', 'scripts', 'workshop', 'ai-skill'] %}
-                <span>rulezet-{{ r }}</span>
-                {% endfor %}
-            </div>
-            <small class="text-muted d-block mt-2"><i class="fa-solid fa-circle-info me-1"></i>April 2025 → November 2026 · made with Gource. The rulesets mirror (bot commits) is left out.</small>
-        </aside>
     </section>
 
-    <!-- ── Timeline ── -->
-    <ol class="hl-timeline">
-        {% for m in milestones %}
-        <li class="hl-step" id="step-{{ loop.index }}" style="--c:{{ m.color }}">
-            <div class="hl-step__dot"><i class="fa-solid {{ m.icon }}"></i></div>
-            <article class="hl-card">
-                <button type="button" class="hl-card__media hl-zoom{% if m.screenshot %} hl-card__media--shot{% endif %}"
-                        data-full="{{ url_for('static', filename=m.image) }}" data-caption="{{ loop.index }} · {{ m.era }} — {{ m.title }}"
-                        aria-label="Enlarge: {{ m.title }}">
-                    <img src="{{ url_for('static', filename=m.image) }}" alt="{{ m.title }}" loading="lazy">
-                    <span class="hl-zoom__hint"><i class="fa-solid fa-magnifying-glass-plus"></i></span>
-                </button>
-                <div class="hl-card__body">
-                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                        <span class="hl-era">{{ loop.index }} · {{ m.era }}</span>
-                        <span class="hl-period"><i class="fa-regular fa-clock me-1"></i>{{ m.period }}</span>
-                        {% if m.screenshot %}<span class="hl-period"><i class="fa-solid fa-display me-1"></i>Interface</span>{% endif %}
-                    </div>
-                    <h3 class="hl-card__title">{{ m.title }}</h3>
-                    <p class="hl-card__text">{{ m.text }}</p>
-                    <ul class="hl-points">
-                        {% for p in m.points %}<li><i class="fa-solid fa-check"></i>{{ p }}</li>{% endfor %}
-                    </ul>
+    <!-- ── 2. Watch it grow ── -->
+    <section class="hl-chapter" id="chapter-2">
+        <header class="hl-chapter__head">
+            <span class="hl-chapter__num">2</span>
+            <div>
+                <h3 class="hl-chapter__title">Watch it grow</h3>
+                <p class="hl-chapter__sub">Every commit of every Rulezet project, replayed — from the mess of rules on the web to the Rulezet family.</p>
+            </div>
+        </header>
+        <div class="hl-panel hl-video" id="video">
+            <div class="hl-video__player">
+                <video controls preload="none" playsinline poster="{{ url_for('static', filename='video/rulezet-history.jpg') }}">
+                    <source src="{{ url_for('static', filename='video/rulezet-history.mp4') }}" type="video/mp4">
+                    Your browser can't play this video — <a href="{{ url_for('static', filename='video/rulezet-history.mp4') }}">download it</a>.
+                </video>
+            </div>
+            <aside class="hl-video__info">
+                <p class="hl-text">
+                    It opens on the mess: rules scattered across repos, gists, blogs and pastes. Then every change made to
+                    Rulezet and its sister projects grows into a living tree — each branch a folder, each dot a file, each
+                    figure a contributor — with the releases along the way.
+                </p>
+                <div class="hl-video__stats">
+                    <div><b>1,671</b><span>commits</span></div>
+                    <div><b>9</b><span>projects</span></div>
+                    <div><b>15</b><span>contributors</span></div>
+                    <div><b>19</b><span>months</span></div>
                 </div>
-            </article>
-        </li>
-        {% endfor %}
+                <div class="hl-video__repos">
+                    {% for r in ['core', 'editor', 'tester', 'cast', 'validation', 'sample-rules', 'scripts', 'workshop', 'ai-skill'] %}<span>rulezet-{{ r }}</span>{% endfor %}
+                </div>
+            </aside>
+        </div>
+    </section>
 
-        <!-- today -->
-        <li class="hl-step hl-step--today" style="--c:#0d6efd">
-            <div class="hl-step__dot"><i class="fa-solid fa-flag-checkered"></i></div>
-            <article class="hl-card hl-card--today">
-                <button type="button" class="hl-card__media hl-card__media--family hl-zoom"
-                        data-full="{{ url_for('static', filename='images/projects/rulezet-family.png') }}" data-caption="Today — One logo, a whole family"
-                        aria-label="Enlarge: the Rulezet family logo">
-                    <img src="{{ url_for('static', filename='images/projects/rulezet-family.png') }}" alt="The Rulezet family of projects" loading="lazy">
-                    <span class="hl-zoom__hint"><i class="fa-solid fa-magnifying-glass-plus"></i></span>
-                </button>
-                <div class="hl-card__body">
-                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                        <span class="hl-era">Today</span>
-                        <span class="hl-period"><i class="fa-solid fa-cubes me-1"></i>A family of projects</span>
+    <!-- ── 3. Step by step ── -->
+    <section class="hl-chapter" id="chapter-3">
+        <header class="hl-chapter__head">
+            <span class="hl-chapter__num">3</span>
+            <div>
+                <h3 class="hl-chapter__title">Step by step</h3>
+                <p class="hl-chapter__sub">The milestones of Rulezet — the people, the releases, and the logos and screens of each era.</p>
+            </div>
+        </header>
+
+        <ol class="hl-timeline">
+            {% for s in steps %}
+            <li class="hl-step{% if s.today %} hl-step--today{% endif %}" style="--c:{{ s.color }}">
+                <div class="hl-step__dot"><i class="fa-solid {{ s.icon }}"></i></div>
+                <article class="hl-card{% if not s.image %} hl-card--text{% endif %}">
+                    {% if s.image %}
+                    <button type="button" class="hl-card__media hl-zoom{% if s.screenshot %} hl-card__media--shot{% endif %}{% if s.today %} hl-card__media--family{% endif %}"
+                            data-full="{{ url_for('static', filename=s.image) }}" data-caption="{{ s.date }} — {{ s.image_kind }}"
+                            aria-label="Enlarge: {{ s.image_kind }}">
+                        <img src="{{ url_for('static', filename=s.image) }}" alt="{{ s.image_kind }}" loading="lazy">
+                        <span class="hl-card__media-tag">{{ s.image_kind }}</span>
+                        <span class="hl-zoom__hint"><i class="fa-solid fa-magnifying-glass-plus"></i></span>
+                    </button>
+                    {% endif %}
+                    <div class="hl-card__body">
+                        <span class="hl-date"><i class="fa-regular fa-calendar me-1"></i>{{ s.date }}</span>
+                        <h4 class="hl-card__title">{{ s.title }}</h4>
+                        <p class="hl-text">{{ s.text }}</p>
+                        {% if s.points %}
+                        <ul class="hl-points">{% for p in s.points %}<li><i class="fa-solid fa-check"></i>{{ p }}</li>{% endfor %}</ul>
+                        {% endif %}
+                        {% if s.today %}
+                        <div class="d-flex flex-wrap align-items-center gap-3 mt-2">
+                            <img src="{{ url_for('static', filename='images/rulezy/simple.png') }}" alt="Rulezy" class="hl-rulezy">
+                            <a href="/about" class="btn btn-sm btn-outline-primary rounded-pill px-3"><i class="fa-solid fa-circle-info me-1"></i>About Rulezet</a>
+                            <a href="https://github.com/rulezet" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary rounded-pill px-3"><i class="fa-brands fa-github me-1"></i>All projects</a>
+                        </div>
+                        {% endif %}
                     </div>
-                    <h3 class="hl-card__title">One logo, a whole family</h3>
-                    <p class="hl-card__text">
-                        The magnifying glass is now shared by every Rulezet project — the editor, the tester, the rulesets,
-                        the cast… each with its own icon inside. And Rulezy, the mascot, guides you through the site.
-                    </p>
-                    <div class="d-flex flex-wrap align-items-center gap-3">
-                        <img src="{{ url_for('static', filename='images/rulezy/simple.png') }}" alt="Rulezy" class="hl-rulezy">
-                        <a href="/about" class="btn btn-sm btn-outline-primary rounded-pill px-3"><i class="fa-solid fa-circle-info me-1"></i>About Rulezet</a>
-                        <a href="https://github.com/rulezet" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary rounded-pill px-3"><i class="fa-brands fa-github me-1"></i>All projects</a>
-                    </div>
-                </div>
-            </article>
-        </li>
-    </ol>
+                </article>
+            </li>
+            {% endfor %}
+        </ol>
+    </section>
 </div>
+{% endblock %}
+
+{% block script %}
+<script type="module" src="{{ url_for('static', filename='js/history/history_lightbox.js') }}"></script>
+<script type="module">
+    import RulesGrowthChart from '/static/js/history/rulesGrowthChart.js'
+    const { createApp, ref, onMounted } = Vue
+    createApp({
+        delimiters: ['[[', ']]'],
+        components: { 'rules-growth-chart': RulesGrowthChart },
+        setup() {
+            const info = ref(null), loading = ref(true), view = ref('total')
+            onMounted(async () => {
+                try { const r = await fetch('/history_logo/rules_growth'); if (r.ok) info.value = await r.json() }
+                finally { loading.value = false }
+            })
+            return { info, loading, view }
+        },
+    }).mount('#hl-growth')
+</script>
 {% endblock %}

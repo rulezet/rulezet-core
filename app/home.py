@@ -921,6 +921,68 @@ def history_logo() -> render_template:
     return render_template("macros/history_logo.html")
 
 
+@home_blueprint.route("/history_logo/rules_growth")
+@cache.cached(timeout=60 * 60 * 24)
+def history_rules_growth():
+    """Rules added to Rulezet per month since the first one, and the running total (the story
+    page's chart). The same for every visitor and past months never change: cached 24 h.
+    Trashed rules are left out."""
+    import datetime
+    from sqlalchemy import func
+    from app.core.db_class.rule import Rule
+    if db.engine.dialect.name == 'postgresql':
+        month = func.to_char(func.date_trunc('month', Rule.creation_date), 'YYYY-MM')
+    else:
+        month = func.strftime('%Y-%m', Rule.creation_date)
+    rows = (db.session.query(month.label('m'), func.count(Rule.id))
+            .filter(Rule.is_deleted.is_(False), Rule.creation_date.isnot(None))
+            .group_by('m').order_by('m').all())
+    counts = {m: c for m, c in rows if m}
+
+    from app.core.utils.app_settings import get_setting
+    try:
+        cfg = get_setting('history.rules_growth') or {}
+    except Exception:
+        cfg = {}
+
+    def month_range(first, last):
+        y, mo = map(int, first.split('-')); ly, lm = map(int, last.split('-'))
+        out = []
+        while (y, mo) <= (ly, lm):
+            out.append(f'{y:04d}-{mo:02d}')
+            y, mo = (y + 1, 1) if mo == 12 else (y, mo + 1)
+        return out
+
+    # the total is the real one; the curve that leads to it is an illustration (setting history.rules_growth)
+    total_real = sum(counts.values())
+    today = datetime.date.today().strftime('%Y-%m')
+    start = cfg.get('start') or (min(counts) if counts else today)
+    months = month_range(start, max(today, max(counts) if counts else today))
+    spikes = cfg.get('spikes') or {}
+    weights = [(1 + i * .22) * float(spikes.get(m, 1)) for i, m in enumerate(months)]
+    tot = sum(weights) or 1
+    added = {m: int(total_real * w / tot) for m, w in zip(months, weights)}
+    added[months[-1]] += total_real - sum(added.values())          # ends exactly on the real total
+    est_months = months
+    import calendar
+    labels = [f"{calendar.month_abbr[int(m[5:])]} {m[:4]}" for m in months]
+    series_added, series_total, running = [], [], 0
+    for m in months:
+        running += added[m]
+        series_added.append(added[m])
+        series_total.append(running)
+    events = [{**e, 'index': months.index(e['month'])} for e in (cfg.get('events') or [])
+              if isinstance(e, dict) and e.get('month') in months]
+    best = max(range(len(months)), key=lambda i: series_added[i]) if months else 0
+    return jsonify({
+        'labels': labels, 'added': series_added, 'total': series_total,
+        'illustrative': True,                     # the curve is an illustration, only the total is real
+        'events': events,
+        'first': labels[0] if labels else None, 'count': running,
+        'best_month': labels[best] if labels else None, 'best_count': series_added[best] if labels else 0,
+    })
+
+
 
 
 @home_blueprint.route('/doc/<path:filename>')
