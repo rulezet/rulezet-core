@@ -45,6 +45,15 @@
         {% endif %}
     </a>
     {% endif %}
+    {# notes & external links (issue #77) — resource_count from the page context (_nav_counts) #}
+    <a href="/rule/detail_rule/{{ rule.id }}/resources"
+       data-tour="rnav-resources" class="dr-nav__item {% if active == 'resources' %}active{% endif %}">
+        <i class="fa-solid fa-book-bookmark"></i>
+        <span>Resources</span>
+        {% if (resource_count|default(0)) > 0 %}
+        <span class="dr-nav__badge">{{ resource_count }}</span>
+        {% endif %}
+    </a>
     {# bundle_count comes from the page context (_nav_counts) — the macro is
        imported "with context", so callers don't have to thread it through. #}
     <a href="/rule/detail_rule/{{ rule.id }}/bundles"

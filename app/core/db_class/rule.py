@@ -817,3 +817,53 @@ class RuleReview(db.Model):
             'user': {'id': self.user.id, 'name': self.user.get_username(),
                      'avatar': self.user.get_avatar_url()} if self.user else None,
         }
+
+
+class RuleResource(db.Model):
+    """Something the rule's owner (or an admin) attached to a rule: a Markdown note (analysis,
+    deployment notes, tuning advice…) or an external link (blog post, report, vendor doc…).
+    A file (kind 'file') is a text file uploaded from the user's computer, stored in `content`.
+    Shown on the rule's Resources tab (/rule/detail_rule/<id>/resources); its author is kept, but
+    only the rule's owner and admins can add, edit or delete one."""
+    __tablename__ = 'rule_resource'
+
+    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid       = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    rule_id    = db.Column(db.Integer, db.ForeignKey('rule.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+    kind       = db.Column(db.String(10), nullable=False, default='note')   # note | link | file
+    title      = db.Column(db.String(200), nullable=False)
+    url        = db.Column(db.String(2000), nullable=True)                 # link only (http/https)
+    content    = db.Column(db.Text, nullable=True)                         # markdown (note / link description) or the file's text
+    filename   = db.Column(db.String(255), nullable=True)                  # file only
+    size       = db.Column(db.Integer, nullable=True)                      # file only, bytes
+    data       = db.Column(db.LargeBinary, nullable=True)                  # file only: a PDF's bytes (text files use content)
+    # link only: what the server read once from the page (title, description, site name)
+    preview    = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    user = db.relationship('User', foreign_keys=[user_id])
+    rule = db.relationship('Rule', backref=db.backref('resources', lazy='dynamic', cascade='all, delete-orphan'))
+
+    def to_json(self):
+        iso = lambda d: d.strftime('%Y-%m-%dT%H:%M:%S') + 'Z' if d else None   # noqa: E731
+        return {
+            'id': self.id,
+            'uuid': self.uuid,
+            'rule_id': self.rule_id,
+            'kind': self.kind,
+            'title': self.title,
+            'url': self.url,
+            # a file's text only comes with its own request (view / download), not in the list
+            'content': '' if self.kind == 'file' else (self.content or ''),
+            'filename': self.filename,
+            'size': self.size,
+            'is_pdf': self.kind == 'file' and (self.filename or '').lower().endswith('.pdf'),
+            'preview': self.preview,
+            'user_id': self.user_id,
+            'user_name': self.user.first_name if self.user else None,
+            'user_avatar': self.user.get_avatar_url() if self.user else None,
+            'created_at': iso(self.created_at),
+            'updated_at': iso(self.updated_at),
+        }

@@ -17,6 +17,7 @@ from app.core.utils.utils import  DB_ID_MAX, as_db_id, bump_version, form_to_dic
 from app.features.account.account_core import add_favorite, remove_favorite, is_rule_favorited_by_user
 from app.features.misp.misp_core import  convert_misp_to_stix
 from app.features.rule_tester import sample_test_core as SampleTests
+from app.features.rule.resources import resources_core as RuleResources
 from app.features.rule.rule_metadata_core import display_metadata
 from app.features.rule.rule_format.main_format import  parse_rule_by_format, process_and_import_fixed_rule, verify_syntax_rule_by_format, import_bad_rule_with_dependency
 from app.features.rule.rule_format.utils_format.utils_import_update import clone_or_access_repo, fill_all_void_field, generic_repo_metadata, get_github_branches, get_github_host, get_github_rate_limit_status, get_github_repo_live_info, get_licst_license, git_pull_repo, github_repo_metadata, valider_repo_github
@@ -1079,6 +1080,7 @@ def _public_nav_counts(rule_id):
         'proposal_pending_count': _rule_proposal_count(rule_id, pending=True),
         'scope_count':         _rule_scope_count(rule_id),
         'linked_rules_count':  _rule_linked_rules_count(rule_id),
+        'resource_count':      RuleResources.count_resources(rule_id),
     }
 
 
@@ -1310,6 +1312,174 @@ def detail_rule_samples(rule_id):
     return render_template("rule/detail_rule/detail_rule_samples.html", rule=rule,
                            samples=SampleTests.rule_sample_details(rule, request.args.get('result', type=int)),
                            **_nav_counts(rule.id))
+
+
+@rule_blueprint.route("/detail_rule/<int:rule_id>/resources", methods=['GET'])
+def detail_rule_resources(rule_id):
+    """Resources sub-page (issue #77): Markdown notes and external links attached to the rule by
+    its owner or an admin."""
+    rule = RuleModel.get_rule(rule_id)
+    if not rule:
+        return render_template("404.html")
+    if rule.is_deleted:
+        return render_template("rule/rule_in_trash.html", rule=rule)
+    return render_template("rule/detail_rule/detail_rule_resources.html", rule=rule,
+                           can_manage=RuleResources.can_manage(current_user, rule),
+                           **_nav_counts(rule.id))
+
+
+# biggest request body a resource can send: a 10 MB PDF in base64 (+ JSON) — anything larger is
+# refused before Flask reads it into memory
+_RESOURCE_MAX_BODY = 16 * 1024 * 1024
+
+
+def _resource_body_too_large():
+    length = request.content_length
+    return length is not None and length > _RESOURCE_MAX_BODY
+
+
+def _resource_rule(rule_id):
+    rule = RuleModel.get_rule(rule_id)
+    return rule if rule and not rule.is_deleted else None
+
+
+@rule_blueprint.route("/<int:rule_id>/resources", methods=['GET'])
+def list_rule_resources(rule_id):
+    rule = _resource_rule(rule_id)
+    if not rule:
+        return jsonify({"success": False, "message": "Rule not found"}), 404
+    return jsonify({"success": True,
+                    "can_manage": RuleResources.can_manage(current_user, rule),
+                    "config": RuleResources.public_config(),
+                    "resources": [r.to_json() for r in RuleResources.list_resources(rule.id)]})
+
+
+def _resource_file(rule_id, resource_id):
+    rule = _resource_rule(rule_id)
+    res = RuleResources.get_resource(rule_id, resource_id) if rule else None
+    return res if res and res.kind == 'file' else None
+
+
+@rule_blueprint.route("/<int:rule_id>/resources/<int:resource_id>/text", methods=['GET'])
+def view_rule_resource_file(rule_id, resource_id):
+    """A file's text, as JSON (shown in the page by the code viewer, never as HTML)."""
+    res = _resource_file(rule_id, resource_id)
+    if not res:
+        return jsonify({"success": False, "message": "File not found"}), 404
+    if res.data is not None:
+        return jsonify({"success": False, "message": "Not a text file"}), 400
+    return jsonify({"success": True, "filename": res.filename, "content": res.content or ''})
+
+
+@rule_blueprint.route("/<int:rule_id>/resources/<int:resource_id>/pdf", methods=['GET'])
+def view_rule_resource_pdf(rule_id, resource_id):
+    """A PDF, inline, for the browser's own PDF viewer — sandboxed (no script, no form, no
+    same-origin access), never sniffed as anything else."""
+    res = _resource_file(rule_id, resource_id)
+    if not res or res.data is None or not res.data.startswith(b'%PDF-'):
+        return render_template("404.html"), 404
+    from urllib.parse import quote
+    ascii_name = ''.join(c if c.isalnum() or c in '._-' else '_' for c in res.filename) or 'file.pdf'
+    return Response(res.data, mimetype='application/pdf', headers={
+        'Content-Disposition': f"inline; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(res.filename)}",
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "sandbox; default-src 'none'; object-src 'self'; plugin-types application/pdf",
+        'Cache-Control': 'private, no-store',
+    })
+
+
+@rule_blueprint.route("/<int:rule_id>/resources/<int:resource_id>/download", methods=['GET'])
+def download_rule_resource_file(rule_id, resource_id):
+    """The file, always as an attachment in plain text: never rendered or run by the browser."""
+    res = _resource_file(rule_id, resource_id)
+    if not res:
+        return render_template("404.html"), 404
+    from urllib.parse import quote
+    ascii_name = ''.join(c if c.isalnum() or c in '._-' else '_' for c in res.filename) or 'file.txt'
+    if res.data is not None:
+        return Response(res.data, mimetype='application/pdf', headers={
+            'Content-Disposition': f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(res.filename)}",
+            'X-Content-Type-Options': 'nosniff',
+            'Content-Security-Policy': "default-src 'none'; sandbox",
+        })
+    return Response((res.content or '').encode('utf-8'), mimetype='text/plain', headers={
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Content-Disposition': f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(res.filename)}",
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'; sandbox",
+    })
+
+
+@rule_blueprint.route("/<int:rule_id>/resources/<int:resource_id>/refresh_preview", methods=['POST'])
+@login_required
+def refresh_rule_resource_preview(rule_id, resource_id):
+    rule = _resource_rule(rule_id)
+    res = RuleResources.get_resource(rule_id, resource_id) if rule else None
+    if not res or res.kind != 'link':
+        return jsonify({"success": False, "message": "Link not found", "toast_class": "danger-subtle"}), 404
+    if not RuleResources.can_manage(current_user, rule):
+        return jsonify({"success": False, "message": "Access denied", "toast_class": "danger-subtle"}), 403
+    RuleResources.refresh_preview(res)
+    ok = bool(res.preview)
+    return jsonify({"success": True, "resource": res.to_json(),
+                    "message": "Preview updated." if ok else "This page could not be read (the link still works).",
+                    "toast_class": "success-subtle" if ok else "warning-subtle"})
+
+
+@rule_blueprint.route("/<int:rule_id>/resources", methods=['POST'])
+@login_required
+def create_rule_resource(rule_id):
+    if _resource_body_too_large():
+        return jsonify({"success": False, "message": "This file is too large.", "toast_class": "danger-subtle"}), 413
+    rule = _resource_rule(rule_id)
+    if not rule:
+        return jsonify({"success": False, "message": "Rule not found", "toast_class": "danger-subtle"}), 404
+    if not RuleResources.can_manage(current_user, rule):
+        return jsonify({"success": False, "message": "Only the rule's owner or an admin can add resources.", "toast_class": "danger-subtle"}), 403
+    res, error = RuleResources.create_resource(rule, current_user, request.get_json(silent=True) or {})
+    if error:
+        return jsonify({"success": False, "message": error, "toast_class": "danger-subtle"}), 400
+    log_activity('rule.resource.create', f"Added {res.kind} '{res.title}' to rule '{rule.title}'",
+                 target_type='rule', target_id=rule.id, target_uuid=rule.uuid,
+                 extra={'resource_uuid': res.uuid, 'kind': res.kind, 'url': res.url})
+    return jsonify({"success": True, "resource": res.to_json(), "message": "Resource added.", "toast_class": "success-subtle"}), 201
+
+
+@rule_blueprint.route("/<int:rule_id>/resources/<int:resource_id>", methods=['PUT'])
+@login_required
+def update_rule_resource(rule_id, resource_id):
+    if _resource_body_too_large():
+        return jsonify({"success": False, "message": "This file is too large.", "toast_class": "danger-subtle"}), 413
+    rule = _resource_rule(rule_id)
+    res = RuleResources.get_resource(rule_id, resource_id) if rule else None
+    if not res:
+        return jsonify({"success": False, "message": "Resource not found", "toast_class": "danger-subtle"}), 404
+    if not RuleResources.can_manage(current_user, rule):
+        return jsonify({"success": False, "message": "Access denied", "toast_class": "danger-subtle"}), 403
+    res, error = RuleResources.update_resource(res, request.get_json(silent=True) or {})
+    if error:
+        return jsonify({"success": False, "message": error, "toast_class": "danger-subtle"}), 400
+    log_activity('rule.resource.update', f"Edited {res.kind} '{res.title}' on rule '{rule.title}'",
+                 target_type='rule', target_id=rule.id, target_uuid=rule.uuid,
+                 extra={'resource_uuid': res.uuid, 'kind': res.kind, 'url': res.url})
+    return jsonify({"success": True, "resource": res.to_json(), "message": "Resource saved.", "toast_class": "success-subtle"})
+
+
+@rule_blueprint.route("/<int:rule_id>/resources/<int:resource_id>", methods=['DELETE'])
+@login_required
+def delete_rule_resource(rule_id, resource_id):
+    rule = _resource_rule(rule_id)
+    res = RuleResources.get_resource(rule_id, resource_id) if rule else None
+    if not res:
+        return jsonify({"success": False, "message": "Resource not found", "toast_class": "danger-subtle"}), 404
+    if not RuleResources.can_manage(current_user, rule):
+        return jsonify({"success": False, "message": "Access denied", "toast_class": "danger-subtle"}), 403
+    kind, title, res_uuid = res.kind, res.title, res.uuid
+    RuleResources.delete_resource(res)
+    log_activity('rule.resource.delete', f"Deleted {kind} '{title}' from rule '{rule.title}'",
+                 target_type='rule', target_id=rule.id, target_uuid=rule.uuid,
+                 extra={'resource_uuid': res_uuid, 'kind': kind})
+    return jsonify({"success": True, "message": "Resource deleted.", "toast_class": "success-subtle"})
 
 
 @rule_blueprint.route("/detail_rule/<int:rule_id>/bundles", methods=['GET'])

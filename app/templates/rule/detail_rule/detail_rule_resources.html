@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ rule.title }} — Resources — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-files.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_section_card.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_resources.css') }}">
+{% endblock %}
+{% import 'macros/detail_rule_nav.html' as nav with context %}
+
+{% block content %}
+<div class="container mt-4" id="main-container" v-cloak>
+
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-book-bookmark banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
+                <li class="breadcrumb-item"><a href="/rule/detail_rule/{{ rule.id }}" class="text-decoration-none text-muted">{% if rule.title|length > 40 %}{{ rule.title[:40] }}…{% else %}{{ rule.title }}{% endif %}</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Resources</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-book-bookmark"></i></div>
+            <div>
+                <h2 class="fw-bold mb-1">Resources</h2>
+                <div class="banner-accent"></div>
+            </div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:640px;font-size:.95rem;">
+            Notes and external links about this rule — analysis, deployment and tuning notes, reports,
+            advisories — added by its owner or an administrator.
+        </p>
+    </div>
+
+    {{ nav.detail_rule_nav(rule, 'resources', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count, test_count=test_count, ai_analysis_count=ai_analysis_count, linked_rules_count=linked_rules_count) }}
+
+    <rule-resources-panel :rule-id="{{ rule.id }}" :can-manage="{{ can_manage | tojson }}"
+                          csrf-token="{{ csrf_token() }}"></rule-resources-panel>
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="module">
+    import RuleResourcesPanel from '/static/js/rule/ruleResourcesPanel.js'
+
+    Vue.createApp({
+        delimiters: ['[[', ']]'],
+        components: { 'rule-resources-panel': RuleResourcesPanel },
+    }).mount('#main-container')
+</script>
+{% endblock %}
