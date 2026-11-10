@@ -800,7 +800,24 @@ def update_request_status() -> jsonify:
 # about us page
 @home_blueprint.route("/about")
 def about() -> render_template:
-    return render_template("/about_us.html")
+    """About Rulezet: the project, who is behind it, its ecosystem — and this instance's numbers
+    (the home page's cached figures when there, else a few cheap counts)."""
+    try:
+        cached = cache.get('home_platform_stats_v4') or {}
+    except Exception:
+        cached = {}
+    from app.core.db_class.user import User
+    from app.core.db_class.rule import Rule
+    from app.core.db_class.bundle import Bundle
+    from app.core.db_class.git import GithubRepo
+    stats = {
+        'rules':    cached.get('total_rules')   if cached else Rule.query.filter_by(is_deleted=False).count(),
+        'bundles':  cached.get('total_bundles') if cached else Bundle.query.count(),
+        'repos':    cached.get('total_repos')   if cached else GithubRepo.query.filter(GithubRepo.rule_count > 0).count(),
+        'formats':  len(cached.get('rule_formats') or []) if cached else len(RuleModel.get_all_rule_format()),
+        'users':    User.query.count(),
+    }
+    return render_template("about_us.html", stats=stats)
 
 # privacy policy page
 @home_blueprint.route("/privacy")
