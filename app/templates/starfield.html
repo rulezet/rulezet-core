@@ -10,7 +10,8 @@
 {% block content %}
 {#
   Starfield — a hidden Rulezet game (not linked anywhere). You are a
-  detection rule fighting malware across five worlds. Everything runs in
+  detection rule fighting malware across sixteen worlds (Act I: five threats,
+  Act II: one world per Rulezet format). Everything runs in
   app/static/js/starfield/ (ES modules); this template only holds the
   canvas and the HTML screens drawn on top of it.
 #}
@@ -28,7 +29,7 @@
             <div class="sf-logo">
                 <div class="sf-logo-kicker">a Rulezet detour</div>
                 <h1>STARFIELD</h1>
-                <div class="sf-logo-sub">ZERO-DAY CAMPAIGN</div>
+                <div class="sf-logo-sub">ZERO-DAY CAMPAIGN · ACT II: THE DEEP GRAPH</div>
             </div>
             <div class="sf-menu">
                 <button class="sf-btn sf-btn--primary" id="sf-btn-continue"><i class="fa-solid fa-play"></i> <span>Continue campaign</span></button>
@@ -66,6 +67,7 @@
                 <div class="sf-maphud-stats">
                     <span title="Stars in this world"><i class="fa-solid fa-star"></i> <b id="sf-map-wstars">0</b>/15</span>
                     <span title="Bytes to spend in the hangar"><i class="fa-solid fa-microchip"></i> <b id="sf-map-bytes">0</b></span>
+                    <button class="sf-btn sf-btn--small" id="sf-map-galaxy" title="Galaxy map (G)"><i class="fa-solid fa-earth-europe"></i> Galaxy</button>
                     <button class="sf-btn sf-btn--small" id="sf-map-hangar"><i class="fa-solid fa-screwdriver-wrench"></i> Hangar</button>
                     <button class="sf-btn sf-btn--small sf-btn--ghost" id="sf-map-menu"><i class="fa-solid fa-house"></i></button>
                 </div>
@@ -76,11 +78,13 @@
                     <span class="sf-lc-stars" id="sf-lc-stars"></span>
                 </div>
                 <div class="sf-lc-name" id="sf-lc-name">Initial access</div>
+                <div class="sf-lc-tags" id="sf-lc-tags"></div>
                 <div class="sf-lc-desc" id="sf-lc-desc"></div>
+                <div class="sf-lc-brief" id="sf-lc-brief"></div>
                 <div class="sf-lc-best" id="sf-lc-best"></div>
                 <button class="sf-btn sf-btn--primary" id="sf-lc-play"><i class="fa-solid fa-rocket"></i> Deploy</button>
             </div>
-            <div class="sf-maphint"><kbd>&larr;</kbd><kbd>&rarr;</kbd> travel &nbsp; <kbd>Enter</kbd> deploy &nbsp; <kbd>H</kbd> hangar &nbsp; <kbd>Esc</kbd> menu &nbsp;·&nbsp; 10 stars in a world open its secret honeypot</div>
+            <div class="sf-maphint"><kbd>&larr;</kbd><kbd>&rarr;</kbd> travel &nbsp; <kbd>Enter</kbd> deploy &nbsp; <kbd>H</kbd> hangar &nbsp; <kbd>G</kbd> galaxy &nbsp; <kbd>Esc</kbd> menu &nbsp;·&nbsp; 10 stars in a world open its secret honeypot</div>
         </div>
 
         <!-- ═════════════ LEVEL HUD ═════════════ -->
@@ -115,8 +119,11 @@
             <div class="sf-intro">
                 <div class="sf-intro-kicker" id="sf-intro-kicker">WORLD 1 — LEVEL 1</div>
                 <div class="sf-intro-name" id="sf-intro-name">Initial access</div>
+                <div class="sf-intro-tags" id="sf-intro-tags"></div>
                 <div class="sf-intro-desc" id="sf-intro-desc"></div>
+                <div class="sf-intro-brief" id="sf-intro-brief"></div>
                 <div class="sf-intro-keys" id="sf-intro-keys"></div>
+                <div class="sf-intro-go" id="sf-intro-go" hidden></div>
             </div>
         </div>
 
@@ -139,6 +146,7 @@
                 <div class="sf-res-stars" id="sf-res-stars"></div>
                 <ul class="sf-res-crit" id="sf-res-crit"></ul>
                 <div class="sf-res-grid" id="sf-res-grid"></div>
+                <p class="sf-res-outro" id="sf-res-outro" hidden></p>
                 <div class="sf-res-unlocks" id="sf-res-unlocks"></div>
                 <div class="sf-rank" data-rank hidden></div>
                 <div class="sf-panel-actions">
@@ -188,6 +196,7 @@
                     <button class="sf-tab active" data-tab="controls">Controls</button>
                     <button class="sf-tab" data-tab="bestiary">Bestiary</button>
                     <button class="sf-tab" data-tab="objectives">Objectives &amp; stars</button>
+                    <button class="sf-tab" data-tab="story">Archives</button>
                 </div>
                 <div class="sf-hangar-body" id="sf-help-body"></div>
                 <button class="sf-btn sf-btn--ghost" data-back><i class="fa-solid fa-arrow-left"></i> Back</button>
@@ -201,6 +210,16 @@
                 <div class="sf-settings" id="sf-settings-list"></div>
                 <button class="sf-btn sf-btn--danger" id="sf-reset"><i class="fa-solid fa-trash"></i> Reset all progress</button>
                 <button class="sf-btn sf-btn--ghost" data-back><i class="fa-solid fa-arrow-left"></i> Back</button>
+            </div>
+        </div>
+
+        <!-- ═════════════ STORY CARD (act break) ═════════════ -->
+        <div class="sf-screen sf-screen--dim" id="sf-story">
+            <div class="sf-panel sf-panel--wide sf-story">
+                <i class="fa-solid fa-book-open sf-story-icon" id="sf-story-icon"></i>
+                <h2 id="sf-story-title"></h2>
+                <p class="sf-story-text" id="sf-story-text"></p>
+                <button class="sf-btn sf-btn--primary" id="sf-story-ok"><i class="fa-solid fa-forward"></i> Continue</button>
             </div>
         </div>
 
@@ -342,7 +361,7 @@
             <template v-else>
                 <div class="sfa-section">Campaign — best result per level</div>
                 <div class="sfa-map">
-                    <div v-for="w in 5" :key="w" class="sfa-world">
+                    <div v-for="w in WORLD_COUNT" :key="w" class="sfa-world">
                         <div class="sfa-world__name">World [[ w ]]</div>
                         <div v-for="i in 6" :key="i" class="sfa-cell" :class="cellClass(w - 1, i - 1)" :title="cellTitle(w - 1, i - 1)">
                             <span class="sfa-cell__lvl">[[ i === 5 ? 'Boss' : i === 6 ? 'Secret' : 'L' + i ]]</span>

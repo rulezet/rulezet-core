@@ -13,7 +13,9 @@ from app.core.db_class.starfield import StarfieldRun
 from app.core.db_class.user import User
 
 MODES = ('level', 'endless')
-SHIPS = ('yara', 'suricata', 'sigma', 'zeek')
+SHIPS = ('yara', 'suricata', 'sigma', 'zeek',          # Act I, from the start
+         'sagan', 'crs', 'nse', 'nova', 'atr', 'wazuh', 'kql', 'splunk', 'elastic', 'kunai', 'plum')   # Act II, one per world
+MAX_WORLD = 15                                         # 16 worlds (static/js/starfield/data.js WORLDS)
 DIFFICULTIES = ('analyst', 'hunter', 'redteam')
 CONTROLS = ('classic', 'twin')
 MAX_SCORE = 50_000_000
@@ -64,6 +66,7 @@ def _details(data):
         'campaign_stars': _int(data.get('campaignStars'), 0, 1000),
         'campaign_bytes': _int(data.get('campaignBytes')),
         'shots': _counts(stats.get('shots')),
+        'false_positives': _int(stats.get('falsePositives'), 0, 10_000),
         'dashes': _int(stats.get('dashes')),
         'bombs': _int(stats.get('bombs')),
         'specials': _int(stats.get('specials')),
@@ -98,7 +101,7 @@ def record_run(data, user_id=None):
         user_id=user_id,
         player_id=player_id,
         mode=mode,
-        world=_int(data.get('world'), 0, 10) if mode == 'level' else None,
+        world=_int(data.get('world'), 0, MAX_WORLD) if mode == 'level' else None,
         level_index=_int(data.get('levelIndex'), 0, 10) if mode == 'level' else None,
         level_name=_text(data.get('levelName'), 80),
         level_kind=_text(data.get('levelKind'), 20),

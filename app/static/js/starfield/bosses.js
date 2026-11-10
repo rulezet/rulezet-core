@@ -1,5 +1,5 @@
 /**
- * bosses.js — the five world bosses. Each boss is an object with
+ * bosses.js — the five bosses of Act I (Act II: bosses2.js). Each boss is an object with
  * update(L), draw(ctx, L) and targets() (what the player's bullets can hit:
  * the boss itself and, for some, its parts). Phases change at 66% / 33% hp.
  * Beams and encrypted zones are generic hazards owned by the Level.
@@ -7,6 +7,7 @@
 import { BOSSES, W, H, TAU } from './data.js';
 import { circle, poly, glyph, glow, hexA, text } from './render.js';
 import { Sfx } from './audio.js';
+import { FACTORIES2 } from './bosses2.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const angleTo = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
@@ -293,10 +294,11 @@ function zeroDay(L) {
     return b;
 }
 
-const FACTORIES = [phishKing, hive, locker, ghost, zeroDay];
+const FACTORIES = [phishKing, hive, locker, ghost, zeroDay, ...FACTORIES2];
 
 export function makeBoss(index, L, scale = 1) {
     const b = FACTORIES[index](L);
+    if (!b.cleanup) b.cleanup = () => {};
     if (scale !== 1) { b.hp = b.maxHp = Math.round(b.maxHp * scale); }
     return b;
 }

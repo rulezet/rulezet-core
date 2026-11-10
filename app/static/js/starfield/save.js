@@ -3,7 +3,7 @@
  * Every access is wrapped: a private window or blocked storage just means
  * the progress lives for the session.
  */
-import { levelKey, WORLDS, WEAPONS, DEFAULT_KEYS } from './data.js';
+import { levelKey, WORLDS, WEAPONS, SKINS, DEFAULT_KEYS, RESERVED_KEYS } from './data.js';
 
 const KEY = 'rz-starfield-v2';
 
@@ -26,6 +26,9 @@ function fresh() {
         pos: { world: 0, node: 0 }, // where the ship stands on the map
         stats: { kills: 0, deaths: 0, played: 0 },
         seenIntro: false,
+        briefed: {},               // "w-i" → true once the briefing of that level was read
+        seenAct2: false,
+        version: 3,
     };
 }
 
@@ -38,7 +41,41 @@ export function load() {
     } catch { data = fresh(); }
     data.settings = Object.assign(fresh().settings, data.settings || {});
     data.settings.keys = Object.assign(defaultKeys(), data.settings.keys || {});
+    migrate();
     return data;
+}
+
+/**
+ * Saves made before Act II existed keep every star, byte, upgrade and boss.
+ * A pilot who already beat the Zero-Day (or any boss) gets the next world opened,
+ * keys bound to the new weapon digits are freed, and broken values are repaired.
+ */
+function migrate() {
+    const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+    if (!isObj(data.unlocked)) data.unlocked = {};
+    if (!isObj(data.stars)) data.stars = {};
+    if (!isObj(data.best)) data.best = {};
+    if (!isObj(data.upgrades)) data.upgrades = {};
+    if (!isObj(data.briefed)) data.briefed = {};
+    if (!Array.isArray(data.bosses)) data.bosses = [];
+    if (!Array.isArray(data.endless)) data.endless = [];
+    data.bosses = [...new Set(data.bosses.filter(w => Number.isInteger(w) && w >= 0 && w < WORLDS.length))];
+    data.unlocked[levelKey(0, 0)] = true;
+    for (const w of data.bosses) if (w + 1 < WORLDS.length) data.unlocked[levelKey(w + 1, 0)] = true;
+    for (let w = 0; w < WORLDS.length; w++) if (secretUnlocked(w)) data.unlocked[levelKey(w, 5)] = true;
+    if (!Number.isFinite(data.bytes) || data.bytes < 0) data.bytes = 0;
+    if (!isObj(data.pos) || !Number.isInteger(data.pos.world) || data.pos.world < 0 || data.pos.world >= WORLDS.length) data.pos = { world: 0, node: 0 };
+    if (!Number.isInteger(data.pos.node) || data.pos.node < 0 || data.pos.node > 5) data.pos.node = 0;
+    if (!SKINS.some(s => s.id === data.skin) || !shipUnlocked(data.skin)) data.skin = 'yara';
+    if (!isObj(data.stats)) data.stats = { kills: 0, deaths: 0, played: 0 };
+    for (const [act, codes] of Object.entries(data.settings.keys)) {
+        if (!Array.isArray(codes)) { data.settings.keys[act] = [...(DEFAULT_KEYS[act] || [null, null])]; continue; }
+        data.settings.keys[act] = codes.slice(0, 2).map(c => (RESERVED_KEYS.includes(c) ? null : c));
+        while (data.settings.keys[act].length < 2) data.settings.keys[act].push(null);
+    }
+    // a pilot who already flew in Act II has seen its introduction
+    if (data.bosses.includes(4) && Object.keys(data.stars).some(k => +k.split('-')[0] >= 5)) data.seenAct2 = true;
+    data.version = 3;
 }
 
 export function save() {
@@ -63,6 +100,12 @@ export const worldUnlocked = (w) => w === 0 || data.bosses.includes(w - 1);
 export const secretUnlocked = (w) => worldStars(w) >= 10;
 export const upgradeLevel = (id) => data.upgrades[id] || 0;
 
+export function shipUnlocked(id) {
+    const s = SKINS.find(x => x.id === id);
+    return !!s && (s.unlock === null || data.bosses.includes(s.unlock));
+}
+export const shipsUnlocked = () => SKINS.filter(s => shipUnlocked(s.id)).map(s => s.id);
+
 export function weaponsUnlocked() {
     return WEAPONS.filter(wp => wp.unlock === null || data.bosses.includes(wp.unlock)).map(wp => wp.id);
 }
@@ -77,15 +120,16 @@ export function completeLevel(w, i, { stars, score, bytes }) {
     const unlockedNow = [];
     const unlock = (ww, ii) => { const kk = levelKey(ww, ii); if (!data.unlocked[kk]) { data.unlocked[kk] = true; unlockedNow.push(kk); } };
     if (i < 4) unlock(w, i + 1);
-    let newWeapon = null;
+    let newWeapon = null, newShip = null;
     if (i === 4 && !data.bosses.includes(w)) {
         data.bosses.push(w);
-        if (w + 1 < WORLDS.length) unlock(w + 1, 0);
         newWeapon = WEAPONS.find(wp => wp.unlock === w) || null;
+        newShip = SKINS.find(s => s.unlock === w) || null;
     }
+    if (i === 4 && w + 1 < WORLDS.length) unlock(w + 1, 0);
     if (secretUnlocked(w)) unlock(w, 5);
     save();
-    return { newStars: Math.max(0, stars - prevStars), unlockedNow, newWeapon, record: score >= (data.best[k] || 0) };
+    return { newStars: Math.max(0, stars - prevStars), unlockedNow, newWeapon, newShip, record: score >= (data.best[k] || 0) };
 }
 
 export function addEndlessScore(score, wave) {

@@ -4,7 +4,7 @@
 const { createApp, ref, computed, onMounted } = Vue;
 
 const PLAYER_KEY = 'rz-starfield-player';
-const SHIP_LABELS = { yara: 'YARA', suricata: 'Suricata', sigma: 'Sigma', zeek: 'Zeek' };
+const SHIP_LABELS = { yara: 'YARA', suricata: 'Suricata', sigma: 'Sigma', zeek: 'Zeek', sagan: 'Sagan', crs: 'OWASP CRS', nse: 'Nmap NSE', nova: 'NOVA', atr: 'ATR', wazuh: 'Wazuh', kql: 'KQL', splunk: 'Splunk', elastic: 'Elastic', kunai: 'Kunai', plum: 'Plum Island' };
 const DIFF_LABELS = { analyst: 'Analyst', hunter: 'Threat hunter', redteam: 'Red team' };
 
 function myPlayerId() {

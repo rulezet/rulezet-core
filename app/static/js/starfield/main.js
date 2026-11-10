@@ -3,7 +3,8 @@
  * hangar, results…), the fixed-step game loop, the HTML HUD and the glue
  * between the save, the map and the running level.
  */
-import { W, H, WORLDS, WEAPONS, UPGRADES, SKINS, DIFFICULTIES, ENEMIES, BOSSES, KEY_ACTIONS, RESERVED_KEYS, PICKUPS, levelDef, upgradeCost } from './data.js';
+import { W, H, WORLDS, WEAPONS, UPGRADES, SKINS, DIFFICULTIES, ENEMIES, BOSSES, KEY_ACTIONS, RESERVED_KEYS, PICKUPS, ACT2_FIRST_WORLD, levelDef, levelKey, upgradeCost } from './data.js';
+import { actText, levelStory, STORY_KEYS } from './story.js';
 import * as Save from './save.js';
 import { Sfx, Music, Audio } from './audio.js';
 import { createInput, normalizeKey } from './input.js';
@@ -87,7 +88,7 @@ document.addEventListener('fullscreenchange', () => setTimeout(resize, 50));
 resize();
 
 // ── Screens ───────────────────────────────────────────────────────────
-const PANELS = ['sf-title', 'sf-difficulty', 'sf-pause', 'sf-results', 'sf-endless', 'sf-hangar', 'sf-help', 'sf-settings'];
+const PANELS = ['sf-title', 'sf-difficulty', 'sf-pause', 'sf-results', 'sf-endless', 'sf-hangar', 'sf-help', 'sf-settings', 'sf-story'];
 let backTo = null;
 function openPanel(id, back = null) {
     PANELS.forEach(p => $(p).classList.toggle('is-open', p === id));
@@ -124,7 +125,8 @@ function showTitle() {
     const best = S.endless[0] ? S.endless[0].score.toLocaleString() : '—';
     $('sf-title-stats').innerHTML = `
         <span><i class="fa-solid fa-star" style="color:#ffd166"></i> <b>${Save.totalStars()}</b> ${tr('stars')}</span>
-        <span><i class="fa-solid fa-skull"></i> <b>${S.bosses.length}</b>/5 ${tr('bosses')}</span>
+        <span><i class="fa-solid fa-skull"></i> <b>${S.bosses.length}</b>/${WORLDS.length} ${tr('bosses')}</span>
+        <span><i class="fa-solid fa-rocket" style="color:#c9a7ff"></i> <b>${Save.shipsUnlocked().length}</b>/${SKINS.length} ${tr('ships')}</span>
         <span><i class="fa-solid fa-microchip" style="color:#5be7ff"></i> <b>${S.bytes}</b> ${tr('bytes')}</span>
         <span><i class="fa-solid fa-infinity"></i> ${tr('best hunt')} <b>${best}</b></span>`;
     Music.play('map');
@@ -151,7 +153,21 @@ function renderDifficulty() {
 }
 
 // ── Map ───────────────────────────────────────────────────────────────
-map.onWorldChange = w => { S.pos = { world: w, node: map.node }; Save.save(); refreshMapHud(); toast(`${WORLDS[w].sub} — ${WORLDS[w].name}`); };
+map.onWorldChange = w => {
+    S.pos = { world: w, node: map.node }; Save.save(); refreshMapHud(); toast(`${WORLDS[w].sub} — ${WORLDS[w].name}`);
+    if (w >= ACT2_FIRST_WORLD && !S.seenAct2) { S.seenAct2 = true; Save.save(); showStory('act2', 'map'); }
+};
+
+/** A story card (act break): title, text, a Continue button back to where we were */
+function showStory(key, back) {
+    const a = actText(key);
+    if (!a) return;
+    $('sf-story-title').textContent = a.title;
+    $('sf-story-text').textContent = a.text;
+    openPanel('sf-story', back);
+    Sfx.levelUp();
+}
+$('sf-story-ok').addEventListener('click', () => goBack());
 map.onArrive = node => { S.pos = { world: map.world, node }; Save.save(); refreshMapHud(); };
 
 function showMap() {
@@ -161,14 +177,26 @@ function showMap() {
     $('sf-hud').classList.remove('is-open'); $('sf-maphud').classList.add('is-open');
     stage.classList.remove('is-playing'); input.setCapture(true);
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    map.galaxy = false;
     map.enter(Math.min(S.pos.world, WORLDS.length - 1), S.pos.node);
     refreshMapHud();
     Music.play('map');
+    if (map.world >= ACT2_FIRST_WORLD && !S.seenAct2) { S.seenAct2 = true; Save.save(); showStory('act2', 'map'); }
 }
 
-const KIND_LABEL = { waves: 'WAVES', survive: 'SURVIVE', beacons: 'CUT THE C2', protect: 'PROTECT', boss: 'BOSS', honeypot: 'BONUS' };
+const KIND_LABEL = { waves: 'WAVES', survive: 'SURVIVE', beacons: 'CUT THE C2', protect: 'PROTECT', boss: 'BOSS', honeypot: 'BONUS',
+    keys: 'FIND THE KEYS', escort: 'ESCORT', capture: 'CAPTURE', pursuit: 'PURSUIT', dark: 'BLACKOUT', purge: 'PURGE',
+    gauntlet: 'GAUNTLET', triage: 'TRIAGE', defend: 'DEFEND' };
+const MOD_LABEL = { storm: ['fa-wind', 'Ion storm'], dark: ['fa-eye-slash', 'Darkness'], rocks: ['fa-meteor', 'Asteroids'], mines: ['fa-bomb', 'Minefield'] };
+function levelTags(def) {
+    const tags = [];
+    if (def.open) tags.push(`<span class="sf-tag"><i class="fa-solid fa-up-down-left-right"></i>${tr('Open space')}</span>`);
+    for (const [k, v] of Object.entries(def.mods || {})) if (v && MOD_LABEL[k]) tags.push(`<span class="sf-tag"><i class="fa-solid ${MOD_LABEL[k][0]}"></i>${tr(MOD_LABEL[k][1])}</span>`);
+    return tags.join('');
+}
 function refreshMapHud() {
     const w = WORLDS[map.world];
+    $('sf-maphud').classList.toggle('is-galaxy', !!map.galaxy);
     setHue(w.hue);
     $('sf-world-sub').textContent = w.sub;
     $('sf-world-name').textContent = w.name;
@@ -183,6 +211,8 @@ function refreshMapHud() {
     $('sf-lc-stars').innerHTML = [0, 1, 2].map(i => `<i class="fa-solid fa-star ${i < st ? 'on' : ''}"></i>`).join('');
     $('sf-lc-name').textContent = (index < 4 ? `${index + 1}. ` : '') + def.name;
     $('sf-lc-desc').textContent = def.kind === 'boss' ? BOSSES[def.boss].intro : def.desc;
+    $('sf-lc-brief').textContent = def.brief || '';
+    $('sf-lc-tags').innerHTML = levelTags(def);
     const best = S.best[`${world}-${index}`];
     $('sf-lc-best').textContent = best ? tr('Best score {n}', { n: best.toLocaleString() }) : tr('Not cleared yet');
     $('sf-lc-play').disabled = !map.canPlay();
@@ -190,6 +220,7 @@ function refreshMapHud() {
 $('sf-lc-play').addEventListener('click', () => { if (map.canPlay()) startLevel(map.world, map.node); });
 $('sf-map-hangar').addEventListener('click', () => { renderHangar('upgrades'); openPanel('sf-hangar', 'map'); });
 $('sf-map-menu').addEventListener('click', () => showTitle());
+$('sf-map-galaxy').addEventListener('click', () => { if (screen === 'map') { closePanels(); map.openGalaxy(); refreshMapHud(); } });
 
 // ── Levels ────────────────────────────────────────────────────────────
 function envFor() {
@@ -209,8 +240,18 @@ function startLevel(world, index) {
         : def.kind === 'honeypot' ? `${WORLDS[world].sub.toUpperCase()} — ${tr('SECRET')}` : `${WORLDS[world].sub.toUpperCase()} — ${tr('LEVEL {n}', { n: index + 1 })}`;
     $('sf-intro-name').textContent = def.name;
     $('sf-intro-desc').textContent = def.desc;
+    $('sf-intro-brief').textContent = def.brief || '';
+    $('sf-intro-tags').innerHTML = levelTags(def);
+    // the first time, the briefing waits for the pilot
+    const key = levelKey(world, index);
+    if (world >= ACT2_FIRST_WORLD) S.seenAct2 = true;     // the first briefing of Act II tells the act break itself
+    briefWait = !!def.brief && !S.briefed[key];
+    if (briefWait) { introT = 1; S.briefed[key] = true; Save.save(); }
+    $('sf-intro-go').hidden = !briefWait;
+    $('sf-intro-go').innerHTML = `${kbd('fire')} / <kbd>Enter</kbd> ${tr('launch')}`;
     setHue(WORLDS[world].hue);
 }
+let briefWait = false;
 
 function startEndless() {
     const pool = [...new Set(WORLDS.flatMap(w => w.pool))].filter(k => !ENEMIES[k].static);
@@ -220,6 +261,10 @@ function startEndless() {
     $('sf-intro-kicker').textContent = tr('ENDLESS');
     $('sf-intro-name').textContent = tr('Threat hunt');
     $('sf-intro-desc').textContent = tr('Waves never stop. A boss every 5 waves. How long does your rule hold?');
+    $('sf-intro-brief').textContent = '';
+    $('sf-intro-tags').innerHTML = '';
+    $('sf-intro-go').hidden = true;
+    briefWait = false;
     setHue(WORLDS[4].hue);
 }
 
@@ -241,6 +286,7 @@ function beginPlay(music) {
 
 function restart() {
     if (!current) return;
+    briefWait = false;
     if (current.endless) startEndless(); else startLevel(current.world, current.index);
 }
 
@@ -308,17 +354,22 @@ function onLevelEnd(result) {
     const unlocks = [];
     if (info.newWeapon) unlocks.push(`<i class="fa-solid ${info.newWeapon.icon}"></i> ${tr('New weapon: {name} — key {key}', { name: info.newWeapon.name, key: info.newWeapon.key })}`);
     if (index === 4 && result.won && world + 1 < WORLDS.length) unlocks.push(`<i class="fa-solid fa-earth-europe"></i> ${tr('{sub} unlocked: {name}', { sub: WORLDS[world + 1].sub, name: WORLDS[world + 1].name })}`);
+    if (info.newShip) unlocks.push(`<i class="fa-solid fa-rocket"></i> ${tr('New ship: {name} — {power} (Hangar → Rule engine)', { name: info.newShip.name, power: info.newShip.special.name })}`);
     if (info.unlockedNow.includes(`${world}-5`)) unlocks.push(`<i class="fa-solid fa-gem"></i> ${tr('Secret honeypot found on this world\'s map!')}`);
-    if (index === 4 && result.won && world === 4) unlocks.push(`<i class="fa-solid fa-trophy"></i> ${tr('Campaign complete — the graph is quiet. Try Red team, or the endless hunt.')}`);
+    if (index === 4 && result.won && world === ACT2_FIRST_WORLD - 1) unlocks.push(`<i class="fa-solid fa-book-open"></i> ${tr('Act I complete — but the Zero-Day was only a scout. Act II, the Deep Graph, is open.')}`);
+    if (index === 4 && result.won && world === WORLDS.length - 1) unlocks.push(`<i class="fa-solid fa-trophy"></i> ${tr('Campaign complete — the graph is quiet. Try Red team, or the endless hunt.')}`);
     if (!result.won) unlocks.push(`<i class="fa-solid fa-microchip"></i> ${tr('Half of the bytes collected were kept: +{n}', { n: result.bytes })}`);
     $('sf-res-unlocks').innerHTML = unlocks.map(u => `<div class="sf-unlock">${u}</div>`).join('');
+    const ldef = levelDef(world, index);
+    $('sf-res-outro').textContent = result.won && ldef.outro ? ldef.outro : '';
+    $('sf-res-outro').hidden = !(result.won && ldef.outro);
 
     const next = nextLevel(world, index);
     $('sf-res-next').style.display = result.won && next ? '' : 'none';
     $('sf-res-next').onclick = () => { S.pos = { world: next[0], node: next[1] }; Save.save(); startLevel(next[0], next[1]); };
     if (result.won && next) { S.pos = { world: next[0], node: next[1] }; Save.save(); }
     openPanel('sf-results');
-    if (result.won && index === 4 && world === 4) Sfx.victory();
+    if (result.won && index === 4 && world === WORLDS.length - 1) Sfx.victory();
 }
 function nextLevel(world, index) {
     if (index < 4) return Save.isUnlocked(world, index + 1) ? [world, index + 1] : null;
@@ -340,16 +391,17 @@ function controlsHint() {
         : `${kbd('left')}${kbd('right')} ${tr('turn')} · ${kbd('up')} ${tr('thrust')} · ${kbd('down')} ${tr('brake')} · ${kbd('fire')} ${tr('fire')} · ${kbd('dash')} ${tr('dash')} · ${kbd('bomb')} ${tr('bomb')} · ${kbd('special')} ${tr('ship power')}`;
 }
 function updateFootnote() {
-    $('sf-footnote').innerHTML = controlsHint() + ` · <kbd>1</kbd>–<kbd>4</kbd> / ${kbd('weapon')} ${tr('weapons')} · ${kbd('pause')} ${tr('pause')} · ${kbd('mute')} ${tr('mute')} — ${tr('change controls and keys in Settings')}`;
+    $('sf-footnote').innerHTML = controlsHint() + ` · <kbd>1</kbd>–<kbd>8</kbd> / ${kbd('weapon')} ${tr('weapons')} · ${kbd('pause')} ${tr('pause')} · ${kbd('mute')} ${tr('mute')} — ${tr('change controls and keys in Settings')}`;
 }
 updateFootnote();
 
 // ── HUD ───────────────────────────────────────────────────────────────
 function buildWeaponsBar() {
     const owned = Save.weaponsUnlocked();
-    $('sf-hud-weapons').innerHTML = WEAPONS.map(w => `
+    // the weapons of Act II only show up once owned, to keep the bar short
+    $('sf-hud-weapons').innerHTML = WEAPONS.filter((w, i) => i < 4 || owned.includes(w.id)).map(w => `
         <div class="sf-weapon ${owned.includes(w.id) ? '' : 'locked'}" data-w="${w.id}" style="--wc:${w.color}">
-            <kbd>${w.key}</kbd><i class="fa-solid ${owned.includes(w.id) ? w.icon : 'fa-lock'}"></i>${owned.includes(w.id) ? w.name : '???'}
+            <kbd>${w.key}</kbd><i class="fa-solid ${owned.includes(w.id) ? w.icon : 'fa-lock'}"></i><span class="sf-wname">${owned.includes(w.id) ? w.name : '???'}</span>
         </div>`).join('');
 }
 
@@ -382,7 +434,8 @@ function updateHud() {
     const BUFF = { rapid: ['fa-bolt', '#ffd166', 'RAPID', 480], shield: ['fa-shield-halved', '#6ea8ff', 'SHIELD', 600], overclock: ['fa-fire', '#ff6bd8', 'OVERCLOCK', 480] };
     $('sf-hud-buffs').innerHTML = Object.entries(h.buffs).filter(([, v]) => v > 0).map(([k, v]) =>
         `<div class="sf-buff" style="color:${BUFF[k][1]}"><i class="fa-solid ${BUFF[k][0]}"></i>${tr(BUFF[k][2])}<span class="sf-meter"><span style="width:${Math.round(v / BUFF[k][3] * 100)}%"></span></span></div>`).join('')
-        + (h.disarmed > 0 ? '<div class="sf-buff" style="color:#ff7a3c"><i class="fa-solid fa-lock"></i>' + tr('ENCRYPTED') + '</div>' : '');
+        + (h.disarmed > 0 ? '<div class="sf-buff" style="color:#ff7a3c"><i class="fa-solid fa-lock"></i>' + tr('ENCRYPTED') + '</div>' : '')
+        + (h.inverted ? '<div class="sf-buff" style="color:#c9a7ff"><i class="fa-solid fa-shuffle"></i>' + tr('REVERSED') + '</div>' : '');
     document.querySelectorAll('.sf-weapon').forEach(el => {
         el.classList.toggle('active', el.dataset.w === h.weapon);
         el.classList.toggle('disarmed', el.dataset.w === h.weapon && h.disarmed > 0);
@@ -428,11 +481,23 @@ function renderHangar(tab) {
             <div class="sf-item-body"><b>${w.name} <kbd>${w.key}</kbd></b><span>${w.desc}</span>
             <span>${owned.includes(w.id) ? tr('Unlocked') : tr('Defeat {boss} ({sub}) to unlock', { boss: BOSSES[WORLDS[w.unlock].boss].name, sub: WORLDS[w.unlock].sub })}</span></div></div>`).join('');
     } else {
-        body.innerHTML = SKINS.map(s => `<div class="sf-item ${s.id === S.skin ? 'selected' : ''}" data-skin="${s.id}" style="cursor:pointer">
-            <div class="sf-swatch" style="--hull:${s.hull};--glow:${s.glow}"></div>
-            <div class="sf-item-body"><b>${s.name}</b><span><i class="fa-solid ${s.special.icon}" style="color:${s.glow}"></i> <b>${s.special.name}</b> ${kbd('special')} — ${s.special.desc} ${tr('Recharges in {n} s.', { n: s.special.cd })}</span>
-            <span>${s.id === S.skin ? tr('Equipped') : tr('Click to equip')}</span></div></div>`).join('');
-        body.querySelectorAll('[data-skin]').forEach(el => el.addEventListener('click', () => { S.skin = el.dataset.skin; Save.save(); Sfx.buy(); renderHangar('skins'); }));
+        body.innerHTML = SKINS.map(s => {
+            const open = Save.shipUnlocked(s.id);
+            const where = s.unlock === null ? '' : tr('Free {format} — beat {boss} ({sub})', { format: s.name, boss: BOSSES[WORLDS[s.unlock].boss].name, sub: WORLDS[s.unlock].sub });
+            return `<div class="sf-item ${s.id === S.skin ? 'selected' : ''} ${open ? '' : 'locked'}" data-skin="${s.id}" style="cursor:${open ? 'pointer' : 'default'}">
+            <canvas class="sf-ship-preview" width="72" height="72" data-preview="${s.id}"></canvas>
+            <div class="sf-item-body"><b>${open ? s.name : '???'}</b><span><i class="fa-solid ${s.special.icon}" style="color:${s.glow}"></i> <b>${s.special.name}</b> ${kbd('special')} — ${s.special.desc} ${tr('Recharges in {n} s.', { n: s.special.cd })}</span>
+            <span>${!open ? `<i class="fa-solid fa-lock"></i> ${where}` : s.id === S.skin ? tr('Equipped') : tr('Click to equip')}</span></div></div>`;
+        }).join('');
+        body.querySelectorAll('[data-preview]').forEach(cv => {
+            const s = SKINS.find(x => x.id === cv.dataset.preview), c = cv.getContext('2d');
+            const open = Save.shipUnlocked(s.id);
+            drawShip(c, 36, 38, -Math.PI / 2, open ? s : { ...s, hull: '#2a2f40', glow: '#556', flame: '#556' }, { thrust: open ? 1 : 0, t: 0, scale: 1.25 });
+        });
+        body.querySelectorAll('[data-skin]').forEach(el => el.addEventListener('click', () => {
+            if (!Save.shipUnlocked(el.dataset.skin)) { Sfx.deny(); return; }
+            S.skin = el.dataset.skin; Save.save(); Sfx.buy(); renderHangar('skins');
+        }));
     }
 }
 document.querySelectorAll('#sf-hangar-tabs .sf-tab').forEach(b => b.addEventListener('click', () => { Sfx.move(); renderHangar(b.dataset.tab); }));
@@ -453,15 +518,55 @@ const BESTIARY = {
     apt: 'An elite operator: strafes, dodges your shots and fires precise bursts.',
     wiper: 'Rushes you and detonates — keep moving.',
     beacon: 'A command-and-control beacon calling reinforcements. Objective target.',
+    flood: 'Floods the sector with log lines that hang in space. Its trail hurts.',
+    tamper: 'Erases the bytes and bonuses lying around — the evidence.',
+    injector: 'Draws a line, then fires a payload down it. Step off the line.',
+    xss: 'Fast and zig-zagging; reflects a script back at you when destroyed.',
+    scanner: 'Sweeps a vision cone. Stay in it too long and it calls scanners and fires. Rocks hide you.',
+    scanbot: 'Crosses the sector in straight lines, firing sideways.',
+    jailbreak: 'Boosts and heals every malware around it. Kill it first.',
+    halluc: 'Mirrors your moves around its anchor and fires when lined up with you.',
+    rogue: 'Steals bonuses (and heals with them), and launches homing tool calls.',
+    toolcall: 'A small homing call. Short-lived — shoot it or dash through.',
+    brute: 'Telegraphs a line and charges along it, three times in a row.',
+    lateral: 'Jumps next to another malware or right behind you, then fires a ring.',
+    obfusc: 'Its noise cloud swallows some of your bullets. Get inside the cloud.',
+    exfil: 'Runs away with data. If it escapes from an edge, your bytes go with it.',
+    shard: 'Splits into two smaller shards when destroyed, three sizes deep.',
+    fork: 'Copies itself every few seconds. Kill them before they pile up.',
+    latch: 'Hooks onto your ship and drains it. Dash to tear it off.',
+    spore: 'Swells and bursts into a ring of bullets when you come close.',
+    benign: 'Clean traffic. Harmless — shooting it is a false positive.',
+    courier: 'Carries stolen data to an exit gate. Stops sometimes to upload.',
+    implant: 'Hidden in the dark, calls malware and fires when you are near. Objective target.',
 };
+const BESTIARY_ICON = { worm: 'bug', spammer: 'envelope', trojan: 'gift', phisher: 'fish', drone: 'robot', botnet: 'network-wired', miner: 'coins', locker: 'lock', mine: 'bomb', keylogger: 'keyboard', rootkit: 'microchip', apt: 'user-secret', wiper: 'biohazard', beacon: 'satellite',
+    flood: 'scroll', tamper: 'ban', injector: 'syringe', xss: 'code', scanner: 'binoculars', scanbot: 'wifi', jailbreak: 'mask', halluc: 'wand-magic-sparkles', rogue: 'user-gear', toolcall: 'gear',
+    brute: 'hammer', lateral: 'shuffle', obfusc: 'cloud', exfil: 'file-export', shard: 'cube', fork: 'clone', latch: 'link', spore: 'bacterium', benign: 'paper-plane', courier: 'file-export', implant: 'spider' };
 function renderHelp(tab) {
     document.querySelectorAll('#sf-help-tabs .sf-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     const body = $('sf-help-body');
     if (tab === 'bestiary') {
         body.classList.remove('is-text');
         body.innerHTML = Object.entries(BESTIARY).map(([k, d]) => `<div class="sf-item">
-            <div class="sf-item-icon" style="color:${ENEMIES[k].color}"><i class="fa-solid fa-${({ worm: 'bug', spammer: 'envelope', trojan: 'gift', phisher: 'fish', drone: 'robot', botnet: 'network-wired', miner: 'coins', locker: 'lock', mine: 'bomb', keylogger: 'keyboard', rootkit: 'microchip', apt: 'user-secret', wiper: 'biohazard', beacon: 'satellite' })[k]}"></i></div>
+            <div class="sf-item-icon" style="color:${ENEMIES[k].color}"><i class="fa-solid fa-${BESTIARY_ICON[k]}"></i></div>
             <div class="sf-item-body"><b>${ENEMIES[k].name}</b><span>${tr(d)}</span></div></div>`).join('');
+        return;
+    }
+    if (tab === 'story') {
+        // the archives: briefings and debriefs of every level cleared so far
+        body.classList.add('is-text');
+        const done = STORY_KEYS.filter(k => S.stars[k] > 0 || (k.endsWith('-4') && S.bosses.includes(+k.split('-')[0])));
+        let html = `<div class="sf-help-section"><p>${tr('The story so far: every level you cleared, with its briefing and debrief.')}</p>`;
+        if (!done.length) html += `<p class="sf-sub">${tr('Nothing yet — clear a level to start the archives.')}</p>`;
+        let lastWorld = -1;
+        for (const k of done) {
+            const [w, i] = k.split('-').map(Number);
+            const st = levelStory(w, i), d = levelDef(w, i);
+            if (w !== lastWorld) { html += `<h3 style="color:${WORLDS[w].hue}">${WORLDS[w].sub} — ${WORLDS[w].name}</h3>`; lastWorld = w; }
+            html += `<div class="sf-archive"><b>${d.name}</b><p>${st.brief}</p>${st.outro ? `<p class="sf-archive-outro"><i class="fa-solid fa-flag-checkered"></i> ${st.outro}</p>` : ''}</div>`;
+        }
+        body.innerHTML = html + '</div>';
         return;
     }
     body.classList.add('is-text');
@@ -485,14 +590,15 @@ function renderHelp(tab) {
                 <span>${kbd('dash', true)}</span><span>${tr('Dash — a quick burst, invulnerable while dashing')}</span>
                 <span>${kbd('bomb', true)}</span><span>${tr('Quarantine bomb — clears every bullet on screen and hurts everything')}</span>
                 <span>${kbd('special', true)}</span><span>${tr('Ship power — each ship (Hangar → Rule engine) has its own, recharging on its own: YARA Signature Sweep, Suricata IPS Drop, Sigma Correlation, Zeek Deep Inspection')}</span>
-                <span><kbd>1</kbd>–<kbd>4</kbd> / ${kbd('weapon')}</span><span>${tr('Switch weapon')}</span>
+                <span><kbd>1</kbd>–<kbd>8</kbd> / ${kbd('weapon')}</span><span>${tr('Switch weapon')}</span>
                 <span>${kbd('pause')} / <kbd>Esc</kbd></span><span>${tr('Pause')}</span>
                 <span>${kbd('mute')}</span><span>${tr('Sound on / off')}</span>
                 <span></span><span>${tr('Every key can be changed in Settings → Keys.')}</span>
                 <span>${tr('Gamepad')}</span><span>${tr('Left stick turn/thrust (classic) or move (twin) · right stick aim · RT fire · A dash · B bomb · Y ship power · LB/RB weapons')}</span>
             </div>
             <h3>${tr('Progress')}</h3>
-            <p>${tr('Bytes dropped by malware are spent in the hangar. Each world boss unlocks a new weapon and the next world. Get 10 stars in a world to reveal its secret honeypot. Kill fast to build a combo (up to x8).')}</p></div>`;
+            <p>${tr('Bytes dropped by malware are spent in the hangar. Each world boss unlocks a new weapon and the next world. Get 10 stars in a world to reveal its secret honeypot. Kill fast to build a combo (up to x8).')}</p>
+            <p>${tr('Act II: every boss of the Deep Graph frees a detection engine — its ship joins your hangar, with its own power. The galaxy map (G on the map) warps you to any open world.')}</p></div>`;
     } else {
         body.innerHTML = `<div class="sf-help-section">
             <h3>${tr('Objectives')}</h3><ul>
@@ -501,10 +607,22 @@ function renderHelp(tab) {
                 <li><b>${tr('Cut the C2')}</b> ${tr('— destroy every beacon; they keep calling reinforcements.')}</li>
                 <li><b>${tr('Protect')}</b> ${tr('— keep the network sensor alive until the scan completes. Malware goes for it too.')}</li>
                 <li><b>${tr('Boss')}</b> ${tr('— three phases each. Watch the dashed lines and red sectors: they are attacks about to land.')}</li>
-                <li><b>${tr('Honeypot')}</b> ${tr('(secret) — 45 seconds, triple bytes.')}</li></ul>
+                <li><b>${tr('Honeypot')}</b> ${tr('(secret) — 45 seconds, triple bytes.')}</li>
+                <li><b>${tr('Find the keys')}</b> ${tr('— open space: explore the sector, pick up every key, then reach the exit gate. Keys appear on the radar once close; a ping shows the nearest.')}</li>
+                <li><b>${tr('Escort')}</b> ${tr('— the convoy only moves while you stay close to it.')}</li>
+                <li><b>${tr('Capture')}</b> ${tr('— stay inside each relay ring until it is captured.')}</li>
+                <li><b>${tr('Pursuit')}</b> ${tr('— destroy the courier before it reaches its exit gate.')}</li>
+                <li><b>${tr('Blackout')}</b> ${tr('— in the dark, find the hidden implants; your scanner pulses every few seconds.')}</li>
+                <li><b>${tr('Purge')}</b> ${tr('— destroy every shard; big ones split.')}</li>
+                <li><b>${tr('Gauntlet')}</b> ${tr('— fly through a long corridor of laser gates to the exit.')}</li>
+                <li><b>${tr('Triage')}</b> ${tr('— destroy the malicious traffic, spare the clean (green) packets. Too many false positives and you lose.')}</li>
+                <li><b>${tr('Defend')}</b> ${tr('— keep several far-apart servers alive; arrows show where they are.')}</li></ul>
+            <h3>${tr('Open space')}</h3>
+            <p>${tr('Some sectors are much bigger than the screen: the camera follows you, the radar (bottom right) shows the whole sector and arrows on the screen edges point at what matters.')}</p>
             <h3>${tr('Stars')}</h3><ul>
                 <li>${tr('★ Complete the level.')}</li><li>${tr('★ Take 2 hits or fewer (3 against a boss).')}</li>
-                <li>${tr('★ Beat the par time — or take no hit (survive), keep the sensor above 70% (protect), collect enough bytes (honeypot).')}</li></ul>
+                <li>${tr('★ Beat the par time — or take no hit (survive), keep the sensor above 70% (protect), collect enough bytes (honeypot).')}</li>
+                <li>${tr('★ Act II: keep the convoy above 70% (escort), lose no server (defend), make no false positive (triage).')}</li></ul>
             <h3>${tr('Pickups')}</h3><ul>
                 <li><i class="fa-solid fa-heart" style="color:#ff5d73"></i> ${tr('+1 integrity ·')} <i class="fa-solid fa-bolt" style="color:#ffd166"></i> ${tr('rapid fire ·')}
                 <i class="fa-solid fa-shield-halved" style="color:#6ea8ff"></i> ${tr('shield (absorbs a hit) ·')} <i class="fa-solid fa-fire" style="color:#ff6bd8"></i> ${tr('overclock (double damage) ·')}
@@ -603,8 +721,17 @@ function update() {
     if (input.actHit('mute')) { S.settings.muted = !S.settings.muted; applySettings(); Save.save(); }
     const pad = input.state.pad;
 
-    if (screen === 'map' && !overlay) {
+    if (screen === 'map' && !overlay && map.galaxy) {
         map.update();
+        if (input.hit('ArrowRight', 'KeyD', 'ArrowDown', 'KeyS') || (pad && (pad.right || pad.down))) map.galaxyStep(1);
+        if (input.hit('ArrowLeft', 'KeyA', 'ArrowUp', 'KeyW') || (pad && (pad.left || pad.up))) map.galaxyStep(-1);
+        if (input.hit('Enter', 'Space') || (pad && pad.confirm)) map.galaxyWarp();
+        else if (input.hit('Escape', 'KeyG') || (pad && pad.back)) map.openGalaxy(false);
+        map.pointer(input.state.mx, input.state.my, input.hit('Mouse0'));
+        if (t % 10 === 0) refreshMapHud();
+    } else if (screen === 'map' && !overlay) {
+        map.update();
+        if (input.hit('KeyG')) { map.openGalaxy(true); refreshMapHud(); }
         if (input.hit('ArrowRight', 'KeyD', 'ArrowDown', 'KeyS') || (pad && (pad.right || pad.down))) map.step(1);
         if (input.hit('ArrowLeft', 'KeyA', 'ArrowUp', 'KeyW') || (pad && (pad.left || pad.up))) map.step(-1);
         if (input.hit('PageDown', 'KeyE')) map.changeWorld(map.world + 1, 0);
@@ -620,14 +747,16 @@ function update() {
         if (paused && overlay === 'sf-settings') { if (input.hit('Escape')) goBack(); }
         else if (input.actHit('pause') || input.hit('Escape') || (pad && pad.pause)) togglePause();
         if (!paused) {
-            if (introT > 0) { introT--; if (introT === 0) $('sf-intro').classList.remove('is-open'); }
+            if (briefWait) {
+                if (input.actHit('fire') || input.hit('Enter', 'Mouse0') || (pad && (pad.confirm || pad.fire))) { briefWait = false; introT = 1; $('sf-intro-go').hidden = true; }
+            } else if (introT > 0) { introT--; if (introT === 0) $('sf-intro').classList.remove('is-open'); }
             else level.update(input);
             if (t % 3 === 0) updateHud();
         }
     } else if (screen === 'title' && overlay && overlay !== 'sf-title' && input.hit('Escape')) goBack();
 
     drift.x += 0.25; drift.y += 0.08;
-    if (level && level.player && !paused) { drift.x += level.player.vx * 0.3; drift.y += level.player.vy * 0.3; }
+    if (level && level.player && !paused && !level.open) { drift.x += level.player.vx * 0.3; drift.y += level.player.vy * 0.3; }
     input.endFrame();
 }
 
@@ -639,7 +768,8 @@ function render() {
     ctx.save();
     ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
     const world = level ? (level.world ?? 0) : screen === 'map' ? map.world : 0;
-    drawBackground(ctx, stars, t * 16, WORLDS[world], drift, bgImage);
+    const cam = level && level.open ? level.cam : null;
+    drawBackground(ctx, stars, t * 16, WORLDS[world], cam ? { x: drift.x + cam.x, y: drift.y + cam.y } : drift, bgImage, !!level);
     if (screen === 'map') map.draw(ctx, skin());
     else if (level) level.draw(ctx);
     else {

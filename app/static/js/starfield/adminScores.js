@@ -3,9 +3,10 @@
 // one player in detail.
 const { createApp, ref, computed, onMounted } = Vue;
 
-const SHIPS = { yara: 'YARA', suricata: 'Suricata', sigma: 'Sigma', zeek: 'Zeek' };
+const SHIPS = { yara: 'YARA', suricata: 'Suricata', sigma: 'Sigma', zeek: 'Zeek', sagan: 'Sagan', crs: 'OWASP CRS', nse: 'Nmap NSE', nova: 'NOVA', atr: 'ATR', wazuh: 'Wazuh', kql: 'KQL', splunk: 'Splunk', elastic: 'Elastic', kunai: 'Kunai', plum: 'Plum Island' };
 const DIFFS = { analyst: 'Analyst', hunter: 'Threat hunter', redteam: 'Red team' };
-const WEAPONS = { pulse: 'Suricata Pulse', spread: 'YARA Spread', rail: 'Sigma Rail', seeker: 'Zeek Seeker' };
+const WEAPONS = { pulse: 'Suricata Pulse', spread: 'YARA Spread', rail: 'Sigma Rail', seeker: 'Zeek Seeker', beam: 'CRS Beam', flak: 'NOVA Flak', arc: 'Wazuh Arc', blade: 'Kunai Blades' };
+const WORLD_COUNT = 16;      // worlds of the campaign (static/js/starfield/data.js WORLDS)
 const PLAYER_COLS = [
     { key: 'name', label: 'Player' },
     { key: 'runs', label: 'Runs', cls: 'text-center' },
@@ -122,7 +123,7 @@ createApp({
         onMounted(load);
 
         return {
-            SHIPS, DIFFS, WEAPONS, PLAYER_COLS, loading, players, runsTotal, topEndless, q, hideAnon, sortKey, sortDir,
+            SHIPS, DIFFS, WEAPONS, WORLD_COUNT, PLAYER_COLS, loading, players, runsTotal, topEndless, q, hideAnon, sortKey, sortDir,
             selected, runs, runsLoading, openRun, sortedPlayers, load, sortBy, openPlayer, best, cellClass, cellTitle,
             sortedCounts, fmt, fmtTime, when, ago,
         };

@@ -24,14 +24,23 @@ def _starfield_played(g) -> bool:
     return StarfieldRun.query.filter_by(user_id=g.user_id).first() is not None
 
 
-def _starfield_all_bosses(g) -> bool:
-    """Beat the boss (level index 4) of every one of the 5 worlds."""
+def _starfield_bosses_beaten(user_id) -> set:
     from app.core.db_class.starfield import StarfieldRun
     from app import db
     worlds = (db.session.query(StarfieldRun.world)
-              .filter_by(user_id=g.user_id, mode='level', level_index=4, won=True)
+              .filter_by(user_id=user_id, mode='level', level_index=4, won=True)
               .distinct().all())
-    return len({w for (w,) in worlds}) >= 5
+    return {w for (w,) in worlds if w is not None}
+
+
+def _starfield_all_bosses(g) -> bool:
+    """Beat the boss (level index 4) of the 5 worlds of Act I (0-4)."""
+    return {0, 1, 2, 3, 4} <= _starfield_bosses_beaten(g.user_id)
+
+
+def _starfield_deep_graph(g) -> bool:
+    """Beat the boss of every world, Act II included (16 worlds, 0-15)."""
+    return set(range(16)) <= _starfield_bosses_beaten(g.user_id)
 
 
 # Secret badges ('secret': True) — tied to the hidden game at /starfield. They
@@ -160,6 +169,16 @@ BADGES = [
         'rulezy_pose': 'armcross',
         'secret': True,
         'check': _starfield_all_bosses,
+    },
+    {
+        'key': 'deep_graph',
+        'name': 'Patient Zero, Quarantined',
+        'description': 'Beyond the last threat lay sixteen worlds and fifteen engines. You freed every one of them, and the whole graph went quiet.',
+        'icon': 'fas fa-virus-slash',
+        'color': 'purple',
+        'rulezy_pose': 'armcross',
+        'secret': True,
+        'check': _starfield_deep_graph,
     },
 ]
 

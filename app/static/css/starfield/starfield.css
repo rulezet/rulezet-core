@@ -302,3 +302,42 @@ kbd {
 
 /* the player's Overall rank on the results screens (static/js/starfield/leaderboard.js) */
 .sf-rank { margin: 8px 0 4px; font-weight: 700; color: #ffd166; text-align: center; letter-spacing: .02em; }
+
+/* ── Act II: level tags, briefings, story card, archives ───────── */
+.sf-lc-tags, .sf-intro-tags { display: flex; flex-wrap: wrap; gap: .3rem; }
+.sf-intro-tags { justify-content: center; margin: .4rem 0; }
+.sf-tag {
+    display: inline-flex; align-items: center; gap: .3rem; font-size: .62rem; font-weight: 800; letter-spacing: .06em;
+    text-transform: uppercase; padding: .15rem .5rem; border-radius: 99px;
+    background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .18); color: #cfd8f0;
+}
+.sf-lc-brief {
+    font-size: .76rem; color: #93a3cc; font-style: italic; line-height: 1.35;
+    max-height: 6.2em; overflow: auto; border-left: 2px solid var(--sf-hue); padding-left: .5rem;
+}
+.sf-lc-brief:empty { display: none; }
+.sf-maphud.is-galaxy .sf-levelcard, .sf-maphud.is-galaxy .sf-maphint, .sf-maphud.is-galaxy .sf-world-story { display: none; }
+.sf-intro-brief {
+    font-size: .92rem; color: #e1e8ff; max-width: 640px; margin: .8rem auto 0; line-height: 1.5;
+    padding: .7rem 1rem; border-radius: 12px; background: rgba(4, 7, 20, .72); border: 1px solid rgba(255, 255, 255, .1);
+    border-left: 3px solid var(--sf-hue); text-align: left;
+}
+.sf-intro-brief:empty { display: none; }
+.sf-intro-go { margin-top: 1rem; font-size: .9rem; color: #fff; font-weight: 800; animation: sf-blink 1.1s ease-in-out infinite; }
+@keyframes sf-blink { 50% { opacity: .35; } }
+.sf-res-outro {
+    margin: 0; font-size: .88rem; color: #dfe6ff; font-style: italic; line-height: 1.45;
+    padding: .55rem .8rem; border-radius: 10px; background: rgba(255, 255, 255, .04); border-left: 3px solid var(--sf-hue);
+}
+.sf-story { text-align: center; max-width: 640px; }
+.sf-story-icon { font-size: 2.2rem; color: var(--sf-hue); filter: drop-shadow(0 0 14px var(--sf-hue)); }
+.sf-story h2 { letter-spacing: .12em; }
+.sf-story-text { font-size: 1rem; color: #e1e8ff; line-height: 1.6; }
+.sf-archive { padding: .5rem .7rem; margin-bottom: .45rem; border-radius: 10px; background: rgba(255, 255, 255, .04); }
+.sf-archive b { color: #fff; font-size: .88rem; }
+.sf-archive p { margin: .2rem 0 0; font-size: .8rem; }
+.sf-archive-outro { color: #9fb0d8 !important; font-style: italic; }
+.sf-ship-preview { width: 54px; height: 54px; flex: none; border-radius: 12px; background: radial-gradient(circle, rgba(255, 255, 255, .06), rgba(0, 0, 0, .2)); }
+/* eight weapons: only the active one shows its name */
+.sf-weapon .sf-wname { display: none; }
+.sf-weapon.active .sf-wname { display: inline; }

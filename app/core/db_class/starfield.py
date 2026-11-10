@@ -21,7 +21,7 @@ class StarfieldRun(db.Model):
     world       = db.Column(db.Integer, nullable=True)
     level_index = db.Column(db.Integer, nullable=True)                    # 0-3 levels, 4 boss, 5 honeypot
     level_name  = db.Column(db.String(80), nullable=True)
-    level_kind  = db.Column(db.String(20), nullable=True)                 # waves, survive, beacons, protect, boss, honeypot…
+    level_kind  = db.Column(db.String(20), nullable=True)                 # waves, survive, beacons, protect, keys, escort, capture, pursuit, dark, purge, gauntlet, triage, defend, boss, honeypot…
     won         = db.Column(db.Boolean, nullable=False, default=False)
     reason      = db.Column(db.String(120), nullable=True)                # why the run was lost
 
@@ -34,7 +34,7 @@ class StarfieldRun(db.Model):
     bytes       = db.Column(db.Integer, nullable=False, default=0)
     time_s      = db.Column(db.Integer, nullable=False, default=0)
 
-    ship        = db.Column(db.String(20), nullable=True, index=True)     # yara | suricata | sigma | zeek
+    ship        = db.Column(db.String(20), nullable=True, index=True)     # yara | suricata | sigma | zeek | sagan | crs | … (starfield_core.SHIPS)
     difficulty  = db.Column(db.String(20), nullable=True)                 # analyst | hunter | redteam
     controls    = db.Column(db.String(10), nullable=True)                 # classic | twin
     # Everything else: criteria met, upgrades, unlocked weapons, shots per
