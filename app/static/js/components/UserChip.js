@@ -116,8 +116,19 @@ const UserChip = defineComponent({
         }
 
         // expose tooltip handler refs so the teleported tooltip can cancel hide
+        // A broken avatar (file gone, 404) shows Rulezy scratching his head instead of a broken image.
+        function onAvatarError(e) {
+            const img = e.target;
+            if (img.dataset.fallback) return;
+            img.dataset.fallback = '1';
+            img.src = AVATAR_FALLBACK;
+            img.style.objectFit = 'contain';
+            img.style.background = 'var(--light-bg-color, #f1f3f5)';
+            img.title = 'Avatar not found';
+        }
+
         return {
-            me: window.RZ_ME || null,
+            me: window.RZ_ME || null, onAvatarError,
             tooltipData, tooltipVisible, tooltipStyle, chipRef,
             px, displayName, initials, verified,
             onMouseEnter, onMouseLeave, onTooltipEnter, onTooltipLeave,
@@ -151,7 +162,7 @@ const UserChip = defineComponent({
         border: '1.5px solid var(--border-color, #dee2e6)',
       }"
     >
-      <img v-if="avatar" :src="avatar" :style="{width:'100%',height:'100%',objectFit:'cover'}" />
+      <img v-if="avatar" :src="avatar" :style="{width:'100%',height:'100%',objectFit:'cover'}" @error="onAvatarError" />
       <template v-else>[[ initials ]]</template>
     </span>
     <!-- Name -->
@@ -180,7 +191,7 @@ const UserChip = defineComponent({
           >
             <img v-if="(tooltipData && tooltipData.avatar) || avatar"
                  :src="(tooltipData && tooltipData.avatar) || avatar"
-                 style="width:100%;height:100%;object-fit:cover;" />
+                 style="width:100%;height:100%;object-fit:cover;" @error="onAvatarError" />
             <template v-else>[[ initials ]]</template>
           </span>
           <div>
@@ -262,5 +273,8 @@ const UserChip = defineComponent({
 </span>
 `,
 });
+
+// Shown when an avatar URL is broken (deleted / missing upload).
+const AVATAR_FALLBACK = '/static/images/rulezy/reflexion.png';
 
 export default UserChip;
