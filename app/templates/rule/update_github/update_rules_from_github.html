@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/account/user_detail.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/proposal.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/github/pending_updates.css') }}">
 {% endblock %}
 
@@ -59,6 +60,18 @@
         <span>Every imported rule is in sync with its repository — nothing to review.</span>
     </div>
 
+    <!-- Panels -->
+    <nav class="dr-nav">
+        <a href="#" class="dr-nav__item" :class="{ active: panel === 'updates' }" @click.prevent="panel = 'updates'">
+            <i class="fa-solid fa-code-pull-request"></i><span>Updates to review</span>
+            <span class="dr-nav__badge" :class="{ 'dr-nav__badge--alert': stats.ready > 0 && panel !== 'updates' }">[[ stats.total ]]</span>
+        </a>
+        <a href="#" class="dr-nav__item" :class="{ active: panel === 'repos' }" @click.prevent="panel = 'repos'">
+            <i class="fa-solid fa-code-branch"></i><span>Out-of-date repositories</span>
+            <span class="dr-nav__badge">[[ repos.length ]]</span>
+        </a>
+    </nav>
+
     <!-- Job progress — shown while a large bulk action runs in the background -->
     <div v-if="activeJobUuid" class="card border-0 shadow-sm rounded-3 mb-4">
         <div class="card-body p-4">
@@ -66,15 +79,8 @@
         </div>
     </div>
 
-    <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div v-show="panel === 'updates'" class="card border-0 shadow-sm rounded-3 mb-4">
         <div class="card-body p-4">
-            <div class="prp-tabs" role="tablist">
-                <button type="button" class="prp-tab is-active" role="tab">
-                    <i class="fa-solid fa-inbox"></i>Updates to review
-                    <span class="prp-tab-count" :class="{ 'prp-tab-count--alert': stats.ready > 0 }">[[ stats.total ]]</span>
-                </button>
-            </div>
-
             <div class="ud-section-header mb-3">
                 <i class="fas fa-code-pull-request ud-section-icon"></i>
                 <div>
@@ -116,6 +122,10 @@
 
                 <template #toolbar-start>
                     <format-select v-model="selectedFormat" :formats="formats" @change="onFormatChange"></format-select>
+                    <span v-if="selectedRepo" class="pu-repo-filter" :title="selectedRepo">
+                        <i :class="repoIcon({ source: selectedRepo })"></i>[[ repoName(selectedRepo) ]]
+                        <button type="button" @click="toggleRepo(selectedRepo)" aria-label="Remove repository filter"><i class="fa-solid fa-xmark"></i></button>
+                    </span>
                 </template>
 
                 <template #cell-rule_format="{ value }">
@@ -165,6 +175,41 @@
             </data-table>
         </div>
     </div>
+
+    <div v-show="panel === 'repos'" class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-4">
+            <div class="ud-section-header mb-3">
+                <i class="fas fa-code-branch ud-section-icon"></i>
+                <div class="flex-grow-1">
+                    <div class="ud-section-title">Out-of-date repositories</div>
+                    <div class="ud-section-sub">Git sources that changed since their rules were imported. Pick one to review only its updates.</div>
+                </div>
+            </div>
+            <div v-if="!repos.length" class="text-center py-5 text-muted"><i class="fa-solid fa-circle-check fa-2x mb-3 d-block text-success opacity-75"></i>No repository is ahead of Rulezet.</div>
+            <div v-else class="pu-repo-list" :class="{ 'pu-repo-list--open': showAllRepos }">
+                <div v-for="r in visibleRepos" :key="r.source" class="pu-repo-row" :class="{ 'pu-repo-row--on': selectedRepo === r.source }">
+                    <div class="pu-repo-icon"><i :class="repoIcon(r)"></i></div>
+                    <div class="pu-repo-main">
+                        <button type="button" class="pu-repo-name" @click="toggleRepo(r.source)" :title="r.source">[[ repoName(r.source) ]]</button>
+                        <div class="pu-repo-meta">
+                            <span v-if="r.branch" class="pu-branch"><i class="fa-solid fa-code-branch"></i>[[ r.branch ]]</span>
+                            <format-chip v-for="f in r.formats" :key="f" :format="f"></format-chip>
+                            <span v-if="r.last_check"><i class="fa-regular fa-clock me-1"></i>checked [[ r.last_check ]]</span>
+                        </div>
+                    </div>
+                    <div class="pu-repo-counts">
+                        <span class="pu-repo-count" title="Pending updates"><b>[[ r.pending ]]</b> update[[ r.pending > 1 ? 's' : '' ]]</span>
+                        <span class="pu-repo-sub">[[ r.ready ]] ready · [[ r.rules ]] rule[[ r.rules > 1 ? 's' : '' ]]</span>
+                    </div>
+                    <div class="dt-actions">
+                        <button class="dt-action-btn" :class="{ 'is-expanded': selectedRepo === r.source }" title="Show only this repository's updates" @click="toggleRepo(r.source)"><i class="fas fa-filter"></i></button>
+                        <a v-if="isUrl(r.source)" class="dt-action-btn" title="Git source page in Rulezet" :href="'/rule/github_detail?url=' + encodeURIComponent(r.source)"><i class="fas fa-circle-info"></i></a>
+                        <a v-if="isUrl(r.source)" class="dt-action-btn" title="Open the repository" :href="repoLink(r)" target="_blank" rel="noreferrer"><i class="fas fa-arrow-up-right-from-square"></i></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -178,6 +223,7 @@
     import FormatChip, { formatLook } from '/static/js/rule/formatChip.js'
     import FormatSelect from '/static/js/rule/formatSelect.js'
     import { PuGitLine, PuStatus, PuDiffstat, updateState } from '/static/js/rule/github/pendingUpdateParts.js'
+    import { gitProviderIcon, repoTreeUrl } from '/static/js/components/git-links.js'
 
     createApp({
         delimiters: ['[[', ']]'],
@@ -193,12 +239,23 @@
 
             const formats = ref([])
             const selectedFormat = ref(new URLSearchParams(location.search).get('format') || '')
+            const urlParams = new URLSearchParams(location.search)
+            const selectedRepo = ref(urlParams.get('repo') || '')
+            const repos = ref([])
+            const panel = ref(urlParams.get('panel') === 'repos' ? 'repos' : 'updates')
+            const showAllRepos = ref(false)
+            const visibleRepos = repos
+            const isUrl = s => /^https?:\/\//i.test(s || '')
+            const repoName = s => (s || '(no source)').replace(/^https?:\/\/[^/]+\//, '').replace(/\.git$/, '')
+            const repoIcon = r => gitProviderIcon(isUrl(r.source) ? r.source : null, r.git_provider)
+            const repoLink = r => repoTreeUrl(r.source, r.branch, r.git_provider)
             const statsLoaded = ref(false)
             const stats = reactive({ total: 0, ready: 0, failed: 0, rules: 0, repositories: 0, by_format: [] })
 
             const fetchUrl = computed(() => {
                 const params = new URLSearchParams()
                 if (selectedFormat.value) params.set('format', selectedFormat.value)
+                if (selectedRepo.value) params.set('repo', selectedRepo.value)
                 const qs = params.toString()
                 return '/rule/get_rule_changes' + (qs ? '?' + qs : '')
             })
@@ -236,10 +293,25 @@
                 } catch (e) { /* KPIs stay at 0 */ }
             }
 
+            async function loadRepos() {
+                try {
+                    const res = await fetch('/rule/update_github/repos')
+                    if (res.ok) repos.value = (await res.json()).repos || []
+                } catch (e) { /* panel stays hidden */ }
+            }
+
+            function toggleRepo(src) {
+                selectedRepo.value = selectedRepo.value === src ? '' : src
+                if (selectedRepo.value) panel.value = 'updates'
+                onFormatChange()
+            }
+
             function onFormatChange() {
                 const url = new URL(location.href)
                 if (selectedFormat.value) url.searchParams.set('format', selectedFormat.value)
                 else url.searchParams.delete('format')
+                if (selectedRepo.value) url.searchParams.set('repo', selectedRepo.value)
+                else url.searchParams.delete('repo')
                 history.replaceState(null, '', url)
                 tableRef.value?.fetchData()
             }
@@ -257,7 +329,7 @@
                 const res = await fetch('/rule/update_github/bulk_decision', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                    body: JSON.stringify({ action, ids, search: tableRef.value?.search || '', format: selectedFormat.value }),
+                    body: JSON.stringify({ action, ids, search: tableRef.value?.search || '', format: selectedFormat.value, repo: selectedRepo.value }),
                 })
                 const data = await res.json().catch(() => ({}))
                 if (!data.success) {
@@ -270,7 +342,7 @@
                 } else {
                     create_message(data.message || 'Done.', 'success-subtle')
                     tableRef.value?.fetchData()
-                    loadStats()
+                    loadStats(); loadRepos()
                 }
             }
 
@@ -279,13 +351,14 @@
             function onJobDone() {
                 activeJobUuid.value = null
                 tableRef.value?.fetchData()
-                loadStats()
+                loadStats(); loadRepos()
             }
 
-            onMounted(() => { loadFormats(); loadStats() })
+            onMounted(() => { loadFormats(); loadStats(); loadRepos() })
 
             return {
                 tableRef, activeJobUuid, formats, selectedFormat, fetchUrl, stats, statsLoaded,
+                repos, panel, visibleRepos, showAllRepos, selectedRepo, isUrl, repoName, repoIcon, repoLink, toggleRepo,
                 columns, bulkActions, look, stateOf,
                 onFormatChange, toggleFormat, goToCompare, decisionRule, onBulkAction, onJobDone,
             }

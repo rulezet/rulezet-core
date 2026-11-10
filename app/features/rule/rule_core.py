@@ -3301,7 +3301,7 @@ def get_old_rule_choice(page , search=None) -> list:
     return query.paginate(page=page, per_page=20, max_per_page=20)
 
 
-def _pending_updates_base_query(search=None, rule_format=None):
+def _pending_updates_base_query(search=None, rule_format=None, repo=None):
     """Shared filter behind every "pending GitHub update" listing/bulk-action
     below — same rule as get_old_rule_choice's base_filters, plus an optional
     Rule.format join-filter for the Pending Updates page's format dropdown."""
@@ -3321,8 +3321,12 @@ def _pending_updates_base_query(search=None, rule_format=None):
         )
     if search:
         query = query.filter(RuleUpdateHistory.rule_title.ilike(f"%{search}%"))
-    if rule_format:
-        query = query.join(Rule, Rule.id == RuleUpdateHistory.rule_id).filter(Rule.format == rule_format)
+    if rule_format or repo:
+        query = query.join(Rule, Rule.id == RuleUpdateHistory.rule_id)
+        if rule_format:
+            query = query.filter(Rule.format == rule_format)
+        if repo:
+            query = query.filter(Rule.source == repo)
     return query
 
 
@@ -3334,10 +3338,11 @@ _PENDING_UPDATES_SORTABLE = {
 
 
 def get_pending_updates_page(page: int = 1, per_page: int = 20, search: str = None,
-                              rule_format: str = None, sort: str = None, direction: str = None):
+                              rule_format: str = None, sort: str = None, direction: str = None,
+                              repo: str = None):
     """Paginated feed for the Pending Updates page's DataTable (fetchUrl
     contract: page/per_page/search/sort/dir -> {items, total, total_pages})."""
-    query = _pending_updates_base_query(search=search, rule_format=rule_format)
+    query = _pending_updates_base_query(search=search, rule_format=rule_format, repo=repo)
     sort_col = _PENDING_UPDATES_SORTABLE.get(sort, RuleUpdateHistory.analyzed_at)
     query = query.order_by(sort_col.desc() if direction != 'asc' else sort_col.asc())
     return query.paginate(page=page, per_page=min(per_page or 20, 100), max_per_page=100)
@@ -3362,11 +3367,51 @@ def get_pending_updates_stats() -> dict:
             "rules": rules, "repositories": repos, "by_format": by_format}
 
 
-def get_pending_updates_ids(search: str = None, rule_format: str = None) -> list:
+def get_pending_updates_by_repo() -> list:
+    """Repositories that changed since their rules were imported: one row per
+    rule source with its pending updates (total / ready), rules concerned,
+    formats and the last check — the "Out-of-date repositories" panel."""
+    from app.core.db_class.git import GithubRepo
+    ready_expr = case((and_(RuleUpdateHistory.success.is_(True),
+                            RuleUpdateHistory.new_content.isnot(None)), 1), else_=0)
+    rows = (_pending_updates_base_query()
+            .join(Rule, Rule.id == RuleUpdateHistory.rule_id)
+            .with_entities(Rule.source,
+                           func.count(RuleUpdateHistory.id),
+                           func.sum(ready_expr),
+                           func.count(func.distinct(Rule.id)),
+                           func.max(RuleUpdateHistory.analyzed_at),
+                           func.max(Rule.git_provider),
+                           func.max(Rule.branch))
+            .group_by(Rule.source)
+            .order_by(func.count(RuleUpdateHistory.id).desc())
+            .all())
+    formats = {}
+    for src, fmt in (_pending_updates_base_query()
+                     .join(Rule, Rule.id == RuleUpdateHistory.rule_id)
+                     .with_entities(Rule.source, Rule.format).distinct().all()):
+        if fmt:
+            formats.setdefault(src, []).append(fmt)
+    known = {r.url for r in GithubRepo.query.filter(
+        GithubRepo.url.in_([r[0] for r in rows if r[0]])).with_entities(GithubRepo.url).all()} if rows else set()
+    return [{
+        "source": src or "",
+        "pending": total,
+        "ready": int(ready or 0),
+        "rules": rules,
+        "last_check": last.strftime('%Y-%m-%d %H:%M') if last else None,
+        "git_provider": provider,
+        "branch": branch,
+        "formats": sorted(formats.get(src, [])),
+        "has_detail_page": src in known,
+    } for src, total, ready, rules, last, provider, branch in rows]
+
+
+def get_pending_updates_ids(search: str = None, rule_format: str = None, repo: str = None) -> list:
     """Every id currently matching the Pending Updates filters — used to
     resolve the DataTable's 'ALL' bulk-action sentinel (select all N items
     matching the current filter, not just the current page)."""
-    return [row.id for row in _pending_updates_base_query(search=search, rule_format=rule_format)
+    return [row.id for row in _pending_updates_base_query(search=search, rule_format=rule_format, repo=repo)
             .with_entities(RuleUpdateHistory.id).all()]
 
 
@@ -3419,16 +3464,9 @@ def delete_update_history(history_id: int) -> bool:
 
 
 def get_update_pending():
-    """Get all the schedules with pending updates for the current user"""
-    return RuleUpdateHistory.query.filter(
-        RuleUpdateHistory.analyzed_by_user_id == current_user.id,
-        RuleUpdateHistory.message != 'accepted',
-        RuleUpdateHistory.message != 'rejected',
-        or_(
-            RuleUpdateHistory.change_type.is_(None),
-            RuleUpdateHistory.change_type.notin_(_NON_PENDING_CHANGE_TYPES),
-        ),
-    ).count()
+    """Number of pending git updates, same scope as the Pending Updates page
+    (every one for an admin, the user's own otherwise) — the navbar badge."""
+    return _pending_updates_base_query().count()
 
 #####################
 #   Format rules    #

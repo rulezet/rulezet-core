@@ -3733,10 +3733,11 @@ def get_rule_changes() -> jsonify:
     sort       = request.args.get('sort', '', type=str).strip() or None
     direction  = request.args.get('dir', 'desc', type=str)
     rule_format = request.args.get('format', '', type=str).strip() or None
+    repo       = request.args.get('repo', '', type=str).strip() or None
 
     rules = RuleModel.get_pending_updates_page(
         page=page, per_page=per_page, search=search, rule_format=rule_format,
-        sort=sort, direction=direction,
+        sort=sort, direction=direction, repo=repo,
     )
     return jsonify({
         "success": True,
@@ -3752,6 +3753,13 @@ def pending_updates_stats() -> jsonify:
     """KPIs of the Pending Updates page (same scope as the list: every
     pending update for an admin, the user's own otherwise)."""
     return jsonify({"success": True, **RuleModel.get_pending_updates_stats()})
+
+
+@rule_blueprint.route("/update_github/repos", methods=['GET'])
+@login_required
+def pending_updates_repos() -> jsonify:
+    """Repositories with pending updates (same scope as the list)."""
+    return jsonify({"success": True, "repos": RuleModel.get_pending_updates_by_repo()})
 
 
 # Above this count, a bulk decision (accept/reject/delete) runs as a
@@ -3780,7 +3788,8 @@ def bulk_pending_update_decision() -> jsonify:
         return jsonify({"success": False, "message": "Invalid action."}), 400
 
     if ids == 'ALL':
-        ids = RuleModel.get_pending_updates_ids(search=search, rule_format=rule_format)
+        ids = RuleModel.get_pending_updates_ids(search=search, rule_format=rule_format,
+                                                repo=(data.get('repo') or '').strip() or None)
     elif isinstance(ids, list):
         ids = [int(i) for i in ids if str(i).isdigit()]
     else:

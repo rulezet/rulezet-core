@@ -67,3 +67,36 @@
 .pu-info-link:hover { text-decoration: underline; }
 .pu-message { white-space: pre-wrap; font-family: var(--bs-font-monospace); font-size: .8rem;
     color: var(--text-color); margin: 0; }
+
+/* ── Out-of-date repositories panel ──────────────────────────── */
+.pu-repo-list { display: flex; flex-direction: column; gap: .5rem; }
+.pu-repo-row {
+    display: flex; align-items: center; gap: .85rem; flex-wrap: wrap;
+    padding: .7rem .9rem; border-radius: 10px;
+    border: 1px solid var(--border-color); background: var(--light-bg-color);
+    transition: border-color .15s, box-shadow .15s;
+}
+.pu-repo-row:hover { box-shadow: 0 3px 12px rgba(0,0,0,.06); }
+.pu-repo-row--on { border-color: #0d6efd; box-shadow: 0 0 0 1px #0d6efd; }
+.pu-repo-icon { width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(111,66,193,.12); color: #6f42c1; font-size: 1rem; }
+.pu-repo-main { flex: 1 1 260px; min-width: 0; }
+.pu-repo-name { border: 0; background: none; padding: 0; font-weight: 600; color: var(--text-color);
+    text-align: left; overflow-wrap: anywhere; }
+.pu-repo-name:hover { color: #0d6efd; text-decoration: underline; }
+.pu-repo-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .25rem;
+    font-size: .74rem; color: var(--subtle-text-color); }
+.pu-repo-counts { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+.pu-repo-count { font-size: .85rem; color: var(--text-color); white-space: nowrap; }
+.pu-repo-sub { font-size: .72rem; color: var(--subtle-text-color); white-space: nowrap; }
+
+.pu-repo-filter { display: inline-flex; align-items: center; gap: .35rem; max-width: 280px;
+    padding: .2rem .3rem .2rem .7rem; border-radius: 999px; font-size: .78rem; font-weight: 600;
+    background: rgba(13,110,253,.1); color: #0d6efd; border: 1px solid rgba(13,110,253,.3); }
+.pu-repo-filter > i + * , .pu-repo-filter { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pu-repo-filter button { border: 0; background: none; color: inherit; padding: 0 .3rem; }
+
+@media (max-width: 576px) {
+    .pu-repo-counts { align-items: flex-start; text-align: left; }
+}
