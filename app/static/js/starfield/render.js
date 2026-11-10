@@ -6,6 +6,9 @@
 import { W, H, TAU, FA } from './data.js';
 import { tr } from './i18n.js';
 
+/** Graphics quality (Settings → Audio & display): low skips the soft glows and nebulas */
+export const GFX = { low: false };
+
 const FA_FONT = "'Font Awesome 7 Free'";   // the family name of fontawesome-7.3.1/css/solid.css
 let faReady = false;
 if (typeof document !== 'undefined' && document.fonts && document.fonts.load) {
@@ -46,7 +49,7 @@ export function poly(ctx, x, y, r, sides, rot, fill, stroke = null, lw = 2) {
 
 /** Soft radial glow (cheaper than shadowBlur) */
 export function glow(ctx, x, y, r, color, alpha = 0.35) {
-    if (!(r > 0) || !Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (GFX.low || !(r > 0) || !Number.isFinite(x) || !Number.isFinite(y)) return;
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
     g.addColorStop(0, hexA(color, alpha));
     g.addColorStop(1, hexA(color, 0));
@@ -169,7 +172,7 @@ export function drawBackground(ctx, stars, t, theme, drift = { x: 0, y: 0 }, ima
     // nebula clouds in the world's colours
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    const clouds = [[0.2, 0.3, 420], [0.75, 0.65, 380], [0.55, 0.15, 300], [0.4, 0.85, 260]];
+    const clouds = GFX.low ? [] : [[0.2, 0.3, 420], [0.75, 0.65, 380], [0.55, 0.15, 300], [0.4, 0.85, 260]];
     clouds.forEach(([cx, cy, r], i) => {
         const span = W + 600, spanY = H + 600;
         const x = ((cx * W - drift.x * 0.05 + Math.sin(t * 0.0003 + i) * 40) % span + span) % span - 300;
@@ -181,7 +184,7 @@ export function drawBackground(ctx, stars, t, theme, drift = { x: 0, y: 0 }, ima
     ctx.save(); if (dim) ctx.globalAlpha = 0.45;
     drawPlanet(ctx, theme, t, (drift.x * 0.02) % 200, (drift.y * 0.02) % 120);
     ctx.restore();
-    stars.forEach(layer => layer.forEach(st => {
+    (GFX.low ? stars.slice(1, 3) : stars).forEach(layer => layer.forEach(st => {
         const x = ((st.x - drift.x * st.speed) % W + W) % W;
         const y = ((st.y - drift.y * st.speed) % H + H) % H;
         const a = 0.45 + 0.55 * Math.abs(Math.sin(st.tw + t * 0.002));

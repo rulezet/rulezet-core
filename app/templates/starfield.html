@@ -42,6 +42,7 @@
                 </div>
                 <button class="sf-btn sf-btn--small" id="sf-btn-leaderboard"><i class="fa-solid fa-ranking-star"></i> Leaderboard</button>
             </div>
+            <div class="sf-title-world" id="sf-title-world"></div>
             <div class="sf-title-stats" id="sf-title-stats"></div>
             <div class="sf-shoutout" id="sf-shoutout" hidden><i class="fa-solid fa-rocket"></i> Éclate-toi Mat !</div>
         </div>
@@ -129,13 +130,16 @@
 
         <!-- ═════════════ PAUSE ═════════════ -->
         <div class="sf-screen sf-screen--dim" id="sf-pause">
-            <div class="sf-panel">
-                <h2>Paused</h2>
+            <div class="sf-panel sf-panel--wide sf-pause">
+                <h2><i class="fa-solid fa-pause"></i> Paused</h2>
+                <div class="sf-pause-where" id="sf-pause-where"></div>
                 <p class="sf-sub" id="sf-pause-obj"></p>
+                <div class="sf-res-grid sf-res-grid--4" id="sf-pause-stats"></div>
                 <button class="sf-btn sf-btn--primary" id="sf-pause-resume"><i class="fa-solid fa-play"></i> Resume</button>
                 <button class="sf-btn" id="sf-pause-settings"><i class="fa-solid fa-sliders"></i> Settings &amp; keys</button>
                 <button class="sf-btn" id="sf-pause-restart"><i class="fa-solid fa-rotate-right"></i> Restart</button>
                 <button class="sf-btn sf-btn--ghost" id="sf-pause-quit"><i class="fa-solid fa-map"></i> Abandon</button>
+                <div class="sf-pause-controls" id="sf-pause-controls"></div>
             </div>
         </div>
 
@@ -205,8 +209,14 @@
 
         <!-- ═════════════ SETTINGS ═════════════ -->
         <div class="sf-screen sf-screen--dim" id="sf-settings">
-            <div class="sf-panel">
+            <div class="sf-panel sf-panel--wide sf-panel--settings">
                 <h2><i class="fa-solid fa-sliders"></i> Settings</h2>
+                <div class="sf-tabs" id="sf-settings-tabs">
+                    <button class="sf-tab active" data-tab="general"><i class="fa-solid fa-gear"></i> General</button>
+                    <button class="sf-tab" data-tab="audio"><i class="fa-solid fa-volume-high"></i> Audio &amp; display</button>
+                    <button class="sf-tab" data-tab="keys"><i class="fa-solid fa-keyboard"></i> Keyboard</button>
+                    <button class="sf-tab" data-tab="pad"><i class="fa-solid fa-gamepad"></i> Gamepad</button>
+                </div>
                 <div class="sf-settings" id="sf-settings-list"></div>
                 <button class="sf-btn sf-btn--danger" id="sf-reset"><i class="fa-solid fa-trash"></i> Reset all progress</button>
                 <button class="sf-btn sf-btn--ghost" data-back><i class="fa-solid fa-arrow-left"></i> Back</button>
@@ -223,6 +233,19 @@
             </div>
         </div>
 
+        <!-- ═════════════ CONFIRM (instead of a browser dialog: works with a controller) ═════════════ -->
+        <div class="sf-screen sf-screen--dim" id="sf-confirm">
+            <div class="sf-panel sf-confirm">
+                <i class="fa-solid fa-triangle-exclamation sf-confirm-icon"></i>
+                <p class="sf-confirm-text" id="sf-confirm-text"></p>
+                <div class="sf-panel-actions">
+                    <button class="sf-btn sf-btn--primary" id="sf-confirm-no"><i class="fa-solid fa-xmark"></i> Cancel</button>
+                    <button class="sf-btn sf-btn--danger" id="sf-confirm-yes"><i class="fa-solid fa-check"></i> Yes</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="sf-padhint" id="sf-padhint" hidden></div>
         <div class="sf-toast" id="sf-toast"></div>
     </div>
     <p class="sf-footnote" id="sf-footnote"></p>

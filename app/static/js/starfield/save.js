@@ -4,6 +4,10 @@
  * the progress lives for the session.
  */
 import { levelKey, WORLDS, WEAPONS, SKINS, DEFAULT_KEYS, RESERVED_KEYS } from './data.js';
+import { DEFAULT_PAD_SETTINGS, DEFAULT_PAD } from './input.js';
+
+export const defaultPad = () => ({ ...DEFAULT_PAD_SETTINGS, map: { ...DEFAULT_PAD } });
+export const defaultVolume = () => ({ master: 0.9, sfx: 1, music: 0.8 });
 
 const KEY = 'rz-starfield-v2';
 
@@ -22,7 +26,10 @@ function fresh() {
         skin: 'yara',
         difficulty: 'hunter',
         endless: [],               // [{score, wave, date}] top 10
-        settings: { muted: false, music: true, shake: true, assist: false, controls: 'classic', keys: defaultKeys() },
+        settings: {
+            muted: false, music: true, shake: true, assist: false, controls: 'classic', keys: defaultKeys(),
+            pad: defaultPad(), volume: defaultVolume(), quality: 'high', fps: false, flashes: true,
+        },
         pos: { world: 0, node: 0 }, // where the ship stands on the map
         stats: { kills: 0, deaths: 0, played: 0 },
         seenIntro: false,
@@ -41,6 +48,9 @@ export function load() {
     } catch { data = fresh(); }
     data.settings = Object.assign(fresh().settings, data.settings || {});
     data.settings.keys = Object.assign(defaultKeys(), data.settings.keys || {});
+    const pad = data.settings.pad && typeof data.settings.pad === 'object' ? data.settings.pad : {};
+    data.settings.pad = { ...defaultPad(), ...pad, map: { ...DEFAULT_PAD, ...(pad.map || {}) } };
+    data.settings.volume = { ...defaultVolume(), ...(data.settings.volume || {}) };
     migrate();
     return data;
 }

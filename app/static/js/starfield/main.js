@@ -7,9 +7,9 @@ import { W, H, WORLDS, WEAPONS, UPGRADES, SKINS, DIFFICULTIES, ENEMIES, BOSSES, 
 import { actText, levelStory, STORY_KEYS } from './story.js';
 import * as Save from './save.js';
 import { Sfx, Music, Audio } from './audio.js';
-import { createInput, normalizeKey } from './input.js';
+import { createInput, normalizeKey, PAD_ACTIONS, PAD_LAYOUTS, PAD_LAYOUT_NAMES, padFamily, padShortName } from './input.js';
 import { tr, setLang, getLang, defaultLang, localizeData, localizeDom } from './i18n.js';
-import { makeStars, drawBackground, drawShip } from './render.js';
+import { makeStars, drawBackground, drawShip, GFX } from './render.js';
 import { createMap } from './worldmap.js';
 import { createLevel } from './level.js';
 import { reportRun } from './report.js';
@@ -31,6 +31,9 @@ $('sf-shoutout').hidden = getLang() !== 'fr';      // a little message for the F
 Audio.setMuted(!!S.settings.muted);
 Music.setEnabled(S.settings.music !== false);
 input.setKeys(S.settings.keys);
+input.setPad(S.settings.pad);
+Audio.setVolumes(S.settings.volume);
+GFX.low = S.settings.quality === 'low';
 
 // ── Key labels (bindings are configurable in Settings → Keys) ─────────
 const KEY_NAMES = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Space: 'Space', ShiftLeft: 'Shift',
@@ -52,8 +55,17 @@ function keyName(code) {
     if (seenKeys[code]) return seenKeys[code];
     return code.replace(/^Key/, '').replace(/^Digit/, '').replace(/^Numpad/, 'Num ');
 }
-/** <kbd> of the keys bound to an action (first one, or both with all=true) */
+// ── Gamepad labels: the controller's own button names (Xbox / PlayStation / Nintendo) ──
+const padLayout = () => (S.settings.pad.layout && S.settings.pad.layout !== 'auto' ? S.settings.pad.layout : padFamily(input.state.padId));
+const padName = i => ((PAD_LAYOUTS[padLayout()] || PAD_LAYOUTS.xbox)[i] ?? `#${i}`);
+const pbtn = i => `<kbd class="sf-pad sf-pad--${padLayout()} sf-pad-b${i}">${padName(i)}</kbd>`;
+const usingPad = () => input.state.lastDevice === 'pad' && input.state.padConnected;
+// keyboard action → gamepad action
+const KEY_TO_PAD = { fire: 'fire', dash: 'dash', bomb: 'bomb', special: 'special', weapon: 'next', pause: 'pause' };
+
+/** <kbd> of the keys bound to an action (first one, or both with all=true) — the controller button when playing with one */
 function kbd(action, all = false) {
+    if (usingPad() && KEY_TO_PAD[action]) return pbtn(S.settings.pad.map[KEY_TO_PAD[action]]);
     const ks = (S.settings.keys[action] || []).filter(Boolean);
     if (!ks.length) return '<kbd>—</kbd>';
     return (all ? ks : ks.slice(0, 1)).map(k => `<kbd>${keyName(k)}</kbd>`).join(' / ');
@@ -88,13 +100,31 @@ document.addEventListener('fullscreenchange', () => setTimeout(resize, 50));
 resize();
 
 // ── Screens ───────────────────────────────────────────────────────────
-const PANELS = ['sf-title', 'sf-difficulty', 'sf-pause', 'sf-results', 'sf-endless', 'sf-hangar', 'sf-help', 'sf-settings', 'sf-story'];
+const PANELS = ['sf-title', 'sf-difficulty', 'sf-pause', 'sf-results', 'sf-endless', 'sf-hangar', 'sf-help', 'sf-settings', 'sf-story', 'sf-confirm'];
 let backTo = null;
 function openPanel(id, back = null) {
     PANELS.forEach(p => $(p).classList.toggle('is-open', p === id));
     overlay = id; backTo = back;
+    setNav(null);
+    refreshPadHint();
 }
-function closePanels() { PANELS.forEach(p => $(p).classList.remove('is-open')); overlay = null; }
+function closePanels() { PANELS.forEach(p => $(p).classList.remove('is-open')); overlay = null; setNav(null); refreshPadHint(); }
+
+// ── An in-game "are you sure?" (browser dialogs can't be answered with a controller) ──
+let confirmCtx = null;
+function askConfirm(text, onYes, yesLabel = 'Yes') {
+    confirmCtx = { onYes, prev: overlay, prevBack: backTo };
+    $('sf-confirm-text').textContent = text;
+    $('sf-confirm-yes').innerHTML = `<i class="fa-solid fa-check"></i> ${tr(yesLabel)}`;
+    openPanel('sf-confirm');
+    Sfx.telegraph();
+}
+function confirmNo() {
+    const c = confirmCtx; confirmCtx = null; Sfx.move();
+    if (c && c.prev) openPanel(c.prev, c.prevBack); else showTitle();
+}
+$('sf-confirm-no').addEventListener('click', () => confirmNo());
+$('sf-confirm-yes').addEventListener('click', () => { const c = confirmCtx; confirmCtx = null; if (c) c.onYes(); });
 document.querySelectorAll('[data-back]').forEach(b => b.addEventListener('click', () => goBack()));
 function goBack() {
     Sfx.move();
@@ -116,9 +146,12 @@ function showTitle() {
     screen = 'title'; level = null; current = null; paused = false;
     introT = 0; $('sf-intro').classList.remove('is-open');
     $('sf-hud').classList.remove('is-open'); $('sf-maphud').classList.remove('is-open');
-    stage.classList.remove('is-playing'); input.setCapture(false);
+    stage.classList.remove('is-playing'); input.setCapture(true);
     openPanel('sf-title');
-    setHue(WORLDS[0].hue);
+    const tw = titleWorld();
+    setHue(WORLDS[tw].hue);
+    $('sf-title-world').innerHTML = (Object.keys(S.stars).length || S.pos.world > 0)
+        ? `<i class="fa-solid fa-location-dot"></i> ${WORLDS[tw].sub} · <b>${WORLDS[tw].name}</b>${S.pos.world >= ACT2_FIRST_WORLD ? ` · <span class="sf-title-act">${tr('ACT II')}</span>` : ''}` : '';
     const started = Object.keys(S.stars).length > 0 || S.pos.world > 0 || S.pos.node > 0;
     $('sf-btn-continue').style.display = started ? '' : 'none';
     $('sf-btn-new').classList.toggle('sf-btn--primary', !started);
@@ -132,6 +165,7 @@ function showTitle() {
     Music.play('map');
 }
 
+const titleWorld = () => Math.max(0, Math.min(WORLDS.length - 1, S.pos.world || 0));
 $('sf-btn-continue').addEventListener('click', () => { Audio.unlock(); Sfx.move(); closePanels(); showMap(); });
 $('sf-btn-new').addEventListener('click', () => { Audio.unlock(); Sfx.move(); renderDifficulty(); openPanel('sf-difficulty'); });
 $('sf-btn-endless').addEventListener('click', () => { Audio.unlock(); startEndless(); });
@@ -143,12 +177,14 @@ function renderDifficulty() {
     $('sf-diff-cards').innerHTML = DIFFICULTIES.map(d => `
         <button class="sf-card" data-diff="${d.id}"><b>${d.name}</b><span>${d.desc}</span></button>`).join('');
     $('sf-diff-cards').querySelectorAll('[data-diff]').forEach(b => b.addEventListener('click', () => {
-        const started = Object.keys(S.stars).length > 0;
-        if (started && !confirm(tr('Start a new campaign? Map progress and stars are reset; bytes, upgrades and weapons are kept.'))) return;
-        S.difficulty = b.dataset.diff;
-        S.unlocked = { '0-0': true }; S.stars = {}; S.best = {}; S.pos = { world: 0, node: 0 };
-        Save.save();
-        Sfx.levelUp(); closePanels(); showMap();
+        const go = () => {
+            S.difficulty = b.dataset.diff;
+            S.unlocked = { '0-0': true }; S.stars = {}; S.best = {}; S.pos = { world: 0, node: 0 };
+            Save.save();
+            Sfx.levelUp(); closePanels(); showMap();
+        };
+        if (Object.keys(S.stars).length > 0) askConfirm(tr('Start a new campaign? Map progress and stars are reset; bytes, upgrades and weapons are kept.'), go, 'Start over');
+        else go();
     }));
 }
 
@@ -226,7 +262,7 @@ $('sf-map-galaxy').addEventListener('click', () => { if (screen === 'map') { clo
 function envFor() {
     return {
         skin: skin(), upgrades: S.upgrades, weapons: Save.weaponsUnlocked(), diff: diff(), settings: S.settings,
-        callbacks: { onEnd: onLevelEnd, onBoss: updateBossBar },
+        callbacks: { onEnd: onLevelEnd, onBoss: updateBossBar, rumble: (a, b, ms) => input.rumble(a, b, ms) },
     };
 }
 
@@ -248,7 +284,7 @@ function startLevel(world, index) {
     briefWait = !!def.brief && !S.briefed[key];
     if (briefWait) { introT = 1; S.briefed[key] = true; Save.save(); }
     $('sf-intro-go').hidden = !briefWait;
-    $('sf-intro-go').innerHTML = `${kbd('fire')} / <kbd>Enter</kbd> ${tr('launch')}`;
+    $('sf-intro-go').innerHTML = `${usingPad() ? pbtn(0) : `${kbd('fire')} / <kbd>Enter</kbd>`} ${tr('launch')}`;
     setHue(WORLDS[world].hue);
 }
 let briefWait = false;
@@ -293,8 +329,18 @@ function restart() {
 function togglePause(force) {
     if (!level || level.finished) return;
     paused = force ?? !paused;
-    if (paused) { $('sf-pause-obj').textContent = level.objective.label || ''; openPanel('sf-pause'); }
+    if (paused) { fillPause(); openPanel('sf-pause'); }
     else closePanels();
+}
+function fillPause() {
+    const def = level.def || {};
+    const w = WORLDS[level.world ?? 0];
+    $('sf-pause-where').innerHTML = current && current.endless ? `<i class="fa-solid fa-infinity"></i> ${tr('Threat hunt')}`
+        : `<span style="color:${w.hue}">${w.sub} · ${w.name}</span> — <b>${def.name || ''}</b>`;
+    $('sf-pause-obj').textContent = level.objective.label || '';
+    $('sf-pause-stats').innerHTML = cells([['Time', fmtTime(Math.round(level.t / 60))], ['Score', level.score.toLocaleString()],
+        ['Kills', level.kills], ['Bytes', level.levelBytes]]);
+    $('sf-pause-controls').innerHTML = controlsHint();
 }
 $('sf-pause-resume').addEventListener('click', () => togglePause(false));
 $('sf-pause-settings').addEventListener('click', () => { Sfx.move(); renderSettings(); openPanel('sf-settings', 'pause'); });
@@ -386,12 +432,26 @@ const fmtTime = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
 // ── Controls hint (intro card, footnote) ───────────────────────────────
 function controlsHint() {
+    if (usingPad()) {
+        const m = S.settings.pad.map;
+        const left = S.settings.pad.swap ? tr('Right stick') : tr('Left stick'), right = S.settings.pad.swap ? tr('Left stick') : tr('Right stick');
+        return `<span class="sf-padtag"><i class="fa-solid fa-gamepad"></i></span> ${left} ${S.settings.controls === 'twin' ? tr('move') : tr('turn & thrust')} · ${right} ${tr('aim')} · ${pbtn(m.fire)} ${tr('fire')} · ${pbtn(m.dash)} ${tr('dash')} · ${pbtn(m.bomb)} ${tr('bomb')} · ${pbtn(m.special)} ${tr('ship power')}`;
+    }
     return S.settings.controls === 'twin'
         ? `${kbd('up')}${kbd('left')}${kbd('down')}${kbd('right')} ${tr('move')} · ${tr('mouse aims')} · ${tr('click fires')} · ${kbd('dash')} ${tr('dash')} · ${kbd('bomb')} ${tr('bomb')} · ${kbd('special')} ${tr('ship power')}`
         : `${kbd('left')}${kbd('right')} ${tr('turn')} · ${kbd('up')} ${tr('thrust')} · ${kbd('down')} ${tr('brake')} · ${kbd('fire')} ${tr('fire')} · ${kbd('dash')} ${tr('dash')} · ${kbd('bomb')} ${tr('bomb')} · ${kbd('special')} ${tr('ship power')}`;
 }
 function updateFootnote() {
-    $('sf-footnote').innerHTML = controlsHint() + ` · <kbd>1</kbd>–<kbd>8</kbd> / ${kbd('weapon')} ${tr('weapons')} · ${kbd('pause')} ${tr('pause')} · ${kbd('mute')} ${tr('mute')} — ${tr('change controls and keys in Settings')}`;
+    if (usingPad()) {
+        const m = S.settings.pad.map;
+        $('sf-footnote').innerHTML = controlsHint() + ` · ${pbtn(m.prev)}${pbtn(m.next)} ${tr('weapons')} · ${pbtn(m.pause)} ${tr('pause')} — ${tr('change the buttons in Settings → Gamepad')}`;
+    } else {
+        $('sf-footnote').innerHTML = controlsHint() + ` · <kbd>1</kbd>–<kbd>8</kbd> / ${kbd('weapon')} ${tr('weapons')} · ${kbd('pause')} ${tr('pause')} · ${kbd('mute')} ${tr('mute')} — ${tr('change controls and keys in Settings')}`;
+    }
+    const mh = $('sf-maphint');
+    if (mh) mh.innerHTML = usingPad()
+        ? `${pbtn(14)}${pbtn(15)} ${tr('travel')} · ${pbtn(0)} ${tr('deploy')} · ${pbtn(2)} ${tr('hangar')} · ${pbtn(3)} ${tr('galaxy')} · ${pbtn(1)} ${tr('menu')}`
+        : `<kbd>&larr;</kbd><kbd>&rarr;</kbd> ${tr('travel')} &nbsp; <kbd>Enter</kbd> ${tr('deploy')} &nbsp; <kbd>H</kbd> ${tr('hangar')} &nbsp; <kbd>G</kbd> ${tr('galaxy')} &nbsp; <kbd>Esc</kbd> ${tr('menu · 10 stars in a world open its secret honeypot')}`;
 }
 updateFootnote();
 
@@ -412,8 +472,8 @@ function updateHud() {
     $('sf-hud-hp').innerHTML = Array.from({ length: h.maxHp }, (_, i) => `<i class="fa-solid fa-heart ${i < h.hp ? '' : 'off'}"></i>`).join('');
     $('sf-hud-bombs').innerHTML = `<i class="fa-solid fa-bomb"></i>${h.bombs}${kbd('bomb')}`;
     $('sf-hud-dash').style.width = `${Math.round(h.dash * 100)}%`;
-    $('sf-hud-dash-key').innerHTML = keyName(S.settings.keys.dash.find(Boolean));
-    $('sf-hud-special-key').innerHTML = keyName(S.settings.keys.special.find(Boolean));
+    $('sf-hud-dash-key').innerHTML = usingPad() ? padName(S.settings.pad.map.dash) : keyName(S.settings.keys.dash.find(Boolean));
+    $('sf-hud-special-key').innerHTML = usingPad() ? padName(S.settings.pad.map.special) : keyName(S.settings.keys.special.find(Boolean));
     const sp = skin().special, spWrap = $('sf-hud-special-wrap');
     spWrap.style.setProperty('--sf-special', skin().glow);
     spWrap.title = `${sp.name} (${keyName(S.settings.keys.special.find(Boolean))}) — ${sp.desc}`;
@@ -632,52 +692,155 @@ function renderHelp(tab) {
 }
 document.querySelectorAll('#sf-help-tabs .sf-tab').forEach(b => b.addEventListener('click', () => { Sfx.move(); renderHelp(b.dataset.tab); }));
 
-// ── Settings ──────────────────────────────────────────────────────────
-function renderSettings() {
-    const sw = (key, label, invert = false) => {
+// ── Settings: General · Audio & display · Keyboard · Gamepad ──────────
+let settingsTab = 'general';
+let padRebind = null;            // { act, t } while waiting for a controller button
+function renderSettings(tab = settingsTab) {
+    settingsTab = tab;
+    document.querySelectorAll('#sf-settings-tabs .sf-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    $('sf-reset').style.display = tab === 'general' ? '' : 'none';
+    const sw = (key, label, invert = false, extra = '') => {
         const on = invert ? !S.settings[key] : S.settings[key] !== false;
-        return `<div class="sf-setting"><span>${tr(label)}</span><button class="sf-switch ${on ? 'on' : ''}" data-set="${key}" data-invert="${invert ? 1 : 0}"></button></div>`;
+        return `<div class="sf-setting"><span>${tr(label)}${extra}</span><button class="sf-switch ${on ? 'on' : ''}" data-set="${key}" aria-label="${tr(label)}"></button></div>`;
     };
-    const assistOn = S.settings.assist === true;
-    $('sf-settings-list').innerHTML = sw('muted', 'Sound', true) + sw('music', 'Music') + sw('shake', 'Screen shake')
-        + `<div class="sf-setting"><span>${tr('Language')}</span><select id="sf-set-lang">
-              <option value="fr" ${getLang() === 'fr' ? 'selected' : ''}>Français</option>
-              <option value="en" ${getLang() === 'en' ? 'selected' : ''}>English</option></select></div>`
-        + `<div class="sf-setting"><span>${tr('Controls')}</span><select id="sf-set-controls">
-              <option value="classic" ${S.settings.controls !== 'twin' ? 'selected' : ''}>${tr('Classic — arrows only (turn & thrust)')}</option>
-              <option value="twin" ${S.settings.controls === 'twin' ? 'selected' : ''}>${tr('Twin-stick — WASD move, mouse aims')}</option></select></div>`
-        + (S.settings.controls === 'twin' ? `<div class="sf-setting"><span>${tr('Auto-aim when the mouse isn\'t used')}</span><button class="sf-switch ${assistOn ? 'on' : ''}" data-set="assist"></button></div>` : '')
-        + `<div class="sf-setting"><span>${tr('Audio engine:')} <b id="sf-audio-state">${Audio.status()}</b>${S.settings.muted ? ' ' + tr('(muted)') : ''}</span><button class="sf-btn sf-btn--small" id="sf-audio-test"><i class="fa-solid fa-volume-high"></i> ${tr('Test sound')}</button></div>`
-        + `<div class="sf-setting"><span>${tr('Difficulty')}</span><select id="sf-set-diff">${DIFFICULTIES.map(d => `<option value="${d.id}" ${d.id === S.difficulty ? 'selected' : ''}>${d.name}</option>`).join('')}</select></div>`
-        + `<div class="sf-keys-head"><b><i class="fa-solid fa-keyboard"></i> ${tr('Keys')}</b><button class="sf-btn sf-btn--small" id="sf-keys-reset"><i class="fa-solid fa-rotate-left"></i> ${tr('Default keys')}</button></div>
+    const padSw = (key, label) => `<div class="sf-setting"><span>${tr(label)}</span><button class="sf-switch ${S.settings.pad[key] ? 'on' : ''}" data-padset="${key}" aria-label="${tr(label)}"></button></div>`;
+    const sel = (id, label, opts, val) => `<div class="sf-setting"><span>${tr(label)}</span><select id="${id}">${opts.map(([v, l]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
+    const range = (key, label, val, min = 0, max = 100, step = 5, unit = '%') => `<div class="sf-setting"><span>${tr(label)}</span><div class="sf-range"><input type="range" min="${min}" max="${max}" step="${step}" value="${val}" data-range="${key}" aria-label="${tr(label)}"><b>${val}${unit}</b></div></div>`;
+    const head = (icon, label) => `<div class="sf-settings-head"><i class="fa-solid ${icon}"></i> ${tr(label)}</div>`;
+    let html = '';
+    if (tab === 'general') {
+        html = head('fa-earth-europe', 'Game')
+            + sel('sf-set-lang', 'Language', [['fr', 'Français'], ['en', 'English']], getLang())
+            + sel('sf-set-diff', 'Difficulty', DIFFICULTIES.map(d => [d.id, d.name]), S.difficulty)
+            + head('fa-arrows-up-down-left-right', 'Steering')
+            + sel('sf-set-controls', 'Controls', [['classic', tr('Classic — arrows only (turn & thrust)')], ['twin', tr('Twin-stick — WASD move, mouse aims')]], S.settings.controls === 'twin' ? 'twin' : 'classic')
+            + (S.settings.controls === 'twin' ? sw('assist', 'Auto-aim when the mouse isn\'t used') : '')
+            + `<p class="sf-sub sf-settings-note">${tr('With a controller, classic = left stick turns and pushes, twin-stick = left stick moves and right stick aims.')}</p>`;
+    } else if (tab === 'audio') {
+        const v = S.settings.volume;
+        html = head('fa-volume-high', 'Sound')
+            + sw('muted', 'Sound', true)
+            + range('master', 'Main volume', Math.round(v.master * 100))
+            + range('sfx', 'Effects', Math.round(v.sfx * 100))
+            + sw('music', 'Music')
+            + range('music', 'Music volume', Math.round(v.music * 100))
+            + `<div class="sf-setting"><span>${tr('Audio engine:')} <b id="sf-audio-state">${Audio.status()}</b>${S.settings.muted ? ' ' + tr('(muted)') : ''}</span><button class="sf-btn sf-btn--small" id="sf-audio-test"><i class="fa-solid fa-volume-high"></i> ${tr('Test sound')}</button></div>`
+            + head('fa-display', 'Display')
+            + sel('sf-set-quality', 'Graphics', [['high', tr('High — glows, nebulas, planets')], ['low', tr('Low — faster on small machines')]], S.settings.quality === 'low' ? 'low' : 'high')
+            + sw('shake', 'Screen shake')
+            + sw('flashes', 'Flashes (explosions, hit screen)')
+            + sw('fps', 'Show frames per second');
+    } else if (tab === 'keys') {
+        html = `<div class="sf-keys-head"><b><i class="fa-solid fa-keyboard"></i> ${tr('Keys')}</b><button class="sf-btn sf-btn--small" id="sf-keys-reset"><i class="fa-solid fa-rotate-left"></i> ${tr('Default keys')}</button></div>
            <p class="sf-sub">${tr('Click a key, then press the new one. {esc} cancels, {back} clears it.', { esc: '<kbd>Esc</kbd>', back: '<kbd>Backspace</kbd>' })}</p>
            <div class="sf-keys">${KEY_ACTIONS.map(a => `<span>${a.label}</span>${[0, 1].map(i =>
                 `<button class="sf-key ${rebinding && rebinding.act === a.id && rebinding.slot === i ? 'listening' : ''}" data-act="${a.id}" data-slot="${i}">${rebinding && rebinding.act === a.id && rebinding.slot === i ? '…' : keyName(S.settings.keys[a.id][i])}</button>`).join('')}`).join('')}</div>`;
-    $('sf-settings-list').querySelectorAll('[data-set]').forEach(b => b.addEventListener('click', () => {
+    } else {
+        const P = S.settings.pad, st = input.state;
+        const fam = padLayout();
+        html = `<div class="sf-padcard ${st.padConnected ? 'on' : ''}">
+                <i class="fa-solid fa-gamepad"></i>
+                <div><b>${st.padConnected ? padShortName(st.padId) : tr('No controller detected')}</b>
+                <span>${st.padConnected ? tr('{family} layout — press any button to try it below', { family: PAD_LAYOUT_NAMES[fam] }) : tr('Plug a controller in (or pair it) and press any of its buttons.')}</span></div>
+            </div>`
+            + sel('sf-set-padlayout', 'Button names', [['auto', tr('Automatic')], ['xbox', 'Xbox'], ['ps', 'PlayStation'], ['nintendo', 'Nintendo']], P.layout || 'auto')
+            + `<div class="sf-padtest" id="sf-padtest">
+                <div class="sf-stick"><span id="sf-stick-l"></span><em>${tr('Left stick')}</em></div>
+                <div class="sf-padbtns">${Array.from({ length: 17 }, (_, i) => `<span class="sf-pb" id="sf-pb-${i}">${padName(i)}</span>`).join('')}</div>
+                <div class="sf-stick"><span id="sf-stick-r"></span><em>${tr('Right stick')}</em></div>
+            </div>`
+            + `<div class="sf-keys-head"><b><i class="fa-solid fa-gamepad"></i> ${tr('Buttons')}</b><button class="sf-btn sf-btn--small" id="sf-pad-reset"><i class="fa-solid fa-rotate-left"></i> ${tr('Default buttons')}</button></div>
+               <p class="sf-sub">${tr('Choose an action, then press the controller button for it. In the menus {a} confirms, {b} goes back and {lb} {rb} switch tabs.', { a: pbtn(0), b: pbtn(1), lb: pbtn(4), rb: pbtn(5) })}</p>
+               <div class="sf-keys sf-keys--pad">${PAD_ACTIONS.map(a => `<span>${tr(a.label)}</span><button class="sf-key ${padRebind && padRebind.act === a.id ? 'listening' : ''}" data-padact="${a.id}">${padRebind && padRebind.act === a.id ? tr('press…') : padName(P.map[a.id])}</button>`).join('')}</div>`
+            + head('fa-sliders', 'Sticks & feel')
+            + range('deadzone', 'Stick dead zone', Math.round((P.deadzone ?? 0.18) * 100), 5, 40, 1)
+            + padSw('swap', 'Swap the sticks (move with the right one)')
+            + padSw('invertY', 'Invert the aim stick vertically')
+            + `<div class="sf-setting"><span>${tr('Vibration')}</span><span class="sf-setting-pair"><button class="sf-btn sf-btn--small" id="sf-pad-rumble"><i class="fa-solid fa-wave-square"></i> ${tr('Test')}</button><button class="sf-switch ${P.vibration ? 'on' : ''}" data-padset="vibration" aria-label="${tr('Vibration')}"></button></span></div>`;
+    }
+    const list = $('sf-settings-list');
+    list.innerHTML = html;
+    list.querySelectorAll('[data-set]').forEach(b => b.addEventListener('click', () => {
         const key = b.dataset.set;
         if (key === 'muted') S.settings.muted = !S.settings.muted;
-        else if (key === 'assist') S.settings.assist = S.settings.assist !== true;
+        else if (key === 'assist' || key === 'fps') S.settings[key] = S.settings[key] !== true;
         else S.settings[key] = S.settings[key] === false;
         applySettings(); Save.save(); renderSettings(); Sfx.move();
     }));
-    $('sf-set-diff').addEventListener('change', e => { S.difficulty = e.target.value; Save.save(); });
+    list.querySelectorAll('[data-padset]').forEach(b => b.addEventListener('click', () => {
+        const key = b.dataset.padset;
+        S.settings.pad[key] = !S.settings.pad[key];
+        applySettings(); Save.save(); renderSettings(); Sfx.move();
+        if (key === 'vibration' && S.settings.pad.vibration) input.rumble(0.6, 0.6, 200);
+    }));
+    list.querySelectorAll('[data-range]').forEach(r => {
+        const show = () => { r.nextElementSibling.textContent = r.value + (r.dataset.range === 'deadzone' ? '%' : '%'); };
+        r.addEventListener('input', () => {
+            const k = r.dataset.range, v = +r.value / 100;
+            if (k === 'deadzone') S.settings.pad.deadzone = v; else S.settings.volume[k] = v;
+            show(); applySettings();
+        });
+        r.addEventListener('change', () => { Save.save(); if (r.dataset.range !== 'deadzone' && r.dataset.range !== 'music') Sfx.move(); });
+    });
+    const on = (id, ev, fn) => { const el = $(id); if (el) el.addEventListener(ev, fn); };
+    on('sf-set-diff', 'change', e => { S.difficulty = e.target.value; Save.save(); });
     // every text is translated at start-up: switching language reloads the page
-    $('sf-set-lang').addEventListener('change', e => { S.settings.lang = e.target.value; Save.save(); location.reload(); });
-    $('sf-settings-list').querySelectorAll('.sf-key').forEach(b => b.addEventListener('click', () => {
+    on('sf-set-lang', 'change', e => { S.settings.lang = e.target.value; Save.save(); location.reload(); });
+    on('sf-set-controls', 'change', e => { S.settings.controls = e.target.value; Save.save(); renderSettings(); updateFootnote(); });
+    on('sf-set-quality', 'change', e => { S.settings.quality = e.target.value; applySettings(); Save.save(); });
+    on('sf-set-padlayout', 'change', e => { S.settings.pad.layout = e.target.value; Save.save(); renderSettings(); updateFootnote(); refreshPadHint(); });
+    list.querySelectorAll('.sf-key[data-act]').forEach(b => b.addEventListener('click', () => {
         rebinding = { act: b.dataset.act, slot: +b.dataset.slot }; Sfx.move(); renderSettings();
     }));
-    $('sf-keys-reset').addEventListener('click', () => {
+    list.querySelectorAll('.sf-key[data-padact]').forEach(b => b.addEventListener('click', () => {
+        padRebind = { act: b.dataset.padact, t: 0 }; Sfx.move(); renderSettings();
+    }));
+    on('sf-keys-reset', 'click', () => {
         S.settings.keys = Save.defaultKeys(); rebinding = null; applySettings(); Save.save(); renderSettings(); updateFootnote(); Sfx.buy();
     });
-    $('sf-audio-test').addEventListener('click', async () => {
+    on('sf-pad-reset', 'click', () => {
+        S.settings.pad = Save.defaultPad(); padRebind = null; applySettings(); Save.save(); renderSettings(); updateFootnote(); Sfx.buy();
+    });
+    on('sf-pad-rumble', 'click', () => {
+        if (!input.state.padConnected) { toast(tr('No controller detected')); Sfx.deny(); return; }
+        if (!S.settings.pad.vibration) { toast(tr('Vibration is off')); Sfx.deny(); return; }
+        input.rumble(1, 0.4, 350);
+    });
+    on('sf-audio-test', 'click', async () => {
         if (S.settings.muted) { S.settings.muted = false; applySettings(); Save.save(); }
         const state = await Audio.test();
-        $('sf-audio-state').textContent = state;
+        const el = $('sf-audio-state'); if (el) el.textContent = state;
         toast(state === 'running' ? tr('You should hear two beeps. Nothing? Check the tab / system volume.')
             : state === 'unsupported' ? tr('This browser has no Web Audio.') : tr('The browser keeps audio {state} — click the page once more.', { state }));
     });
-    $('sf-set-controls').addEventListener('change', e => { S.settings.controls = e.target.value; Save.save(); renderSettings(); updateFootnote(); });
 }
+document.querySelectorAll('#sf-settings-tabs .sf-tab').forEach(b => b.addEventListener('click', () => { Sfx.move(); rebinding = null; padRebind = null; renderSettings(b.dataset.tab); }));
+
+/** The live controller tester of Settings → Gamepad */
+function updatePadTester() {
+    const p = input.state.pad;
+    for (let i = 0; i < 17; i++) { const el = $(`sf-pb-${i}`); if (el) el.classList.toggle('on', !!(p && p.held[i])); }
+    const dot = (id, x, y) => { const el = $(id); if (el) el.style.transform = `translate(${x * 18}px, ${y * 18}px)`; };
+    dot('sf-stick-l', p ? p.axes[0] : 0, p ? p.axes[1] : 0);
+    dot('sf-stick-r', p ? p.axes[2] : 0, p ? p.axes[3] : 0);
+}
+
+/** Waiting for the controller button of an action (Settings → Gamepad) */
+function updatePadRebind() {
+    const p = input.state.pad;
+    padRebind.t++;
+    if (input.hit('Escape') || padRebind.t > 60 * 8) { padRebind = null; renderSettings(); return; }
+    if (!p || p.edgeButton < 0) return;
+    const b = p.edgeButton, map = S.settings.pad.map, act = padRebind.act;
+    // a button does one thing: swap with the action that had it
+    const other = Object.keys(map).find(k => map[k] === b && k !== act);
+    if (other) map[other] = map[act];
+    map[act] = b;
+    padRebind = null;
+    Sfx.buy(); applySettings(); Save.save(); renderSettings(); updateFootnote();
+    if (other) toast(tr('{a} ↔ {b} swapped', { a: tr(PAD_ACTIONS.find(x => x.id === act).label), b: tr(PAD_ACTIONS.find(x => x.id === other).label) }));
+}
+
 // Waiting for the new key of an action: grabbed before the game sees it
 let rebinding = null;
 window.addEventListener('keydown', e => {
@@ -699,13 +862,15 @@ window.addEventListener('keydown', e => {
 
 function applySettings() {
     input.setKeys(S.settings.keys);
+    input.setPad(S.settings.pad);
+    Audio.setVolumes(S.settings.volume);
+    GFX.low = S.settings.quality === 'low';
     Audio.setMuted(!!S.settings.muted);
     Music.setEnabled(S.settings.music !== false);
     $('sf-btn-mute').innerHTML = `<i class="fa-solid ${S.settings.muted ? 'fa-volume-xmark' : 'fa-volume-high'}"></i>`;
 }
 $('sf-reset').addEventListener('click', () => {
-    if (!confirm(tr('Erase every star, byte, upgrade and score? This cannot be undone.'))) return;
-    Save.reset(); applySettings(); showTitle();
+    askConfirm(tr('Erase every star, byte, upgrade and score? This cannot be undone.'), () => { Save.reset(); applySettings(); showTitle(); }, 'Erase everything');
 });
 $('sf-btn-mute').addEventListener('click', () => { S.settings.muted = !S.settings.muted; applySettings(); Save.save(); });
 $('sf-btn-full').addEventListener('click', () => {
@@ -714,24 +879,147 @@ $('sf-btn-full').addEventListener('click', () => {
 });
 applySettings();
 
+// ── Menu navigation: d-pad / left stick / arrows move a focus ring, A / Enter clicks ──
+const NAV_SEL = 'button:not([disabled]), select, input[type=range], [data-skin]';
+let navEl = null, navKey = null;
+function keyOf(el) {
+    if (el.id) return `#${el.id}`;
+    const d = Object.entries(el.dataset).map(([k, v]) => `[data-${k.replace(/[A-Z]/g, c => '-' + c.toLowerCase())}="${v}"]`).join('');
+    return d || null;
+}
+function setNav(el) {
+    if (navEl) navEl.classList.remove('sf-focus');
+    navEl = el; navKey = el ? keyOf(el) : null;
+    if (el) { el.classList.add('sf-focus'); el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+}
+function navItems() {
+    const root = overlay ? $(overlay) : null;
+    if (!root) return [];
+    return [...root.querySelectorAll(NAV_SEL)].filter(el => el.offsetParent !== null && el.getBoundingClientRect().width > 0 && el.style.display !== 'none');
+}
+const navDefault = items => items.find(e => e.classList.contains('sf-btn--primary')) || items.find(e => e.classList.contains('sf-tab') && e.classList.contains('active')) || items[0];
+function navMove(dir) {
+    const items = navItems();
+    if (!items.length) return;
+    if (!navEl || !items.includes(navEl)) { setNav(navDefault(items)); Sfx.move(); return; }
+    const a = navEl.getBoundingClientRect(), ax = a.left + a.width / 2, ay = a.top + a.height / 2;
+    let best = null, bs = Infinity;
+    for (const el of items) {
+        if (el === navEl) continue;
+        const r = el.getBoundingClientRect(), dx = r.left + r.width / 2 - ax, dy = r.top + r.height / 2 - ay;
+        const [main, side] = dir === 'up' ? [-dy, dx] : dir === 'down' ? [dy, dx] : dir === 'left' ? [-dx, dy] : [dx, dy];
+        if (main <= 4) continue;
+        const sc = main + Math.abs(side) * 2.2;
+        if (sc < bs) { bs = sc; best = el; }
+    }
+    if (best) { setNav(best); Sfx.move(); }
+}
+function navAdjust(dir) {
+    if (!navEl) return false;
+    const d = dir === 'right' ? 1 : -1;
+    if (navEl.tagName === 'SELECT') {
+        const n = navEl.options.length;
+        navEl.selectedIndex = (navEl.selectedIndex + d + n) % n;
+        navEl.dispatchEvent(new Event('change')); Sfx.move(); return true;
+    }
+    if (navEl.type === 'range') {
+        const st = +navEl.step || 1;
+        navEl.value = Math.max(+navEl.min, Math.min(+navEl.max, +navEl.value + d * st));
+        navEl.dispatchEvent(new Event('input')); navEl.dispatchEvent(new Event('change')); return true;
+    }
+    return false;
+}
+function navConfirm() {
+    const items = navItems();
+    if (!navEl || !items.includes(navEl)) { if (items.length) { setNav(navDefault(items)); Sfx.move(); } return; }
+    if (navEl.tagName === 'SELECT') { navAdjust('right'); return; }
+    if (navEl.type === 'range') return;
+    navEl.click();
+}
+function switchTab(d) {
+    const root = overlay ? $(overlay) : null;
+    const tabs = root ? [...root.querySelectorAll('.sf-tab')] : [];
+    if (!tabs.length) return;
+    const i = Math.max(0, tabs.findIndex(t => t.classList.contains('active')));
+    const next = tabs[(i + d + tabs.length) % tabs.length];
+    next.click();
+    setNav(next);
+}
+function padBack() {
+    if (overlay === 'sf-title') return;
+    if (overlay === 'sf-pause') return togglePause(false);
+    if (overlay === 'sf-results') return $('sf-res-map').click();
+    if (overlay === 'sf-endless') return $('sf-end-menu').click();
+    if (overlay === 'sf-confirm') return confirmNo();
+    if (overlay === 'sf-story') return $('sf-story-ok').click();
+    goBack();
+}
+function menuInput(pad) {
+    // a panel re-rendered under the focus: find the same control again
+    if (navEl && !navEl.isConnected) { const root = overlay && $(overlay); const again = root && navKey ? root.querySelector(navKey) : null; navEl = null; if (again) setNav(again); }
+    if (!navEl && usingPad()) { const items = navItems(); if (items.length) setNav(navDefault(items)); }
+    const kDir = input.hit('ArrowUp') ? 'up' : input.hit('ArrowDown') ? 'down' : input.hit('ArrowLeft') ? 'left' : input.hit('ArrowRight') ? 'right' : null;
+    const pDir = pad ? (pad.up ? 'up' : pad.down ? 'down' : pad.left ? 'left' : pad.right ? 'right' : null) : null;
+    const dir = pDir || kDir;
+    if (dir && !((dir === 'left' || dir === 'right') && navAdjust(dir))) navMove(dir);
+    let used = !!dir;
+    if ((pad && pad.confirm) || (navEl && input.hit('Enter'))) { navConfirm(); used = true; }
+    if (pad && (pad.tabPrev || pad.tabNext)) { switchTab(pad.tabNext ? 1 : -1); used = true; }
+    if (pad && pad.back) { padBack(); used = true; }
+    return used;          // this frame's input was for the menu: the screen behind must not see it
+}
+
+/** The button guide at the bottom of the panels, while a controller is in use */
+function refreshPadHint() {
+    const el = $('sf-padhint');
+    if (!el) return;
+    const show = usingPad() && overlay && overlay !== 'sf-title';
+    el.hidden = !show;
+    if (!show) return;
+    const tabs = $(overlay) && $(overlay).querySelector('.sf-tab');
+    el.innerHTML = `${pbtn(0)} ${tr('select')} &nbsp; ${pbtn(1)} ${tr('back')}${tabs ? ` &nbsp; ${pbtn(4)}${pbtn(5)} ${tr('tabs')}` : ''}`;
+}
+input.onPadChange((on, id) => {
+    toast(on ? tr('Controller connected: {name}', { name: padShortName(id) }) : tr('Controller disconnected'));
+    if (on) input.state.lastDevice = 'pad';
+    if (!on && level && !level.finished && !paused) togglePause(true);
+    if (overlay === 'sf-settings' && settingsTab === 'pad') renderSettings();
+    deviceChanged();
+});
+let lastDevice = null;
+function deviceChanged() {
+    updateFootnote(); refreshPadHint();
+    if (overlay === 'sf-pause' && level) $('sf-pause-controls').innerHTML = controlsHint();
+    if (screen === 'level' || screen === 'endless') $('sf-intro-keys').innerHTML = controlsHint();
+    if (briefWait) $('sf-intro-go').innerHTML = `${usingPad() ? pbtn(0) : `${kbd('fire')} / <kbd>Enter</kbd>`} ${tr('launch')}`;
+}
+
 // ── Loop: fixed 60 Hz updates, render every frame ─────────────────────
 function update() {
     t++;
     input.frame();
     if (input.actHit('mute')) { S.settings.muted = !S.settings.muted; applySettings(); Save.save(); }
     const pad = input.state.pad;
+    const dev = usingPad() ? 'pad' : 'kbm';
+    if (dev !== lastDevice) { lastDevice = dev; deviceChanged(); }
+    if (overlay === 'sf-settings' && settingsTab === 'pad') updatePadTester();
+    let consumed = false;
+    if (padRebind && overlay === 'sf-settings') { updatePadRebind(); consumed = true; }
+    else if (overlay && !rebinding) consumed = menuInput(pad);
 
-    if (screen === 'map' && !overlay && map.galaxy) {
+    if (consumed) { /* the menu used this frame's input */ }
+    else if (screen === 'map' && !overlay && map.galaxy) {
         map.update();
         if (input.hit('ArrowRight', 'KeyD', 'ArrowDown', 'KeyS') || (pad && (pad.right || pad.down))) map.galaxyStep(1);
         if (input.hit('ArrowLeft', 'KeyA', 'ArrowUp', 'KeyW') || (pad && (pad.left || pad.up))) map.galaxyStep(-1);
         if (input.hit('Enter', 'Space') || (pad && pad.confirm)) map.galaxyWarp();
-        else if (input.hit('Escape', 'KeyG') || (pad && pad.back)) map.openGalaxy(false);
+        else if (input.hit('Escape', 'KeyG') || (pad && (pad.back || pad.edgeButton === 3))) { map.openGalaxy(false); refreshMapHud(); }
         map.pointer(input.state.mx, input.state.my, input.hit('Mouse0'));
         if (t % 10 === 0) refreshMapHud();
     } else if (screen === 'map' && !overlay) {
         map.update();
-        if (input.hit('KeyG')) { map.openGalaxy(true); refreshMapHud(); }
+        if (input.hit('KeyG') || (pad && pad.edgeButton === 3)) { map.openGalaxy(true); refreshMapHud(); }
+        if (pad && pad.edgeButton === 2) { renderHangar('upgrades'); openPanel('sf-hangar', 'map'); }
         if (input.hit('ArrowRight', 'KeyD', 'ArrowDown', 'KeyS') || (pad && (pad.right || pad.down))) map.step(1);
         if (input.hit('ArrowLeft', 'KeyA', 'ArrowUp', 'KeyW') || (pad && (pad.left || pad.up))) map.step(-1);
         if (input.hit('PageDown', 'KeyE')) map.changeWorld(map.world + 1, 0);
@@ -748,7 +1036,7 @@ function update() {
         else if (input.actHit('pause') || input.hit('Escape') || (pad && pad.pause)) togglePause();
         if (!paused) {
             if (briefWait) {
-                if (input.actHit('fire') || input.hit('Enter', 'Mouse0') || (pad && (pad.confirm || pad.fire))) { briefWait = false; introT = 1; $('sf-intro-go').hidden = true; }
+                if (input.actHit('fire') || input.hit('Enter', 'Mouse0') || (pad && pad.confirm)) { briefWait = false; introT = 1; $('sf-intro-go').hidden = true; }
             } else if (introT > 0) { introT--; if (introT === 0) $('sf-intro').classList.remove('is-open'); }
             else level.update(input);
             if (t % 3 === 0) updateHud();
@@ -767,20 +1055,32 @@ function render() {
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * ox, dpr * oy);
     ctx.save();
     ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
-    const world = level ? (level.world ?? 0) : screen === 'map' ? map.world : 0;
+    const world = level ? (level.world ?? 0) : screen === 'map' ? map.world : titleWorld();
     const cam = level && level.open ? level.cam : null;
     drawBackground(ctx, stars, t * 16, WORLDS[world], cam ? { x: drift.x + cam.x, y: drift.y + cam.y } : drift, bgImage, !!level);
     if (screen === 'map') map.draw(ctx, skin());
     else if (level) level.draw(ctx);
     else {
-        // title: the rule ship drifting through the field
-        drawShip(ctx, W / 2 + Math.sin(t * 0.01) * 300, H / 2 + 170 + Math.sin(t * 0.023) * 30, -Math.PI / 2 + Math.sin(t * 0.01) * 0.3, skin(), { thrust: 1, t, scale: 1.6 });
+        // title: the fleet of engines you freed flies by in formation, your ship in front
+        const fleet = SKINS.filter(sk => Save.shipUnlocked(sk.id) && sk.id !== skin().id).slice(0, 6);
+        const lx = W / 2 + Math.sin(t * 0.01) * 300, ly = H / 2 + 170 + Math.sin(t * 0.023) * 30, la = -Math.PI / 2 + Math.sin(t * 0.01) * 0.3;
+        fleet.forEach((sk, i) => {
+            const side = i % 2 ? 1 : -1, rank = 1 + (i >> 1);
+            drawShip(ctx, lx + side * rank * 70 + Math.sin(t * 0.03 + i) * 6, ly + rank * 46, la, sk, { thrust: 1, t: t + i * 7, scale: 0.9, alpha: 0.75 });
+        });
+        drawShip(ctx, lx, ly, la, skin(), { thrust: 1, t, scale: 1.6 });
     }
     ctx.restore();
+    if (S.settings.fps) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.font = '700 11px ui-monospace, monospace'; ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(4, canvas.height / dpr - 20, 62, 16);
+        ctx.fillStyle = fps >= 55 ? '#4be08a' : fps >= 40 ? '#ffd166' : '#ff5d73'; ctx.fillText(`${Math.round(fps)} FPS`, 8, canvas.height / dpr - 8);
+    }
 }
 
-let acc = 0, lastTs = 0;
+let acc = 0, lastTs = 0, fps = 60;
 function frame(ts) {
+    if (lastTs && ts > lastTs) fps += (1000 / (ts - lastTs) - fps) * 0.05;
     if (!lastTs) lastTs = ts;
     acc += Math.min(100, ts - lastTs); lastTs = ts;
     let steps = 0;

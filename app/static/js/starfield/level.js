@@ -397,6 +397,7 @@ export function createLevel(def, env) {
         for (const e of L.enemies) if (e.latched) { e.latched = false; killEnemy(e); }
         P.inv = Math.max(P.inv, 60);
         L.shake(20); Sfx.bomb();
+        if (env.callbacks.rumble) env.callbacks.rumble(1, 1, 450);
         L.announce('QUARANTINE', '#ffffff');
     }
 
@@ -517,6 +518,7 @@ export function createLevel(def, env) {
         P.inv = Math.max(P.inv, 30);
         burst(P.x, P.y, 24, c, 5);
         L.announce(sp.name.toUpperCase(), c);
+        if (env.callbacks.rumble) env.callbacks.rumble(0.3, 0.7, 180);
         Sfx.powerup();
     }
 
@@ -543,6 +545,7 @@ export function createLevel(def, env) {
         if (P.buffs.shield > 0) { P.buffs.shield = 0; P.inv = 60; Sfx.shieldBreak(); burst(P.x, P.y, 20, '#6ea8ff'); return; }
         if (P.armor > 0 && Math.random() < P.armor) { P.inv = 50; L.float(P.x, P.y - 26, tr('BLOCKED'), '#c0c0ff'); Sfx.shieldBreak(); return; }
         P.hp--; L.hits++; P.inv = 100; L.combo = 0; L.comboT = 0; L.hurtT = 22;
+        if (env.callbacks.rumble) env.callbacks.rumble(0.8, 0.6, 240);
         L.shake(16); Sfx.hurt(); burst(P.x, P.y, 30, '#ff5d73', 5);
         if (P.hp <= 0) lose(tr('Rule disabled'));
     }
@@ -722,6 +725,7 @@ export function createLevel(def, env) {
                     L.hazards.forEach(h => { h.life = Math.min(h.life, 30); });
                     for (const e of L.enemies) e.dead = true;
                     L.announce(tr('{name} NEUTRALIZED', { name: b.name }), b.def.color);
+                    if (env.callbacks.rumble) env.callbacks.rumble(1, 1, 900);
                     Sfx.bossRoar();
                 }
                 if (L.endingT) {
@@ -1665,7 +1669,7 @@ export function createLevel(def, env) {
             if (!onScreen(p.x, p.y, p.kind === 'spark' ? 10 : (p.max || p.r) + 10)) continue;
             const k = 1 - p.t / p.life;
             if (p.kind === 'spark') { ctx.globalAlpha = k; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size); }
-            else if (p.kind === 'flash') { ctx.globalAlpha = 1; glow(ctx, p.x, p.y, p.r * (0.6 + 0.4 * (1 - k)), p.color, 0.5 * k); }
+            else if (p.kind === 'flash') { if (env.settings?.flashes === false) continue; ctx.globalAlpha = 1; glow(ctx, p.x, p.y, p.r * (0.6 + 0.4 * (1 - k)), p.color, 0.5 * k); }
             else { ctx.globalAlpha = k * 0.8; circle(ctx, p.x, p.y, p.r, null, p.color, 3); }
         }
         ctx.globalAlpha = 1;
@@ -1707,7 +1711,7 @@ export function createLevel(def, env) {
         }
         if (open) drawPointers(ctx);
         if (open) drawRadar(ctx);
-        if (L.hurtT > 0) {
+        if (L.hurtT > 0 && env.settings?.flashes !== false) {
             const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.9);
             g.addColorStop(0, 'rgba(255,40,60,0)'); g.addColorStop(1, `rgba(255,40,60,${0.35 * L.hurtT / 22})`);
             ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);

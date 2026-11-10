@@ -486,3 +486,31 @@ Object.assign(FR, {
     'ACT II — beat the Zero-Day': 'ACTE II — bats le Zero-Day',
     'CLEAN TRAFFIC — HOLD FIRE!': 'TRAFIC SAIN — CESSEZ LE FEU !',
 });
+
+// ── Settings tabs, gamepad configuration, menus ──
+Object.assign(FR, {
+    'General': 'Général', 'Audio & display': 'Son & affichage', 'Keyboard': 'Clavier', 'Gamepad': 'Manette',
+    'Game': 'Jeu', 'Steering': 'Pilotage', 'Display': 'Affichage', 'Main volume': 'Volume général', 'Effects': 'Effets',
+    'Music volume': 'Volume de la musique', 'Graphics': 'Graphismes',
+    'High — glows, nebulas, planets': 'Élevés — halos, nébuleuses, planètes', 'Low — faster on small machines': 'Légers — plus fluide sur les petites machines',
+    'Flashes (explosions, hit screen)': 'Flashs (explosions, écran touché)', 'Show frames per second': 'Afficher les images par seconde',
+    'With a controller, classic = left stick turns and pushes, twin-stick = left stick moves and right stick aims.':
+        'À la manette : classique = le stick gauche tourne et pousse, twin-stick = le stick gauche déplace et le droit vise.',
+    'No controller detected': 'Aucune manette détectée',
+    '{family} layout — press any button to try it below': 'Disposition {family} — appuie sur un bouton pour l\'essayer ci-dessous',
+    'Plug a controller in (or pair it) and press any of its buttons.': 'Branche une manette (ou appaire-la) et appuie sur un de ses boutons.',
+    'Button names': 'Noms des boutons', 'Automatic': 'Automatique', 'Buttons': 'Boutons', 'Default buttons': 'Boutons par défaut',
+    'Choose an action, then press the controller button for it. In the menus {a} confirms, {b} goes back and {lb} {rb} switch tabs.':
+        'Choisis une action, puis appuie sur le bouton de la manette. Dans les menus, {a} valide, {b} revient et {lb} {rb} changent d\'onglet.',
+    'press…': 'appuie…', 'Previous weapon': 'Arme précédente',
+    'Sticks & feel': 'Sticks & sensations', 'Stick dead zone': 'Zone morte des sticks',
+    'Swap the sticks (move with the right one)': 'Inverser les sticks (se déplacer avec le droit)',
+    'Invert the aim stick vertically': 'Inverser l\'axe vertical de visée',
+    'Vibration': 'Vibrations', 'Test': 'Tester', 'Vibration is off': 'Les vibrations sont coupées',
+    '{a} ↔ {b} swapped': '{a} ↔ {b} échangés',
+    'Controller connected: {name}': 'Manette connectée : {name}', 'Controller disconnected': 'Manette déconnectée',
+    'select': 'valider', 'back': 'retour', 'tabs': 'onglets', 'menu': 'menu', 'aim': 'viser', 'turn & thrust': 'tourner et avancer',
+    'Left stick': 'Stick gauche', 'Right stick': 'Stick droit',
+    'change the buttons in Settings → Gamepad': 'boutons modifiables dans Réglages → Manette',
+    'Cancel': 'Annuler', 'Yes': 'Oui', 'Start over': 'Recommencer', 'Erase everything': 'Tout effacer', 'ACT II': 'ACTE II',
+});

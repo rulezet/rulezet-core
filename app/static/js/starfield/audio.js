@@ -11,6 +11,8 @@ let sfxGain = null;
 let musicGain = null;
 let muted = false;
 let musicOn = true;
+// volumes 0..1 (Settings → Audio & display)
+let volMaster = 1, volSfx = 1, volMusic = 1;
 // Browsers only let audio start after a user gesture: nothing is created
 // before Audio.unlock() (first click / key press), music asked for earlier
 // waits in pendingTheme.
@@ -27,9 +29,9 @@ function ensure() {
         const comp = ctx.createDynamicsCompressor();
         comp.threshold.value = -14; comp.knee.value = 12; comp.ratio.value = 6;
         comp.connect(ctx.destination);
-        master = ctx.createGain(); master.gain.value = muted ? 0 : 1; master.connect(comp);
-        sfxGain = ctx.createGain(); sfxGain.gain.value = 1.6; sfxGain.connect(master);
-        musicGain = ctx.createGain(); musicGain.gain.value = musicOn ? MUSIC_VOL : 0.0001; musicGain.connect(master);
+        master = ctx.createGain(); master.gain.value = muted ? 0 : volMaster; master.connect(comp);
+        sfxGain = ctx.createGain(); sfxGain.gain.value = 1.6 * volSfx; sfxGain.connect(master);
+        musicGain = ctx.createGain(); musicGain.gain.value = musicOn ? Math.max(0.0001, MUSIC_VOL * volMusic) : 0.0001; musicGain.connect(master);
     }
     if (ctx.state === 'suspended') ctx.resume();
     return ctx;
@@ -140,7 +142,7 @@ function startLoop() {
         musicSrc.connect(musicGain);
         // soft fade-in instead of the track slamming in
         musicGain.gain.setValueAtTime(0.0001, c.currentTime);
-        musicGain.gain.exponentialRampToValueAtTime(musicOn ? MUSIC_VOL : 0.0001, c.currentTime + 2);
+        musicGain.gain.exponentialRampToValueAtTime(musicOn ? Math.max(0.0001, MUSIC_VOL * volMusic) : 0.0001, c.currentTime + 2);
         musicSrc.start();
     });
 }
@@ -161,7 +163,7 @@ export const Music = {
     sleep(hidden) { if (!ctx) return; try { hidden ? ctx.suspend() : ctx.resume(); } catch { /* ignore */ } },
     setEnabled(v) {
         musicOn = v;
-        if (musicGain && ctx) musicGain.gain.setTargetAtTime(v ? MUSIC_VOL : 0.0001, ctx.currentTime, 0.2);
+        if (musicGain && ctx) musicGain.gain.setTargetAtTime(v ? Math.max(0.0001, MUSIC_VOL * volMusic) : 0.0001, ctx.currentTime, 0.2);
     },
 };
 
@@ -172,7 +174,16 @@ export const Audio = {
         ensure();
         if (first && pendingTheme) { const name = pendingTheme; pendingTheme = null; Music.play(name); }
     },
-    setMuted(v) { muted = v; if (master && ctx) master.gain.setValueAtTime(v ? 0 : 1, ctx.currentTime); },
+    setMuted(v) { muted = v; if (master && ctx) master.gain.setValueAtTime(v ? 0 : volMaster, ctx.currentTime); },
+    /** Volumes 0..1: { master, sfx, music } */
+    setVolumes(v = {}) {
+        const c01 = (x, d) => (Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : d);
+        volMaster = c01(v.master, 1); volSfx = c01(v.sfx, 1); volMusic = c01(v.music, 1);
+        if (!ctx) return;
+        if (master) master.gain.setTargetAtTime(muted ? 0 : volMaster, ctx.currentTime, 0.05);
+        if (sfxGain) sfxGain.gain.setTargetAtTime(1.6 * volSfx, ctx.currentTime, 0.05);
+        if (musicGain) musicGain.gain.setTargetAtTime(musicOn ? Math.max(0.0001, MUSIC_VOL * volMusic) : 0.0001, ctx.currentTime, 0.1);
+    },
     /** For the settings' diagnostic: unsupported | waiting | running | suspended | closed */
     status() {
         if (typeof window === 'undefined' || !(window.AudioContext || window.webkitAudioContext)) return 'unsupported';
