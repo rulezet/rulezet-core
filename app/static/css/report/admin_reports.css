@@ -1,0 +1,38 @@
+/* report/admin_reports.html — moved out of the template's inline <style> */
+[v-cloak] { display: none; }
+.rpt-row {
+    border-bottom: 1px solid var(--border-color);
+    transition: background .1s;
+}
+.rpt-row:hover { background: var(--light-bg-color); }
+.rpt-row--pending { background: rgba(255, 193, 7, .04); }
+.rpt-td {
+    padding: .55rem .75rem;
+    font-size: .86rem;
+    color: var(--text-color);
+    vertical-align: middle;
+}
+.rpt-sel-bar {
+    background: rgba(13, 110, 253, .07);
+    border: 1px solid rgba(13, 110, 253, .2);
+    border-radius: 10px;
+    padding: .55rem 1rem;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .4rem;
+}
+.rpt-bar-fade-enter-active,
+.rpt-bar-fade-leave-active { transition: opacity .2s, transform .2s; }
+.rpt-bar-fade-enter-from,
+.rpt-bar-fade-leave-to { opacity: 0; transform: translateY(-4px); }
+
+/* Sortable column headers */
+.rpt-th-sort {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+.rpt-th-sort:hover { background: var(--light-bg-color); }
+.rpt-th-sort--active { color: #0d6efd; }
+.rpt-th-sort .fa-sort { opacity: .3; }

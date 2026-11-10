@@ -3,14 +3,7 @@
 {% block title %}{{ rule.title }} — {{ (rule.format or '') | upper }} detection rule | Rulezet{% endblock %}
 {% block head %}
 {% if seo.indexable %}<script type="application/ld+json">{{ seo_rule_jsonld(rule) | tojson }}</script>{% endif %}
-<style>
-@keyframes comment-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(255,193,7,.7); outline: 2px solid #ffc107; }
-  70%  { box-shadow: 0 0 0 10px rgba(255,193,7,0); }
-  100% { box-shadow: 0 0 0 0 rgba(255,193,7,0); outline: 2px solid transparent; }
-}
-.comment-highlight { animation: comment-pulse 1.4s ease 3; background: rgba(255,193,7,.07) !important; border-radius: .5rem; }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule-page.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">

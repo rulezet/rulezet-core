@@ -4,71 +4,7 @@
 {% block title %}How Rulesets Works — Rulezet{% endblock %}
 
 {% block head %}
-<style>
-  .hiw-section { scroll-margin-top: 80px; }
-
-  .hiw-step-num {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2rem;
-    height: 2rem;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #0d6efd, #0a58ca);
-    color: #fff;
-    font-weight: 700;
-    font-size: .85rem;
-    flex-shrink: 0;
-  }
-
-  .hiw-toc-link {
-    display: block;
-    padding: .35rem .75rem;
-    color: var(--subtle-text-color);
-    text-decoration: none;
-    font-size: .82rem;
-    border-left: 2px solid transparent;
-    transition: all .15s;
-    border-radius: 0 4px 4px 0;
-  }
-  .hiw-toc-link:hover {
-    color: #0d6efd;
-    border-left-color: #0d6efd;
-    background: rgba(13,110,253,.06);
-  }
-
-  .hiw-callout {
-    border-left: 3px solid;
-    border-radius: 0 8px 8px 0;
-    padding: .75rem 1rem;
-    font-size: .84rem;
-    margin-bottom: 0;
-  }
-  .hiw-callout--info    { border-color: #0d6efd; background: rgba(13,110,253,.07); }
-  .hiw-callout--warning { border-color: #ffc107; background: rgba(255,193,7,.07); }
-  .hiw-callout--success { border-color: #198754; background: rgba(25,135,84,.07); }
-  .hiw-callout--danger  { border-color: #dc3545; background: rgba(220,53,69,.07); }
-
-  .hiw-agent-card {
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    background: var(--card-bg-color);
-    padding: 1rem 1.1rem;
-    height: 100%;
-  }
-
-  .hiw-code {
-    display: block;
-    background: var(--code-bg-color, #1e1e1e);
-    color: #d4d4d4;
-    border-radius: 8px;
-    padding: .6rem .9rem;
-    font-family: monospace;
-    font-size: .82rem;
-    overflow-x: auto;
-    margin-top: .5rem;
-  }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/rule_mirror_how_it_works.css') }}">
 {% endblock %}
 
 {% block content %}

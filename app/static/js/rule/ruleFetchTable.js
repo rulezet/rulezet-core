@@ -96,7 +96,7 @@ const UserRulesManagementComponent = {
         };
 
         const deleteSelectedRules = async () => {
-            if (!confirm(`Delete ${selectedRules.value.length} rules?`)) return;
+            if (!(await window.rzConfirm(`Delete ${selectedRules.value.length} rules?`))) return;
 
             const res = await fetch('/rule/delete_rule_list', {
                 method: 'POST',

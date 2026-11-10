@@ -338,7 +338,7 @@
                     </p>
                     <div class="d-flex flex-column gap-1 rounded-3 border p-2 mb-3" style="max-height:220px;overflow-y:auto;background:var(--light-bg-color);">
                         <div v-for="[id, info] in pendingAdd.extra" :key="id" class="d-flex align-items-center gap-2 small">
-                            <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis" style="font-size:.65rem;">[[ info.format ]]</span>
+                            <format-chip :format="info.format || ''" plain></format-chip>
                             <span class="text-truncate">[[ info.title ]]</span>
                         </div>
                     </div>
@@ -371,6 +371,7 @@ import BundleRuleSelector    from '/static/js/bundle/BundleRuleSelector.js'
 import VulnerabilityInput    from '/static/js/vulnerability/vulnerabilityInput.js'
 import TagCreateModal        from '/static/js/tags/tagCreateModal.js'
 import SmartEditor           from '/static/js/components/smart-editor.js'
+import FormatChip from '/static/js/rule/formatChip.js'
 import PaginationComponent   from '/static/js/rule/paginationComponent.js'
 
 const { createApp, ref, computed, onMounted } = Vue
@@ -389,6 +390,7 @@ createApp({
         'vulnerability-input':     VulnerabilityInput,
         'tag-create-modal':        TagCreateModal,
         'smart-editor':            SmartEditor,
+        'format-chip':             FormatChip,
         'pagination-component':    PaginationComponent,
     },
 

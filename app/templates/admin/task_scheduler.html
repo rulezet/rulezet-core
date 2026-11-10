@@ -2367,7 +2367,7 @@
             // From the edit dialog (no argument) or straight from the day panel (the entry)
             async function deleteCalEntry(entry) {
                 const e = entry && entry.uuid ? entry : { uuid: calEntry.uuid, kind: calEntry.kind, title: calEntry.title };
-                if (!window.confirm(`Delete the ${e.kind} "${e.title}"?`)) return false;
+                if (!(await window.rzConfirm(`Delete the ${e.kind} "${e.title}"?`))) return false;
                 const res = await fetch('/admin/tasks/calendar/entries/' + e.uuid, { method: 'DELETE', headers: { 'X-CSRFToken': csrfToken } });
                 const data = await res.json().catch(() => ({}));
                 create_message(data.message || (res.ok ? 'Removed.' : 'Failed.'), res.ok ? 'success-subtle' : 'danger-subtle');
@@ -2393,7 +2393,7 @@
                     launch = launchFrom(start, 'once');
                 } else {
                     const when = start.toLocaleString([], { weekday: e.mode === 'weekly' ? 'long' : undefined, day: e.mode === 'monthly' ? 'numeric' : undefined, hour: '2-digit', minute: '2-digit' });
-                    if (!window.confirm(`Move every ${modeLabel(e.mode).replace('every ', '')} launch of "${e.title}" to ${when}?`)) { revert(); return; }
+                    if (!(await window.rzConfirm(`Move every ${modeLabel(e.mode).replace('every ', '')} launch of "${e.title}" to ${when}?`))) { revert(); return; }
                     launch = launchFrom(start, e.mode);
                     if (e.mode === 'weekly' && Array.isArray(e.days_of_week) && e.days_of_week.length > 1) {
                         // several days a week: only the dragged day moves
@@ -2648,7 +2648,7 @@
                 if (res.ok) share.url = (await res.json()).url;
             }
             async function shareAction(action) {
-                if (action === 'regenerate' && share.url && !window.confirm('Regenerate the key? The current link stops working.')) return;
+                if (action === 'regenerate' && share.url && !(await window.rzConfirm('Regenerate the key? The current link stops working.'))) return;
                 share.busy = true;
                 try {
                     const res = await fetch(`/admin/tasks/workflows/${activeWorkflow.value.uuid}/share`, {
@@ -2986,7 +2986,7 @@
                 const n = wfChecked.value.size;
                 const what = `${n} workflow${n > 1 ? 's' : ''}`;
                 const ask = { stop: `Stop the running jobs of ${what}?`, delete: `Delete ${what} and all their tasks? This cannot be undone.` }[action];
-                if (ask && !window.confirm(ask)) return;
+                if (ask && !(await window.rzConfirm(ask))) return;
                 wfBulkBusy.value = true;
                 try {
                     const res = await fetch('/admin/tasks/workflows/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -3002,7 +3002,7 @@
             }
 
             async function deleteWorkflow(w) {
-                if (!window.confirm(`Delete workflow "${w.title}" and all ${w.task_count} of its task(s)? This cannot be undone.`)) return;
+                if (!(await window.rzConfirm(`Delete workflow "${w.title}" and all ${w.task_count} of its task(s)? This cannot be undone.`))) return;
                 const res = await fetch(`/admin/tasks/workflows/${w.uuid}/delete`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
                 const data = await res.json();
                 create_message(data.message, res.ok ? 'success-subtle' : 'danger-subtle');
@@ -3206,7 +3206,7 @@
             }
 
             async function bulkDeleteRuns() {
-                if (!window.confirm(`Delete ${selectedRunUuids.value.size} launch history entr${selectedRunUuids.value.size === 1 ? 'y' : 'ies'}? This only removes the history entries, not the tasks' own run status.`)) return;
+                if (!(await window.rzConfirm(`Delete ${selectedRunUuids.value.size} launch history entr${selectedRunUuids.value.size === 1 ? 'y' : 'ies'}? This only removes the history entries, not the tasks' own run status.`))) return;
                 const res = await fetch(`/admin/tasks/workflows/${activeWorkflow.value.uuid}/runs/bulk_delete`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -3360,7 +3360,7 @@
 
             async function stopWorkflow() {
                 if (!activeWorkflow.value) return;
-                if (!window.confirm('Stop every currently running/queued job in this workflow? Jobs already past their next checkpoint may take a moment to actually halt.')) return;
+                if (!(await window.rzConfirm('Stop every currently running/queued job in this workflow? Jobs already past their next checkpoint may take a moment to actually halt.'))) return;
                 const res = await fetch(`/admin/tasks/workflows/${activeWorkflow.value.uuid}/stop`, {
                     method: 'POST', headers: { 'X-CSRFToken': csrfToken },
                 });

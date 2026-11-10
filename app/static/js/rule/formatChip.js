@@ -14,6 +14,7 @@
  *   canFilter  show "Add to filter" (emits `filter` with the format) — for
  *              a page holding a filterable rule list (RuleList)
  *   active     this format is already the list's filter
+ *   plain      just the badge (logo + colour + name), no menu — inside clickable rows, pickers, previews
  * Emits:
  *   filter(format)
  */
@@ -51,6 +52,7 @@ export default {
         format:    { type: String, default: '' },
         canFilter: { type: Boolean, default: false },
         active:    { type: Boolean, default: false },
+        plain:     { type: Boolean, default: false },
     },
     emits: ['filter'],
     created() { loadCatalog() },
@@ -66,6 +68,10 @@ export default {
     },
     template: `
 <span v-if="!format" class="badge rounded-pill bg-dark pt-1 shadow-sm">?</span>
+<span v-else-if="plain" class="fmt-chip fmt-chip--brand fmt-chip--plain" :style="{ '--fmt': color }" :title="'Format: ' + title">
+    <span class="fmt-chip__logo" v-if="logo"><img :src="logo" alt="" loading="lazy"></span>
+    <span class="fmt-chip__label">[[ title ]]</span>
+</span>
 <div v-else class="dropdown vdl-item d-inline-block" @click.stop>
     <button type="button" data-bs-toggle="dropdown" aria-expanded="false"
             class="fmt-chip fmt-chip--brand" :style="{ '--fmt': color }"

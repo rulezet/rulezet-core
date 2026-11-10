@@ -33,8 +33,8 @@ const WidgetFrame = {
             showSettings.value = false
             emit('save-settings')
         }
-        function confirmRemove() {
-            if (confirm('Remove this widget from your dashboard?')) emit('remove')
+        async function confirmRemove() {
+            if ((await window.rzConfirm('Remove this widget from your dashboard?'))) emit('remove')
         }
 
         return { showSettings, toggleSettings, saveSettings, confirmRemove }

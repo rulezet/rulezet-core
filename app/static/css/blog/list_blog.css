@@ -1,0 +1,36 @@
+/* blog/list_blog.html — moved out of the template's inline <style> */
+.blog-hero-card {
+    border-radius: 16px;
+    overflow: hidden;
+}
+.blog-hero-image {
+    width: 100%;
+    height: 260px;
+    object-fit: cover;
+    display: block;
+}
+.blog-hero-image-placeholder {
+    width: 100%;
+    height: 180px;
+    background: linear-gradient(135deg, #0d6efd18 0%, #0a58ca10 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.blog-preview-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.65;
+    color: var(--subtle-text-color);
+    font-size: .93rem;
+}
+.blog-read-more {
+    font-size: .85rem;
+    font-weight: 600;
+    color: #0d6efd;
+    text-decoration: none;
+    letter-spacing: .02em;
+}
+.blog-read-more:hover { text-decoration: underline; }

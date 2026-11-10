@@ -1,5 +1,7 @@
 import RuleFilterBar from '/static/js/rule/ruleFilterBar.js';
 import PaginationComponent from '/static/js/rule/paginationComponent.js';
+import { create_message } from '/static/js/toaster.js';
+import FormatChip from '/static/js/rule/formatChip.js';
 
 const RuleSelectionTable = {
     props: {
@@ -12,7 +14,8 @@ const RuleSelectionTable = {
     delimiters: ['[[', ']]'],
     components: {
         'rule-filter-bar': RuleFilterBar,
-        'pagination-component': PaginationComponent
+        'pagination-component': PaginationComponent,
+        'format-chip': FormatChip,
     },
     data() {
         return {
@@ -131,11 +134,11 @@ const RuleSelectionTable = {
 
       
                 if (result.success || response.status === 200) {
-                    alert(`Action successful for ${this.selectedCount} rules.`);
+                    create_message(`Action successful for ${this.selectedCount} rules.`, 'success-subtle');
                 }
             } catch (err) {
                 console.error("Submission error:", err);
-                alert("An error occurred during processing.");
+                create_message('An error occurred during processing.', 'danger-subtle');
             } finally {
                 this.loading = false;
             }
@@ -221,7 +224,7 @@ const RuleSelectionTable = {
                                 <div class="small fw-medium">[[ rule.author || 'Internal' ]]</div>
                                 <div class="x-small text-primary">[[ rule.source || 'Default' ]]</div>
                             </td>
-                            <td><span class="badge-format">[[ rule.format ]]</span></td>
+                            <td><format-chip :format="rule.format || ''" plain></format-chip></td>
                             <td class="text-end pe-4 small">[[ rule.last_modif ]]</td>
                         </tr>
                         

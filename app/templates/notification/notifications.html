@@ -14,6 +14,12 @@
     <!-- Banner -->
     <div class="explorer-banner mb-4">
         <i class="fa-solid fa-inbox banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Notifications</li>
+            </ol>
+        </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
             <div class="banner-icon"><i class="fa-solid fa-bell"></i></div>
             <div>
@@ -743,7 +749,7 @@ createApp({
         async function run(ids, action, label_id, all = false) {
             const howMany = all ? total.value : ids.length
             if (!howMany) return false
-            if (action === 'delete' && howMany > 1 && !confirm(`Delete ${howMany} notifications? This cannot be undone.`)) return false
+            if (action === 'delete' && howMany > 1 && !(await window.rzConfirm(`Delete ${howMany} notifications? This cannot be undone.`))) return false
             const body = all ? { scope: scope(), action, label_id } : { ids, action, label_id }
             const data = await api('/notifications/bulk', { method: 'POST', body: JSON.stringify(body) })
             if (!data) return false
@@ -822,7 +828,7 @@ createApp({
             if (data) { labelForm.open = false; load(page.value, true) }
         }
         async function deleteLabel(id) {
-            if (!confirm('Delete this label? The notifications stay, only the label goes.')) return
+            if (!(await window.rzConfirm('Delete this label? The notifications stay, only the label goes.'))) return
             if (await api(`/notifications/labels/${id}`, { method: 'DELETE' })) {
                 labelForm.open = false
                 if (labelId.value === id) openFolder('inbox'); else load(page.value, true)
@@ -887,7 +893,7 @@ createApp({
             }, 350)
         }
         async function resetPrefs() {
-            if (!confirm('Reset all notification preferences to their default values?')) return
+            if (!(await window.rzConfirm('Reset all notification preferences to their default values?'))) return
             prefs.value = { ...DEFAULT_PREFS }
             const data = await api('/notifications/preferences', { method: 'POST', body: JSON.stringify(prefs.value) })
             if (data && data.ok) create_message('Preferences reset to default.', 'success-subtle')

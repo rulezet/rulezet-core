@@ -207,7 +207,7 @@ export default {
             const changed = changedDeps()
             if (!changed.length) return true
             const names = changed.map(c => c.dep.name).join(', ')
-            if (!window.confirm(`You also changed ${changed.length} dependency rule(s): ${names}.\n\nSave them too (a new version of each)? Cancel keeps the page open.`)) return false
+            if (!(await window.rzConfirm(`You also changed ${changed.length} dependency rule(s): ${names}.\n\nSave them too (a new version of each)? Cancel keeps the page open.`))) return false
             try {
                 const res = await fetch('/editor-api/yara/import', {
                     method: 'POST',

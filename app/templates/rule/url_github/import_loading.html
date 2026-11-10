@@ -713,7 +713,7 @@
 
             async function deleteAllBadRulesQuick() {
                 if (!repoUrl.value) return
-                if (!confirm(`Delete all ${badRuleCountDisplay.value} invalid rule(s) from this repository? This cannot be undone.`)) return
+                if (!(await window.rzConfirm(`Delete all ${badRuleCountDisplay.value} invalid rule(s) from this repository? This cannot be undone.`))) return
                 try {
                     const params = new URLSearchParams({ sources: repoUrl.value })
                     const res = await fetch('/rule/bad_rule/delete_all_bad_rule?' + params.toString(), {

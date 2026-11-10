@@ -263,24 +263,7 @@
                 <!-- /Table -->
 
                 <!-- Pagination -->
-                <nav v-if="totalPages > 1" class="d-flex justify-content-center mt-3">
-                    <ul class="pagination pagination-sm mb-0">
-                        <li class="page-item" :class="{ disabled: currentPage <= 1 }">
-                            <button class="page-link" @click="fetchTags(currentPage - 1)">
-                                <i class="fas fa-chevron-left"></i>
-                            </button>
-                        </li>
-                        <li v-for="p in visiblePages" :key="p" class="page-item"
-                            :class="{ active: p === currentPage, disabled: p === '…' }">
-                            <button class="page-link" @click="p !== '…' && fetchTags(p)">[[ p ]]</button>
-                        </li>
-                        <li class="page-item" :class="{ disabled: currentPage >= totalPages }">
-                            <button class="page-link" @click="fetchTags(currentPage + 1)">
-                                <i class="fas fa-chevron-right"></i>
-                            </button>
-                        </li>
-                    </ul>
-                </nav>
+                <pagination-component v-if="totalPages > 1" :current-page="currentPage" :total-pages="totalPages" @change-page="fetchTags"></pagination-component>
                 <!-- /Pagination -->
 
             </div>
@@ -420,10 +403,12 @@
     import TagCreateModal from '/static/js/tags/tagCreateModal.js';
     import TagEditModal   from '/static/js/tags/TagEditModal.js';
     import FamilyDrawer   from '/static/js/tags/manage/FamilyDrawer.js';
+    import PaginationComponent from '/static/js/rule/paginationComponent.js';
 
     createApp({
         delimiters: ['[[', ']]'],
         components: {
+            'pagination-component': PaginationComponent,
             TagBadge,
             'tag-create-modal': TagCreateModal,
             'tag-edit-modal':   TagEditModal,
@@ -536,7 +521,7 @@
             function openDetail(tag) { detailTag.value = { ...tag }; }
 
             async function confirmDelete(tag) {
-                if (!confirm(`Are you sure you want to delete "${tag.name}"? This cannot be undone.`)) return;
+                if (!(await window.rzConfirm(`Are you sure you want to delete "${tag.name}"? This cannot be undone.`))) return;
                 const res  = await fetch('/tags/delete_tag/' + tag.id, {
                     method: 'POST',
                     headers: { 'X-CSRFToken': csrfToken },
@@ -548,7 +533,7 @@
 
             async function bulkDelete() {
                 if (!selected.value.length) return;
-                if (!confirm(`Are you sure you want to permanently delete ${selected.value.length} tag(s)? This cannot be undone.`)) return;
+                if (!(await window.rzConfirm(`Are you sure you want to permanently delete ${selected.value.length} tag(s)? This cannot be undone.`))) return;
                 const res = await fetch('/tags/remove_tags_bulk', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -568,12 +553,12 @@
                 a.click();
                 URL.revokeObjectURL(url);
             }
-            function exportSelected() {
-                if (!confirm(`Export ${selected.value.length} selected tag(s)?`)) return;
+            async function exportSelected() {
+                if (!(await window.rzConfirm(`Export ${selected.value.length} selected tag(s)?`))) return;
                 doExport(tags.value.filter(t => selected.value.includes(t.id)));
             }
-            function exportAll() {
-                if (!confirm(`Export all ${tags.value.length} visible tag(s)?`)) return;
+            async function exportAll() {
+                if (!(await window.rzConfirm(`Export all ${tags.value.length} visible tag(s)?`))) return;
                 doExport(tags.value);
             }
 

@@ -450,7 +450,7 @@ createApp({
 
         // ── Delete single ─────────────────────────────────────────────────────
         async function deleteOne(log) {
-            if (!confirm(`Delete this log entry?\n"${log.description}"`)) return
+            if (!(await window.rzConfirm(`Delete this log entry?\n"${log.description}"`))) return
             try {
                 await fetch(`/admin/logs/delete/${log.id}`, {
                     method: 'POST', headers: { 'X-CSRFToken': csrfToken },
@@ -462,7 +462,7 @@ createApp({
         }
 
         async function deleteOneTl(log) {
-            if (!confirm(`Delete this log entry?\n"${log.description}"`)) return
+            if (!(await window.rzConfirm(`Delete this log entry?\n"${log.description}"`))) return
             try {
                 await fetch(`/admin/logs/delete/${log.id}`, {
                     method: 'POST', headers: { 'X-CSRFToken': csrfToken },
@@ -477,7 +477,7 @@ createApp({
         // ── Bulk delete (UUIDs from LogTable component) ───────────────────────
         async function bulkDeleteByUuids(uuids) {
             if (!uuids.length) return
-            if (!confirm(`Delete ${uuids.length} selected log(s)?`)) return
+            if (!(await window.rzConfirm(`Delete ${uuids.length} selected log(s)?`))) return
             try {
                 const res  = await fetch('/api/log/bulk-delete', {
                     method:  'POST',
@@ -524,7 +524,7 @@ createApp({
 
         // ── Delete ALL ────────────────────────────────────────────────────────
         async function deleteAll() {
-            if (!confirm('Delete ALL activity logs? This cannot be undone. A background job will be created.')) return
+            if (!(await window.rzConfirm('Delete ALL activity logs? This cannot be undone. A background job will be created.'))) return
             try {
                 const res  = await fetch('/admin/logs/delete_bulk', {
                     method:  'POST',

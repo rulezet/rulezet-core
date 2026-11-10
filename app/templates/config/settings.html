@@ -11,6 +11,13 @@
     <!-- Banner -->
     <div class="explorer-banner mb-4">
         <i class="fa-solid fa-sliders banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/account" class="text-decoration-none text-muted">Account</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Settings</li>
+            </ol>
+        </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
             <div class="banner-icon"><i class="fa-solid fa-sliders"></i></div>
             <div class="flex-1">
@@ -1404,7 +1411,7 @@
             }
 
             async function onDeletePivotickImage(bg) {
-                if (!confirm(`Delete background "${bg.name}"? This removes it for everyone using it.`)) return
+                if (!(await window.rzConfirm(`Delete background "${bg.name}"? This removes it for everyone using it.`))) return
                 const csrf = document.getElementById('csrf_token')
                 try {
                     const res  = await fetch(`/config/pivotick_backgrounds/${bg.id}`, {
@@ -1714,7 +1721,7 @@
             }
 
             async function deleteTheme(t) {
-                if (!confirm(`Delete theme "${t.name}"? This cannot be undone.`)) return
+                if (!(await window.rzConfirm(`Delete theme "${t.name}"? This cannot be undone.`))) return
                 const res = await apiFetch(`/api/config/themes/${t.uuid}`, 'DELETE')
                 if (res.ok) {
                     create_message('Theme deleted', 'success')
@@ -1727,7 +1734,7 @@
             }
 
             async function resetBuiltin() {
-                if (!confirm('Reset this theme to default values?')) return
+                if (!(await window.rzConfirm('Reset this theme to default values?'))) return
                 const res = await apiFetch(`/api/config/themes/builtin/${modal_builtin_key.value}`, 'DELETE')
                 if (res.ok) {
                     _modal.hide()
@@ -1762,7 +1769,7 @@
             }
 
             async function resetAllSettings() {
-                if (!confirm('Reset all settings to their defaults? This cannot be undone.')) return
+                if (!(await window.rzConfirm('Reset all settings to their defaults? This cannot be undone.'))) return
 
                 // localStorage-only preferences
                 localStorage.removeItem('rz-nav-style')

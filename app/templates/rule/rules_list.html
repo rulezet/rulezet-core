@@ -85,7 +85,7 @@
             function goToAddRule() { window.location.href = '/rule/create_rule' }
 
             async function handleDelete(rule) {
-                if (!confirm(`Delete "${rule.title}"?`)) return
+                if (!(await window.rzConfirm(`Delete "${rule.title}"?`))) return
                 try {
                     const res = await fetch('/rule/delete_rule', {
                         method: 'POST',

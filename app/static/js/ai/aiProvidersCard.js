@@ -523,8 +523,8 @@ export default {
 
         async function installSdkIfNeeded(data, kind) {
             if (!data?.needs_install) return false
-            const ok = confirm(`${kindLabel(kind)} needs the Python package "${data.package}", which isn't installed on this server yet.\n\n`
-                + `Rulezet will now download and install it (${data.spec}). This can take up to a minute.\n\nContinue?`)
+            const ok = (await window.rzConfirm(`${kindLabel(kind)} needs the Python package "${data.package}", which isn't installed on this server yet.\n\n`
+                + `Rulezet will now download and install it (${data.spec}). This can take up to a minute.\n\nContinue?`))
             if (!ok) return false
             installing.value = true
             create_message(`Downloading and installing ${data.spec}…`, 'info-subtle')
@@ -585,7 +585,7 @@ export default {
             const msg = external
                 ? `Make "${p.name}" the active provider?\n\nEvery AI feature will then send rule content and messages to ${p.base_url || kindLabel(p.kind)}.`
                 : `Make "${p.name}" the active provider for every AI feature?`
-            if (!confirm(msg)) { refresh(); return }
+            if (!(await window.rzConfirm(msg))) { refresh(); return }
             activating.value = true
             try {
                 const { ok, data } = await post(`/ai/admin/providers/${p.id}/activate`)
@@ -614,7 +614,7 @@ export default {
         }
 
         async function remove(p) {
-            if (!confirm(`Delete the provider "${p.name}"${p.has_api_key ? ' and its stored API key' : ''}?`)) return
+            if (!(await window.rzConfirm(`Delete the provider "${p.name}"${p.has_api_key ? ' and its stored API key' : ''}?`))) return
             const { ok, data } = await post(`/ai/admin/providers/${p.id}`, null, 'DELETE')
             if (ok) { create_message('Provider deleted', 'success-subtle'); refresh() }
             else create_message(data.error || 'Failed to delete', 'danger-subtle')

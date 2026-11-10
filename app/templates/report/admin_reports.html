@@ -322,45 +322,7 @@
 </div>
 {% endif %}
 
-<style>
-[v-cloak] { display: none; }
-.rpt-row {
-    border-bottom: 1px solid var(--border-color);
-    transition: background .1s;
-}
-.rpt-row:hover { background: var(--light-bg-color); }
-.rpt-row--pending { background: rgba(255, 193, 7, .04); }
-.rpt-td {
-    padding: .55rem .75rem;
-    font-size: .86rem;
-    color: var(--text-color);
-    vertical-align: middle;
-}
-.rpt-sel-bar {
-    background: rgba(13, 110, 253, .07);
-    border: 1px solid rgba(13, 110, 253, .2);
-    border-radius: 10px;
-    padding: .55rem 1rem;
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: .4rem;
-}
-.rpt-bar-fade-enter-active,
-.rpt-bar-fade-leave-active { transition: opacity .2s, transform .2s; }
-.rpt-bar-fade-enter-from,
-.rpt-bar-fade-leave-to { opacity: 0; transform: translateY(-4px); }
-
-/* Sortable column headers */
-.rpt-th-sort {
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
-}
-.rpt-th-sort:hover { background: var(--light-bg-color); }
-.rpt-th-sort--active { color: #0d6efd; }
-.rpt-th-sort .fa-sort { opacity: .3; }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/report/admin_reports.css') }}">
 
 <script type="module">
 import { create_message } from '/static/js/toaster.js'
@@ -478,8 +440,8 @@ createApp({
             return { ok: res.ok, data }
         }
 
-        function singleAction(id, action) {
-            if (action === 'delete' && !confirm('Delete this report?')) return
+        async function singleAction(id, action) {
+            if (action === 'delete' && !(await window.rzConfirm('Delete this report?'))) return
             _post(`/report/admin/${id}/${action}`).then(({ ok }) => {
                 if (ok) { fetchData(); fetchStats() }
             })
@@ -505,8 +467,8 @@ createApp({
             }
         }
 
-        function singleDeleteTarget(r) {
-            if (!confirm(`Delete the reported ${r.object_type}? This action may be irreversible.`)) return
+        async function singleDeleteTarget(r) {
+            if (!(await window.rzConfirm(`Delete the reported ${r.object_type}? This action may be irreversible.`))) return
             _post(`/report/admin/${r.id}/delete_target`).then(({ ok }) => {
                 if (ok) { fetchData(); fetchStats() }
             })
@@ -515,8 +477,8 @@ createApp({
         async function bulkAction(action) {
             const ids = selectedIds.value
             if (!ids.length) return
-            if (action === 'delete' && !confirm(`Delete ${ids.length} report(s)?`)) return
-            if (action === 'delete_target' && !confirm(`Delete the reported objects for ${ids.length} report(s)? This may be irreversible.`)) return
+            if (action === 'delete' && !(await window.rzConfirm(`Delete ${ids.length} report(s)?`))) return
+            if (action === 'delete_target' && !(await window.rzConfirm(`Delete the reported objects for ${ids.length} report(s)? This may be irreversible.`))) return
             const res  = await fetch('/report/admin/bulk', {
                 method:  'POST',
                 headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/json' },

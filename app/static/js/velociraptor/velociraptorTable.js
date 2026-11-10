@@ -151,7 +151,7 @@ const VelociraptorRow = {
     }
 
     async function deleteServer() {
-      if (!confirm(`Delete Velociraptor server "${props.s.name}"? This cannot be undone.`)) return
+      if (!(await window.rzConfirm(`Delete Velociraptor server "${props.s.name}"? This cannot be undone.`))) return
       const r = await doPost(`/velociraptor/delete/${props.s.uuid}`)
       const data = await r.json()
       if (data.success) {

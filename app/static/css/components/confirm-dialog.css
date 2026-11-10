@@ -1,0 +1,30 @@
+/* Confirmation / input dialogs — js/components/confirm-dialog.js (rzConfirm, rzPrompt). */
+.rzd-backdrop {
+    position: fixed; inset: 0; z-index: 2100;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+    background: rgba(8, 15, 30, .45); backdrop-filter: blur(2px);
+    opacity: 0; transition: opacity .15s ease;
+}
+.rzd-backdrop.rzd-show { opacity: 1; }
+.rzd-dialog {
+    width: 100%; max-width: 460px; padding: 1.4rem 1.4rem 1.1rem;
+    border-radius: 16px; border: 1px solid var(--border-color);
+    background: var(--card-bg-color); color: var(--text-color);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .25);
+    transform: translateY(8px) scale(.98); transition: transform .15s ease;
+}
+.rzd-show .rzd-dialog { transform: none; }
+.rzd-head { display: flex; gap: .9rem; align-items: flex-start; }
+.rzd-icon {
+    width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 1.05rem;
+    background: rgba(13, 110, 253, .12); color: #0d6efd;
+}
+.rzd-dialog--danger .rzd-icon { background: rgba(220, 53, 69, .12); color: #dc3545; }
+.rzd-titles { min-width: 0; flex: 1; }
+.rzd-title { font-weight: 700; font-size: 1rem; line-height: 1.35; overflow-wrap: anywhere; }
+.rzd-message { margin-top: .35rem; font-size: .88rem; line-height: 1.55; color: var(--subtle-text-color);
+    white-space: pre-line; overflow-wrap: anywhere; max-height: 50vh; overflow-y: auto; }
+.rzd-input { margin-top: 1rem; }
+.rzd-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1.2rem; }
+body.rzd-open { overflow: hidden; }

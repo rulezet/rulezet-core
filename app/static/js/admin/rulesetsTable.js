@@ -194,7 +194,7 @@ const RulesetRow = {
     }
 
     async function deleteConfig() {
-      if (!confirm(`Delete the "${props.c.name}" mirror config? This only removes this instance's settings and local checkout — it never touches the remote repository.`)) return
+      if (!(await window.rzConfirm(`Delete the "${props.c.name}" mirror config? This only removes this instance's settings and local checkout — it never touches the remote repository.`))) return
       const r = await doPost(`/admin/rule_mirror/delete/${props.c.uuid}`)
       const data = await r.json()
       if (data.success) {

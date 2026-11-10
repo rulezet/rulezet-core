@@ -149,7 +149,7 @@ createApp({
         }
 
         async function deleteOne(log) {
-            if (!confirm(`Delete this log entry?\n"${log.description}"`)) return
+            if (!(await window.rzConfirm(`Delete this log entry?\n"${log.description}"`))) return
             try {
                 await fetch(`/admin/logs/delete/${log.id}`, {
                     method: 'POST', headers: { 'X-CSRFToken': csrfToken },
@@ -162,7 +162,7 @@ createApp({
 
         async function bulkDeleteByUuids(uuids) {
             if (!uuids.length) return
-            if (!confirm(`Delete ${uuids.length} selected log(s)?`)) return
+            if (!(await window.rzConfirm(`Delete ${uuids.length} selected log(s)?`))) return
             try {
                 const res  = await fetch('/api/log/bulk-delete', {
                     method:  'POST',

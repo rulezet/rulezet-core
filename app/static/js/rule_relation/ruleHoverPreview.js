@@ -16,6 +16,7 @@
  *   ruleId  (Number)  — required; fetched via /rule/get_current_rule
  */
 import CodeViewer from '/static/js/components/code-viewer.js';
+import FormatChip from '/static/js/rule/formatChip.js';
 
 const { defineComponent, ref, computed } = Vue;
 
@@ -31,7 +32,7 @@ function fetchRulePreview(ruleId) {
 const RuleHoverPreview = defineComponent({
     name: 'RuleHoverPreview',
     delimiters: ['[[', ']]'],
-    components: { 'code-viewer': CodeViewer },
+    components: { 'code-viewer': CodeViewer, 'format-chip': FormatChip },
     props: {
         ruleId: { type: Number, required: true },
     },
@@ -114,7 +115,7 @@ const RuleHoverPreview = defineComponent({
           <div style="min-width:0;">
             <div class="fw-bold text-truncate" style="font-size:.88rem;color:var(--text-color);">[[ previewData.title ]]</div>
             <div class="d-flex align-items-center gap-1 mt-1">
-              <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis" style="font-size:.65rem;">[[ previewData.format ]]</span>
+              <format-chip :format="previewData.format || ''" plain></format-chip>
               <span v-if="previewData.license" class="badge rounded-pill bg-light text-muted border" style="font-size:.65rem;">[[ previewData.license ]]</span>
             </div>
           </div>

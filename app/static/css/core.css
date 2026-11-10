@@ -3469,3 +3469,69 @@ body.rz-first-setup .rz-setup-field input { border-color: #f0ad00; }
 tr.dt-row:has(.dt-action-btn--expand) { cursor: pointer; }
 tr.dt-row:has(.dt-action-btn--expand) :is(a, button, input, select, label, .dropdown-menu) { cursor: auto; }
 tr.dt-row:has(.dt-action-btn--expand) :is(a, button) { cursor: pointer; }
+
+/* ── Breadcrumb ──────────────────────────────────────────────────────────────────────────────
+   One discreet look for every page's breadcrumb (they all use the same Bootstrap markup, many with
+   an inline "uppercase .75rem" style — overridden here so no template needs to change): small
+   grey text, thin chevrons, a small house for Home, links blue on hover, current page a bit darker. */
+nav[aria-label="breadcrumb"] .breadcrumb {
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 0;
+    padding: 0 !important;
+    background: none !important;
+    font-size: .72rem !important;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+    line-height: 1.5;
+}
+nav[aria-label="breadcrumb"] .breadcrumb-item {
+    display: inline-flex;
+    align-items: center;
+    padding-left: 0 !important;
+    min-width: 0;
+    color: var(--subtle-text-color);
+}
+nav[aria-label="breadcrumb"] .breadcrumb-item + .breadcrumb-item::before {
+    content: "" !important;
+    float: none;
+    width: .3rem;
+    height: .3rem;
+    margin: 0 .45rem 0 .3rem;
+    padding: 0 !important;
+    border-right: 1px solid currentColor;
+    border-top: 1px solid currentColor;
+    transform: rotate(45deg);
+    opacity: .4;
+    flex-shrink: 0;
+}
+nav[aria-label="breadcrumb"] .breadcrumb-item a {
+    color: var(--subtle-text-color) !important;
+    opacity: .85;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color .15s, opacity .15s;
+}
+nav[aria-label="breadcrumb"] .breadcrumb-item a:hover {
+    color: #0d6efd !important;
+    opacity: 1;
+}
+nav[aria-label="breadcrumb"] .breadcrumb-item:first-child a::before {
+    content: "\f015";
+    font-family: "Font Awesome 7 Free", "Font Awesome 6 Free";
+    font-weight: 900;
+    margin-right: .3rem;
+    font-size: .9em;
+}
+nav[aria-label="breadcrumb"] .breadcrumb-item.active {
+    color: var(--text-color) !important;
+    opacity: .75;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 42ch;
+}
+@media (max-width: 576px) {
+    nav[aria-label="breadcrumb"] .breadcrumb-item.active { max-width: 24ch; }
+}

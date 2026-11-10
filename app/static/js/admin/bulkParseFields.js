@@ -250,7 +250,7 @@ const FieldParserUpdater = {
         }
 
         async function deleteConfig(id) {
-            if (!confirm('Delete this config?')) return;
+            if (!(await window.rzConfirm('Delete this config?'))) return;
             await fetch(`/account/admin/bulk_parse_fields/configs/${id}`, {
                 method: 'DELETE', headers: { 'X-CSRFToken': props.csrfToken },
             });

@@ -9,21 +9,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/account/user-picker.css') }}">
-<style>
-[v-cloak] { display: none; }
-.req-tab {
-    display: inline-flex; align-items: center; gap: .35rem;
-    padding: .3rem .9rem; border-radius: 99px;
-    border: 1.5px solid var(--border-color);
-    background: var(--light-bg-color);
-    font-size: .78rem; font-weight: 600; color: var(--subtle-text-color);
-    cursor: pointer; transition: all .12s; user-select: none;
-}
-.req-tab.active { background: #0d6efd; border-color: #0d6efd; color: #fff; }
-.req-tab:hover:not(.active) { border-color: #0d6efd44; color: var(--text-color); }
-.req-row { cursor: pointer; }
-.req-row:hover td { background: rgba(13,110,253,.03); }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/request.css') }}">
 {% endblock %}
 
 {% block content %}

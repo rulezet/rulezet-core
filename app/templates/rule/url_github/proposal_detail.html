@@ -11,13 +11,21 @@
 {% block content %}
 <div class="container my-4" id="main-container" v-cloak>
 
-    <nav aria-label="breadcrumb" class="mb-2">
-        <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
-            <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-            <li class="breadcrumb-item"><a href="/rule/github/manage" class="text-decoration-none text-muted">Manage Git</a></li>
-            <li class="breadcrumb-item active text-muted" aria-current="page">Repository Proposal</li>
-        </ol>
-    </nav>
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-code-pull-request banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/rule/github/manage" class="text-decoration-none text-muted">Manage Git</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Repository Proposal</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-code-pull-request"></i></div>
+            <div><h2 class="fw-bold mb-1">Repository proposal</h2><div class="banner-accent"></div></div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">A user proposed a git repository to import into Rulezet. Check it, then accept or reject the import.</p>
+    </div>
 
     <div v-if="loading" class="text-center py-5">
         <div class="spinner-border text-primary"></div>
@@ -232,7 +240,7 @@
             }
 
             async function deleteRequest() {
-                if (!confirm('Delete this proposal request?')) return;
+                if (!(await window.rzConfirm('Delete this proposal request?'))) return;
                 actionLoading.value = true;
                 try {
                     const res = await fetch(`/rule/github_proposal/${proposalUuid}/delete`, {
@@ -248,7 +256,7 @@
             }
 
             async function cancelMine() {
-                if (!confirm('Cancel your proposal?')) return;
+                if (!(await window.rzConfirm('Cancel your proposal?'))) return;
                 actionLoading.value = true;
                 try {
                     const res = await fetch(`/rule/github_proposal/${proposalUuid}/cancel`, {

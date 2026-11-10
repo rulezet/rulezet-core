@@ -377,7 +377,7 @@
             }
 
             async function handleDelete(job) {
-                if (!confirm(`Delete job "${job.title}"?\n\nThis cannot be undone.`)) return
+                if (!(await window.rzConfirm(`Delete job "${job.title}"?\n\nThis cannot be undone.`))) return
                 const res = await apiFetch('/jobs/api/' + job.uuid, 'DELETE')
                 if (res.ok) {
                     create_message('Job deleted', TOAST.SUCCESS)
@@ -403,7 +403,7 @@
             async function handleBulk({ action, ids }) {
                 const count = ids === 'ALL' ? 'all' : ids.length
                 const verb  = action === 'cancel' ? 'Cancel' : 'Delete'
-                if (!confirm(`${verb} ${count} selected job(s)?`)) return
+                if (!(await window.rzConfirm(`${verb} ${count} selected job(s)?`))) return
 
                 const uuids = ids === 'ALL' ? [] : ids
                 const res = await apiFetch('/jobs/api/bulk', 'POST', { action, uuids })

@@ -336,7 +336,7 @@ createApp({
         }
 
         async function deleteConversation(conv) {
-            if (!confirm(`Delete this conversation with ${conv.username}? This cannot be undone.`)) return
+            if (!(await window.rzConfirm(`Delete this conversation with ${conv.username}? This cannot be undone.`))) return
             try {
                 const res  = await fetch(`/chatbot/admin/conversations/${conv.uuid}/delete`, {
                     method: 'POST', headers: { 'X-CSRFToken': csrf() },

@@ -16,6 +16,7 @@ import TagInput from '/static/js/tags/tagInput.js'
 import AttackInput from '/static/js/attack/attackInput.js'
 import VulnerabilityInput from '/static/js/vulnerability/vulnerabilityInput.js'
 import AlertCriteriaChips from './alertCriteriaChips.js'
+import FormatChip from '/static/js/rule/formatChip.js'
 
 const EMAIL_MODES = [
     { key: 'off',     label: 'Off' },
@@ -33,6 +34,7 @@ export default {
         'attack-input': AttackInput,
         'vulnerability-input': VulnerabilityInput,
         'alert-criteria-chips': AlertCriteriaChips,
+        'format-chip': FormatChip,
     },
 
     props: {
@@ -294,7 +296,7 @@ export default {
           <div v-for="s in preview.sample" :key="s.type + s.id" class="al-preview-item">
             <i class="fa-solid" :class="s.type === 'bundle' ? 'fa-layer-group text-success' : 'fa-shield-halved text-primary'"></i>
             <a :href="s.link" target="_blank" :title="s.title">[[ s.title ]]</a>
-            <span v-if="s.format" class="badge bg-light text-dark border ms-auto">[[ s.format ]]</span>
+            <format-chip v-if="s.format" class="ms-auto" :format="s.format" plain></format-chip>
           </div>
         </template>
       </template>

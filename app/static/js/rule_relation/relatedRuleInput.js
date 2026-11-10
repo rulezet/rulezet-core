@@ -45,6 +45,7 @@
 import RuleList from '/static/js/rule/ruleList.js';
 import RuleHoverPreview from '/static/js/rule_relation/ruleHoverPreview.js';
 import { create_message } from '/static/js/toaster.js';
+import FormatChip from '/static/js/rule/formatChip.js';
 
 // Keep in sync with RULE_RELATION_TYPES in app/core/db_class/rule_relation.py — this
 // is the manual-link vocabulary; auto-detected links (Wazuh if_sid, Kunai
@@ -66,7 +67,7 @@ const BROWSE_MODAL_ID = 'relatedRuleBrowseModal';
 
 const RelatedRuleInput = {
     name: 'RelatedRuleInput',
-    components: { 'rule-list': RuleList, 'rule-hover-preview': RuleHoverPreview },
+    components: { 'rule-list': RuleList, 'rule-hover-preview': RuleHoverPreview, 'format-chip': FormatChip },
     props: {
         modelValue: { type: Array,  default: () => [] },
         label:      { type: String, default: 'Linked Rules' },
@@ -234,7 +235,7 @@ const RelatedRuleInput = {
              style="background:var(--card-bg-color); border:1px solid var(--border-color);">
             <rule-hover-preview :rule-id="entry.id">
                 <div class="d-flex align-items-center gap-2" style="min-width:0;">
-                    <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis" style="font-size:.65rem; flex-shrink:0;">[[ entry.format ]]</span>
+                    <format-chip :format="entry.format || ''" plain style="flex-shrink:0;"></format-chip>
                     <span class="small fw-bold text-truncate" style="max-width:200px; color:var(--text-color);">[[ entry.title ]]</span>
                 </div>
             </rule-hover-preview>

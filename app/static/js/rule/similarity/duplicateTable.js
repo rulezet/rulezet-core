@@ -247,7 +247,7 @@ const DuplicateTable = {
 
         // ── Single history delete (component-owned, per approved plan) ──
         async function deleteHistoryItem(item) {
-            if (!confirm('Delete this history record?')) return;
+            if (!(await window.rzConfirm('Delete this history record?'))) return;
             try {
                 const res = await fetch(`/rule/history_updater/delete/${item.uuid}`);
                 const data = await res.json().catch(() => ({}));

@@ -303,11 +303,11 @@
 
             async function resetAllScores() {
                 if (resetting.value) return;
-                const ok = window.confirm(
+                const ok = (await window.rzConfirm(
                     'Reset ALL quality scores? This clears every rule\'s score, breakdown and ' +
                     'analysis date back to "never analyzed". This cannot be undone — you would ' +
                     'need to re-run an analysis to get scores back. Continue?'
-                );
+                ));
                 if (!ok) return;
 
                 resetting.value = true;
@@ -361,7 +361,7 @@
 
             async function deleteHistoryJob(uuid) {
                 if (deletingJobUuid.value) return;
-                if (!window.confirm('Delete this analysis run? This only removes the history entry, not the scores it computed.')) return;
+                if (!(await window.rzConfirm('Delete this analysis run? This only removes the history entry, not the scores it computed.'))) return;
                 deletingJobUuid.value = uuid;
                 try {
                     const res = await fetch(`/jobs/delete/${uuid}`, {

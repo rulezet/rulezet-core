@@ -62,8 +62,8 @@ export async function detectMachine() {
 }
 
 export async function askAndDetect() {
-    const ok = window.confirm('Fill the scope with this computer? Your browser tells its operating system, '
-        + 'architecture and version — nothing is sent until you save the declaration.');
+    const ok = (await window.rzConfirm('Fill the scope with this computer? Your browser tells its operating system, '
+        + 'architecture and version — nothing is sent until you save the declaration.'));
     if (!ok) return [];
     return detectMachine();
 }

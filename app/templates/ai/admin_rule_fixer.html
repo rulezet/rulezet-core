@@ -94,7 +94,7 @@ createApp({
         function onNotify({ message, level }) { create_message(message, level) }
 
         async function handleDelete(item) {
-            if (!confirm('Delete this entry? This cannot be undone.')) return
+            if (!(await window.rzConfirm('Delete this entry? This cannot be undone.'))) return
             const res = await fetch('/ai/admin/history/rule_fixer/bulk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -107,7 +107,7 @@ createApp({
 
         async function handleBulkAction({ action, ids }) {
             if (action !== 'delete') return
-            if (!confirm('Delete the selected entries? This cannot be undone.')) return
+            if (!(await window.rzConfirm('Delete the selected entries? This cannot be undone.'))) return
             const res = await fetch('/ai/admin/history/rule_fixer/bulk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },

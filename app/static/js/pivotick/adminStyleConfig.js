@@ -221,7 +221,7 @@ export function createPivotickAdminApp(initialConfigs, defaultConfigs, initialEn
             },
 
             async reset(section) {
-                if (!confirm(`Reset the "${section.label}" render to its default values?`)) return
+                if (!(await window.rzConfirm(`Reset the "${section.label}" render to its default values?`))) return
                 section.saving = true
                 try {
                     const res = await fetch(`/admin/pivotick/style/${section.key}/reset`, {

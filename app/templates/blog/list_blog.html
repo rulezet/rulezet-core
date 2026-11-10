@@ -3,43 +3,7 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/blog/blog.css') }}">
-<style>
-.blog-hero-card {
-    border-radius: 16px;
-    overflow: hidden;
-}
-.blog-hero-image {
-    width: 100%;
-    height: 260px;
-    object-fit: cover;
-    display: block;
-}
-.blog-hero-image-placeholder {
-    width: 100%;
-    height: 180px;
-    background: linear-gradient(135deg, #0d6efd18 0%, #0a58ca10 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.blog-preview-text {
-    display: -webkit-box;
-    -webkit-line-clamp: 4;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    line-height: 1.65;
-    color: var(--subtle-text-color);
-    font-size: .93rem;
-}
-.blog-read-more {
-    font-size: .85rem;
-    font-weight: 600;
-    color: #0d6efd;
-    text-decoration: none;
-    letter-spacing: .02em;
-}
-.blog-read-more:hover { text-decoration: underline; }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/blog/list_blog.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -191,24 +155,7 @@
     </div>
 
     <!-- Pagination -->
-    <nav v-if="totalPages > 1" class="d-flex justify-content-center mt-2 mb-4">
-        <ul class="pagination pagination-sm mb-0">
-            <li class="page-item" :class="{disabled: currentPage === 1}">
-                <button class="page-link" @click="goToPage(currentPage - 1)">
-                    <i class="fa-solid fa-chevron-left"></i>
-                </button>
-            </li>
-            <li v-for="p in paginationRange" :key="p"
-                class="page-item" :class="{active: p === currentPage, disabled: p === '…'}">
-                <button class="page-link" @click="typeof p === 'number' && goToPage(p)">[[ p ]]</button>
-            </li>
-            <li class="page-item" :class="{disabled: currentPage === totalPages}">
-                <button class="page-link" @click="goToPage(currentPage + 1)">
-                    <i class="fa-solid fa-chevron-right"></i>
-                </button>
-            </li>
-        </ul>
-    </nav>
+    <pagination-component v-if="totalPages > 1" class="mb-4" :current-page="currentPage" :total-pages="totalPages" @change-page="goToPage"></pagination-component>
 
 </div>
 {% endblock %}
@@ -217,6 +164,7 @@
 <script type="module">
     import { create_message } from '/static/js/toaster.js'
     import UserChip           from '/static/js/components/UserChip.js'
+    import PaginationComponent from '/static/js/rule/paginationComponent.js';
     const { createApp, ref, computed, onMounted } = Vue
 
     const isAuthenticated = {{ current_user.is_authenticated | tojson }}
@@ -225,7 +173,7 @@
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { 'user-chip': UserChip },
+        components: { 'user-chip': UserChip, 'pagination-component': PaginationComponent },
         setup() {
             const posts          = ref([])
             const isLoading      = ref(false)

@@ -1631,7 +1631,7 @@
             }
 
             async function deleteWorkspace() {
-                if (!confirm(`Delete workspace "${wsName}"?\n\nRules will not be deleted.`)) return
+                if (!(await window.rzConfirm(`Delete workspace "${wsName}"?\n\nRules will not be deleted.`))) return
                 try {
                     const csrf = document.getElementById('csrf_token')?.value || csrfToken
                     const r = await fetch(`/workspace/${wsUuid}`, {
@@ -1827,7 +1827,7 @@
             }
 
             async function deleteDocument(doc) {
-                if (!confirm(`Delete "${doc.title}"?`)) return
+                if (!(await window.rzConfirm(`Delete "${doc.title}"?`))) return
                 try {
                     const csrf = document.getElementById('csrf_token')?.value || csrfToken
                     const r = await fetch(`/workspace/${wsUuid}/documents/${doc.id}`, {
@@ -1880,7 +1880,7 @@
             function openFile(f) { window.open(f.url, '_blank', 'noopener') }
 
             async function deleteFile(f) {
-                if (!confirm(`Delete "${f.original_name}"?`)) return
+                if (!(await window.rzConfirm(`Delete "${f.original_name}"?`))) return
                 try {
                     const csrf = document.getElementById('csrf_token')?.value || csrfToken
                     const r = await fetch(`/workspace/${wsUuid}/files/${f.uuid}`, {
@@ -1945,7 +1945,7 @@
             }
 
             async function deleteLink(link) {
-                if (!confirm(`Delete link "${link.title}"?`)) return
+                if (!(await window.rzConfirm(`Delete link "${link.title}"?`))) return
                 try {
                     const csrf = document.getElementById('csrf_token')?.value || csrfToken
                     const r = await fetch(`/workspace/${wsUuid}/links/${link.id}`, {
@@ -1983,7 +1983,7 @@
             }
 
             async function unlinkBundle(bundle) {
-                if (!confirm(`Remove "${bundle.name || 'this bundle'}" from this workspace? The bundle itself won't be deleted.`)) return
+                if (!(await window.rzConfirm(`Remove "${bundle.name || 'this bundle'}" from this workspace? The bundle itself won't be deleted.`))) return
                 try {
                     const csrf = document.getElementById('csrf_token')?.value || csrfToken
                     const r = await fetch(`/workspace/${wsUuid}/bundles/${bundle.id}`, {

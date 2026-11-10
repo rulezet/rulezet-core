@@ -1268,3 +1268,7 @@ body.dark-mode .rz-role-chip { color: color-mix(in srgb, var(--role) 70%, #fff);
 /* ── Card: View details next to Show / Hide the rule ── */
 .rl-card-preview__bar { display: flex; align-items: center; justify-content: center; gap: .75rem; margin-top: .4rem; }
 .rl-card-preview__bar .rl-card-preview__toggle { margin: 0; }
+
+/* FormatChip plain: same badge, not a button (inside clickable rows / pickers) */
+.fmt-chip--plain { cursor: default; padding-right: .55rem; }
+.fmt-chip--plain:hover { background: color-mix(in srgb, var(--fmt) 10%, var(--card-bg-color)); box-shadow: none; }

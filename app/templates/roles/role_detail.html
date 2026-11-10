@@ -335,7 +335,7 @@
 
             async function deleteRole() {
                 if (role.is_system) return
-                if (!confirm(`Delete role "${role.name}"?`)) return
+                if (!(await window.rzConfirm(`Delete role "${role.name}"?`))) return
                 const res = await apiFetch(`/admin/roles/${ROLE_ID}/delete`, 'POST')
                 const data = await res.json()
                 if (res.ok) {
@@ -370,7 +370,7 @@
             }
 
             async function removeUser(item) {
-                if (!confirm(`Remove ${item.username} from this role?`)) return
+                if (!(await window.rzConfirm(`Remove ${item.username} from this role?`))) return
                 const res = await apiFetch(`/admin/roles/${ROLE_ID}/users/remove`, 'POST', { user_id: item.id })
                 const data = await res.json()
                 if (res.ok) {

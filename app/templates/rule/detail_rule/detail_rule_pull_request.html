@@ -221,19 +221,7 @@
                     </section>
                 </div>
 
-                <nav v-if="total_pages > 1" class="mt-4">
-                    <ul class="pagination justify-content-center">
-                        <li class="page-item" :class="{ disabled: current_page === 1 }">
-                            <a class="page-link" href="#" @click.prevent="fetchThreads(current_page - 1)">Previous</a>
-                        </li>
-                        <li class="page-item disabled">
-                            <span class="page-link">[[ current_page ]] / [[ total_pages ]]</span>
-                        </li>
-                        <li class="page-item" :class="{ disabled: current_page === total_pages }">
-                            <a class="page-link" href="#" @click.prevent="fetchThreads(current_page + 1)">Next</a>
-                        </li>
-                    </ul>
-                </nav>
+                <pagination-component v-if="total_pages > 1" class="mt-3" :current-page="current_page" :total-pages="total_pages" @change-page="fetchThreads"></pagination-component>
             </div>
         </div>
 
@@ -247,6 +235,7 @@
     const { createApp, ref, reactive, computed, watch, onMounted } = Vue;
     import { renderMarkdown } from '/static/js/sanitize.js';
     import HelpTip from '/static/js/components/help-tip.js';
+    import PaginationComponent from '/static/js/rule/paginationComponent.js';
     import { layoutThread } from '/static/js/rule/proposal/ProposalThreadGraph.js';
 
     const rule_id = {{ rule.id }};
@@ -255,7 +244,7 @@
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { HelpTip },
+        components: { HelpTip, 'pagination-component': PaginationComponent },
         setup() {
             // [{ id, status: accepted|open|closed, last_activity,
             //    proposals: [{ ...proposal, version, depth }] }] — in reading order
