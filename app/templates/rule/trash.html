@@ -553,7 +553,7 @@ createApp({
     }
 
     async function permanentDeleteOne(rule) {
-      if (!confirm(`Permanently delete "${rule.title}"?\nThis cannot be undone.`)) return
+      if (!(await window.rzConfirm(`Permanently delete "${rule.title}"?\nThis cannot be undone.`))) return
       const res  = await fetch(`/rule/permanent_delete/${rule.id}`, { method:'POST', headers:{'X-CSRFToken':csrf} })
       const data = await res.json()
       if (data.success) { fetchRules(page.value); create_message('Rule permanently deleted', 'danger-subtle') }
@@ -583,7 +583,7 @@ createApp({
     }
 
     async function permanentDeleteBulk() {
-      if (!confirm(`Permanently delete ${selectedIds.value.length} rule(s)?\nThis cannot be undone.`)) return
+      if (!(await window.rzConfirm(`Permanently delete ${selectedIds.value.length} rule(s)?\nThis cannot be undone.`))) return
       const res  = await fetch('/rule/permanent_delete_bulk', {
         method:'POST',
         headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
@@ -605,7 +605,7 @@ createApp({
     async function deleteBatch(batchUuid) {
       const b     = batches.value.find(b => b.batch_uuid === batchUuid)
       const count = b ? b.count : '?'
-      if (!confirm(`Permanently delete all ${count} rules in this batch?\nThis cannot be undone.`)) return
+      if (!(await window.rzConfirm(`Permanently delete all ${count} rules in this batch?\nThis cannot be undone.`))) return
       const res  = await fetch('/rule/permanent_delete_bulk', {
         method:'POST',
         headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
@@ -619,7 +619,7 @@ createApp({
     }
 
     async function restoreAll() {
-      if (!confirm(`Restore all ${totalCount.value} deleted rule(s)?`)) return
+      if (!(await window.rzConfirm(`Restore all ${totalCount.value} deleted rule(s)?`))) return
       const res  = await fetch('/rule/restore_bulk', {
         method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
         body: JSON.stringify({restore_all: true}),
@@ -629,7 +629,7 @@ createApp({
     }
 
     async function deleteAll() {
-      if (!confirm(`Permanently delete ALL ${totalCount.value} rule(s) in trash?\nThis CANNOT be undone.`)) return
+      if (!(await window.rzConfirm(`Permanently delete ALL ${totalCount.value} rule(s) in trash?\nThis CANNOT be undone.`))) return
       const res  = await fetch('/rule/permanent_delete_bulk', {
         method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
         body: JSON.stringify({delete_all: true}),

@@ -450,7 +450,7 @@ const CommentItem = {
         }
 
         async function doDelete() {
-            if (!confirm('Delete this comment?')) return
+            if (!(await window.rzConfirm('Delete this comment?'))) return
             const res = await apiFetch(`/api/comments/${props.comment.uuid}`, 'DELETE')
             const d = await res.json()
             if (res.ok) {
@@ -467,7 +467,7 @@ const CommentItem = {
             const msg = replyCount > 0
                 ? `Permanently delete this comment AND its ${replyCount} reply/replies? This cannot be undone.`
                 : 'Permanently delete this comment? This cannot be undone.'
-            if (!confirm(msg)) return
+            if (!(await window.rzConfirm(msg))) return
             const res = await apiFetch(`/api/comments/${props.comment.uuid}/hard_delete`, 'DELETE')
             const d = await res.json()
             if (res.ok) {
@@ -493,7 +493,7 @@ const CommentItem = {
 
         async function createGithubIssue() {
             if (creatingIssue.value || githubIssueUrl.value) return
-            if (!confirm('File this comment as a new issue on the official rulezet-core GitHub repo?')) return
+            if (!(await window.rzConfirm('File this comment as a new issue on the official rulezet-core GitHub repo?'))) return
             creatingIssue.value = true
             const res = await apiFetch(`/api/comments/${props.comment.uuid}/create_issue`, 'POST', {})
             const d = await res.json()

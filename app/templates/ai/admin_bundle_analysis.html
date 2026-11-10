@@ -226,11 +226,11 @@ createApp({
             if (data.success) { create_message(`Deleted ${data.deleted}.`, 'success-subtle'); table_ref.value?.fetchData() }
             else create_message(data.error || 'Failed to delete', 'danger-subtle')
         }
-        function handleDelete(item) {
-            if (confirm('Delete this analysis? This cannot be undone.')) bulkDelete([item.id])
+        async function handleDelete(item) {
+            if ((await window.rzConfirm('Delete this analysis? This cannot be undone.'))) bulkDelete([item.id])
         }
-        function handleBulkAction({ action, ids }) {
-            if (action === 'delete' && confirm(`Delete ${ids === 'ALL' ? 'ALL' : ids.length} analyses? This cannot be undone.`)) bulkDelete(ids)
+        async function handleBulkAction({ action, ids }) {
+            if (action === 'delete' && (await window.rzConfirm(`Delete ${ids === 'ALL' ? 'ALL' : ids.length} analyses? This cannot be undone.`))) bulkDelete(ids)
         }
         async function toggleVisibility(item) {
             const res = await fetch(`/ai/admin/history/bundle_analysis/toggle_visibility/${item.id}`, {

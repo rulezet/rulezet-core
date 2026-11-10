@@ -246,7 +246,7 @@ export default {
 
         async function deleteHistoryRun(h) {
             if (h.status === 'pending' || h.status === 'running') return;
-            if (!confirm(`Delete this validation run (${h.created_at})? This cannot be undone.`)) return;
+            if (!(await window.rzConfirm(`Delete this validation run (${h.created_at})? This cannot be undone.`))) return;
             try {
                 const res  = await fetch(`/jobs/delete/${h.uuid}`, {
                     method: 'POST',
@@ -629,10 +629,10 @@ export default {
             quarantined.value.filter(q => q.rule_id && riskLevel(q.proposed_tag) && !q.resolved).map(q => q.rule_id)
         );
 
-        function acceptAllProposed() {
+        async function acceptAllProposed() {
             const ids = acceptableRuleIds.value;
             if (!ids.length) return;
-            if (!confirm(`Accept the proposed risk tag for all ${ids.length} quarantined rule(s)?`)) return;
+            if (!(await window.rzConfirm(`Accept the proposed risk tag for all ${ids.length} quarantined rule(s)?`))) return;
             acceptProposedForRules(ids);
         }
 

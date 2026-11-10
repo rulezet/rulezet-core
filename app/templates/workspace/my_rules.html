@@ -227,7 +227,7 @@
             }
 
             async function deleteWorkspace(ws) {
-                if (!confirm(`Delete workspace "${ws.name}"?\n\nRules will not be deleted.`)) return
+                if (!(await window.rzConfirm(`Delete workspace "${ws.name}"?\n\nRules will not be deleted.`))) return
                 try {
                     const csrf = document.getElementById('csrf_token')?.value || csrfToken
                     const res = await fetch(`/workspace/${ws.uuid}`, {

@@ -6,144 +6,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
-<style>
-    .fl-rename-section {
-        border: 1px solid var(--border-color);
-        border-radius: 12px;
-        overflow: hidden;
-        background: var(--card-bg-color);
-    }
-    .fl-rename-toggle {
-        width: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: .75rem 1.1rem;
-        border: none;
-        background: transparent;
-        cursor: pointer;
-        color: var(--text-color);
-        font-size: .88rem;
-        font-weight: 600;
-        gap: .5rem;
-        transition: background .1s;
-    }
-    .fl-rename-toggle:hover { background: var(--light-bg-color); }
-    .fl-rename-toggle-left  { display: flex; align-items: center; gap: .4rem; }
-    .fl-rename-badge {
-        font-size: .65rem; font-weight: 700; padding: .15rem .5rem;
-        border-radius: 999px; background: rgba(255,193,7,.15); color: #c07000;
-        border: 1px solid rgba(255,193,7,.3); letter-spacing: .04em; text-transform: uppercase;
-    }
-    .fl-rename-body { padding: 1rem 1.1rem; border-top: 1px solid var(--border-color); }
-    .transition-icon { transition: transform .2s; }
-    .fw-600 { font-weight: 600; }
-
-    /* ── Toolbar ── */
-    .fl-wrapper { position: relative; }
-    .fl-toolbar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: .6rem;
-        flex-wrap: wrap;
-        margin-bottom: .85rem;
-    }
-    .fl-toolbar-left, .fl-toolbar-right {
-        display: flex;
-        gap: .45rem;
-        align-items: center;
-        flex-wrap: wrap;
-    }
-
-    /* ── Card grid ── */
-    .fl-cards {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: .85rem;
-        margin-bottom: 1rem;
-    }
-    .fl-format-card {
-        position: relative;
-        background: var(--card-bg-color);
-        border: 1px solid var(--border-color);
-        border-radius: 14px;
-        padding: 1.1rem;
-        display: flex;
-        flex-direction: column;
-        gap: .6rem;
-        box-shadow: 0 2px 6px rgba(0,0,0,.05);
-        transition: box-shadow .15s, border-color .15s, transform .12s;
-        overflow: hidden;
-    }
-    .fl-format-card:hover {
-        box-shadow: 0 5px 18px rgba(0,0,0,.09);
-        border-color: rgba(13,110,253,.3);
-        transform: translateY(-2px);
-    }
-    .dark-mode .fl-format-card { background: #1e2433; border-color: rgba(255,255,255,.1); }
-    .dark-mode .fl-format-card:hover { border-color: rgba(13,110,253,.45); background: #212840; }
-
-    .fl-card-accent {
-        position: absolute;
-        top: 0; left: 0; right: 0; height: 3px;
-        background: linear-gradient(90deg, #0d6efd, #0a58ca);
-        border-radius: 14px 14px 0 0;
-    }
-    .fl-card-top {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: .4rem;
-        margin-top: .2rem;
-    }
-    .fl-card-icon {
-        width: 38px; height: 38px;
-        border-radius: 10px;
-        background: rgba(13,110,253,.1);
-        color: #0d6efd;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 1rem;
-        flex-shrink: 0;
-    }
-    .fl-card-badges { display: flex; flex-direction: column; gap: .25rem; align-items: flex-end; }
-    .fl-card-name {
-        font-size: 1rem;
-        font-weight: 700;
-        color: var(--text-color);
-        letter-spacing: .01em;
-    }
-    .fl-card-meta {
-        display: flex;
-        flex-direction: column;
-        gap: .2rem;
-        padding-top: .4rem;
-        border-top: 1px solid var(--border-color);
-    }
-    .fl-meta-item {
-        display: inline-flex; align-items: center; gap: .35rem;
-        font-size: .73rem; color: var(--subtle-text-color);
-    }
-    .fl-meta-item i { font-size: .65rem; width: .8rem; text-align: center; opacity: .7; }
-    .fl-card-actions {
-        display: flex;
-        justify-content: flex-end;
-        margin-top: auto;
-        padding-top: .4rem;
-    }
-    .fl-action-delete {
-        width: 30px; height: 30px;
-        border-radius: 50%;
-        border: 1px solid rgba(220,53,69,.3);
-        background: transparent;
-        color: #dc3545;
-        display: inline-flex; align-items: center; justify-content: center;
-        font-size: .75rem;
-        cursor: pointer;
-        transition: background .1s;
-    }
-    .fl-action-delete:hover { background: rgba(220,53,69,.1); }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin/format.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -278,7 +141,7 @@
                         <details v-for="group in sidGroups" :key="group.format + ':' + group.sid"
                                   class="mb-2" style="border:1px solid var(--border-color);border-radius:10px;padding:.5rem .75rem;">
                             <summary style="cursor:pointer;font-size:.85rem;">
-                                <span class="badge" style="background:#1a1a1a;color:#fff;text-transform:uppercase;font-size:.65rem;">[[ group.format ]]</span>
+                                <format-chip :format="group.format || ''" plain></format-chip>
                                 SID <code>[[ group.sid ]]</code> — [[ group.rules.length ]] rules
                             </summary>
                             <table class="table table-sm mb-0 mt-2" style="font-size:.8rem;">
@@ -379,13 +242,14 @@
     import FormatList          from '/static/js/rule/formatList.js'
     import PaginationComponent from '/static/js/rule/paginationComponent.js'
     import JobTracker          from '/static/js/jobs/JobTracker.js'
+    import FormatChip from '/static/js/rule/formatChip.js'
 
     window.create_message = create_message
     const csrfToken = '{{ csrf_token() }}'
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { 'format-list': FormatList, 'pagination-component': PaginationComponent, 'job-tracker': JobTracker },
+        components: { 'format-list': FormatList, 'pagination-component': PaginationComponent, 'job-tracker': JobTracker, 'format-chip': FormatChip },
         setup() {
             const formatListRef = ref(null)
 

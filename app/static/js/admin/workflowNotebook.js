@@ -101,7 +101,7 @@ export default {
 
         async function remove(kind, item) {
             const label = kind === 'notes' ? `the note "${item.title.replace(/^#+\s*/, '')}"` : `the file "${item.filename}"`;
-            if (!window.confirm(`Delete ${label}?`)) return;
+            if (!(await window.rzConfirm(`Delete ${label}?`))) return;
             const res = await fetch(`${base.value}/${kind}/${item.uuid}`, { method: 'DELETE', headers: { 'X-CSRFToken': props.csrfToken } });
             const data = await res.json();
             create_message(data.message, data.toast_class);

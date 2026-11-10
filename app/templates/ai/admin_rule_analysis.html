@@ -252,7 +252,7 @@ createApp({
         function onNotify({ message, level }) { create_message(message, level) }
 
         async function handleDelete(item) {
-            if (!confirm('Delete this analysis? This cannot be undone.')) return
+            if (!(await window.rzConfirm('Delete this analysis? This cannot be undone.'))) return
             const res = await fetch('/ai/admin/history/rule_analysis/bulk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -265,7 +265,7 @@ createApp({
 
         async function handleBulkAction({ action, ids }) {
             if (action !== 'delete') return
-            if (!confirm(`Delete ${ids === 'ALL' ? 'ALL' : ids.length} analys${ids === 'ALL' || ids.length !== 1 ? 'es' : 'is'}? This cannot be undone.`)) return
+            if (!(await window.rzConfirm(`Delete ${ids === 'ALL' ? 'ALL' : ids.length} analys${ids === 'ALL' || ids.length !== 1 ? 'es' : 'is'}? This cannot be undone.`))) return
             const res = await fetch('/ai/admin/history/rule_analysis/bulk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -315,12 +315,12 @@ createApp({
 
         // "Select all pages" + send, without having to tick anything in the
         // list — the job gets the full filter set (see ruleList.js emitSend).
-        function analyseAllMatching() {
+        async function analyseAllMatching() {
             const rl = ruleListRef.value
             if (!rl || !matchingTotal.value) return
             const skipNote = skipAnalysed.value ? ', skipping those already analysed' : ', re-analysing those already done'
             const capNote = unlimitedBatch.value ? '' : ` (capped at ${batchSize.value} this run — turn on "No limit" for all)`
-            if (!confirm(`Analyse ${matchingTotal.value.toLocaleString()} matching rule(s)${skipNote}${capNote}?`)) return
+            if (!(await window.rzConfirm(`Analyse ${matchingTotal.value.toLocaleString()} matching rule(s)${skipNote}${capNote}?`))) return
             rl.selectAllPages()
             rl.emitSend()
         }

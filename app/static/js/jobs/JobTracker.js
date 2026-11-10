@@ -107,7 +107,7 @@ const JobTracker = {
 
         async function doAction(action, confirmMsg = null) {
             if (acting.value) return;
-            if (confirmMsg && !confirm(confirmMsg)) return;
+            if (confirmMsg && !(await window.rzConfirm(confirmMsg))) return;
             acting.value = action;
             try {
                 const csrfToken = document.getElementById('csrf_token')?.value || '';

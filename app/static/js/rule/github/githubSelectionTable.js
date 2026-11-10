@@ -432,7 +432,7 @@ const GitHubSelectionTable = {
 
         async updateSingleRepo(item) {
             const label = item.branch ? `${item.url} (branch: ${item.branch})` : item.url;
-            if (!confirm(`Check for updates for: ${label}?`)) return;
+            if (!(await window.rzConfirm(`Check for updates for: ${label}?`))) return;
             item.isUpdating = true;
             try {
                 // item.branch matters: a repo imported from more than one
@@ -453,7 +453,7 @@ const GitHubSelectionTable = {
                     window.location.href = '/rule/update_loading/' + data.session_uuid;
                 } else {
                     const errorData = await response.json();
-                    alert(errorData.message || 'Error starting update check');
+                    create_message(errorData.message || 'Error starting update check', 'danger-subtle');
                     item.isUpdating = false;
                 }
             } catch (err) {

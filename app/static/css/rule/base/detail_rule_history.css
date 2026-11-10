@@ -1,0 +1,82 @@
+/* rule/detail_rule/detail_rule_history.html — moved out of the template's inline <style> */
+[v-cloak] { display: none; }
+
+/* ── Version list ────────────────────────────────────────── */
+.ver-list { max-height: 400px; overflow-y: auto; }
+.ver-row {
+    display: flex; align-items: center; gap: .75rem;
+    padding: .6rem .85rem;
+    border-radius: 10px;
+    border: 1.5px solid var(--border-color);
+    margin-bottom: .4rem;
+    transition: border-color .12s, background .12s;
+}
+.ver-row:hover { background: rgba(13,110,253,.02); }
+
+.ver-num {
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 20px; border-radius: 10px;
+    font-size: .62rem; font-weight: 700; flex-shrink: 0;
+    background: var(--light-bg-color); border: 1px solid var(--border-color); color: var(--subtle-text-color);
+}
+
+.ver-row {
+    cursor: pointer;
+}
+.ver-row--selected {
+    border-color: #0d6efd;
+    background: rgba(13,110,253,.05);
+}
+.ver-row--selected .ver-num {
+    background: #0d6efd; border-color: #0d6efd; color: #fff;
+}
+
+/* Compare toggle button */
+.ver-compare-btn {
+    display: inline-flex; align-items: center; gap: .3rem;
+    padding: .22rem .6rem;
+    border-radius: 99px;
+    border: 1.5px solid var(--border-color);
+    background: var(--light-bg-color);
+    font-size: .68rem; font-weight: 600;
+    color: var(--subtle-text-color);
+    cursor: pointer;
+    transition: all .12s;
+    user-select: none;
+    white-space: nowrap;
+}
+.ver-compare-btn:hover { border-color: #198754aa; color: #198754; }
+.ver-compare-btn.active { background: #198754; border-color: #198754; color: #fff; }
+.ver-compare-btn .cmp-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: rgba(255,255,255,.3); font-size: .55rem; font-weight: 800;
+}
+
+/* ── Segmented toggle (Content / What changed) ──────────────── */
+.seg-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border-color);
+    border-radius: 99px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.seg-toggle button {
+    border: none;
+    background: transparent;
+    padding: .3rem .85rem;
+    font-size: .68rem;
+    font-weight: 700;
+    color: var(--subtle-text-color);
+    cursor: pointer;
+    transition: all .12s;
+}
+.seg-toggle button.active { background: #0d6efd; color: #fff; }
+
+/* ── Diff transition ─────────────────────────────────────── */
+.slide-down-enter-active { animation: slideDown .2s ease; }
+.slide-down-leave-active { animation: slideDown .15s ease reverse; }
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}

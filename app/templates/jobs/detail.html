@@ -522,7 +522,7 @@
             }
 
             async function doDelete() {
-                if (!confirm(`Delete job "${job.value.title}"? This cannot be undone.`)) return
+                if (!(await window.rzConfirm(`Delete job "${job.value.title}"? This cannot be undone.`))) return
                 const res = await apiFetch('/jobs/api/' + JOB_UUID, 'DELETE')
                 if (res.ok) {
                     create_message('Job deleted', TOAST.SUCCESS)

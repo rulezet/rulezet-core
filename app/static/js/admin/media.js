@@ -178,7 +178,7 @@ createApp({
 
         // Delete one file — from its card, its row in the tree, or the drawer.
         async function deleteFile(kind, file, cat = category.value, confirmed = false) {
-            if (!confirmed && !confirm(`Delete ${file.name}?\n\n${hintFor(kind, file)}`)) return;
+            if (!confirmed && !(await window.rzConfirm(`Delete ${file.name}?\n\n${hintFor(kind, file)}`))) return;
             const data = kind === 'library'
                 ? await postJson('/admin/media/library/delete', { root: root.value, rel: file.rel })
                 : await postJson('/admin/media/upload/delete', { category: cat, rel: file.rel });

@@ -1,0 +1,10 @@
+/* rule/rule_in_trash.html — moved out of the template's inline <style> */
+.trash-icon-wrapper {
+    width: 72px; height: 72px;
+    background: rgba(220, 53, 69, .1);
+    border-radius: 18px;
+    display: flex; align-items: center; justify-content: center;
+}
+.trash-rule-details { font-size: .85rem; }
+.trash-rule-label { color: var(--subtle-text-color); }
+.trash-rule-value { color: var(--text-color); }

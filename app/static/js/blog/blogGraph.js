@@ -178,8 +178,8 @@ export function useBlogGraph({ editUuid, hasGraph, postTitle, notify }) {
         return true
     }
 
-    function removeGraph() {
-        if (!confirm('Remove the graph from this post?')) return
+    async function removeGraph() {
+        if (!(await window.rzConfirm('Remove the graph from this post?'))) return
         graph.value = null
         graphDirty.value = true
     }

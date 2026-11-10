@@ -185,7 +185,7 @@ const ConnectorRow = {
         }
 
         async function deleteConn() {
-            if (!confirm(`Delete connector "${props.c.name}"?`)) return
+            if (!(await window.rzConfirm(`Delete connector "${props.c.name}"?`))) return
             const r    = await doPost(`/connector/delete/${props.c.uuid}`)
             const data = await r.json()
             if (data.success) {
@@ -510,7 +510,7 @@ const ConnectorCard = {
         }
 
         async function deleteConn() {
-            if (!confirm(`Delete connector "${props.c.name}"?`)) return
+            if (!(await window.rzConfirm(`Delete connector "${props.c.name}"?`))) return
             const r    = await doPost(`/connector/delete/${props.c.uuid}`)
             const data = await r.json()
             if (data.success) {
@@ -899,7 +899,7 @@ export default {
         }
 
         async function bulkDelete() {
-            if (!confirm(`Delete ${selectedUuids.size} connector(s)? Imported rules will remain.`)) return
+            if (!(await window.rzConfirm(`Delete ${selectedUuids.size} connector(s)? Imported rules will remain.`))) return
             bulkBusy.value = true
             const uuids = [...selectedUuids]
             for (const uuid of uuids) {

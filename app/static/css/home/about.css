@@ -1,0 +1,82 @@
+/* About page (templates/about_us.html) — ab-*. KPI cards and section headers come from
+   css/account/user_detail.css (ud-*). */
+
+.ab-eyebrow { display: inline-block; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+    color: #0d6efd; background: rgba(13,110,253,.08); padding: .25rem .7rem; border-radius: 999px; }
+
+/* hero */
+.ab-hero { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 2.5rem; align-items: center; }
+.ab-hero__title { font-size: clamp(1.6rem, 3.2vw, 2.4rem); font-weight: 800; line-height: 1.2; margin: .9rem 0 1rem; color: var(--text-color); }
+.ab-hero__title span { background: linear-gradient(135deg, #0d6efd, #0a58ca); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.ab-hero__lead { font-size: 1rem; line-height: 1.7; color: var(--subtle-text-color); max-width: 620px; margin: 0; }
+.ab-hero__art { text-align: center; }
+.ab-hero__art img { max-width: 100%; max-height: 300px; object-fit: contain; filter: drop-shadow(0 12px 30px rgba(13,110,253,.18)); }
+
+.ab-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .9rem; }
+
+/* pillars */
+.ab-pillars { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.ab-pillar { padding: 1.4rem; border-radius: 14px; border: 1px solid var(--border-color); background: var(--card-bg-color);
+    box-shadow: 0 2px 12px rgba(0,0,0,.05); transition: transform .15s, box-shadow .15s; }
+.ab-pillar:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,.09); }
+.ab-pillar h3 { font-size: 1.05rem; font-weight: 700; margin: .9rem 0 .4rem; color: var(--text-color); }
+.ab-pillar p { font-size: .88rem; line-height: 1.6; color: var(--subtle-text-color); margin: 0; }
+.ab-pillar__icon { width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+.ab-pillar__icon--blue   { background: rgba(13,110,253,.12); color: #0d6efd; }
+.ab-pillar__icon--green  { background: rgba(25,135,84,.12);  color: #198754; }
+.ab-pillar__icon--purple { background: rgba(111,66,193,.12); color: #6f42c1; }
+
+/* organisations */
+.ab-orgs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.ab-org { display: flex; gap: 1rem; align-items: flex-start; padding: 1.1rem 1.2rem; border-radius: 14px; text-decoration: none;
+    border: 1px solid var(--border-color); background: var(--card-bg-color); color: var(--text-color); transition: border-color .15s, box-shadow .15s; }
+.ab-org:hover { border-color: #0d6efd; box-shadow: 0 4px 16px rgba(13,110,253,.1); color: var(--text-color); }
+.ab-org img { width: 64px; height: 64px; object-fit: contain; flex-shrink: 0; border-radius: 10px; background: #fff; padding: 6px; border: 1px solid var(--border-color); }
+.ab-org__name { font-weight: 700; font-size: .95rem; margin-bottom: .25rem; }
+.ab-org__desc { font-size: .82rem; line-height: 1.55; color: var(--subtle-text-color); }
+
+/* ecosystem */
+.ab-projects { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: .8rem; }
+.ab-project { display: flex; gap: .85rem; align-items: center; padding: .85rem 1rem; border-radius: 12px; text-decoration: none;
+    border: 1px solid var(--border-color); background: var(--card-bg-color); color: var(--text-color); transition: transform .15s, border-color .15s; }
+.ab-project:hover { transform: translateY(-2px); border-color: #0d6efd; color: var(--text-color); }
+.ab-project img { width: 46px; height: 46px; object-fit: contain; flex-shrink: 0; }
+.ab-project__name { font-weight: 700; font-size: .9rem; font-family: var(--bs-font-monospace); }
+.ab-project__name i { font-size: .65rem; opacity: .4; margin-left: .2rem; }
+.ab-project__desc { font-size: .8rem; line-height: 1.45; color: var(--subtle-text-color); }
+
+/* connected tools */
+.ab-tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .8rem; }
+.ab-tool { display: grid; grid-template-columns: 38px 1fr; grid-template-rows: auto auto; column-gap: .8rem; align-items: center;
+    padding: .85rem 1rem; border-radius: 12px; background: var(--light-bg-color); border: 1px solid var(--border-color); }
+.ab-tool > i { grid-row: 1 / 3; width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+    background: rgba(13,110,253,.1); color: #0d6efd; }
+.ab-tool b { font-size: .88rem; color: var(--text-color); }
+.ab-tool span { font-size: .78rem; color: var(--subtle-text-color); }
+
+/* principles */
+.ab-principles { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: .8rem 1.5rem; }
+.ab-principles > div { display: grid; grid-template-columns: 26px 1fr; column-gap: .7rem; padding: .6rem 0; border-bottom: 1px dashed var(--border-color); }
+.ab-principles i { grid-row: 1 / 3; color: #0d6efd; font-size: 1.05rem; margin-top: .15rem; }
+.ab-principles b { font-size: .9rem; color: var(--text-color); }
+.ab-principles span { font-size: .82rem; line-height: 1.5; color: var(--subtle-text-color); }
+
+/* get involved + story */
+.ab-bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.2rem; }
+.ab-involved, .ab-story { padding: 1.4rem; border-radius: 14px; border: 1px solid var(--border-color); background: var(--card-bg-color); }
+.ab-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .6rem; font-size: .9rem; color: var(--text-color); }
+.ab-list i { width: 1.4rem; color: #0d6efd; }
+.ab-story { display: flex; gap: 1.2rem; align-items: center;
+    background: linear-gradient(135deg, rgba(13,110,253,.06), rgba(10,88,202,.02)), var(--card-bg-color); }
+.ab-story__mascot { width: 110px; height: auto; flex-shrink: 0; }
+.ab-story__title { font-weight: 700; font-size: 1rem; margin-bottom: .35rem; color: var(--text-color); }
+.ab-story p { font-size: .88rem; line-height: 1.6; color: var(--subtle-text-color); }
+
+@media (max-width: 992px) {
+    .ab-hero, .ab-bottom { grid-template-columns: 1fr; }
+    .ab-hero__art { order: -1; }
+    .ab-pillars, .ab-orgs { grid-template-columns: 1fr; }
+}
+@media (max-width: 576px) {
+    .ab-story { flex-direction: column; text-align: center; }
+}

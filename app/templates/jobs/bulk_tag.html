@@ -2,6 +2,7 @@
 {% import 'macros/admin_nav.html' as anav %}
 {% block title %}Bulk Tag Rules — Rulezet{% endblock %}
 {% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
 {% endblock %}
 {% block content %}
@@ -238,6 +239,7 @@
     import RuleSelectionTable from '/static/js/rule/ruleSelectionTable.js';
     import RuleFilterBar      from '/static/js/rule/ruleFilterBar.js';
     import PaginationComponent from '/static/js/rule/paginationComponent.js';
+    import FormatChip from '/static/js/rule/formatChip.js';
 
     function getTextColor(hex) {
         if (!hex) return '#000';
@@ -261,6 +263,7 @@
         components: {
             'rule-filter-bar':     RuleFilterBar,
             'pagination-component': PaginationComponent,
+            'format-chip':          FormatChip,
         },
         data() {
             return {
@@ -472,7 +475,7 @@
                                     <div class="small fw-medium">[[ rule.author || 'Internal' ]]</div>
                                     <div class="x-small text-primary">[[ rule.source || 'Default' ]]</div>
                                 </td>
-                                <td><span class="badge-format">[[ rule.format ]]</span></td>
+                                <td><format-chip :format="rule.format || ''" plain></format-chip></td>
                                 <td class="text-end pe-4 small">[[ rule.last_modif ]]</td>
                             </tr>
                             <tr v-if="expandedRows.has(rule.id)" class="detail-row">

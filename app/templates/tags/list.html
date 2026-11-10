@@ -421,7 +421,7 @@
             async function bulkDelete() {
                 if (!selectedIds.value.length) return;
                 const n = selectedIds.value.length;
-                if (!confirm(`Are you sure you want to permanently delete ${n} tag(s)? This action cannot be undone.`)) return;
+                if (!(await window.rzConfirm(`Are you sure you want to permanently delete ${n} tag(s)? This action cannot be undone.`))) return;
                 const res = await fetch('/tags/remove_tags_bulk', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -440,7 +440,7 @@
                 if (!selectedIds.value.length) return;
                 const n = selectedIds.value.length;
                 const label = target === 'public' ? 'public' : 'private';
-                if (!confirm(`Are you sure you want to set ${n} tag(s) to ${label}?`)) return;
+                if (!(await window.rzConfirm(`Are you sure you want to set ${n} tag(s) to ${label}?`))) return;
 
                 // we need each tag's uuid for /tags/toggle_visibility — only flip those
                 // whose current visibility differs from the target
@@ -462,7 +462,7 @@
                 if (!selectedIds.value.length) return;
                 const n = selectedIds.value.length;
                 const verb = activate ? 'activate' : 'deactivate';
-                if (!confirm(`Are you sure you want to ${verb} ${n} tag(s)?`)) return;
+                if (!(await window.rzConfirm(`Are you sure you want to ${verb} ${n} tag(s)?`))) return;
 
                 const toFlip = tags.value.filter(t =>
                     selectedIds.value.includes(t.id) && t.is_active !== activate
@@ -488,16 +488,16 @@
                 a.click();
                 URL.revokeObjectURL(url);
             }
-            function exportSelected() {
+            async function exportSelected() {
                 const list = tags.value.filter(t => selectedIds.value.includes(t.id));
                 if (!list.length) return;
-                if (!confirm(`Export ${list.length} selected tag(s) as JSON?`)) return;
+                if (!(await window.rzConfirm(`Export ${list.length} selected tag(s) as JSON?`))) return;
                 exportTags(list);
                 create_message(`Exported ${list.length} tag(s).`, 'success-subtle');
             }
-            function exportAll() {
+            async function exportAll() {
                 if (!tags.value.length) return;
-                if (!confirm(`Export all ${tags.value.length} tag(s) currently visible as JSON?`)) return;
+                if (!(await window.rzConfirm(`Export all ${tags.value.length} tag(s) currently visible as JSON?`))) return;
                 exportTags(tags.value);
                 create_message(`Exported ${tags.value.length} tag(s).`, 'success-subtle');
             }

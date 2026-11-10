@@ -538,7 +538,7 @@
             }
 
             async function deleteScope(scope) {
-                if (!scope?.id || !confirm('Delete this scope declaration?')) return;
+                if (!scope?.id || !(await window.rzConfirm('Delete this scope declaration?'))) return;
                 const res = await fetch(`/rule/scope/${rule_id}/${scope.id}`, {
                     method: 'DELETE',
                     headers: { 'X-CSRFToken': csrf_token },

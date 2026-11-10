@@ -429,7 +429,7 @@
             }
 
             async function confirmRestoreDefault() {
-                if (!confirm('Restore the default dashboard layout? This replaces all your current widgets.')) return
+                if (!(await window.rzConfirm('Restore the default dashboard layout? This replaces all your current widgets.'))) return
                 try {
                     const csrf = document.getElementById('csrf_token')?.value || csrfToken
                     const res  = await fetch('/dashboard/layout/reset', {

@@ -8,13 +8,14 @@ for the next ones). Details for the larger topics live in their own files.
 |---|---|---|---|---|
 | 0 | [Code health — full review](#0-code-health--full-review-of-the-codebase) | Large, continuous | A lighter, faster codebase every other feature builds on | Planned |
 | 1 | [Sightings](#1-sightings--i-saw-this-rule-fire) | Small | The missing "does this rule work in real life?" signal | Idea |
-| 2 | [CVE response kit](#2-cve-response-kit) | Medium | Rules for a critical CVE, in hours, in one place | Idea |
+| 2 | [CVE response kit](#2-cve-response-kit) | Medium | Rules for a critical CVE, in hours, in one place | Shipped (`/vulnerability/<id>`) |
 | 3 | [Connectors per format](README.md) — Suricata first | Small → large | Rulezet becomes where tools get their rules | Suricata global feed shipped; per-bundle feed next |
 | 4 | [Rulezet Lab](testing_lab.md) | Large | Proof of what each rule detects, a Lab score; replaces the Rule Tester | Idea |
 | 5 | [`rulezet-validate` GitHub Action](#5-rulezet-validate-github-action) | Medium | Rulezet inside teams' detection-as-code repos | Idea |
 | 6 | [Coverage gap analysis](#6-coverage-gap-analysis--what-dont-i-detect) | Medium → large | From "searching rules" to "knowing what to deploy" | Idea |
 | 7 | [Cross-format rule families](#7-cross-format-rule-families) | Medium | One threat, every format; Sigma → SIEM queries | Idea |
 | 8 | [Signed releases and verified publishers](#8-signed-releases-and-verified-publishers) | Medium | Trust for automated deployment | Idea |
+| 9 | [CLI client `rulezet` (issue #13)](cli_client.md) | Small (~4 days, v0.1 `fetch` ~2 days) | Rules fetched from the command line, synced into local tools and pipelines | Planned |
 
 ---
 

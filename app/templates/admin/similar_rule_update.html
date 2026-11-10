@@ -293,7 +293,7 @@
 
             async function handleBulkDeleteHistory(uuids) {
                 if (!uuids.length) return;
-                if (!confirm(`Delete ${uuids.length} selected history record(s)?`)) return;
+                if (!(await window.rzConfirm(`Delete ${uuids.length} selected history record(s)?`))) return;
                 const results = await Promise.all(uuids.map(uuid =>
                     fetch(`/rule/history_updater/delete/${uuid}`).then(res => res.ok)
                 ));

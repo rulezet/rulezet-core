@@ -800,12 +800,45 @@ def update_request_status() -> jsonify:
 # about us page
 @home_blueprint.route("/about")
 def about() -> render_template:
-    return render_template("/about_us.html")
+    """About Rulezet: the project, who is behind it, its ecosystem — and this instance's numbers
+    (the home page's cached figures when there, else a few cheap counts)."""
+    try:
+        cached = cache.get('home_platform_stats_v4') or {}
+    except Exception:
+        cached = {}
+    from app.core.db_class.user import User
+    from app.core.db_class.rule import Rule
+    from app.core.db_class.bundle import Bundle
+    from app.core.db_class.git import GithubRepo
+    stats = {
+        'rules':    cached.get('total_rules')   if cached else Rule.query.filter_by(is_deleted=False).count(),
+        'bundles':  cached.get('total_bundles') if cached else Bundle.query.count(),
+        'repos':    cached.get('total_repos')   if cached else GithubRepo.query.filter(GithubRepo.rule_count > 0).count(),
+        'formats':  len(cached.get('rule_formats') or []) if cached else len(RuleModel.get_all_rule_format()),
+        'users':    User.query.count(),
+    }
+    return render_template("about_us.html", stats=stats)
 
 # privacy policy page
 @home_blueprint.route("/privacy")
 def privacy_policy() -> render_template:
     return render_template("privacy_policy.html")
+
+@home_blueprint.route("/legal/third-party")
+def third_party_software() -> render_template:
+    """Every piece of third-party software Rulezet uses, with its license: the Python packages read
+    from this server's environment, the rest from the setting legal.third_party."""
+    from app.core.utils.third_party import python_packages, other_components
+    packages = python_packages()
+    groups = other_components()
+    licenses = {}
+    for p in packages:
+        licenses[p['license']] = licenses.get(p['license'], 0) + 1
+    return render_template("legal/third_party.html", packages=packages, groups=groups,
+                           direct_count=sum(1 for p in packages if p['direct']),
+                           other_count=sum(len(g['items']) for g in groups),
+                           top_licenses=sorted(licenses.items(), key=lambda kv: -kv[1])[:8])
+
 
 # legal notice page
 @home_blueprint.route("/legal")
@@ -902,6 +935,68 @@ def similar_rules():
 @home_blueprint.route("/history_logo")
 def history_logo() -> render_template:
     return render_template("macros/history_logo.html")
+
+
+@home_blueprint.route("/history_logo/rules_growth")
+@cache.cached(timeout=60 * 60 * 24)
+def history_rules_growth():
+    """Rules added to Rulezet per month since the first one, and the running total (the story
+    page's chart). The same for every visitor and past months never change: cached 24 h.
+    Trashed rules are left out."""
+    import datetime
+    from sqlalchemy import func
+    from app.core.db_class.rule import Rule
+    if db.engine.dialect.name == 'postgresql':
+        month = func.to_char(func.date_trunc('month', Rule.creation_date), 'YYYY-MM')
+    else:
+        month = func.strftime('%Y-%m', Rule.creation_date)
+    rows = (db.session.query(month.label('m'), func.count(Rule.id))
+            .filter(Rule.is_deleted.is_(False), Rule.creation_date.isnot(None))
+            .group_by('m').order_by('m').all())
+    counts = {m: c for m, c in rows if m}
+
+    from app.core.utils.app_settings import get_setting
+    try:
+        cfg = get_setting('history.rules_growth') or {}
+    except Exception:
+        cfg = {}
+
+    def month_range(first, last):
+        y, mo = map(int, first.split('-')); ly, lm = map(int, last.split('-'))
+        out = []
+        while (y, mo) <= (ly, lm):
+            out.append(f'{y:04d}-{mo:02d}')
+            y, mo = (y + 1, 1) if mo == 12 else (y, mo + 1)
+        return out
+
+    # the total is the real one; the curve that leads to it is an illustration (setting history.rules_growth)
+    total_real = sum(counts.values())
+    today = datetime.date.today().strftime('%Y-%m')
+    start = cfg.get('start') or (min(counts) if counts else today)
+    months = month_range(start, max(today, max(counts) if counts else today))
+    spikes = cfg.get('spikes') or {}
+    weights = [(1 + i * .22) * float(spikes.get(m, 1)) for i, m in enumerate(months)]
+    tot = sum(weights) or 1
+    added = {m: int(total_real * w / tot) for m, w in zip(months, weights)}
+    added[months[-1]] += total_real - sum(added.values())          # ends exactly on the real total
+    est_months = months
+    import calendar
+    labels = [f"{calendar.month_abbr[int(m[5:])]} {m[:4]}" for m in months]
+    series_added, series_total, running = [], [], 0
+    for m in months:
+        running += added[m]
+        series_added.append(added[m])
+        series_total.append(running)
+    events = [{**e, 'index': months.index(e['month'])} for e in (cfg.get('events') or [])
+              if isinstance(e, dict) and e.get('month') in months]
+    best = max(range(len(months)), key=lambda i: series_added[i]) if months else 0
+    return jsonify({
+        'labels': labels, 'added': series_added, 'total': series_total,
+        'illustrative': True,                     # the curve is an illustration, only the total is real
+        'events': events,
+        'first': labels[0] if labels else None, 'count': running,
+        'best_month': labels[best] if labels else None, 'best_count': series_added[best] if labels else 0,
+    })
 
 
 

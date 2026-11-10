@@ -1,0 +1,30 @@
+/* rule/edit_rule.html — moved out of the template's inline <style> */
+.rf-label-hint {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1rem; height: 1rem; border-radius: 50%;
+    background: var(--light-bg-color, #f1f1f1);
+    border: 1px solid var(--border-color, #dee2e6);
+    color: var(--subtle-text-color, #6c757d);
+    font-size: .6rem; cursor: help; position: relative; z-index: 10;
+    font-weight: 700; font-style: normal; transition: background .15s, color .15s;
+    flex-shrink: 0; text-decoration: none;
+}
+.rf-label-hint:hover { background: rgba(13,110,253,.08); color: #0d6efd; border-color: #0d6efd; z-index: 9998; }
+.rf-label-hint::after {
+    content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + .5rem);
+    transform: translateX(-50%);
+    background: var(--card-bg-color, #fff); border: 1px solid var(--border-color, #dee2e6);
+    border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.18);
+    padding: .5rem .7rem; font-size: .75rem; font-weight: 400; letter-spacing: 0;
+    text-transform: none; color: var(--text-color, #1e1e1e);
+    white-space: pre-wrap; width: max-content; max-width: 280px; line-height: 1.5;
+    pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 9999;
+}
+.rf-label-hint::before {
+    content: ''; position: absolute; left: 50%; bottom: calc(100% + .15rem);
+    transform: translateX(-50%); border: 5px solid transparent;
+    border-top-color: var(--border-color, #dee2e6);
+    pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 9999;
+}
+.rf-label-hint:hover::after, .rf-label-hint:hover::before { opacity: 1; }
+.rf-restricted { opacity: .45; pointer-events: none; user-select: none; }

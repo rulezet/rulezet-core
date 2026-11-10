@@ -262,8 +262,8 @@ const ProposalHistoryTable = {
         async function submitBulk(action) {
             if (!selectedCount.value) return;
             const verb = action === 'accept' ? 'Accept' : 'Reject';
-            if (!confirm(`${verb} ${selectedCount.value} proposal(s)?` +
-                (action === 'accept' ? ' The rules will be updated with the proposed content.' : ''))) return;
+            if (!(await window.rzConfirm(`${verb} ${selectedCount.value} proposal(s)?` +
+                (action === 'accept' ? ' The rules will be updated with the proposed content.' : '')))) return;
             loading.value = true;
             try {
                 const res = await fetch(props.submitEndpoint, {

@@ -150,7 +150,7 @@ const MispRow = {
     }
 
     async function deleteServer() {
-      if (!confirm(`Delete MISP server "${props.s.name}"? This cannot be undone.`)) return
+      if (!(await window.rzConfirm(`Delete MISP server "${props.s.name}"? This cannot be undone.`))) return
       const r = await doPost(`/misp/delete/${props.s.uuid}`)
       const data = await r.json()
       if (data.success) {

@@ -298,7 +298,7 @@ export default {
         }
 
         async function deleteRule(rule) {
-            if (!confirm(`Delete this invalid rule (${rule.file_name})? This cannot be undone.`)) return
+            if (!(await window.rzConfirm(`Delete this invalid rule (${rule.file_name})? This cannot be undone.`))) return
             try {
                 const res = await fetch(`/rule/bad_rule/${rule.id}/delete`, {
                     method: 'POST',
@@ -317,7 +317,7 @@ export default {
 
         async function deleteAll() {
             const label = formatFilter.value ? ` (${formatFilter.value.toUpperCase()} only)` : ''
-            if (!confirm(`Delete all ${totalRules.value} invalid rule(s) in this list${label}? This cannot be undone.`)) return
+            if (!(await window.rzConfirm(`Delete all ${totalRules.value} invalid rule(s) in this list${label}? This cannot be undone.`))) return
             try {
                 const params = new URLSearchParams()
                 if (props.source)       params.set('sources', props.source)
@@ -353,11 +353,11 @@ export default {
             }
         }
 
-        function emitBulkAction(actionKey) {
+        async function emitBulkAction(actionKey) {
             const ids   = Array.from(selectedIds)
             const count = selectionCount.value
             if (actionKey === 'delete') {
-                if (confirm(`Delete ${count} selected invalid rule(s)? This cannot be undone.`)) _bulkDelete(ids)
+                if ((await window.rzConfirm(`Delete ${count} selected invalid rule(s)? This cannot be undone.`))) _bulkDelete(ids)
             } else {
                 emit('bulk-action', { action: actionKey, ids, count })
                 clearSelection()

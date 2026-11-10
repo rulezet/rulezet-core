@@ -1,0 +1,363 @@
+{
+    "label": "Third-party software",
+    "category": "Legal",
+    "description": "The software, fonts, data sets and services Rulezet uses, shown on /legal/third-party (the Python packages are listed automatically from the server's environment). Each group: title, icon (Font Awesome name), items: name, version (optional), license, url, use.",
+    "public": false,
+    "value": [
+        {
+            "title": "Interface libraries",
+            "icon": "fa-palette",
+            "items": [
+                {
+                    "name": "Vue.js",
+                    "license": "MIT",
+                    "url": "https://vuejs.org",
+                    "use": "Every interactive page",
+                    "version": "3.2.47"
+                },
+                {
+                    "name": "Bootstrap",
+                    "license": "MIT",
+                    "url": "https://getbootstrap.com",
+                    "use": "Layout and components",
+                    "version": "5.3.0"
+                },
+                {
+                    "name": "Popper",
+                    "license": "MIT",
+                    "url": "https://popper.js.org",
+                    "use": "Positions menus and tooltips",
+                    "version": "2.11.6"
+                },
+                {
+                    "name": "Font Awesome Free",
+                    "license": "Icons CC BY 4.0, fonts SIL OFL 1.1, code MIT",
+                    "url": "https://fontawesome.com",
+                    "use": "Icons",
+                    "version": "7.3.1"
+                },
+                {
+                    "name": "jQuery",
+                    "license": "MIT",
+                    "url": "https://jquery.com",
+                    "use": "Older pages",
+                    "version": "3.6.0"
+                },
+                {
+                    "name": "jQuery UI",
+                    "license": "MIT",
+                    "url": "https://jqueryui.com",
+                    "use": "Older pages",
+                    "version": "1.13.2"
+                },
+                {
+                    "name": "Select2",
+                    "license": "MIT",
+                    "url": "https://select2.org",
+                    "use": "Searchable selects",
+                    "version": "4.1.0"
+                },
+                {
+                    "name": "select2-bootstrap-5-theme",
+                    "license": "MIT",
+                    "url": "https://github.com/apalfrey/select2-bootstrap-5-theme",
+                    "use": "Select2 look"
+                },
+                {
+                    "name": "Day.js",
+                    "license": "MIT",
+                    "url": "https://day.js.org",
+                    "use": "Dates"
+                },
+                {
+                    "name": "marked",
+                    "license": "MIT",
+                    "url": "https://marked.js.org",
+                    "use": "Markdown rendering",
+                    "version": "15.0.12"
+                },
+                {
+                    "name": "DOMPurify",
+                    "license": "MPL 2.0 or Apache 2.0",
+                    "url": "https://github.com/cure53/DOMPurify",
+                    "use": "Cleans user content before display",
+                    "version": "3.4.11"
+                },
+                {
+                    "name": "highlight.js",
+                    "license": "BSD 3-Clause",
+                    "url": "https://highlightjs.org",
+                    "use": "Code highlighting",
+                    "version": "11.11.1"
+                },
+                {
+                    "name": "CodeMirror",
+                    "license": "MIT",
+                    "url": "https://codemirror.net",
+                    "use": "Code editors"
+                },
+                {
+                    "name": "Apache ECharts",
+                    "license": "Apache 2.0",
+                    "url": "https://echarts.apache.org",
+                    "use": "Charts",
+                    "version": "5"
+                },
+                {
+                    "name": "Chart.js",
+                    "license": "MIT",
+                    "url": "https://www.chartjs.org",
+                    "use": "Charts on some admin pages"
+                },
+                {
+                    "name": "diff2html",
+                    "license": "MIT",
+                    "url": "https://diff2html.xyz",
+                    "use": "Diffs between rule versions"
+                },
+                {
+                    "name": "FullCalendar",
+                    "license": "MIT",
+                    "url": "https://fullcalendar.io",
+                    "use": "Calendars",
+                    "version": "6.1.15"
+                },
+                {
+                    "name": "GridStack.js",
+                    "license": "MIT",
+                    "url": "https://gridstackjs.com",
+                    "use": "Dashboard layout"
+                },
+                {
+                    "name": "SortableJS",
+                    "license": "MIT",
+                    "url": "https://sortablejs.github.io/Sortable",
+                    "use": "Drag and drop"
+                },
+                {
+                    "name": "vue.draggable.next",
+                    "license": "MIT",
+                    "url": "https://github.com/SortableJS/vue.draggable.next",
+                    "use": "Drag and drop in Vue"
+                },
+                {
+                    "name": "canvas-confetti",
+                    "license": "ISC",
+                    "url": "https://github.com/catdad/canvas-confetti",
+                    "use": "Celebrations"
+                }
+            ]
+        },
+        {
+            "title": "Fonts",
+            "icon": "fa-font",
+            "items": [
+                {
+                    "name": "Inter",
+                    "license": "SIL OFL 1.1",
+                    "url": "https://rsms.me/inter",
+                    "use": "Text"
+                },
+                {
+                    "name": "JetBrains Mono",
+                    "license": "SIL OFL 1.1",
+                    "url": "https://www.jetbrains.com/lp/mono",
+                    "use": "Code"
+                },
+                {
+                    "name": "Fira Code",
+                    "license": "SIL OFL 1.1",
+                    "url": "https://github.com/tonsky/FiraCode",
+                    "use": "Code"
+                },
+                {
+                    "name": "Poppins",
+                    "license": "SIL OFL 1.1",
+                    "url": "https://fonts.google.com/specimen/Poppins",
+                    "use": "Titles"
+                },
+                {
+                    "name": "Space Grotesk",
+                    "license": "SIL OFL 1.1",
+                    "url": "https://fonts.google.com/specimen/Space+Grotesk",
+                    "use": "Titles"
+                }
+            ]
+        },
+        {
+            "title": "Data sets",
+            "icon": "fa-database",
+            "items": [
+                {
+                    "name": "MITRE ATT&CK®",
+                    "license": "ATT&CK terms of use — © The MITRE Corporation",
+                    "url": "https://attack.mitre.org",
+                    "use": "Techniques, tactics, the ATT&CK matrix"
+                },
+                {
+                    "name": "MISP taxonomies",
+                    "license": "CC0 1.0 or BSD 2-Clause",
+                    "url": "https://github.com/MISP/misp-taxonomies",
+                    "use": "Tags (TLP, PAP, …)"
+                },
+                {
+                    "name": "MISP galaxy",
+                    "license": "CC0 1.0 or BSD 2-Clause",
+                    "url": "https://github.com/MISP/misp-galaxy",
+                    "use": "Galaxy clusters (threat actors, tools, …)"
+                },
+                {
+                    "name": "OTRF Security-Datasets",
+                    "license": "MIT",
+                    "url": "https://github.com/OTRF/Security-Datasets",
+                    "use": "Recorded attacks used as test samples"
+                },
+                {
+                    "name": "flag-icons",
+                    "license": "MIT",
+                    "url": "https://github.com/lipis/flag-icons",
+                    "use": "Country flags",
+                    "version": "7.2.3"
+                }
+            ]
+        },
+        {
+            "title": "Rulezet and sister projects",
+            "icon": "fa-cubes",
+            "items": [
+                {
+                    "name": "rulezet-editor",
+                    "license": "AGPL 3.0",
+                    "url": "https://github.com/rulezet/rulezet-editor",
+                    "use": "The rule editor"
+                },
+                {
+                    "name": "rulezet-tester",
+                    "license": "AGPL 3.0",
+                    "url": "https://github.com/rulezet/rulezet-tester",
+                    "use": "Tests of rules on sample sets"
+                },
+                {
+                    "name": "rulezet-validation",
+                    "license": "AGPL 3.0",
+                    "url": "https://github.com/rulezet/rulezet-validation",
+                    "use": "Rule validation"
+                },
+                {
+                    "name": "rulezet-cast",
+                    "license": "GPL 3.0",
+                    "url": "https://github.com/rulezet/rulezet-cast",
+                    "use": "Rule parsing to JSON"
+                },
+                {
+                    "name": "Pivotick",
+                    "license": "MIT",
+                    "url": "https://github.com/Pivotick/Pivotick",
+                    "use": "Graphs"
+                },
+                {
+                    "name": "Pivograph",
+                    "license": "MIT",
+                    "url": "https://github.com/ecrou-exact/project-graph",
+                    "use": "Graphs of rules, bundles and formats"
+                },
+                {
+                    "name": "pivotick-converters",
+                    "license": "MIT",
+                    "url": "https://github.com/Pivotick/pivotick-converters",
+                    "use": "Graph data conversion"
+                },
+                {
+                    "name": "yaraQA",
+                    "license": "GPL 3.0",
+                    "url": "https://github.com/Neo23x0/yaraQA",
+                    "use": "YARA quality checks"
+                }
+            ]
+        },
+        {
+            "title": "Server software",
+            "icon": "fa-server",
+            "items": [
+                {
+                    "name": "Python",
+                    "license": "PSF License",
+                    "url": "https://www.python.org",
+                    "use": "The language Rulezet is written in"
+                },
+                {
+                    "name": "PostgreSQL",
+                    "license": "PostgreSQL License",
+                    "url": "https://www.postgresql.org",
+                    "use": "Database"
+                },
+                {
+                    "name": "Redis",
+                    "license": "RSALv2, SSPLv1 or AGPL 3.0",
+                    "url": "https://redis.io",
+                    "use": "Cache and sessions"
+                },
+                {
+                    "name": "nginx",
+                    "license": "BSD 2-Clause",
+                    "url": "https://nginx.org",
+                    "use": "Web server"
+                },
+                {
+                    "name": "uv",
+                    "license": "Apache 2.0 or MIT",
+                    "url": "https://docs.astral.sh/uv",
+                    "use": "Python dependencies"
+                },
+                {
+                    "name": "bubblewrap",
+                    "license": "LGPL 2.0+",
+                    "url": "https://github.com/containers/bubblewrap",
+                    "use": "Sandbox of the rule tester"
+                },
+                {
+                    "name": "Ollama",
+                    "license": "MIT",
+                    "url": "https://ollama.com",
+                    "use": "Local AI models, when the instance uses them"
+                }
+            ]
+        },
+        {
+            "title": "Used to make the site’s content",
+            "icon": "fa-film",
+            "items": [
+                {
+                    "name": "Gource",
+                    "license": "GPL 3.0",
+                    "url": "https://gource.io",
+                    "use": "The video of the story page"
+                },
+                {
+                    "name": "FFmpeg",
+                    "license": "LGPL 2.1+ (with libx264: GPL 2.0+)",
+                    "url": "https://ffmpeg.org",
+                    "use": "Encoding of that video"
+                },
+                {
+                    "name": "Pillow",
+                    "license": "HPND (MIT-CMU)",
+                    "url": "https://python-pillow.org",
+                    "use": "Intro and outro of that video, images"
+                }
+            ]
+        },
+        {
+            "title": "Names and logos",
+            "icon": "fa-copyright",
+            "items": [
+                {
+                    "name": "Logos of connected services",
+                    "license": "Trademarks of their owners",
+                    "url": "",
+                    "use": "GitHub, GitLab, Matrix / Element, MISP, rule formats… shown only to name them"
+                }
+            ]
+        }
+    ]
+}

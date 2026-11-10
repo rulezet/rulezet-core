@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block title %}500 — Something went wrong | Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/error.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="error-page">
+    <div class="error-card">
+
+        {% if mascot_enabled %}
+        <div class="error-icon-wrap rulezy-say" tabindex="0">
+            <img src="{{ url_for('static', filename='images/rulezy/reflexion.png') }}" alt="Rulezy, puzzled" class="error-icon error-icon--mascot">
+            <div class="rulezy-say__bubble">Hmm… that wasn't supposed to happen. Something broke on our side — not yours.</div>
+        </div>
+        {% else %}
+        <div class="error-icon-wrap">
+            <i class="fa-solid fa-triangle-exclamation error-icon"></i>
+        </div>
+        {% endif %}
+
+        <div class="error-code">500</div>
+
+        <h1 class="error-title">Something went wrong</h1>
+
+        <p class="error-desc">
+            The server ran into an unexpected error while loading this page. It has been logged.
+            Try again in a moment — if it keeps happening, report it with the reference below.
+        </p>
+
+        {% if error_ref %}
+        <p class="error-desc mb-4">
+            <span class="text-muted small">Reference</span>
+            <code class="ms-1 user-select-all">{{ error_ref }}</code>
+        </p>
+        {% endif %}
+
+        <div class="error-actions">
+            <a href="javascript:location.reload()" class="btn btn-primary rounded-pill px-4">
+                <i class="fas fa-rotate-right me-2"></i>Try again
+            </a>
+            <a href="javascript:history.back()" class="btn btn-outline-secondary rounded-pill px-4">
+                <i class="fas fa-arrow-left me-2"></i>Go back
+            </a>
+            <a href="/" class="btn btn-outline-primary rounded-pill px-4">
+                <i class="fas fa-house me-2"></i>Home
+            </a>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

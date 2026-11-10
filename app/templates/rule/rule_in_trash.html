@@ -1,28 +1,26 @@
 {% extends 'base.html' %}
 {% block title %}Deleted Rule — Rulezet{% endblock %}
 {% block head %}
-<style>
-.trash-icon-wrapper {
-    width: 72px; height: 72px;
-    background: rgba(220, 53, 69, .1);
-    border-radius: 18px;
-    display: flex; align-items: center; justify-content: center;
-}
-.trash-rule-details { font-size: .85rem; }
-.trash-rule-label { color: var(--subtle-text-color); }
-.trash-rule-value { color: var(--text-color); }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/rule_in_trash.css') }}">
 {% endblock %}
 {% block content %}
-<div class="container mt-5">
-  <nav aria-label="breadcrumb" class="mb-4">
-    <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+<div class="container mt-4">
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-trash-can banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-2">
+      <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
         <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
         <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
         <li class="breadcrumb-item"><a href="/rule/trash" class="text-decoration-none text-muted">Trash</a></li>
-        <li class="breadcrumb-item active text-muted" aria-current="page">{{ rule.title[:40] }}{% if rule.title|length > 40 %}…{% endif %}</li>
-    </ol>
-  </nav>
+        <li class="breadcrumb-item active text-muted" aria-current="page">{% if rule.title|length > 40 %}{{ rule.title[:40] }}…{% else %}{{ rule.title }}{% endif %}</li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <div class="banner-icon"><i class="fa-solid fa-trash-can"></i></div>
+      <div><h2 class="fw-bold mb-1">{% if rule.title|length > 60 %}{{ rule.title[:60] }}…{% else %}{{ rule.title }}{% endif %}</h2><div class="banner-accent"></div></div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">This rule is in the trash: it is no longer shown on Rulezet{% if current_user.is_authenticated and current_user.is_admin() %} until an admin restores it{% endif %}.</p>
+  </div>
   <div class="row justify-content-center">
     <div class="col-lg-7 col-md-9">
 

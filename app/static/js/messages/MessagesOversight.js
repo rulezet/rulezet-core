@@ -35,7 +35,7 @@ export default {
             if (d) { msgs.value = [...msgs.value, ...d.messages]; hasMore.value = d.has_more }
         }
         async function reveal(m) {
-            if (!confirm('Reveal this message? It is written to the activity log with your name.')) return
+            if (!(await window.rzConfirm('Reveal this message? It is written to the activity log with your name.'))) return
             const res = await fetch(`/admin/messages/api/messages/${m.id}/reveal`, { method: 'POST', headers: { 'X-CSRFToken': csrf() } })
             const d = await res.json().catch(() => null)
             if (!res.ok || !d) return create_message('Could not reveal it.', 'danger-subtle')

@@ -1,0 +1,13 @@
+{
+    "label": "Rule resources (notes, links, files)",
+    "category": "Rules",
+    "description": "The Resources tab of a rule, where its owner or an admin adds Markdown notes, external links and documents. file_extensions — the only file types that can be uploaded: documents only (Markdown, text, PDF, CSV, logs), never scripts or programs; text files are always served as plain text, a PDF is checked to really be a PDF and opened by the browser's own viewer in a sandbox. max_file_kb — one text file; max_pdf_kb — one PDF; max_total_kb — all the files of one rule together; link_preview — when a link is saved, the server reads the page once to show its title, description and site name (never from a private or local address).",
+    "public": true,
+    "value": {
+        "file_extensions": ["md", "markdown", "txt", "pdf", "csv", "log"],
+        "max_file_kb": 1024,
+        "max_pdf_kb": 10240,
+        "max_total_kb": 30720,
+        "link_preview": true
+    }
+}

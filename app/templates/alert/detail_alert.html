@@ -269,7 +269,7 @@ createApp({
         }
 
         async function remove() {
-            if (!confirm(`Delete the alert "${alert.value.name}"? Its match history goes with it.`)) return
+            if (!(await window.rzConfirm(`Delete the alert "${alert.value.name}"? Its match history goes with it.`))) return
             const data = await post(`/alert/${alert.value.uuid}/delete`)
             if (data.success) window.location.href = '/alert/'
             else create_message(data.message || 'Failed.', 'danger-subtle')

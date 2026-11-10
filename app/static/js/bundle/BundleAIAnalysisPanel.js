@@ -222,7 +222,7 @@ export default {
         }
 
         async function remove(entry) {
-            if (!confirm('Delete this AI analysis? This cannot be undone.')) return
+            if (!(await window.rzConfirm('Delete this AI analysis? This cannot be undone.'))) return
             const res = await fetch(`/bundle/${props.bundleId}/ai_analysis/${entry.id}`, {
                 method: 'DELETE', headers: { 'X-CSRFToken': props.csrfToken },
             })

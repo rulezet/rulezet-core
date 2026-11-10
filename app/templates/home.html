@@ -61,8 +61,21 @@
                 </form>
 
                 <div class="hv2-cta">
-                    <a href="/rule/create_rule" class="hv2-btn hv2-btn--primary hv2-btn--lg"><i class="fa-solid fa-plus"></i>Add a rule</a>
-                    <a href="/bundle/create" class="hv2-btn hv2-btn--bundle hv2-btn--lg"><i class="fa-solid fa-box"></i>Create a bundle</a>
+                    <a href="/rule/rules_list" class="hv2-btn hv2-btn--primary hv2-btn--lg"><i class="fa-solid fa-list"></i>Browse all rules</a>
+                    <div class="dropdown hv2-create">
+                        <button type="button" class="hv2-btn hv2-btn--bundle hv2-btn--lg" data-bs-toggle="dropdown" aria-expanded="false"
+                                data-bs-popper-config='{"strategy":"fixed"}'>
+                            <i class="fa-solid fa-plus"></i>Create<i class="fa-solid fa-chevron-down hv2-create__caret"></i>
+                        </button>
+                        <ul class="dropdown-menu hv2-create__menu shadow-lg border-0">
+                            <li><a class="hv2-create__item" href="/rule/create_rule">
+                                <span class="hv2-create__icon hv2-create__icon--rule"><i class="fa-solid fa-shield-halved"></i></span>
+                                <span><b>A rule</b><small>Write it, paste it or import a git repository</small></span></a></li>
+                            <li><a class="hv2-create__item" href="/bundle/create">
+                                <span class="hv2-create__icon hv2-create__icon--bundle"><i class="fa-solid fa-box"></i></span>
+                                <span><b>A bundle</b><small>A collection of rules for a threat, a tool or a team</small></span></a></li>
+                        </ul>
+                    </div>
                     <a href="/why_choose_rulezet" class="hv2-cta__why">Why Rulezet?<i class="fa-solid fa-arrow-right"></i></a>
                 </div>
             </div>

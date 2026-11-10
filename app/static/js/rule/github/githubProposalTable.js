@@ -175,15 +175,15 @@ const GithubProposalTable = {
             clearSelection();
         }
 
-        function deleteItem(item) {
-            if (!confirm(`Delete the proposal for ${item.repo_url}?`)) return;
+        async function deleteItem(item) {
+            if (!(await window.rzConfirm(`Delete the proposal for ${item.repo_url}?`))) return;
             emit('delete', item.uuid);
         }
 
-        function bulkDelete() {
+        async function bulkDelete() {
             const uuids = props.items.filter(i => selectedIds.has(rowKey(i))).map(i => i.uuid);
             if (!uuids.length) return;
-            if (!confirm(`Delete ${uuids.length} selected proposal(s)?`)) return;
+            if (!(await window.rzConfirm(`Delete ${uuids.length} selected proposal(s)?`))) return;
             emit('bulk-delete', uuids);
             clearSelection();
         }

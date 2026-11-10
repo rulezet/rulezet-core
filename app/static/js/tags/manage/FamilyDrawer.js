@@ -70,7 +70,7 @@ const FamilyDrawer = {
 
         async function deleteSelected() {
             if (!selected.value.length) return;
-            if (!confirm(`Delete ${selected.value.length} tag(s) from "${shortTitle.value}"?`)) return;
+            if (!(await window.rzConfirm(`Delete ${selected.value.length} tag(s) from "${shortTitle.value}"?`))) return;
             const res = await fetch('/tags/remove_tags_bulk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': props.csrfToken },
@@ -82,7 +82,7 @@ const FamilyDrawer = {
         }
 
         async function deleteFamily() {
-            if (!confirm(`Delete ALL ${tags.value.length} tags from "${shortTitle.value}"? This cannot be undone.`)) return;
+            if (!(await window.rzConfirm(`Delete ALL ${tags.value.length} tags from "${shortTitle.value}"? This cannot be undone.`))) return;
             const res = await fetch('/tags/delete_family', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': props.csrfToken },

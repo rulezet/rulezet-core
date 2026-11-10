@@ -327,7 +327,7 @@ export default {
             }
         }
         async function removeReview(r) {
-            if (!window.confirm('Remove this review?')) return;
+            if (!(await window.rzConfirm('Remove this review?'))) return;
             const res = await fetch(`/rule/review/${r.uuid}`, { method: 'DELETE', headers: { 'X-CSRFToken': props.csrfToken } });
             const data = await res.json();
             create_message(data.message, data.toast_class);

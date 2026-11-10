@@ -631,7 +631,56 @@ class RuleUpdateHistory(db.Model):
             return rule.source
         return None
     
-    def to_json(self):
+    def rule_context(self) -> dict:
+        """Where the rule comes from (repo, branch, file) and its identity —
+        shown by the Pending Updates pages (format chip, git links)."""
+        rule = self.rule
+        if not rule:
+            return {}
+        return {
+            "rule_uuid": rule.uuid,
+            "rule_author": rule.author,
+            "rule_version": rule.version,
+            "rule_status": rule.status,
+            "rule_branch": rule.branch,
+            "rule_github_path": rule.github_path,
+            "rule_git_provider": rule.git_provider,
+            "rule_is_deleted": bool(rule.is_deleted),
+        }
+
+    def line_stats(self) -> dict:
+        """Lines added / removed between old and new content."""
+        import difflib
+        added = removed = 0
+        for line in difflib.unified_diff((self.old_content or '').splitlines(),
+                                         (self.new_content or '').splitlines(), lineterm='', n=0):
+            if line.startswith('+') and not line.startswith('+++'):
+                added += 1
+            elif line.startswith('-') and not line.startswith('---'):
+                removed += 1
+        return {"lines_added": added, "lines_removed": removed}
+
+    def to_json(self, light: bool = False):
+        """light=True: list rows — no rule contents, line counts instead."""
+        if light:
+            return {
+                "id": self.id,
+                "rule_id": self.rule_id,
+                "rule_title": self.rule_title,
+                "success": self.success,
+                "has_new_content": bool(self.new_content),
+                "message": self.message,
+                "analyzed_by_user_id": self.analyzed_by_user_id,
+                "analyzed_at": self.analyzed_at.strftime('%Y-%m-%d %H:%M') if self.analyzed_at else None,
+                "analyzed_by_user_name": self.analyzed_by.first_name if self.analyzed_by else None,
+                "analyzed_by_avatar": self.analyzed_by.get_avatar_url() if self.analyzed_by else None,
+                "rule_format": self.rule.format if self.rule else None,
+                "rule_source": self.rule.source if self.rule else None,
+                "manuel_submit": bool(self.manuel_submit),
+                "change_type": self.change_type,
+                **self.rule_context(),
+                **self.line_stats(),
+            }
         return {
             "id": self.id,
             "rule_id": self.rule_id,
@@ -640,6 +689,8 @@ class RuleUpdateHistory(db.Model):
             "message": self.message,
             "new_content": self.new_content,
             "old_content": self.old_content,
+            **self.rule_context(),
+            **self.line_stats(),
             "analyzed_by_user_id": self.analyzed_by_user_id,
             "analyzed_at": self.analyzed_at.strftime('%Y-%m-%d %H:%M'),
             "analyzed_by_user_name": self.analyzed_by.first_name,
@@ -765,4 +816,54 @@ class RuleReview(db.Model):
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else None,
             'user': {'id': self.user.id, 'name': self.user.get_username(),
                      'avatar': self.user.get_avatar_url()} if self.user else None,
+        }
+
+
+class RuleResource(db.Model):
+    """Something the rule's owner (or an admin) attached to a rule: a Markdown note (analysis,
+    deployment notes, tuning advice…) or an external link (blog post, report, vendor doc…).
+    A file (kind 'file') is a text file uploaded from the user's computer, stored in `content`.
+    Shown on the rule's Resources tab (/rule/detail_rule/<id>/resources); its author is kept, but
+    only the rule's owner and admins can add, edit or delete one."""
+    __tablename__ = 'rule_resource'
+
+    id         = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid       = db.Column(db.String(36), unique=True, nullable=False, index=True)
+    rule_id    = db.Column(db.Integer, db.ForeignKey('rule.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+    kind       = db.Column(db.String(10), nullable=False, default='note')   # note | link | file
+    title      = db.Column(db.String(200), nullable=False)
+    url        = db.Column(db.String(2000), nullable=True)                 # link only (http/https)
+    content    = db.Column(db.Text, nullable=True)                         # markdown (note / link description) or the file's text
+    filename   = db.Column(db.String(255), nullable=True)                  # file only
+    size       = db.Column(db.Integer, nullable=True)                      # file only, bytes
+    data       = db.Column(db.LargeBinary, nullable=True)                  # file only: a PDF's bytes (text files use content)
+    # link only: what the server read once from the page (title, description, site name)
+    preview    = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.datetime.now(datetime.timezone.utc), index=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    user = db.relationship('User', foreign_keys=[user_id])
+    rule = db.relationship('Rule', backref=db.backref('resources', lazy='dynamic', cascade='all, delete-orphan'))
+
+    def to_json(self):
+        iso = lambda d: d.strftime('%Y-%m-%dT%H:%M:%S') + 'Z' if d else None   # noqa: E731
+        return {
+            'id': self.id,
+            'uuid': self.uuid,
+            'rule_id': self.rule_id,
+            'kind': self.kind,
+            'title': self.title,
+            'url': self.url,
+            # a file's text only comes with its own request (view / download), not in the list
+            'content': '' if self.kind == 'file' else (self.content or ''),
+            'filename': self.filename,
+            'size': self.size,
+            'is_pdf': self.kind == 'file' and (self.filename or '').lower().endswith('.pdf'),
+            'preview': self.preview,
+            'user_id': self.user_id,
+            'user_name': self.user.first_name if self.user else None,
+            'user_avatar': self.user.get_avatar_url() if self.user else None,
+            'created_at': iso(self.created_at),
+            'updated_at': iso(self.updated_at),
         }

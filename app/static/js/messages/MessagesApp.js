@@ -253,7 +253,7 @@ export default {
             emojiFor.value = null
         }
         async function removeMsg(m) {
-            if (!confirm('Delete this message?')) return
+            if (!(await window.rzConfirm('Delete this message?'))) return
             const data = await api(`/messages/api/channels/${current.value.uuid}/messages/${m.id}`, 'DELETE')
             if (data) replaceMsg(data.message)
         }
@@ -277,7 +277,7 @@ export default {
             if (data) { current.value = data.channel; loadConversations(); loadPublic(); poll() }
         }
         async function leave() {
-            if (!confirm(`Leave #${current.value.name}?` + (current.value.is_private ? ' It is private: you will need to be added again.' : ''))) return
+            if (!(await window.rzConfirm(`Leave #${current.value.name}?` + (current.value.is_private ? ' It is private: you will need to be added again.' : '')))) return
             const data = await api(`/messages/api/channels/${current.value.uuid}/leave`, 'POST')
             if (data) { current.value = null; msgs.value = []; history.replaceState(null, '', '/messages/'); loadConversations() }
         }
@@ -297,7 +297,7 @@ export default {
         })
         async function saveSettings(extra = {}) {
             if (current.value.is_private && !settings.is_private && !extra.is_archived
-                && !confirm(`Make #${current.value.name} public?\n\nAnyone with a Rulezet account will be able to find it, join it without an invitation and read every message — the ones already written too.`)) {
+                && !(await window.rzConfirm(`Make #${current.value.name} public?\n\nAnyone with a Rulezet account will be able to find it, join it without an invitation and read every message — the ones already written too.`))) {
                 settings.is_private = true
                 return
             }
@@ -305,7 +305,7 @@ export default {
             if (data) { current.value = data.channel; create_message('Saved.', 'success-subtle'); loadConversations(); poll() }
         }
         async function deleteChannel() {
-            if (!confirm(`Delete #${current.value.name} and all its messages? This cannot be undone.`)) return
+            if (!(await window.rzConfirm(`Delete #${current.value.name} and all its messages? This cannot be undone.`))) return
             const data = await api(`/messages/api/channels/${current.value.uuid}`, 'DELETE')
             if (data) { current.value = null; msgs.value = []; history.replaceState(null, '', '/messages/'); loadConversations() }
         }
@@ -317,12 +317,12 @@ export default {
             return data
         }
         async function removeMember(u) {
-            if (!confirm(`Remove ${u.name} from #${current.value.name}?`)) return
+            if (!(await window.rzConfirm(`Remove ${u.name} from #${current.value.name}?`))) return
             const data = await api(`/messages/api/channels/${current.value.uuid}/members/${u.id}`, 'DELETE')
             if (data) { current.value = data.channel; poll() }
         }
         async function setRole(u, role) {
-            if (role === 'owner' && !confirm(`Give #${current.value.name} to ${u.name}? You become a moderator.`)) return
+            if (role === 'owner' && !(await window.rzConfirm(`Give #${current.value.name} to ${u.name}? You become a moderator.`))) return
             const data = await api(`/messages/api/channels/${current.value.uuid}/members/${u.id}/role`, 'POST', { role })
             if (data) { current.value = data.channel; poll() }
         }
@@ -345,19 +345,19 @@ export default {
         }
         async function convClear(c) {
             const who = c.kind === 'direct' ? c.name : '#' + c.name
-            if (!confirm(`Delete the conversation with ${who} for you? Its messages disappear for you only — ${c.kind === 'direct' ? c.name + ' keeps them' : 'the others keep them'}. It comes back if someone writes again.`)) return
+            if (!(await window.rzConfirm(`Delete the conversation with ${who} for you? Its messages disappear for you only — ${c.kind === 'direct' ? c.name + ' keeps them' : 'the others keep them'}. It comes back if someone writes again.`))) return
             if (!await api(`/messages/api/channels/${c.uuid}/clear`, 'POST')) return
             closeIfOpen(c.uuid)
             conversations.value = conversations.value.filter(x => x.uuid !== c.uuid)
             create_message('Conversation deleted for you.', 'success-subtle')
         }
         async function convLeave(c) {
-            if (!confirm(`Leave #${c.name}?` + (c.is_private ? ' It is private: you will need to be added again.' : ''))) return
+            if (!(await window.rzConfirm(`Leave #${c.name}?` + (c.is_private ? ' It is private: you will need to be added again.' : '')))) return
             if (!await api(`/messages/api/channels/${c.uuid}/leave`, 'POST')) return
             closeIfOpen(c.uuid); loadConversations()
         }
         async function convDelete(c) {
-            if (!confirm(`Delete #${c.name} and all its messages for everyone? This cannot be undone.`)) return
+            if (!(await window.rzConfirm(`Delete #${c.name} and all its messages for everyone? This cannot be undone.`))) return
             if (!await api(`/messages/api/channels/${c.uuid}`, 'DELETE')) return
             closeIfOpen(c.uuid); loadConversations()
             create_message('Channel deleted.', 'success-subtle')
@@ -409,7 +409,7 @@ export default {
         // ── invite link ──
         const inviteUrl = computed(() => current.value && current.value.invite_code ? `${location.origin}/messages/join/${current.value.invite_code}` : '')
         async function setInvite(on) {
-            if (on && current.value.invite_code && !confirm('Renew the link? The current one stops working.')) return
+            if (on && current.value.invite_code && !(await window.rzConfirm('Renew the link? The current one stops working.'))) return
             const data = await api(`/messages/api/channels/${current.value.uuid}/invite`, on ? 'POST' : 'DELETE')
             if (data) { current.value = data.channel; poll() }
         }
@@ -483,7 +483,7 @@ export default {
             if (d) { feedData.value.feeds = d.feeds; feedForm.kind = ''; create_message('Automation added.', 'success-subtle'); poll() }
         }
         async function removeFeed(f) {
-            if (!confirm(`Remove "${f.label}"?`)) return
+            if (!(await window.rzConfirm(`Remove "${f.label}"?`))) return
             const d = await api(`/messages/api/channels/${current.value.uuid}/feeds/${f.id}`, 'DELETE')
             if (d) { feedData.value.feeds = d.feeds; poll() }
         }

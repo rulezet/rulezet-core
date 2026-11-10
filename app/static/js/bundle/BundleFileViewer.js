@@ -10,6 +10,10 @@
  *   hasPrev  Boolean      enable "previous file" (← key)
  *   hasNext  Boolean      enable "next file" (→ key)
  *   origin   String       where it was opened from: 'structure' | 'files' | ''
+ *   showLocate      Boolean  "Show in structure / in Rules" buttons (default true; false outside a bundle,
+ *                            e.g. the rule Resources tab)
+ *   externalDownload Boolean the Download button emits `download(file)` instead of saving the file
+ *                            itself — for a page that asks for a confirmation first
  *
  * Emits: close, prev, next,
  *        locate('structure' | 'list') — "show it in the bundle": in the
@@ -38,9 +42,11 @@ export default {
         hasNext: { type: Boolean, default: false },
         origin:  { type: String,  default: '' },
         canEdit: { type: Boolean, default: false },   // owner / admin → "Edit" opens the bundle editor on this file
+        showLocate:       { type: Boolean, default: true },
+        externalDownload: { type: Boolean, default: false },
     },
 
-    emits: ['close', 'prev', 'next', 'locate', 'edit'],
+    emits: ['close', 'prev', 'next', 'locate', 'edit', 'download'],
 
     template: `
     <teleport to="body">
@@ -78,6 +84,7 @@ export default {
                                target="_blank" rel="noopener" title="Open rule page">
                                 <i class="fa-solid fa-arrow-up-right-from-square"></i>
                             </a>
+                            <template v-if="showLocate">
                             <button v-if="origin !== 'structure'" type="button" class="bfv-locate"
                                     title="Show where it is in the bundle structure" @click="$emit('locate', 'structure')">
                                 <i class="fa-solid fa-folder-tree"></i><span>Show in structure</span>
@@ -87,6 +94,7 @@ export default {
                                 <i :class="file.isRule ? 'fa-solid fa-shield-halved' : 'fa-solid fa-file-lines'"></i>
                                 <span>{{ file.isRule ? 'Show in Rules' : 'Show in Files' }}</span>
                             </button>
+                            </template>
                             <button v-if="canEdit" type="button" class="bfv-locate" title="Open the bundle editor with this file selected"
                                     @click="$emit('edit', file)">
                                 <i class="fa-solid fa-pen"></i><span>Edit</span>
@@ -157,6 +165,7 @@ export default {
 
         function download() {
             if (!props.file || props.file.loading) return
+            if (props.externalDownload) { emit('download', props.file); return }
             downloadText(props.file.name, props.file.content)
             create_message(`Downloaded ${props.file.name}`, 'success-subtle')
         }

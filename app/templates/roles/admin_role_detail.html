@@ -227,7 +227,7 @@
 
             async function removeAdmin(item) {
                 if (item.id === CURRENT_USER_ID) return
-                if (!confirm(`Remove admin rights from ${item.username}?`)) return
+                if (!(await window.rzConfirm(`Remove admin rights from ${item.username}?`))) return
                 const res = await apiFetch('/account/promote_remove_admin', 'POST', { userId: item.id, action: 'remove' })
                 const data = await res.json()
                 if (res.ok && data.success) {

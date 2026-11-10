@@ -1,0 +1,42 @@
+/* account/edit_user.html — moved out of the template's inline <style> */
+.edit-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem 3rem;
+  position: relative;
+}
+.edit-wrapper::before {
+  content: '';
+  position: fixed;
+  top: -80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 800px;
+  height: 800px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(10,88,202,.10) 0%, transparent 68%);
+  pointer-events: none;
+  z-index: 0;
+}
+/* Widen the auth-card when inside edit-wrapper */
+.edit-wrapper .auth-card {
+  max-width: 760px;
+}
+.edit-section-divider {
+  border: 0;
+  border-top: 1px solid var(--border-color, #dee2e6);
+  margin: 1.75rem 0;
+}
+.edit-section-label {
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--subtle-text-color);
+  margin-bottom: .75rem;
+}
+.edit-section-label i {
+  margin-right: .35rem;
+  color: #0d6efd;
+}

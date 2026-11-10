@@ -344,7 +344,7 @@ const PlatformTagConfigEditor = {
         }
 
         async function deleteConfig(id) {
-            if (!confirm('Delete this platform-tag config?')) return;
+            if (!(await window.rzConfirm('Delete this platform-tag config?'))) return;
             await fetch(`/account/admin/bulk_parse_fields/platform_configs/${id}`, {
                 method: 'DELETE', headers: { 'X-CSRFToken': props.csrfToken },
             });

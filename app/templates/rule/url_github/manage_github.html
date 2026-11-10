@@ -10,90 +10,7 @@
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/rule/github/github-proposal-table.css') }}">
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/components/chart-viewer.css') }}">
 <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='css/rule/github/ruleOwnerPicker.css') }}">
-<style>
-.row-highlight-import {
-    outline: 2px solid #0d6efd !important;
-    background: rgba(13,110,253,.08) !important;
-}
-.row-highlight-update {
-    outline: 2px solid #ffc107 !important;
-    background: rgba(255,193,7,.1) !important;
-}
-
-/* ── GitHub API quota card — pinned to the banner's top-right corner,
-   same idiom as the small badge cluster used on rule/bundle detail pages
-   (.explorer-banner is already position:relative). ── */
-.gh-quota-card {
-    position: absolute;
-    top: 1.25rem;
-    right: 1.25rem;
-    z-index: 2;
-    display: flex;
-    align-items: center;
-    gap: .75rem;
-    padding: .65rem .9rem;
-    border-radius: 14px;
-    background: var(--card-bg-color);
-    border: 1px solid var(--border-color);
-    box-shadow: 0 4px 14px rgba(0,0,0,.06);
-    min-width: 210px;
-}
-.gh-quota-card__chart {
-    width: 46px;
-    height: 46px;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.gh-quota-card__icon-fallback {
-    font-size: 1.3rem;
-    color: var(--subtle-text-color);
-}
-.gh-quota-card__body { min-width: 0; }
-.gh-quota-card__label {
-    font-size: .65rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .04em;
-    color: var(--subtle-text-color);
-    margin-bottom: 2px;
-}
-.gh-quota-card__value {
-    font-size: 1.05rem;
-    font-weight: 700;
-    line-height: 1.1;
-    color: var(--text-color);
-}
-.gh-quota-card__value-sep { color: var(--subtle-text-color); font-weight: 400; margin: 0 1px; }
-.gh-quota-card__sub {
-    font-size: .68rem;
-    color: var(--subtle-text-color);
-    white-space: nowrap;
-}
-.gh-quota-card__refresh {
-    border: none;
-    background: transparent;
-    color: var(--subtle-text-color);
-    font-size: .75rem;
-    padding: 4px 6px;
-    border-radius: 8px;
-    flex-shrink: 0;
-    align-self: flex-start;
-}
-.gh-quota-card__refresh:hover { background: var(--light-bg-color); color: #0d6efd; }
-
-/* Banner content needs room on the right so its own text never runs
-   under the absolutely-positioned quota card on narrow-ish viewports. */
-@media (min-width: 768px) {
-    .explorer-banner:has(.gh-quota-card) { padding-right: 15rem; }
-}
-/* Below that, drop out of absolute positioning entirely and just stack
-   the card under the banner text instead of overlapping it. */
-@media (max-width: 767.98px) {
-    .gh-quota-card { position: static; margin-top: 1rem; width: 100%; }
-}
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/github/manage_github.css') }}">
 {% endblock %}
 {% block content %}
 <div class="container mt-4" id="main-container" v-cloak>
@@ -1343,7 +1260,7 @@
 
             async function bulkDeleteSchedules() {
                 if (scheduleSelectedUuids.value.size === 0) return
-                if (!confirm(`Delete ${scheduleSelectedUuids.value.size} Sync Schedule(s)? This cannot be undone.`)) return
+                if (!(await window.rzConfirm(`Delete ${scheduleSelectedUuids.value.size} Sync Schedule(s)? This cannot be undone.`))) return
                 const res = await fetch('/rule/github/schedule/bulk_delete', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -1388,7 +1305,7 @@
             const isLocked = (s) => !!(s.workflow && s.workflow.locked)
             const lockedTitle = 'An admin workflow has taken over this schedule — ask an admin to change it'
             async function workflowFromSchedule(s) {
-                if (!window.confirm(`Create a workflow that runs "${s.title}"?\n\nThe workflow takes over its timer (same rhythm): this schedule's own timer is switched off so it never runs twice. Its repositories and settings stay here.`)) return
+                if (!(await window.rzConfirm(`Create a workflow that runs "${s.title}"?\n\nThe workflow takes over its timer (same rhythm): this schedule's own timer is switched off so it never runs twice. Its repositories and settings stay here.`))) return
                 const res = await fetch('/admin/tasks/workflows/from_git_updater', {
                     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                     body: JSON.stringify({ schedule_uuid: s.uuid }),
@@ -1399,7 +1316,7 @@
             }
 
             async function deleteSchedule(s) {
-                if (!confirm(`Delete Sync Schedule "${s.title}"? This cannot be undone.`)) return
+                if (!(await window.rzConfirm(`Delete Sync Schedule "${s.title}"? This cannot be undone.`))) return
                 const res = await fetch(`/rule/github/schedule/${s.uuid}/delete`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },

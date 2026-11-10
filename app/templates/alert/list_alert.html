@@ -362,7 +362,7 @@ createApp({
         }
 
         async function remove(a) {
-            if (!confirm(`Delete the alert "${a.name}"? Its match history goes with it.`)) return
+            if (!(await window.rzConfirm(`Delete the alert "${a.name}"? Its match history goes with it.`))) return
             const data = await post(`/alert/${a.uuid}/delete`)
             if (data.success) {
                 create_message('Alert deleted.', 'success-subtle')

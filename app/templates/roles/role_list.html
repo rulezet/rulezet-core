@@ -224,7 +224,7 @@
             }
 
             async function handleDelete(role) {
-                if (!confirm(`Delete role "${role.name}"?`)) return
+                if (!(await window.rzConfirm(`Delete role "${role.name}"?`))) return
                 const res = await apiFetch('/admin/roles/' + role.id + '/delete', 'POST')
                 const data = await res.json()
                 if (res.ok) {
@@ -238,7 +238,7 @@
             async function handleBulk({ action, ids }) {
                 if (action !== 'delete') return
                 const count = ids === 'ALL' ? 'all' : ids.length
-                if (!confirm(`Delete ${count} selected role(s)? System roles will be skipped.`)) return
+                if (!(await window.rzConfirm(`Delete ${count} selected role(s)? System roles will be skipped.`))) return
 
                 const res = await apiFetch('/admin/roles/bulk_delete', 'POST', {
                     role_ids: ids === 'ALL' ? null : ids,

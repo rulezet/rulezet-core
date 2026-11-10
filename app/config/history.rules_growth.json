@@ -1,0 +1,56 @@
+{
+    "label": "Story page: rules growth chart",
+    "category": "About",
+    "description": "The 'Rules added on Rulezet since its creation' chart of /history_logo. The total at the end is the real number of rules of the instance; the curve before it is an illustration of the growth, shown as such on the page. start — the month the chart starts (Rulezet's launch); spikes — months that weigh more (launch, big imports, key contributions); events — key moments marked on the curve (month YYYY-MM, a short label, a longer text shown on hover).",
+    "public": true,
+    "value": {
+        "start": "2025-06",
+        "spikes": {
+            "2025-07": 2.2,
+            "2025-12": 1.8,
+            "2026-02": 1.5,
+            "2026-04": 5.5,
+            "2026-06": 3.2,
+            "2026-08": 6.5,
+            "2026-09": 7.5,
+            "2026-10": 2.2
+        },
+        "events": [
+            {
+                "month": "2025-06",
+                "label": "Launch",
+                "text": "The idea of Alexandre Dulaunoy, head of CIRCL, becomes an internship project."
+            },
+            {
+                "month": "2025-07",
+                "label": "v1.0",
+                "text": "First public release."
+            },
+            {
+                "month": "2026-04",
+                "label": "Thomas Patzke",
+                "text": "The creator of Sigma brings full pySigma validation: Sigma rules pour in."
+            },
+            {
+                "month": "2026-06",
+                "label": "Federation",
+                "text": "Rulezet instances start syncing their rules (v1.5.2)."
+            },
+            {
+                "month": "2026-08",
+                "label": "Théo Geffe",
+                "text": "Rulezet rebuilt on stronger foundations by Théo Geffe — and a big wave of new rules."
+            },
+            {
+                "month": "2026-09",
+                "label": "Éric Leblond",
+                "text": "Trusted Suricata rules (v1.7.3): a big wave of Suricata rules."
+            },
+            {
+                "month": "2026-10",
+                "label": "Rule editor",
+                "text": "A real editor for YARA, then Sigma."
+            }
+        ]
+    }
+}
