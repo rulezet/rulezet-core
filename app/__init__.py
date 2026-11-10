@@ -477,6 +477,33 @@ def create_app(start_worker=True):
             return jsonify({"error": "Not found."}), 404
         return render_template('404.html'), 404
 
+    @app.errorhandler(500)
+    def internal_error_page(e):
+        """Unexpected error: a proper page (or JSON for fetch / API) with a short reference that
+        is also in the server log, instead of Werkzeug's bare 'Internal Server Error'."""
+        import uuid as _uuid
+        ref = _uuid.uuid4().hex[:10]
+        original = getattr(e, 'original_exception', None) or e
+        app.logger.error('500 [ref %s] %s %s: %r', ref, request.method, request.path, original,
+                         exc_info=original if isinstance(original, BaseException) else None)
+        try:
+            db.session.rollback()          # a failed transaction would break the page too
+        except Exception:
+            pass
+        if request.path.startswith('/api/') or request.accept_mimetypes.best == 'application/json' \
+                or request.headers.get('X-CSRFToken') is not None or request.is_json:
+            return jsonify({'success': False, 'error': 'Internal server error.', 'reference': ref,
+                            'message': f'Something went wrong on the server (reference {ref}).',
+                            'toast_class': 'danger-subtle'}), 500
+        try:
+            return render_template('500.html', error_ref=ref), 500
+        except Exception:
+            # base.html itself failed (database down, broken setting…): the self-contained page
+            try:
+                return render_template('500_static.html', error_ref=ref), 500
+            except Exception:
+                return f'Something went wrong (reference {ref}).', 500, {'Content-Type': 'text/plain; charset=utf-8'}
+
     _init_instance_config(app)
     if start_worker:
         _start_telemetry(app)
