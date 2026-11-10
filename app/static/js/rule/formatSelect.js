@@ -19,6 +19,20 @@ export default {
         formats: { type: Array, default: () => [] },
     },
     emits: ['update:modelValue', 'change'],
+    // Close on a click outside: listened in the capture phase so a parent that stops the
+    // click (@click.stop in a list or a panel) can't keep the menu open.
+    mounted() {
+        this._outside = (e) => {
+            if (this.$el.contains(e.target)) return
+            const trigger = this.$el.querySelector('.fsel-trigger')
+            if (!trigger || !trigger.classList.contains('show')) return
+            window.bootstrap?.Dropdown.getOrCreateInstance(trigger).hide()
+        }
+        document.addEventListener('click', this._outside, true)
+    },
+    beforeUnmount() {
+        document.removeEventListener('click', this._outside, true)
+    },
     methods: {
         look(name) { return formatLook(name) },
         pick(name) {
