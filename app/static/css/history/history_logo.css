@@ -78,3 +78,33 @@
     .hl-video { grid-template-columns: 1fr; }
     .hl-video__info { padding: 0; }
 }
+
+/* clickable images → lightbox (js/history/history_lightbox.js) */
+.hl-zoom { position: relative; border: 0; cursor: zoom-in; font: inherit; color: inherit; }
+.hl-zoom img { transition: transform .3s ease; }
+.hl-zoom:hover img { transform: scale(1.04); }
+.hl-zoom__hint { position: absolute; right: .7rem; bottom: .7rem; width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; background: rgba(11, 18, 32, .7); color: #fff;
+    font-size: .85rem; opacity: 0; transform: translateY(4px); transition: opacity .2s, transform .2s; }
+.hl-zoom:hover .hl-zoom__hint, .hl-zoom:focus-visible .hl-zoom__hint { opacity: 1; transform: none; }
+
+.hl-lb { position: fixed; inset: 0; z-index: 2200; display: flex; align-items: center; justify-content: center; gap: 1rem;
+    padding: 2rem 1rem; background: rgba(8, 13, 24, .88); backdrop-filter: blur(4px);
+    opacity: 0; visibility: hidden; transition: opacity .2s, visibility .2s; }
+.hl-lb--open { opacity: 1; visibility: visible; }
+.hl-lb__figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: .8rem; max-width: min(1200px, 100%); flex: 1; }
+.hl-lb__frame { background: #fff; border-radius: 16px; padding: 1.5rem; box-shadow: 0 30px 80px rgba(0,0,0,.5);
+    transform: scale(.96); transition: transform .2s; }
+.hl-lb--open .hl-lb__frame { transform: none; }
+.hl-lb__frame--shot { padding: 0; overflow: hidden; }
+.hl-lb__frame img { display: block; max-width: 100%; max-height: calc(100vh - 9rem); object-fit: contain; }
+.hl-lb__caption { color: #e5ebf5; font-size: .9rem; text-align: center; }
+.hl-lb__btn { flex-shrink: 0; width: 46px; height: 46px; border-radius: 50%; border: 1px solid rgba(255,255,255,.25);
+    background: rgba(255,255,255,.08); color: #fff; font-size: 1rem; display: flex; align-items: center; justify-content: center;
+    transition: background .15s; }
+.hl-lb__btn:hover { background: rgba(255,255,255,.2); }
+.hl-lb__close { position: absolute; top: 1rem; right: 1rem; }
+@media (max-width: 576px) {
+    .hl-lb__prev, .hl-lb__next { position: absolute; bottom: 1rem; }
+    .hl-lb__prev { left: 1rem; } .hl-lb__next { right: 1rem; }
+}

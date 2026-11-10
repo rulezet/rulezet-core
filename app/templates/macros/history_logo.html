@@ -1,17 +1,21 @@
 {% extends 'base.html' %}
 {% block title %}The story of Rulezet — Rulezet{% endblock %}
 
+{% block script %}
+<script type="module" src="{{ url_for('static', filename='js/history/history_lightbox.js') }}"></script>
+{% endblock %}
+
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/history/history_logo.css') }}">
 {% endblock %}
 
 {% set milestones = [
     {
-        'era': 'Inception', 'period': 'Internship stage', 'color': '#0d6efd', 'icon': 'fa-seedling',
-        'title': 'The seed: an internship project',
+        'era': 'Inception', 'period': 'An internship at CIRCL', 'color': '#0d6efd', 'icon': 'fa-seedling',
+        'title': 'It all started with an internship at CIRCL',
         'image': 'image/Rulezet.png', 'screenshot': false,
-        'text': 'Rulezet began as a focused internship project at CIRCL — a proof of concept to centralise YARA and Sigma detection rules. The goal was simple: replace scattered files and chat threads with a shared, searchable repository analysts could rely on. This first logo gave the project an identity before it had a product.',
-        'points': ['YARA and Sigma rule storage', 'Internal team use only', 'Basic search and tag filtering', 'Single-instance SQLite backend'],
+        'text': 'Rulezet began as an internship at CIRCL, from a problem every analyst knows: detection rules are everywhere. They live in thousands of git repositories, blog posts, gists and vendor PDFs, written in many formats, copied again and again, often outdated — and there is no way to tell a good rule from a broken one. The internship set out to answer one question: what if there was a single open place to find, check and improve them? This first logo was drawn before the platform even existed.',
+        'points': ['Rules scattered across thousands of sources', 'Many formats, no common way to check them', 'Duplicates and outdated copies everywhere', 'The goal: one open place for every detection rule'],
     },
     {
         'era': 'Development', 'period': 'Growth phase', 'color': '#198754', 'icon': 'fa-code-branch',
@@ -115,9 +119,12 @@
         <li class="hl-step" id="step-{{ loop.index }}" style="--c:{{ m.color }}">
             <div class="hl-step__dot"><i class="fa-solid {{ m.icon }}"></i></div>
             <article class="hl-card">
-                <div class="hl-card__media{% if m.screenshot %} hl-card__media--shot{% endif %}">
+                <button type="button" class="hl-card__media hl-zoom{% if m.screenshot %} hl-card__media--shot{% endif %}"
+                        data-full="{{ url_for('static', filename=m.image) }}" data-caption="{{ loop.index }} · {{ m.era }} — {{ m.title }}"
+                        aria-label="Enlarge: {{ m.title }}">
                     <img src="{{ url_for('static', filename=m.image) }}" alt="{{ m.title }}" loading="lazy">
-                </div>
+                    <span class="hl-zoom__hint"><i class="fa-solid fa-magnifying-glass-plus"></i></span>
+                </button>
                 <div class="hl-card__body">
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                         <span class="hl-era">{{ loop.index }} · {{ m.era }}</span>
@@ -138,9 +145,12 @@
         <li class="hl-step hl-step--today" style="--c:#0d6efd">
             <div class="hl-step__dot"><i class="fa-solid fa-flag-checkered"></i></div>
             <article class="hl-card hl-card--today">
-                <div class="hl-card__media hl-card__media--family">
+                <button type="button" class="hl-card__media hl-card__media--family hl-zoom"
+                        data-full="{{ url_for('static', filename='images/projects/rulezet-family.png') }}" data-caption="Today — One logo, a whole family"
+                        aria-label="Enlarge: the Rulezet family logo">
                     <img src="{{ url_for('static', filename='images/projects/rulezet-family.png') }}" alt="The Rulezet family of projects" loading="lazy">
-                </div>
+                    <span class="hl-zoom__hint"><i class="fa-solid fa-magnifying-glass-plus"></i></span>
+                </button>
                 <div class="hl-card__body">
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                         <span class="hl-era">Today</span>
