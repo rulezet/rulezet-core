@@ -1,264 +1,262 @@
-# Intégration profonde Rulezet ↔ MISP
+# Deep Rulezet ↔ MISP integration
 
-Objectif : brancher Rulezet sur MISP au maximum — tout ce que Rulezet sait d'une
-rule ou d'un bundle doit pouvoir partir dans MISP, et ce que MISP contient comme
-règles de détection doit pouvoir revenir dans Rulezet.
+Goal: connect Rulezet to MISP as much as possible — everything Rulezet knows
+about a rule or a bundle can go to MISP, and the detection rules living in MISP
+can come back into Rulezet.
 
-Plan en 4 étapes :
+Plan in 4 steps:
 
-1. **Mapping complet** — remettre à jour tous les convertisseurs Rulezet → MISP, couvrir tous les formats, exporter tout le contexte (scopes, tests, reviews, commentaires, fichiers…).
-2. **Sync bidirectionnelle** — push amélioré (update au lieu de recréer) + **receive** : importer les rules présentes dans MISP.
-3. **misp-modules Rulezet** — expansion / enrichment / import / export côté MISP.
-4. **Autres intégrations** — idées pour aller plus loin.
+1. **Complete mapping** — update every Rulezet → MISP converter, cover every format, export the whole context (scopes, tests, reviews, comments, files…).
+2. **Two-way sync** — better push (update instead of re-create) + **receive**: import the rules found in MISP.
+3. **Rulezet misp-modules** — expansion / enrichment / import / export on the MISP side.
+4. **Other integrations** — ideas to go further.
 
 ---
 
-## 0. État actuel (novembre 2026)
+## 0. Current state (November 2026)
 
-| Élément | Où | Remarque |
+| Piece | Where | Note |
 |---|---|---|
-| Serveurs MISP (CRUD, clé chiffrée Fernet, test, historique) | `app/features/misp/misp.py`, `misp_connector_core.py`, `db_class/misp.py` | admin only |
-| Push (job `misp_push`) | `job_handlers.py:5608`, `trigger_push()` | `add_event()` uniquement → **chaque push crée un nouvel event** (pas d'update, pas d'idempotence) |
-| Rule → MISP | `app/features/misp/rule/misp_object.py` | event = `rulezet-metadata` + objet de contenu par format + attributs `vulnerability` + tags |
-| Bundle → MISP | `app/features/misp/bundle/misp_object.py` | event = `rulezet-bundle` + pour chaque rule (metadata + contenu) + tags + vulnérabilités |
-| Templates custom | `app/features/misp/object_templates/` | `rulezet-metadata`, `rulezet-bundle`, `splunk-rule`, `elastic-detection-rule`, `kql-analytics-rule`, `kunai-rule` |
-| API | `GET` rule `misp_object`, bundle download `part=misp` | |
+| MISP servers (CRUD, Fernet-encrypted key, test, history) | `app/features/misp/misp.py`, `misp_connector_core.py`, `db_class/misp.py` | admin only |
+| Push (job `misp_push`) | `job_handlers.py` `handle_misp_push`, `trigger_push()` | `add_event()` only → **every push creates a new event** (no update, not idempotent) |
+| Rule → MISP | `app/features/misp/rule/misp_object.py` | event = `rulezet-metadata` + one content object per format + `vulnerability` attributes + tags |
+| Bundle → MISP | `app/features/misp/bundle/misp_object.py` | event = `rulezet-bundle` + for each rule (metadata + content) + tags + vulnerabilities |
+| Custom templates | `app/features/misp/object_templates/` | `rulezet-metadata`, `rulezet-bundle`, `splunk-rule`, `elastic-detection-rule`, `kql-analytics-rule`, `kunai-rule` |
+| API | rule `misp_object`, bundle download `part=misp` | |
 | MISP → STIX | `misp_core.convert_misp_to_stix` | |
-| Taxonomies / galaxies | submodules `misp-taxonomies`, `misp-galaxy`, job `update_misp_data` | tags Rulezet = tags MISP (uuid + colour) |
+| Taxonomies / galaxies | submodules `misp-taxonomies`, `misp-galaxy`, job `update_misp_data` | Rulezet tags = MISP tags (uuid + colour) |
 
-### Couverture des formats (`formats.catalog.json`)
+### Format coverage (`formats.catalog.json`)
 
-| Format | Objet MISP | Statut |
+| Format | MISP object | Status |
 |---|---|---|
-| yara | `yara` (officiel) | OK — ajouter `comment`, `version`, `context` |
-| sigma | `sigma` (officiel) | OK — ajouter `context`, `reference`, `comment` |
-| suricata | `suricata` (officiel) | OK — `ref` = source ; ajouter `version`, `comment` |
-| wazuh | `wazuh-rule` | à vérifier contre le template officiel |
-| nse | `nse` | **bug** : `misp_object.uuid = rule.uuid` → collision si la même rule est poussée dans plusieurs events / avec la metadata ; à retirer |
-| crs | `owasp-crs-rule` | à vérifier |
-| nova | `nova`? | vérifier qu'un template existe, sinon template custom |
-| splunk / elastic / kql / kunai | templates custom (PR MISP/misp-objects#529) | suivre le merge upstream, puis passer sur les templates officiels |
-| **zeek** | — | **manquant** → fallback générique invalide |
-| **sagan** | — | **manquant** (proche Snort/Suricata → `suricata`-like ou template `sagan-rule`) |
-| **atr** | — | **manquant** |
-| **plum** | — | **manquant** |
-| no format | — | fallback générique |
+| yara | `yara` (official) | OK — add `comment`, `version`, `context` |
+| sigma | `sigma` (official) | OK — add `context`, `reference`, `comment` |
+| suricata | `suricata` (official) | OK — `ref` = source; add `version`, `comment` |
+| wazuh | `wazuh-rule` | check against the official template |
+| nse | `nse` | **bug**: `misp_object.uuid = rule.uuid` → collision when the same rule is pushed in several events; remove it |
+| crs | `owasp-crs-rule` | to check |
+| nova | `nova`? | check that a template exists, otherwise a custom one |
+| splunk / elastic / kql / kunai | custom templates (PR MISP/misp-objects#529) | follow the upstream merge, then switch to the official templates |
+| **zeek** | — | **missing** → falls back to an invalid generic object |
+| **sagan** | — | **missing** (close to Snort/Suricata → `suricata`-like or a `sagan-rule` template) |
+| **atr** | — | **missing** |
+| **plum** | — | **missing** |
+| no format | — | generic fallback |
 
-Le fallback actuel `MISPObject(name=fmt, ignore_warning=True)` produit un objet
-dont le nom n'est pas un template connu : MISP l'accepte mal / l'affiche en vrac.
-→ Remplacer par un template unique **`detection-rule`** générique (custom
-Rulezet, à proposer upstream) : `rule-content`, `format`, `rule-name`,
+The current fallback `MISPObject(name=fmt, ignore_warning=True)` produces an
+object whose name matches no known template: MISP handles it badly / shows it as
+raw data. → Replace it with one generic **`detection-rule`** template (Rulezet
+custom, to propose upstream): `rule-content`, `format`, `rule-name`,
 `language`, `reference`.
 
 ---
 
-## 1. Étape 1 — Mapping complet
+## 1. Step 1 — Complete mapping
 
-### 1.1 Principes
+### 1.1 Principles
 
-- **Une seule source de vérité** : un registre `FORMAT → builder` (dict) au lieu
-  de la chaîne `if/elif` ; le registre liste aussi le template utilisé, pour
-  pouvoir afficher la couverture sur `/misp/how-it-works`.
-- **Mapping configurable** : le nom d'objet / meta-category / `to_ids` par
-  format va dans `app/config/misp.format_objects.json` (règle du projet : pas de
-  tables dans le code). Ce qui reste en code : la logique de construction.
-- **UUID stables** : objets dérivés de façon déterministe
-  (`uuid5(rule.uuid, "misp:<objet>")`) → un re-push met à jour au lieu de
-  dupliquer (pré-requis de l'étape 2).
-- **Niveaux d'export** (option du push et du endpoint) :
-  `minimal` (rule + metadata, comme aujourd'hui) · `standard` (+ scopes, ATT&CK,
-  vulnérabilités, relations) · `full` (+ tests, reviews, commentaires, historique,
-  fichiers). Défaut = setting `misp.export_level`.
-- **Respect des droits** : on n'exporte jamais une rule supprimée (`_active()`),
-  ni un bundle privé sans être owner/admin, ni des commentaires masqués /
-  modérés, ni les e-mails / données perso des users (seulement username +
-  lien profil).
-- **Distribution / sharing group** : réglable par serveur MISP (champ sur
-  `MispServer`), plus TLP → distribution (tag `tlp:*` de la rule → niveau de
-  distribution MISP, table dans un setting).
+- **One source of truth**: a `FORMAT → builder` registry (dict) instead of the
+  `if/elif` chain; the registry also lists the template used, so the coverage
+  can be shown on `/misp/how-it-works`.
+- **Configurable mapping**: object name / meta-category / `to_ids` per format go
+  in `app/config/misp.format_objects.json` (project rule: no tables in code).
+  What stays in code: the building logic.
+- **Stable UUIDs**: objects derived deterministically
+  (`uuid5(rule.uuid, "misp:<object>")`) → a re-push updates instead of
+  duplicating (prerequisite for step 2).
+- **Export levels** (option of the push and of the endpoint):
+  `minimal` (rule + metadata, as today) · `standard` (+ scopes, ATT&CK,
+  vulnerabilities, relations) · `full` (+ tests, reviews, comments, history,
+  files). Default = setting `misp.export_level`.
+- **Respect access rights**: never export a deleted rule (`_active()`), a
+  private bundle unless owner/admin, hidden / moderated comments, or users'
+  e-mails / personal data (only username + profile link).
+- **Distribution / sharing group**: set per MISP server (field on `MispServer`),
+  plus TLP → distribution (the rule's `tlp:*` tag → MISP distribution level,
+  table in a setting).
 
-### 1.2 Rule — ce qu'on veut exporter
+### 1.2 Rule — what we want to export
 
-| Donnée Rulezet | Modèle | Cible MISP |
+| Rulezet data | Model | MISP target |
 |---|---|---|
-| Contenu + titre | `Rule` | objet du format (§0) |
-| Metadata (version, licence, auteur, source, dates, votes, github-path, extra-metadata, références) | `Rule` | `rulezet-metadata` (existe) — **ajouter** : `rulezet-url` (lien vers la rule), `status` (validée / invalide), `download-count`, `favorite-count`, `owner`, `parent/original` |
-| CVE / GHSA | `rule.cve_id` | attributs `vulnerability` + référence `related-to` (existe) — ajouter le lien vers le **CVE kit** `/vulnerability/<id>` |
-| ATT&CK | `get_techniques_for_rule` | aujourd'hui `attack-id` texte → **ajouter les galaxy clusters** `mitre-attack-pattern` sur l'event et sur l'objet (vrais clusters, pas que des tags) |
-| Tags | `Tag` | tags event (existe) + **tags au niveau attribut** du contenu (pour que `to_ids` et TLP suivent la rule) |
-| **Scopes** | `RuleScope` | nouveau template `rulezet-rule-scope` (produit, plateforme, log source, environnement…) ou attributs `scope` dans `rulezet-metadata` |
-| **Tests** (unitaires / samples) | `RuleTest`, `RuleTestResult`, `SampleTestRun`, `RuleSampleResult` | nouveau template `rulezet-rule-test` : date, moteur + version, verdict, nb samples matchés / non matchés, **hash des samples** (`sha256` → attributs `sha256` liés `detects`) — jamais les samples eux-mêmes |
-| **Reviews / évaluations** | `RuleReview`, `RuleVote` | template `rulezet-review` (score, reviewer, date, verdict) + **opinion** MISP (analyst data, voir §1.4) |
-| **Commentaires** | `UnifiedComment` | **analyst notes** MISP (MISP ≥ 2.5) sur l'objet de la rule ; fallback : attribut `comment` |
-| Relations entre rules | `RuleRelation`, `RuleSimilarity` | références d'objets (`derived-from`, `similar-to`, `duplicate-of`) quand l'autre rule est dans le même event, sinon attribut `link` vers Rulezet |
-| Historique / propositions | `RuleUpdateHistory`, `RuleEditProposal` | `full` uniquement : attribut `last-modif` + nb de versions + lien vers l'historique ; pas de diff complet |
-| Validation | `InvalidRuleModel`, validateurs | attribut `validation-status` + message ; `to_ids=False` si la rule est invalide |
+| Content + title | `Rule` | format object (§0) |
+| Metadata (version, license, author, source, dates, votes, github-path, extra-metadata, references) | `Rule` | `rulezet-metadata` (exists) — **add**: `rulezet-url` (link to the rule), `status` (validated / invalid), `download-count`, `favorite-count`, `owner`, `parent/original` |
+| CVE / GHSA | `rule.cve_id` | `vulnerability` attributes + `related-to` reference (exists) — add the link to the **CVE kit** `/vulnerability/<id>` |
+| ATT&CK | `get_techniques_for_rule` | today `attack-id` as text → **add real galaxy clusters** `mitre-attack-pattern` on the event and on the object |
+| Tags | `Tag` | event tags (exists) + **attribute-level tags** on the content (so `to_ids` and TLP follow the rule) |
+| **Scopes** | `RuleScope` | new template `rulezet-rule-scope` (product, platform, log source, environment…) or `scope` attributes in `rulezet-metadata` |
+| **Tests** (unit / samples) | `RuleTest`, `RuleTestResult`, `SampleTestRun`, `RuleSampleResult` | new template `rulezet-rule-test`: date, engine + version, verdict, matched / unmatched samples, **sample hashes** (`sha256` attributes linked with `detects`) — never the samples themselves |
+| **Reviews / evaluations** | `RuleReview`, `RuleVote` | template `rulezet-review` (score, reviewer, date, verdict) + MISP **opinion** (analyst data, see §1.4) |
+| **Comments** | `UnifiedComment` | MISP **analyst notes** (MISP ≥ 2.5) on the rule object; fallback: `comment` attribute |
+| Rule relations | `RuleRelation`, `RuleSimilarity` | object references (`derived-from`, `similar-to`, `duplicate-of`) when the other rule is in the same event, otherwise a `link` attribute to Rulezet |
+| History / proposals | `RuleUpdateHistory`, `RuleEditProposal` | `full` only: `last-modif` attribute + number of versions + link to the history; no full diff |
+| Validation | `InvalidRuleModel`, validators | `validation-status` attribute + message; `to_ids=False` when the rule is invalid |
 
-### 1.3 Bundle — ce qu'on veut exporter
+### 1.3 Bundle — what we want to export
 
-Aujourd'hui : objet `rulezet-bundle` + rules + tags + vulnérabilités. À ajouter :
+Today: `rulezet-bundle` object + rules + tags + vulnerabilities. To add:
 
-| Donnée | Modèle | Cible MISP |
+| Data | Model | MISP target |
 |---|---|---|
-| Structure (dossiers) | `BundleNode` | attribut `structure` (JSON) dans `rulezet-bundle` + pour chaque rule l'attribut `path` dans son metadata |
-| **Fichiers externes / custom** (README, scripts, docs) | `BundleNode` type fichier | objet `file` (filename, size, sha256, `attachment` avec le contenu si < seuil setting `misp.max_attachment_size`), référence `included-in` vers le bundle |
-| README | bundle | `report` MISP (event report markdown) — rendu direct dans MISP |
-| **Notes** | `BundleNote`, `BundleNoteTag` | analyst notes (ou event reports si longues) |
-| **Commentaires** | `CommentBundle`, `UnifiedComment` | analyst notes sur l'objet bundle |
-| **Évaluations / votes** | `BundleVote`, `is_verified` | opinion MISP + attributs existants |
-| **Releases** | `BundleRelease` | un push par release possible (`release=v1.2`) : event figé, `info = "<bundle> v1.2"`, tag `rulezet:release="v1.2"` |
-| Historique | `BundleHistory` | `full` : timeline résumée en event report |
-| Forks / merge requests | `BundleForkRule`, `BundleMergeRequest` | attribut `forked-from` (uuid + lien) ; référence `derived-from` entre events si le parent est déjà dans MISP |
-| Couverture ATT&CK | kit_core | galaxy clusters sur l'event + event report « coverage » (formats, gaps) |
-| Rules du bundle | `BundleRuleAssociation` | même export que §1.2 au niveau choisi |
+| Structure (folders) | `BundleNode` | `structure` attribute (JSON) in `rulezet-bundle` + a `path` attribute in each rule's metadata |
+| **External / custom files** (README, scripts, docs) | `BundleNode` file nodes | `file` object (filename, size, sha256, `attachment` with the content when under the `misp.max_attachment_size` setting), `included-in` reference to the bundle |
+| README | bundle | MISP **event report** (markdown) — rendered directly in MISP |
+| **Notes** | `BundleNote`, `BundleNoteTag` | analyst notes (or event reports when long) |
+| **Comments** | `CommentBundle`, `UnifiedComment` | analyst notes on the bundle object |
+| **Evaluations / votes** | `BundleVote`, `is_verified` | MISP opinion + existing attributes |
+| **Releases** | `BundleRelease` | one push per release possible (`release=v1.2`): frozen event, `info = "<bundle> v1.2"`, tag `rulezet:release="v1.2"` |
+| History | `BundleHistory` | `full`: summarised timeline as an event report |
+| Forks / merge requests | `BundleForkRule`, `BundleMergeRequest` | `forked-from` attribute (uuid + link); `derived-from` reference between events when the parent is already in MISP |
+| ATT&CK coverage | kit_core | galaxy clusters on the event + "coverage" event report (formats, gaps) |
+| Bundle rules | `BundleRuleAssociation` | same export as §1.2 at the chosen level |
 
-### 1.4 Analyst data MISP (notes / opinions / relationships)
+### 1.4 MISP analyst data (notes / opinions / relationships)
 
-MISP 2.5 a les **analyst data** : `Note`, `Opinion` (score 0-100 + commentaire),
-`Relationship`, attachables à n'importe quel event / objet / attribut. C'est le
-mapping naturel pour :
-- commentaires Rulezet → `Note` ;
-- reviews / votes → `Opinion` (score = vote ratio ou note de review) ;
-- relations rule ↔ rule → `Relationship`.
+MISP 2.5 has **analyst data**: `Note`, `Opinion` (score 0-100 + comment),
+`Relationship`, attachable to any event / object / attribute. It is the natural
+mapping for:
+- Rulezet comments → `Note`;
+- reviews / votes → `Opinion` (score = vote ratio or review score);
+- rule ↔ rule relations → `Relationship`.
 
-Fallback pour MISP < 2.5 : attributs `comment` / `text`. Détection de la version
-au `test_server_connection` (stocker `misp_version` sur `MispServer`).
+Fallback for MISP < 2.5: `comment` / `text` attributes. Detect the version in
+`test_server_connection` (store `misp_version` on `MispServer`).
 
-### 1.5 Nouveaux templates à créer (`object_templates/`)
+### 1.5 New templates to create (`object_templates/`)
 
-| Template | Rôle |
+| Template | Role |
 |---|---|
-| `detection-rule` | générique (zeek, sagan, atr, plum, fallback) |
-| `zeek-script` / `sagan-rule` / `atr-rule` / `plum-rule` | si on veut un objet dédié (à proposer upstream misp-objects) |
+| `detection-rule` | generic (zeek, sagan, atr, plum, fallback) |
+| `zeek-script` / `sagan-rule` / `atr-rule` / `plum-rule` | if we want a dedicated object (to propose upstream to misp-objects) |
 | `rulezet-rule-scope` | scopes |
-| `rulezet-rule-test` | résultats de tests |
-| `rulezet-review` | si on ne peut pas utiliser les opinions |
-| `rulezet-metadata` / `rulezet-bundle` | **bump `version`** + nouveaux champs |
+| `rulezet-rule-test` | test results |
+| `rulezet-review` | if opinions can't be used |
+| `rulezet-metadata` / `rulezet-bundle` | **bump `version`** + new fields |
 
-Chaque template custom → PR sur MISP/misp-objects (comme #529) pour que les
-autres instances MISP les connaissent nativement.
+Each custom template → PR on MISP/misp-objects (like #529) so other MISP
+instances know them natively.
 
-### 1.6 Checklist étape 1
+### 1.6 Step 1 checklist
 
-- [ ] Registre format → builder + setting `misp.format_objects`
-- [ ] Builders zeek / sagan / atr / plum + template `detection-rule`
-- [ ] Retirer `uuid = rule.uuid` du builder NSE ; UUID déterministes partout
-- [ ] `except Exception: return None` silencieux dans `content_convert_to_misp_object` → logger l'erreur
-- [ ] Rule : scopes, tests, reviews, commentaires, relations, galaxy ATT&CK, lien Rulezet
-- [ ] Bundle : fichiers, README → event report, notes, commentaires, releases, forks, structure
-- [ ] Niveaux `minimal / standard / full` (push, API rule, API bundle `part=misp`)
-- [ ] Mapping TLP → distribution + sharing group par serveur
-- [ ] Page `/misp/how-it-works` : tableau de couverture généré depuis le registre
-- [ ] Tests `tests_new/misp/` : un test par format (objet valide contre son template via pymisp), rule complète, bundle complet, pas de fuite (privé / supprimé / commentaire masqué)
+- [ ] Format → builder registry + `misp.format_objects` setting
+- [ ] zeek / sagan / atr / plum builders + `detection-rule` template
+- [ ] Remove `uuid = rule.uuid` from the NSE builder; deterministic UUIDs everywhere
+- [ ] Silent `except Exception: return None` in `content_convert_to_misp_object` → log the error
+- [ ] Rule: scopes, tests, reviews, comments, relations, ATT&CK galaxy, Rulezet link
+- [ ] Bundle: files, README → event report, notes, comments, releases, forks, structure
+- [ ] `minimal / standard / full` levels (push, rule API, bundle API `part=misp`)
+- [ ] TLP → distribution mapping + sharing group per server
+- [ ] `/misp/how-it-works` page: coverage table generated from the registry
+- [ ] Tests `tests_new/misp/`: one test per format (object valid against its template via pymisp), full rule, full bundle, no leak (private / deleted / hidden comment)
 
 ---
 
-## 2. Étape 2 — Sync bidirectionnelle
+## 2. Step 2 — Two-way sync
 
-### 2.1 Push amélioré
+### 2.1 Better push
 
-- **Idempotence** : nouvelle table `misp_sync_link` (`server_id`, `local_type`
+- **Idempotence**: new table `misp_sync_link` (`server_id`, `local_type`
   rule|bundle|release, `local_uuid`, `misp_event_uuid`, `misp_object_uuid`,
-  `last_pushed_at`, `last_pushed_hash`). Si un lien existe → `update_event`
-  (ou `update_object`) au lieu de `add_event`.
-- Hash du contenu exporté → on ne re-pousse que si ça a changé.
-- **Push auto** (optionnel, par serveur) : quand une rule / un bundle suivi
-  change, job `misp_push` en différé (debounce). Réglage par serveur : « suivre
-  les bundles X, Y » / « toutes les rules d'un tag / format ».
-- **Publish** : option par serveur (`publish` après push ou laisser en draft).
-- Supprimer côté Rulezet → option : retirer / marquer `to_ids=False` côté MISP.
+  `last_pushed_at`, `last_pushed_hash`). When a link exists → `update_event`
+  (or `update_object`) instead of `add_event`.
+- Hash of the exported content → re-push only when it changed.
+- **Auto push** (optional, per server): when a followed rule / bundle changes,
+  a debounced `misp_push` job. Per-server setting: "follow bundles X, Y" /
+  "every rule with a tag / format".
+- **Publish**: per-server option (publish after the push, or leave as draft).
+- Deleted in Rulezet → option: remove / set `to_ids=False` on the MISP side.
 
 ### 2.2 Receive — MISP → Rulezet
 
-But : les rules qui vivent dans MISP (attributs `yara`, `sigma`, `snort`,
-objets `yara`/`sigma`/`suricata`/…, et nos propres objets `rulezet-*`)
-arrivent dans Rulezet.
+Goal: rules that live in MISP (`yara`, `sigma`, `snort` attributes,
+`yara`/`sigma`/`suricata`/… objects, and our own `rulezet-*` objects) arrive in
+Rulezet.
 
-**Mode de récupération**
-- **Pull** (job `misp_pull`, planifié via task scheduler) : `search(controller='attributes', type_attribute=[yara, sigma, snort, …], timestamp=<last_pull>, tags=…, org=…)` + `search(controller='objects', object_name=[...])`. Filtres par serveur : tags, orgs, eventid, `published only`, `to_ids only`.
-- **Push depuis MISP** (plus tard) : endpoint `POST /api/misp/receive` (API key) appelé par un **workflow MISP** ou un misp-module d'export (§3) → réception en temps réel.
-- **ZMQ / Kafka** de MISP (option avancée) : écouter `misp_json_attribute` et filtrer les types de rules.
+**How they are fetched**
+- **Pull** (job `misp_pull`, scheduled through the task scheduler): `search(controller='attributes', type_attribute=[yara, sigma, snort, …], timestamp=<last_pull>, tags=…, org=…)` + `search(controller='objects', object_name=[...])`. Per-server filters: tags, orgs, event ids, published only, `to_ids` only.
+- **Push from MISP** (later): endpoint `POST /api/misp/receive` (API key) called by a **MISP workflow** or an export misp-module (§3) → real-time reception.
+- **MISP ZMQ / Kafka** (advanced option): listen to `misp_json_attribute` and filter the rule types.
 
-**Conversion MISP → Rulezet** (`misp/import_core.py`, inverse du §1)
-- Objet `rulezet-metadata` présent → on **reconstruit fidèlement** (uuid d'origine, version, licence, ATT&CK, CVE, tags) ; si l'uuid existe déjà dans Rulezet → c'est un **aller-retour** : proposition de modification plutôt qu'écrasement.
-- Objet / attribut natif sans metadata → format déduit du type (`yara`→yara, `sigma`→sigma, `snort`→suricata/snort, …), titre = nom de règle parsé, auteur = org MISP, source = lien vers l'event MISP, tags de l'event / attribut → tags Rulezet (via taxonomies déjà chargées), galaxies ATT&CK → techniques, attributs `vulnerability` de l'event → CVE.
-- **Validation** : passe par le parser du format comme toute création ; les invalides vont dans `InvalidRuleModel` (comme l'import GitHub) avec le lien MISP.
-- **Dédup** : uuid MISP de l'attribut stocké (`original_uuid` / `misp_sync_link`) + similarité existante pour les doublons de contenu.
-- **Propriété** : rules créées au nom d'un user « bot » du serveur MISP (configurable), ou de l'admin qui a lancé le pull.
-- **Modes soft / hard** comme les connectors : soft = skip existantes, hard = update / proposition d'édition.
-- **Bundle auto** : option « un bundle par event MISP » (nom = `event.info`, README = event reports).
-- Activity log `misp.pull`, historique dans la timeline du serveur, job visible dans `/jobs`.
+**MISP → Rulezet conversion** (`misp/import_core.py`, the inverse of §1)
+- `rulezet-metadata` object present → **faithful rebuild** (original uuid, version, license, ATT&CK, CVE, tags); if the uuid already exists in Rulezet → it is a **round trip**: an edit proposal rather than an overwrite.
+- Native object / attribute without metadata → format inferred from the type (`yara`→yara, `sigma`→sigma, `snort`→suricata/snort, …), title = parsed rule name, author = MISP org, source = link to the MISP event, event / attribute tags → Rulezet tags (through the already loaded taxonomies), ATT&CK galaxies → techniques, event `vulnerability` attributes → CVEs.
+- **Validation**: goes through the format parser like any creation; invalid ones go to `InvalidRuleModel` (like the GitHub import) with the MISP link.
+- **Dedup**: MISP attribute uuid stored (`original_uuid` / `misp_sync_link`) + the existing similarity check for content duplicates.
+- **Ownership**: rules created under a "bot" user of the MISP server (configurable), or the admin who started the pull.
+- **Soft / hard modes** like connectors: soft = skip existing ones, hard = update / edit proposal.
+- **Auto bundle**: option "one bundle per MISP event" (name = `event.info`, README = event reports).
+- Activity log `misp.pull`, history in the server timeline, job visible in `/jobs`.
 
 ### 2.3 UI
 
-- Fiche serveur : onglets **Push** / **Receive** (filtres, fréquence, mode, dernier run, compteurs).
-- Sur une rule / un bundle : badge « synchronisé avec MISP X (event lien) », bouton re-push, état (à jour / modifié depuis).
-- Prévisualisation du pull (dry-run : N nouvelles, M mises à jour, K invalides) avant import.
+- Server page: **Push** / **Receive** tabs (filters, frequency, mode, last run, counters).
+- On a rule / bundle: "synced with MISP X (event link)" badge, re-push button, state (up to date / changed since).
+- Pull preview (dry run: N new, M updated, K invalid) before importing.
 
-### 2.4 Checklist étape 2
+### 2.4 Step 2 checklist
 
-- [ ] Table `misp_sync_link` + migration
-- [ ] Push update / idempotent + hash
-- [ ] Push auto (abonnements par serveur) + publish optionnel
-- [ ] Job `misp_pull` + filtres + planification
-- [ ] Convertisseur MISP → Rulezet (avec aller-retour `rulezet-metadata`)
-- [ ] Dry-run + UI Receive
-- [ ] Endpoint `POST /api/misp/receive`
-- [ ] Tests : aller-retour rule → MISP → rule identique ; dédup ; invalides
+- [ ] `misp_sync_link` table + migration
+- [ ] Idempotent push (update) + hash
+- [ ] Auto push (per-server subscriptions) + optional publish
+- [ ] `misp_pull` job + filters + scheduling
+- [ ] MISP → Rulezet converter (with the `rulezet-metadata` round trip)
+- [ ] Dry run + Receive UI
+- [ ] `POST /api/misp/receive` endpoint
+- [ ] Tests: round trip rule → MISP → identical rule; dedup; invalid rules
 
 ---
 
-## 3. Étape 3 — misp-modules Rulezet
+## 3. Step 3 — Rulezet misp-modules
 
-Repo à part (`rulezet/misp-modules-rulezet` ou PR directe sur
-MISP/misp-modules). Chaque module appelle l'API publique Rulezet
-(URL instance + API key en config du module) — fonctionne avec rulezet.org ou
-une instance privée.
+Separate repo (`rulezet/misp-modules-rulezet`) or a PR straight to
+MISP/misp-modules. Each module calls the public Rulezet API (instance URL + API
+key in the module config) — works with rulezet.org or a private instance.
 
-| Type | Module | Ce qu'il fait |
+| Type | Module | What it does |
 |---|---|---|
-| **expansion** | `rulezet_cve` | sur un attribut `vulnerability` → rules Rulezet qui détectent ce CVE (réutilise `search_rules_by_cve`, **ne pas changer ce endpoint**) → ajoute les objets rules dans l'event |
-| expansion | `rulezet_attack` | sur un galaxy / attribut ATT&CK `T…` → rules couvrant la technique (kit ATT&CK) |
-| expansion | `rulezet_hash` / `rulezet_ioc` | sur un hash / domaine / IP → rules qui contiennent cet IOC (recherche plein texte du contenu) |
-| expansion | `rulezet_rule_lookup` | sur un attribut `yara`/`sigma`/`snort` → la rule existe-t-elle dans Rulezet ? lien, votes, reviews, tests, version plus récente |
-| expansion | `rulezet_validate` | valide une rule de l'event avec le validateur Rulezet (+ YARA-X / yaraQA) et met le résultat en commentaire |
-| **hover** | `rulezet_hover` | survol d'un CVE / T-id / rule → nb de rules, formats, lien |
-| **import** | `rulezet_import` | importe une rule ou un bundle Rulezet (uuid / URL) dans un event |
-| **export** | `rulezet_export` | export d'un event → crée / propose les rules dans Rulezet (même chemin que le receive §2.2) |
-| **action** (workflows MISP 2.5) | `rulezet_push_on_publish` | à la publication d'un event → envoie ses rules à Rulezet |
+| **expansion** | `rulezet_cve` | on a `vulnerability` attribute → the Rulezet rules detecting that CVE (reuses `search_rules_by_cve`, **do not change this endpoint**) → adds the rule objects to the event |
+| expansion | `rulezet_attack` | on an ATT&CK galaxy / `T…` attribute → rules covering the technique (ATT&CK kit) |
+| expansion | `rulezet_hash` / `rulezet_ioc` | on a hash / domain / IP → rules containing that IOC (full-text search on the content) |
+| expansion | `rulezet_rule_lookup` | on a `yara`/`sigma`/`snort` attribute → is the rule in Rulezet? link, votes, reviews, tests, newer version |
+| expansion | `rulezet_validate` | validates an event's rule with the Rulezet validator (+ YARA-X / yaraQA) and puts the result in a comment |
+| **hover** | `rulezet_hover` | hovering a CVE / T-id / rule → number of rules, formats, link |
+| **import** | `rulezet_import` | imports a Rulezet rule or bundle (uuid / URL) into an event |
+| **export** | `rulezet_export` | exports an event → creates / proposes the rules in Rulezet (same path as receive §2.2) |
+| **action** (MISP 2.5 workflows) | `rulezet_push_on_publish` | when an event is published → sends its rules to Rulezet |
 
-Côté Rulezet, prévoir :
-- endpoints dédiés stables (`/api/misp/…`) qui renvoient directement du MISP JSON prêt à fusionner ;
-- une clé API à scope limité (lecture / proposition seulement) pour les modules ;
-- rate limit adapté (les expansions peuvent être appelées en masse — attention à l'allowlist en cours).
-
----
-
-## 4. Autres idées d'intégration
-
-1. **Feed MISP Rulezet** : rulezet.org publie un **feed MISP natif** (manifest.json + un event par bundle / par format / par CVE kit) → n'importe quel MISP l'ajoute en un clic dans *Feeds*. Le plus gros levier de diffusion, et sans clé API.
-2. **Rulezet dans le catalogue de feeds par défaut de MISP** (`defaults/feed-metadata/default-feeds.json`) une fois le feed stable.
-3. **Galaxy « Rulezet »** : un cluster par bundle vérifié (ou par ruleset connu) dans misp-galaxy → les analystes taguent un event « détecté par le bundle X ».
-4. **Taxonomie `rulezet`** : `rulezet:status=validated|tested|community`, `rulezet:quality=…`, `rulezet:format=…` → poussée sur les attributs pour filtrer l'export IDS.
-5. **Export IDS ciblé** : MISP exporte déjà `yara`/`snort` via `/events/nids` ; s'assurer que nos objets passent avec le bon `to_ids` pour que les rules Rulezet arrivent directement dans les sondes Suricata / scanners YARA branchés sur MISP.
-6. **Sightings** : quand une rule matche (rule-tester, retour d'un connecteur / Velociraptor / sonde), envoyer un **sighting** MISP sur l'attribut de la rule ; en sens inverse, lire les sightings MISP pour afficher « vue en prod N fois » sur la rule (faux positifs = sighting type 1).
-7. **Proposals MISP ↔ propositions d'édition** : une *proposal* sur un attribut rule dans MISP → `RuleEditProposal` dans Rulezet, et inversement.
-8. **Event reports** : génération auto d'un rapport markdown (CVE kit / ATT&CK kit) dans l'event — « voici toutes les détections dispo pour ce CVE ».
-9. **Pivotick / pivograph** : le graphe MISP (event ↔ objets ↔ rules ↔ CVE ↔ ATT&CK) déjà affichable, l'étendre aux events reçus.
-10. **Tester les IOC d'un event** : bouton dans Rulezet « tester ces rules contre les samples / hashes de l'event MISP X » (rule-tester + attachments MISP malware-sample).
-11. **Génération de rules depuis un event** : l'IA Generator lit un event MISP (IOC, ATT&CK, rapports) et propose des rules YARA / Sigma / Suricata → poussées en draft dans Rulezet puis renvoyées dans l'event.
-12. **Couverture d'un event** : pour un event MISP, quelles techniques / CVE ont des rules dans Rulezet et lesquelles sont des **gaps** (kit_core) — sous forme de module d'expansion ou d'event report.
-13. **Sync des taxonomies / galaxies custom** de l'instance MISP connectée vers Rulezet (aujourd'hui on ne charge que les dépôts publics).
-14. **SSO / identité** : login Rulezet via MISP (OIDC si MISP en est la source) pour les communautés qui vivent déjà dans MISP — et l'org MISP comme organisation Rulezet.
-15. **Communautés MISP** (CIRCL, sectoriels) : un connecteur par communauté avec sharing group dédié, bundles privés partagés seulement dans ce groupe.
-16. **Workflows MISP 2.5** : blueprints prêts à l'emploi (« à la publication → envoyer à Rulezet », « nouvel attribut vulnerability → enrichir avec Rulezet »).
+On the Rulezet side:
+- stable dedicated endpoints (`/api/misp/…`) returning MISP JSON ready to merge;
+- an API key with a limited scope (read / propose only) for the modules;
+- suitable rate limits (expansions can be called in bulk — mind the allowlist in progress).
 
 ---
 
-## Ordre proposé
+## 4. Other integration ideas
 
-1. Étape 1 (mapping) — prérequis de tout le reste, et UUID stables.
-2. Feed MISP (idée 1) — peu de code une fois le mapping fait, gros impact.
-3. Étape 2 push idempotent, puis receive.
-4. misp-modules : `rulezet_cve` et `rulezet_rule_lookup` d'abord.
+1. **Rulezet MISP feed**: rulezet.org publishes a **native MISP feed** (manifest.json + one event per bundle / per format / per CVE kit) → any MISP adds it in one click under *Feeds*. The biggest reach for the least code, no API key needed.
+2. **Rulezet in MISP's default feed list** (`defaults/feed-metadata/default-feeds.json`) once the feed is stable.
+3. **"Rulezet" galaxy**: one cluster per verified bundle (or known ruleset) in misp-galaxy → analysts tag an event "detected by bundle X".
+4. **`rulezet` taxonomy**: `rulezet:status=validated|tested|community`, `rulezet:quality=…`, `rulezet:format=…` → pushed on attributes to filter the IDS export.
+5. **Targeted IDS export**: MISP already exports `yara`/`snort` through `/events/nids`; make sure our objects go through with the right `to_ids` so Rulezet rules land directly in the Suricata sensors / YARA scanners fed by MISP.
+6. **Sightings**: when a rule matches (rule tester, feedback from a connector / Velociraptor / sensor), send a MISP **sighting** on the rule's attribute; the other way, read MISP sightings to show "seen in production N times" on the rule (false positives = sighting type 1).
+7. **MISP proposals ↔ edit proposals**: a *proposal* on a rule attribute in MISP → a `RuleEditProposal` in Rulezet, and the other way round.
+8. **Event reports**: auto-generated markdown report (CVE kit / ATT&CK kit) in the event — "here are all the detections available for this CVE".
+9. **Pivotick / pivograph**: the MISP graph (event ↔ objects ↔ rules ↔ CVE ↔ ATT&CK) is already displayable; extend it to received events.
+10. **Test an event's IOCs**: a button in Rulezet "test these rules against the samples / hashes of MISP event X" (rule tester + MISP malware-sample attachments).
+11. **Rules generated from an event**: the AI Generator reads a MISP event (IOCs, ATT&CK, reports) and proposes YARA / Sigma / Suricata rules → pushed as drafts in Rulezet, then sent back to the event.
+12. **Event coverage**: for a MISP event, which techniques / CVEs have rules in Rulezet and which are **gaps** (kit_core) — as an expansion module or an event report.
+13. **Sync the custom taxonomies / galaxies** of the connected MISP instance into Rulezet (today only the public repos are loaded).
+14. **SSO / identity**: log into Rulezet through MISP (OIDC when MISP is the source) for communities already living in MISP — and the MISP org as the Rulezet organisation.
+15. **MISP communities** (CIRCL, sector-based): one connector per community with a dedicated sharing group, private bundles shared only within that group.
+16. **MISP 2.5 workflows**: ready-made blueprints ("on publish → send to Rulezet", "new vulnerability attribute → enrich with Rulezet").
+
+---
+
+## Suggested order
+
+1. Step 1 (mapping) — prerequisite for everything else, and stable UUIDs.
+2. MISP feed (idea 1) — little code once the mapping is done, big impact.
+3. Step 2: idempotent push, then receive.
+4. misp-modules: `rulezet_cve` and `rulezet_rule_lookup` first.
 5. Sightings, analyst data, workflows.
