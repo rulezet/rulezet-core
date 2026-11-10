@@ -2728,6 +2728,14 @@ def get_history_rule():
     d = history_rule.to_json()
     d['old_diff_html'] = old_html
     d['new_diff_html'] = new_html
+    d['metadata_changes'] = RuleModel.diff_rule_snapshots(history_rule.old_snapshot, history_rule.new_snapshot)
+    # next update still waiting in the current user's list, for "Accept & next"
+    from app.core.db_class.rule import RuleUpdateHistory
+    nxt =RuleModel._pending_updates_base_query() \
+        .filter(RuleUpdateHistory.id != history_rule.id) \
+        .order_by(RuleUpdateHistory.analyzed_at.desc()) \
+        .with_entities(RuleUpdateHistory.id).first()
+    d['next_pending_id'] = nxt[0] if nxt else None
 
     return {
         "history_rule": d
@@ -2937,8 +2945,13 @@ def history_diff_json(history_id):
 @login_required
 def choose_changes() -> render_template:
     """Redirect to updating interface for choose"""
-    history_id = request.args.get('id', 1, type=int)
-    return render_template("rule/update_github/updates_choose_changes.html" , history_id=history_id)
+    history_id = request.args.get('id', type=int)
+    history = RuleModel.get_history_rule_by_id(history_id) if history_id else None
+    rule = RuleModel.get_rule(history.rule_id) if history else None
+    if not rule:
+        return render_template("404.html"), 404
+    return render_template("rule/update_github/updates_choose_changes.html",
+                           history_id=history_id, rule=rule, **_nav_counts(rule.id))
 
 #################################################
 # Accept_all_changes in update pannel 3 section #
@@ -3727,10 +3740,18 @@ def get_rule_changes() -> jsonify:
     )
     return jsonify({
         "success": True,
-        "items": [r.to_json() for r in rules.items],
+        "items": [r.to_json(light=True) for r in rules.items],
         "total": rules.total,
         "total_pages": rules.pages,
     })
+
+
+@rule_blueprint.route("/update_github/stats", methods=['GET'])
+@login_required
+def pending_updates_stats() -> jsonify:
+    """KPIs of the Pending Updates page (same scope as the list: every
+    pending update for an admin, the user's own otherwise)."""
+    return jsonify({"success": True, **RuleModel.get_pending_updates_stats()})
 
 
 # Above this count, a bulk decision (accept/reject/delete) runs as a

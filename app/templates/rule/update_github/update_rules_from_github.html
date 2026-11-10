@@ -4,47 +4,109 @@
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/ansi-terminal.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account/user_detail.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/proposal.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/github/pending_updates.css') }}">
 {% endblock %}
 
 {% block content %}
 <div class="container mt-4" id="main-container" v-cloak>
     <div class="explorer-banner mb-4">
-        <i class="fa-solid fa-rotate banner-watermark"></i>
-        <nav aria-label="breadcrumb" class="mb-3">
-            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+        <i class="fa-solid fa-code-pull-request banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
                 <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
                 <li class="breadcrumb-item active text-muted" aria-current="page">Pending Updates</li>
             </ol>
         </nav>
         <div class="d-flex align-items-center gap-3 mb-3">
-            <div class="banner-icon"><i class="fa-solid fa-rotate"></i></div>
+            <div class="banner-icon"><i class="fa-solid fa-code-pull-request"></i></div>
             <div>
-                <h2 class="fw-bold mb-1">Rules to be Updated</h2>
+                <h2 class="fw-bold mb-1">Pending git updates</h2>
                 <div class="banner-accent"></div>
             </div>
         </div>
-        <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
-            Review and accept, reject, or delete pending rule updates detected from git repository sources (GitHub, GitLab, Gitea…).
+        <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+            Rules whose source repository (GitHub, GitLab, Gitea…) changed since they were imported.
+            Compare each change, then accept it into Rulezet or reject it.
         </p>
     </div>
 
+    <!-- KPIs -->
+    <div class="pu-kpis mb-4">
+        <div class="ud-kpi-card ud-kpi-card--blue">
+            <div class="ud-kpi-icon"><i class="fa-solid fa-code-pull-request"></i></div>
+            <div class="ud-kpi-body"><div class="ud-kpi-value">[[ stats.total ]]</div><div class="ud-kpi-label">Pending updates</div></div>
+        </div>
+        <div class="ud-kpi-card ud-kpi-card--green">
+            <div class="ud-kpi-icon"><i class="fa-solid fa-circle-check"></i></div>
+            <div class="ud-kpi-body"><div class="ud-kpi-value">[[ stats.ready ]]</div><div class="ud-kpi-label">Ready to review</div></div>
+        </div>
+        <div class="ud-kpi-card ud-kpi-card--orange">
+            <div class="ud-kpi-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div class="ud-kpi-body"><div class="ud-kpi-value">[[ stats.failed ]]</div><div class="ud-kpi-label">Failed checks</div></div>
+        </div>
+        <div class="ud-kpi-card ud-kpi-card--purple">
+            <div class="ud-kpi-icon"><i class="fa-brands fa-git-alt"></i></div>
+            <div class="ud-kpi-body"><div class="ud-kpi-value">[[ stats.repositories ]]</div><div class="ud-kpi-label">Repositories</div></div>
+        </div>
+    </div>
+
+    <div v-if="statsLoaded && stats.total === 0" class="alert border-0 shadow-sm rounded-3 mb-4 d-flex align-items-center gap-3" style="background:var(--light-bg-color);">
+        <i class="fa-solid fa-circle-check fa-lg text-success"></i>
+        <span>Every imported rule is in sync with its repository — nothing to review.</span>
+    </div>
+
     <!-- Job progress — shown while a large bulk action runs in the background -->
-    <div v-if="activeJobUuid" class="card border-0 shadow-sm rounded-4 mb-4">
+    <div v-if="activeJobUuid" class="card border-0 shadow-sm rounded-3 mb-4">
         <div class="card-body p-4">
             <job-tracker :job-uuid="activeJobUuid" @done="onJobDone" @failed="onJobDone"></job-tracker>
         </div>
     </div>
 
-    <div class="card border-0 shadow-sm rounded-4">
-        <div class="card-body p-3">
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-4">
+            <div class="prp-tabs" role="tablist">
+                <button type="button" class="prp-tab is-active" role="tab">
+                    <i class="fa-solid fa-inbox"></i>Updates to review
+                    <span class="prp-tab-count" :class="{ 'prp-tab-count--alert': stats.ready > 0 }">[[ stats.total ]]</span>
+                </button>
+            </div>
+
+            <div class="ud-section-header mb-3">
+                <i class="fas fa-code-pull-request ud-section-icon"></i>
+                <div>
+                    <div class="ud-section-title">Updates to review</div>
+                    <div class="ud-section-sub">
+                        {% if current_user.is_admin() %}Every pending update on Rulezet (you are an administrator).{% else %}Updates found on the rules you imported.{% endif %}
+                        Open one to compare it, or select several to accept or reject them in bulk.
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="stats.by_format.length > 1" class="pu-format-strip mb-3">
+                <button v-for="f in stats.by_format" :key="f.format" type="button" class="pu-format-pill"
+                        :class="{ 'pu-format-pill--on': selectedFormat === f.format }"
+                        :style="{ '--fmt': look(f.format).color }" @click="toggleFormat(f.format)">
+                    <span class="pu-format-pill__logo">
+                        <img v-if="look(f.format).logo" :src="look(f.format).logo" alt="">
+                        <i v-else class="fa-solid fa-file-code"></i>
+                    </span>
+                    [[ look(f.format).title ]]
+                    <span class="pu-format-pill__count">[[ f.count ]]</span>
+                </button>
+            </div>
+
             <data-table
                 ref="tableRef"
                 :fetch-url="fetchUrl"
                 mode="manage"
                 :columns="columns"
                 :bulk-actions="bulkActions"
-                :can-view="true"
+                :can-view="false"
+                :expandable="false"
                 :allow-card-view="false"
                 :initial-per-page="20"
                 initial-sort="analyzed_at"
@@ -53,31 +115,32 @@
                 @bulk-action="onBulkAction">
 
                 <template #toolbar-start>
-                    <select class="form-select form-select-sm" style="width:auto;max-width:180px;flex:0 0 auto;"
-                            v-model="selectedFormat" @change="onFormatChange">
-                        <option value="">All formats</option>
-                        <option v-for="fmt in formats" :key="fmt.name" :value="fmt.name">[[ fmt.name ]]</option>
-                    </select>
+                    <format-select v-model="selectedFormat" :formats="formats" @change="onFormatChange"></format-select>
                 </template>
 
                 <template #cell-rule_format="{ value }">
-                    <span v-if="value" class="badge" style="background:#1a1a1a;color:#fff;text-transform:uppercase;letter-spacing:.03em;font-size:.68rem;">[[ value ]]</span>
-                    <span v-else class="badge bg-secondary">Unknown</span>
+                    <format-chip :format="value || ''" :can-filter="true" :active="selectedFormat === value"
+                                 @filter="toggleFormat"></format-chip>
                 </template>
 
                 <template #cell-rule_title="{ item }">
-                    <a :href="'/rule/detail_rule/' + item.rule_id" class="text-primary fw-semibold text-decoration-none">
-                        [[ item.rule_title ]]
-                    </a>
+                    <div class="pu-rule-cell">
+                        <div class="d-flex align-items-center gap-2">
+                            <a :href="'/rule/update_github/choose_changes?id=' + item.id" class="pu-rule-title text-primary">[[ item.rule_title ]]</a>
+                            <span v-if="item.manuel_submit" class="pu-manual" title="Check started by hand">manual</span>
+                        </div>
+                        <pu-git-line :item="item"></pu-git-line>
+                    </div>
                 </template>
 
                 <template #cell-success="{ item }">
-                    <span v-if="item.success && item.new_content" class="text-success fw-semibold">
-                        <i class="fas fa-check-circle me-1"></i>Update found
-                    </span>
-                    <span v-else class="text-danger fw-semibold">
-                        <i class="fas fa-times-circle me-1"></i>Failed
-                    </span>
+                    <pu-status :item="item"></pu-status>
+                    <div v-if="stateOf(item) === 'failed' && item.message" class="small text-danger mt-1 text-truncate" style="max-width:220px;" :title="item.message">[[ item.message ]]</div>
+                </template>
+
+                <template #cell-changes="{ item }">
+                    <pu-diffstat v-if="item.has_new_content" :added="item.lines_added || 0" :removed="item.lines_removed || 0"></pu-diffstat>
+                    <span v-else class="text-muted small">—</span>
                 </template>
 
                 <template #cell-analyzed_by_user_id="{ item }">
@@ -86,14 +149,16 @@
                                size="xs" :show-name="true"></user-chip>
                 </template>
 
+                <template #cell-analyzed_at="{ value }">
+                    <span class="small text-muted text-nowrap"><i class="fa-regular fa-clock me-1"></i>[[ value ]]</span>
+                </template>
+
                 <template #cell-quick_actions="{ item }">
-                    <div class="d-flex gap-1">
-                        <button class="btn btn-sm btn-outline-success rounded-pill px-2" title="Accept" @click="decisionRule(item, 'accept')">
-                            <i class="fa-solid fa-check"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger rounded-pill px-2" title="Reject" @click="decisionRule(item, 'reject')">
-                            <i class="fa-solid fa-xmark"></i>
-                        </button>
+                    <div class="dt-actions justify-content-end">
+                        <a class="dt-action-btn" title="Compare" :href="'/rule/update_github/choose_changes?id=' + item.id"><i class="fas fa-code-compare"></i></a>
+                        <a class="dt-action-btn" title="Open rule" :href="'/rule/detail_rule/' + item.rule_id"><i class="fas fa-shield-halved"></i></a>
+                        <button class="dt-action-btn prp-btn-accept" title="Accept" :disabled="stateOf(item) !== 'ready'" @click="decisionRule(item, 'accept')"><i class="fas fa-check"></i></button>
+                        <button class="dt-action-btn dt-action-btn--danger" title="Reject" @click="decisionRule(item, 'reject')"><i class="fas fa-xmark"></i></button>
                     </div>
                 </template>
 
@@ -105,22 +170,31 @@
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, computed, onMounted } = Vue
+    const { createApp, ref, reactive, computed, onMounted } = Vue
     import { create_message } from '/static/js/toaster.js'
     import DataTable from '/static/js/components/table/data-table.js'
     import UserChip from '/static/js/components/UserChip.js'
     import JobTracker from '/static/js/jobs/JobTracker.js'
+    import FormatChip, { formatLook } from '/static/js/rule/formatChip.js'
+    import FormatSelect from '/static/js/rule/formatSelect.js'
+    import { PuGitLine, PuStatus, PuDiffstat, updateState } from '/static/js/rule/github/pendingUpdateParts.js'
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { 'data-table': DataTable, 'user-chip': UserChip, 'job-tracker': JobTracker },
+        components: {
+            'data-table': DataTable, 'user-chip': UserChip, 'job-tracker': JobTracker,
+            'format-chip': FormatChip, 'format-select': FormatSelect,
+            'pu-git-line': PuGitLine, 'pu-status': PuStatus, 'pu-diffstat': PuDiffstat,
+        },
         setup() {
             const csrfToken = '{{ csrf_token() }}'
             const tableRef = ref(null)
             const activeJobUuid = ref(null)
 
             const formats = ref([])
-            const selectedFormat = ref('')
+            const selectedFormat = ref(new URLSearchParams(location.search).get('format') || '')
+            const statsLoaded = ref(false)
+            const stats = reactive({ total: 0, ready: 0, failed: 0, rules: 0, repositories: 0, by_format: [] })
 
             const fetchUrl = computed(() => {
                 const params = new URLSearchParams()
@@ -130,33 +204,49 @@
             })
 
             const columns = [
-                { key: 'rule_format',        label: 'Format',   sortable: false, width: '110px' },
-                { key: 'rule_title',         label: 'Rule',     sortable: true },
-                { key: 'success',            label: 'Status',   sortable: false, width: '140px' },
-                { key: 'message',            label: 'Message',  sortable: false, truncate: true },
-                { key: 'analyzed_by_user_id', label: 'Analyzed By', sortable: false, width: '160px' },
-                { key: 'analyzed_at',        label: 'Analyzed At', sortable: true, width: '140px' },
-                { key: 'quick_actions',      label: 'Quick actions', sortable: false, width: '100px' },
+                { key: 'rule_format',         label: 'Format',      sortable: false, width: '130px' },
+                { key: 'rule_title',          label: 'Rule',        sortable: true },
+                { key: 'success',             label: 'Status',      sortable: true,  width: '150px' },
+                { key: 'changes',             label: 'Changes',     sortable: false, width: '130px' },
+                { key: 'analyzed_by_user_id', label: 'Checked by',  sortable: false, width: '150px' },
+                { key: 'analyzed_at',         label: 'Checked at',  sortable: true,  width: '150px' },
+                { key: 'quick_actions',       label: 'Actions',     sortable: false, width: '150px' },
             ]
 
             const bulkActions = [
                 { key: 'accept', label: 'Accept', icon: 'fa-check' },
                 { key: 'reject', label: 'Reject', icon: 'fa-times', variant: 'danger' },
-                { key: 'delete', label: 'Delete',  icon: 'fa-trash-can', variant: 'danger' },
+                { key: 'delete', label: 'Delete', icon: 'fa-trash-can', variant: 'danger' },
             ]
+
+            const look = formatLook
+            const stateOf = updateState
 
             async function loadFormats() {
                 try {
                     const res = await fetch('/rule/get_rules_formats')
-                    if (res.ok) {
-                        const data = await res.json()
-                        formats.value = data.formats || []
-                    }
-                } catch (e) { /* format filter is a nice-to-have, fail quiet */ }
+                    if (res.ok) formats.value = (await res.json()).formats || []
+                } catch (e) { /* format filter is a nice-to-have */ }
+            }
+
+            async function loadStats() {
+                try {
+                    const res = await fetch('/rule/update_github/stats')
+                    if (res.ok) { Object.assign(stats, await res.json()); statsLoaded.value = true }
+                } catch (e) { /* KPIs stay at 0 */ }
             }
 
             function onFormatChange() {
+                const url = new URL(location.href)
+                if (selectedFormat.value) url.searchParams.set('format', selectedFormat.value)
+                else url.searchParams.delete('format')
+                history.replaceState(null, '', url)
                 tableRef.value?.fetchData()
+            }
+
+            function toggleFormat(fmt) {
+                selectedFormat.value = selectedFormat.value === fmt ? '' : fmt
+                onFormatChange()
             }
 
             function goToCompare(item) {
@@ -167,11 +257,7 @@
                 const res = await fetch('/rule/update_github/bulk_decision', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                    body: JSON.stringify({
-                        action, ids,
-                        search: tableRef.value?.search || '',
-                        format: selectedFormat.value,
-                    }),
+                    body: JSON.stringify({ action, ids, search: tableRef.value?.search || '', format: selectedFormat.value }),
                 })
                 const data = await res.json().catch(() => ({}))
                 if (!data.success) {
@@ -184,28 +270,24 @@
                 } else {
                     create_message(data.message || 'Done.', 'success-subtle')
                     tableRef.value?.fetchData()
+                    loadStats()
                 }
             }
 
-            function decisionRule(item, action) {
-                runDecision(action, [item.id])
-            }
-
-            function onBulkAction({ action, ids }) {
-                runDecision(action, ids)
-            }
-
+            function decisionRule(item, action) { runDecision(action, [item.id]) }
+            function onBulkAction({ action, ids }) { runDecision(action, ids) }
             function onJobDone() {
                 activeJobUuid.value = null
                 tableRef.value?.fetchData()
+                loadStats()
             }
 
-            onMounted(loadFormats)
+            onMounted(() => { loadFormats(); loadStats() })
 
             return {
-                tableRef, activeJobUuid, formats, selectedFormat, fetchUrl,
-                columns, bulkActions,
-                onFormatChange, goToCompare, decisionRule, onBulkAction, onJobDone,
+                tableRef, activeJobUuid, formats, selectedFormat, fetchUrl, stats, statsLoaded,
+                columns, bulkActions, look, stateOf,
+                onFormatChange, toggleFormat, goToCompare, decisionRule, onBulkAction, onJobDone,
             }
         }
     }).mount('#main-container')

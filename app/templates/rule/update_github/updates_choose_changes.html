@@ -1,111 +1,198 @@
 {% extends 'base.html' %}
 {% block title %}Compare Update — Rulezet{% endblock %}
+{% import 'macros/detail_rule_nav.html' as nav with context %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/base/detail_rule_nav.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/proposal_discuss.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account/user_detail.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rule/github/pending_updates.css') }}">
 {% endblock %}
 
 {% block content %}
-<div class="container mt-4" id="main-container" v-cloak>
+<div class="container my-4" id="main-container" v-cloak>
 
+    <!-- ── Explorer banner ── -->
     <div class="explorer-banner mb-4">
         <i class="fa-solid fa-code-compare banner-watermark"></i>
-        <nav aria-label="breadcrumb" class="mb-3">
-            <ol class="breadcrumb mb-0" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em;">
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.03em;">
                 <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
-                <li class="breadcrumb-item"><a href="/rule/rules_list" class="text-decoration-none text-muted">Rules</a></li>
                 <li class="breadcrumb-item"><a href="{{ url_for('rule.get_update_page') }}" class="text-decoration-none text-muted">Pending Updates</a></li>
-                <li class="breadcrumb-item active text-muted" aria-current="page">Compare</li>
+                <li class="breadcrumb-item"><a href="/rule/detail_rule/{{ rule.id }}" class="text-decoration-none text-muted">{% if rule.title|length > 40 %}{{ rule.title[:40] }}…{% else %}{{ rule.title }}{% endif %}</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Update #{{ history_id }}</li>
             </ol>
         </nav>
-        <div class="d-flex align-items-center gap-3 mb-3">
-            <div class="banner-icon"><i class="fa-solid fa-code-compare"></i></div>
-            <div>
-                <h2 class="fw-bold mb-1">
-                    Compare Update
-                    <span v-if="entry" class="text-muted fw-normal">— [[ entry.rule_title ]]</span>
-                </h2>
+        <div class="d-flex align-items-start gap-3 mb-3 flex-wrap">
+            <div class="banner-icon flex-shrink-0"><i class="fa-solid fa-code-compare"></i></div>
+            <div class="min-width-0">
+                <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                    <h2 class="fw-bold mb-0">Repository update</h2>
+                    <span v-if="entry" class="pstatus-badge" :class="statusBadge.cls">
+                        <i class="fas" :class="statusBadge.icon"></i>[[ statusBadge.text ]]
+                    </span>
+                    <format-chip v-if="entry && entry.rule_format" :format="entry.rule_format"></format-chip>
+                </div>
                 <div class="banner-accent"></div>
             </div>
         </div>
-        <p class="text-muted mb-0" style="max-width: 600px; font-size: 0.95rem;">
-            Review the proposed content before accepting or rejecting this update.
+        <p class="text-muted mb-0" style="max-width:650px;font-size:.95rem;">
+            New version found in the source repository of
+            <a href="/rule/detail_rule/{{ rule.id }}" class="fw-semibold text-decoration-none">
+                {% if rule.title|length > 60 %}{{ rule.title[:60] }}…{% else %}{{ rule.title }}{% endif %}
+                <i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size:.7rem;"></i>
+            </a>
         </p>
     </div>
 
-    <!-- Loading -->
+    {{ nav.detail_rule_nav(rule, 'history', similarity_count=similarity_count, history_count=history_count, proposal_count=proposal_count, scope_count=scope_count) }}
+
     <div v-if="loading" class="d-flex justify-content-center py-5">
         <div class="spinner-border text-primary" role="status"></div>
     </div>
 
     <template v-else-if="entry">
-        <!-- Info card -->
-        <div class="card border-0 shadow-sm rounded-3 mb-4">
-            <div class="card-body p-4">
-                <div class="row g-3">
-                    <div class="col-6 col-md-3">
-                        <div class="text-muted small text-uppercase mb-1" style="font-size:.72rem;letter-spacing:.03em;">Format</div>
-                        <span v-if="entry.rule_format" class="badge" style="background:#1a1a1a;color:#fff;text-transform:uppercase;letter-spacing:.03em;font-size:.68rem;">[[ entry.rule_format ]]</span>
-                        <span v-else class="badge bg-secondary">Unknown</span>
+        <!-- ── Info card ── -->
+        <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
+            <div class="d-flex align-items-center justify-content-between gap-2 mb-3 pb-3 flex-wrap" style="border-bottom:1px solid var(--border-color);">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted" style="font-size:0.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">
+                        <i class="fa-solid fa-user-check me-1"></i>Checked by
+                    </span>
+                    <user-chip v-if="entry.analyzed_by_user_id" :user-id="entry.analyzed_by_user_id"
+                               :username="entry.analyzed_by_user_name" :avatar="entry.analyzed_by_avatar" size="sm"></user-chip>
+                    <span v-if="entry.manuel_submit" class="pu-manual">manual</span>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <a :href="'/rule/detail_rule/' + entry.rule_id" class="btn btn-sm rounded-pill px-3 pu-btn-ghost" title="View the rule">
+                        <i class="fa-solid fa-shield-halved me-1"></i>View rule
+                    </a>
+                    <a v-if="fileUrl" :href="fileUrl" target="_blank" rel="noreferrer" class="btn btn-sm rounded-pill px-3 pu-btn-ghost" title="Open the file in its repository">
+                        <i :class="providerIcon" class="me-1"></i>View file
+                    </a>
+                    <a href="{{ url_for('rule.get_update_page') }}" class="btn btn-sm rounded-pill px-3 pu-btn-ghost pu-btn-ghost--muted" title="All pending updates">
+                        <i class="fa-solid fa-list-check me-1"></i>Review queue
+                    </a>
+                    <a v-if="entry.next_pending_id" :href="'/rule/update_github/choose_changes?id=' + entry.next_pending_id"
+                       class="btn btn-sm rounded-pill px-3 pu-btn-ghost pu-btn-ghost--muted" title="Next pending update">
+                        Next<i class="fa-solid fa-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+
+            <div class="proposal-meta-grid pu-meta-grid">
+                <div class="meta-item" v-if="entry.rule_source">
+                    <div class="meta-item__icon"><i :class="providerIcon"></i></div>
+                    <div class="pu-meta-body">
+                        <div class="meta-item__label">Repository</div>
+                        <div class="meta-item__value">
+                            <a v-if="repoUrl" :href="repoUrl" target="_blank" rel="noreferrer" class="pu-info-link">[[ entry.rule_source ]]</a>
+                            <span v-else>[[ entry.rule_source ]]</span>
+                            <span v-if="entry.rule_branch" class="pu-branch ms-2"><i class="fa-solid fa-code-branch"></i>[[ entry.rule_branch ]]</span>
+                        </div>
                     </div>
-                    <div class="col-6 col-md-3">
-                        <div class="text-muted small text-uppercase mb-1" style="font-size:.72rem;letter-spacing:.03em;">Status</div>
-                        <span v-if="entry.message === 'accepted'" class="badge bg-success">Accepted</span>
-                        <span v-else-if="entry.message === 'rejected'" class="badge bg-danger">Rejected</span>
-                        <span v-else-if="entry.success && entry.new_content" class="text-success fw-semibold small">
-                            <i class="fas fa-check-circle me-1"></i>Update found
-                        </span>
-                        <span v-else class="text-danger fw-semibold small">
-                            <i class="fas fa-times-circle me-1"></i>Failed
-                        </span>
+                </div>
+                <div class="meta-item" v-if="entry.rule_github_path">
+                    <div class="meta-item__icon"><i class="fa-regular fa-file-code"></i></div>
+                    <div class="pu-meta-body">
+                        <div class="meta-item__label">File</div>
+                        <div class="meta-item__value">
+                            <a v-if="fileUrl" :href="fileUrl" target="_blank" rel="noreferrer" class="pu-info-link">[[ entry.rule_github_path ]]</a>
+                            <span v-else>[[ entry.rule_github_path ]]</span>
+                        </div>
                     </div>
-                    <div class="col-6 col-md-3">
-                        <div class="text-muted small text-uppercase mb-1" style="font-size:.72rem;letter-spacing:.03em;">Analyzed By</div>
-                        <user-chip v-if="entry.analyzed_by_user_id" :user-id="entry.analyzed_by_user_id"
-                                   :username="entry.analyzed_by_user_name" :avatar="entry.analyzed_by_avatar"
-                                   size="xs" :show-name="true"></user-chip>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-item__icon"><i class="fa-regular fa-clock"></i></div>
+                    <div class="pu-meta-body">
+                        <div class="meta-item__label">Checked at</div>
+                        <div class="meta-item__value">[[ entry.analyzed_at ]]</div>
                     </div>
-                    <div class="col-6 col-md-3">
-                        <div class="text-muted small text-uppercase mb-1" style="font-size:.72rem;letter-spacing:.03em;">Analyzed At</div>
-                        <span class="small">[[ entry.analyzed_at ]]</span>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-item__icon"><i class="fa-solid fa-chart-simple"></i></div>
+                    <div class="pu-meta-body">
+                        <div class="meta-item__label">Changes</div>
+                        <div class="meta-item__value"><pu-diffstat :added="entry.lines_added || 0" :removed="entry.lines_removed || 0"></pu-diffstat></div>
                     </div>
-                    <div class="col-12" v-if="entry.rule_source">
-                        <div class="text-muted small text-uppercase mb-1" style="font-size:.72rem;letter-spacing:.03em;">Rule Source</div>
-                        <a :href="entry.rule_source" rel="noreferrer" target="_blank" class="small">[[ entry.rule_source ]]</a>
+                </div>
+                <div class="meta-item" v-if="entry.rule_version || entry.rule_author">
+                    <div class="meta-item__icon"><i class="fa-solid fa-tag"></i></div>
+                    <div class="pu-meta-body">
+                        <div class="meta-item__label">Version · author</div>
+                        <div class="meta-item__value">[[ entry.rule_version || '—' ]] · [[ entry.rule_author || '—' ]]</div>
                     </div>
-                    <div class="col-12" v-if="entry.message && entry.message !== 'accepted' && entry.message !== 'rejected'">
-                        <div class="text-muted small text-uppercase mb-1" style="font-size:.72rem;letter-spacing:.03em;">Message</div>
-                        <span class="small">[[ entry.message ]]</span>
+                </div>
+                <div class="meta-item" v-if="entry.rule_uuid">
+                    <div class="meta-item__icon"><i class="fa-solid fa-fingerprint"></i></div>
+                    <div class="pu-meta-body">
+                        <div class="meta-item__label">Rule UUID</div>
+                        <div class="meta-item__value font-monospace">[[ entry.rule_uuid ]]</div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Diff -->
-        <div class="card border-0 shadow-sm rounded-3 mb-4">
-            <div class="card-body p-4">
-                <diff-viewer
-                    :initial-left="entry.old_content || ''"
-                    :initial-right="entry.new_content || ''"
-                    left-label="Previous Content"
-                    right-label="New Content"
-                    mode="read">
-                </diff-viewer>
+            <div v-if="state === 'failed' && entry.message" class="proposal-message-block mt-3" style="border-left-color:#dc3545;">
+                <div class="meta-item__label text-danger mb-1"><i class="fa-solid fa-triangle-exclamation me-1"></i>Why the check failed</div>
+                <pre class="pu-message">[[ entry.message ]]</pre>
             </div>
         </div>
 
-        <!-- Actions -->
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <a :href="'/rule/detail_rule/' + entry.rule_id" class="btn btn-outline-secondary rounded-pill px-4">
-                <i class="fa-solid fa-arrow-left me-2"></i>Back to rule
-            </a>
-            <div class="d-flex gap-2" v-if="entry.message !== 'accepted' && entry.message !== 'rejected'">
-                <button class="btn btn-success rounded-pill px-4" :disabled="deciding" @click="decide('accept')">
-                    <i class="fas fa-check me-2"></i>Accept
+        <!-- ── Metadata changes ── -->
+        <div v-if="entry.metadata_changes && entry.metadata_changes.length" class="card border-0 shadow-sm rounded-4 p-4 mb-4">
+            <div class="ud-section-header mb-3">
+                <i class="fas fa-tags ud-section-icon"></i>
+                <div>
+                    <div class="ud-section-title">Metadata changes</div>
+                    <div class="ud-section-sub">Fields that change with this update.</div>
+                </div>
+            </div>
+            <meta-change-list :changes="entry.metadata_changes"></meta-change-list>
+        </div>
+
+        <!-- ── Diff ── -->
+        <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
+            <div class="ud-section-header mb-3">
+                <i class="fas fa-code-compare ud-section-icon"></i>
+                <div>
+                    <div class="ud-section-title">Content</div>
+                    <div class="ud-section-sub">The rule in Rulezet (left) against the version in the repository (right).</div>
+                </div>
+            </div>
+            <diff-viewer
+                :initial-left="entry.old_content || ''"
+                :initial-right="entry.new_content || ''"
+                left-label="In Rulezet"
+                right-label="In the repository"
+                mode="read">
+            </diff-viewer>
+        </div>
+
+        <!-- ── Decision box (same as a proposal) ── -->
+        <div v-if="!decided" class="proposal-decision-box mb-4">
+            <div class="proposal-decision-box__icon"><i class="fa-solid fa-code-pull-request"></i></div>
+            <div class="flex-grow-1 min-width-0">
+                <div class="proposal-decision-box__title">This update is awaiting a decision</div>
+                <div class="proposal-decision-box__subtitle">
+                    <template v-if="state === 'ready'">Accept to replace the rule's content with the repository version (it is validated first), or reject it.</template>
+                    <template v-else>The check failed, so there is nothing to apply — reject it to clear it from the queue.</template>
+                </div>
+            </div>
+            <div class="d-flex gap-2 flex-shrink-0 flex-wrap">
+                <button class="btn btn-success rounded-pill px-4" :disabled="!!deciding || state !== 'ready'" @click="decide('accept')">
+                    <span v-if="deciding === 'accept'" class="spinner-border spinner-border-sm me-1"></span>
+                    <i v-else class="fa-solid fa-check me-1"></i>Accept
                 </button>
-                <button class="btn btn-danger rounded-pill px-4" :disabled="deciding" @click="decide('reject')">
-                    <i class="fas fa-times me-2"></i>Reject
+                <button v-if="entry.next_pending_id" class="btn btn-outline-success rounded-pill px-4"
+                        :disabled="!!deciding || state !== 'ready'" @click="decide('accept', true)" title="Accept, then open the next pending update">
+                    <i class="fa-solid fa-forward me-1"></i>Accept &amp; next
+                </button>
+                <button class="btn btn-outline-danger rounded-pill px-4" :disabled="!!deciding" @click="decide('reject')">
+                    <span v-if="deciding === 'reject'" class="spinner-border spinner-border-sm me-1"></span>
+                    <i v-else class="fa-solid fa-xmark me-1"></i>Reject
                 </button>
             </div>
         </div>
@@ -120,39 +207,61 @@
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, onMounted } = Vue
+    const { createApp, ref, computed, onMounted } = Vue
     import { create_message } from '/static/js/toaster.js'
     import DiffViewer from '/static/js/components/diff-viewer.js'
     import UserChip from '/static/js/components/UserChip.js'
+    import MetaChangeList from '/static/js/components/meta-change-list.js'
+    import FormatChip from '/static/js/rule/formatChip.js'
+    import { gitProviderIcon, repoBlobUrl, repoTreeUrl } from '/static/js/components/git-links.js'
+    import { PuDiffstat, updateState } from '/static/js/rule/github/pendingUpdateParts.js'
+
+    const BADGES = {
+        ready:    { cls: 'pstatus-pending',  icon: 'fa-clock',        text: 'pending' },
+        failed:   { cls: 'pstatus-rejected', icon: 'fa-circle-xmark', text: 'check failed' },
+        accepted: { cls: 'pstatus-accepted', icon: 'fa-check',        text: 'accepted' },
+        rejected: { cls: 'pstatus-rejected', icon: 'fa-xmark',        text: 'rejected' },
+    }
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { 'diff-viewer': DiffViewer, 'user-chip': UserChip },
+        components: {
+            'diff-viewer': DiffViewer, 'user-chip': UserChip, 'meta-change-list': MetaChangeList,
+            'format-chip': FormatChip, 'pu-diffstat': PuDiffstat,
+        },
         setup() {
             const csrfToken = '{{ csrf_token() }}'
             const historyId = {{ history_id | tojson }}
 
-            const entry   = ref(null)
-            const loading = ref(true)
-            const deciding = ref(false)
+            const entry    = ref(null)
+            const loading  = ref(true)
+            const deciding = ref(null)
+
+            const state   = computed(() => updateState(entry.value))
+            const decided = computed(() => ['accepted', 'rejected'].includes(state.value))
+            const statusBadge = computed(() => BADGES[state.value])
+            const isUrl = s => /^https?:\/\//i.test(s || '')
+            const src = computed(() => (isUrl(entry.value?.rule_source) ? entry.value.rule_source : null))
+            const providerIcon = computed(() => gitProviderIcon(src.value, entry.value?.rule_git_provider))
+            const repoUrl = computed(() => (src.value ? repoTreeUrl(src.value, entry.value.rule_branch, entry.value.rule_git_provider) : null))
+            const fileUrl = computed(() => {
+                const e = entry.value
+                if (!src.value || !e.rule_github_path) return null
+                return repoBlobUrl(src.value, e.rule_branch, e.rule_github_path, e.rule_git_provider)
+            })
 
             async function fetchEntry() {
                 loading.value = true
                 try {
                     const res = await fetch('/rule/get_history_rule?rule_id=' + historyId)
-                    if (res.ok) {
-                        const data = await res.json()
-                        entry.value = data.history_rule
-                    } else {
-                        entry.value = null
-                    }
+                    entry.value = res.ok ? (await res.json()).history_rule : null
                 } finally {
                     loading.value = false
                 }
             }
 
-            async function decide(action) {
-                deciding.value = true
+            async function decide(action, goNext = false) {
+                deciding.value = action
                 try {
                     const res = await fetch('/rule/update_github/bulk_decision', {
                         method: 'POST',
@@ -160,20 +269,24 @@
                         body: JSON.stringify({ action, ids: [historyId] }),
                     })
                     const data = await res.json().catch(() => ({}))
-                    if (data.success) {
-                        create_message(action === 'accept' ? 'Update accepted.' : 'Update rejected.', 'success-subtle')
-                        await fetchEntry()
-                    } else {
+                    if (!data.success) {
                         create_message(data.message || 'Request failed.', 'danger-subtle')
+                        return
                     }
+                    create_message(action === 'accept' ? 'Update accepted.' : 'Update rejected.', 'success-subtle')
+                    if (goNext && entry.value?.next_pending_id) {
+                        window.location.href = '/rule/update_github/choose_changes?id=' + entry.value.next_pending_id
+                        return
+                    }
+                    await fetchEntry()
                 } finally {
-                    deciding.value = false
+                    deciding.value = null
                 }
             }
 
             onMounted(fetchEntry)
 
-            return { entry, loading, deciding, decide }
+            return { entry, loading, deciding, state, decided, statusBadge, providerIcon, repoUrl, fileUrl, decide }
         }
     }).mount('#main-container')
 </script>

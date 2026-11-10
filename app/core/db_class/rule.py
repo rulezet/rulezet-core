@@ -631,7 +631,56 @@ class RuleUpdateHistory(db.Model):
             return rule.source
         return None
     
-    def to_json(self):
+    def rule_context(self) -> dict:
+        """Where the rule comes from (repo, branch, file) and its identity —
+        shown by the Pending Updates pages (format chip, git links)."""
+        rule = self.rule
+        if not rule:
+            return {}
+        return {
+            "rule_uuid": rule.uuid,
+            "rule_author": rule.author,
+            "rule_version": rule.version,
+            "rule_status": rule.status,
+            "rule_branch": rule.branch,
+            "rule_github_path": rule.github_path,
+            "rule_git_provider": rule.git_provider,
+            "rule_is_deleted": bool(rule.is_deleted),
+        }
+
+    def line_stats(self) -> dict:
+        """Lines added / removed between old and new content."""
+        import difflib
+        added = removed = 0
+        for line in difflib.unified_diff((self.old_content or '').splitlines(),
+                                         (self.new_content or '').splitlines(), lineterm='', n=0):
+            if line.startswith('+') and not line.startswith('+++'):
+                added += 1
+            elif line.startswith('-') and not line.startswith('---'):
+                removed += 1
+        return {"lines_added": added, "lines_removed": removed}
+
+    def to_json(self, light: bool = False):
+        """light=True: list rows — no rule contents, line counts instead."""
+        if light:
+            return {
+                "id": self.id,
+                "rule_id": self.rule_id,
+                "rule_title": self.rule_title,
+                "success": self.success,
+                "has_new_content": bool(self.new_content),
+                "message": self.message,
+                "analyzed_by_user_id": self.analyzed_by_user_id,
+                "analyzed_at": self.analyzed_at.strftime('%Y-%m-%d %H:%M') if self.analyzed_at else None,
+                "analyzed_by_user_name": self.analyzed_by.first_name if self.analyzed_by else None,
+                "analyzed_by_avatar": self.analyzed_by.get_avatar_url() if self.analyzed_by else None,
+                "rule_format": self.rule.format if self.rule else None,
+                "rule_source": self.rule.source if self.rule else None,
+                "manuel_submit": bool(self.manuel_submit),
+                "change_type": self.change_type,
+                **self.rule_context(),
+                **self.line_stats(),
+            }
         return {
             "id": self.id,
             "rule_id": self.rule_id,
@@ -640,6 +689,8 @@ class RuleUpdateHistory(db.Model):
             "message": self.message,
             "new_content": self.new_content,
             "old_content": self.old_content,
+            **self.rule_context(),
+            **self.line_stats(),
             "analyzed_by_user_id": self.analyzed_by_user_id,
             "analyzed_at": self.analyzed_at.strftime('%Y-%m-%d %H:%M'),
             "analyzed_by_user_name": self.analyzed_by.first_name,

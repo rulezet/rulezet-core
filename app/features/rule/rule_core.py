@@ -3343,6 +3343,25 @@ def get_pending_updates_page(page: int = 1, per_page: int = 20, search: str = No
     return query.paginate(page=page, per_page=min(per_page or 20, 100), max_per_page=100)
 
 
+def get_pending_updates_stats() -> dict:
+    """Counts for the Pending Updates KPIs: total, ready (new content
+    found), failed, rules / repositories concerned, and per format."""
+    query = _pending_updates_base_query()
+    total = query.count()
+    ready = query.filter(RuleUpdateHistory.success.is_(True),
+                         RuleUpdateHistory.new_content.isnot(None)).count()
+    joined = query.join(Rule, Rule.id == RuleUpdateHistory.rule_id)
+    rules = joined.with_entities(func.count(func.distinct(Rule.id))).scalar() or 0
+    repos = joined.with_entities(func.count(func.distinct(Rule.source))).scalar() or 0
+    by_format = [
+        {"format": fmt or "", "count": count}
+        for fmt, count in joined.with_entities(Rule.format, func.count(RuleUpdateHistory.id))
+                                 .group_by(Rule.format).order_by(func.count(RuleUpdateHistory.id).desc()).all()
+    ]
+    return {"total": total, "ready": ready, "failed": total - ready,
+            "rules": rules, "repositories": repos, "by_format": by_format}
+
+
 def get_pending_updates_ids(search: str = None, rule_format: str = None) -> list:
     """Every id currently matching the Pending Updates filters — used to
     resolve the DataTable's 'ALL' bulk-action sentinel (select all N items

@@ -19,6 +19,7 @@
  *   defaultView     String  'table' | 'card'               (default: 'table')
  *   allowCardView   Boolean (default: true) — set false to hide the card view
  *                   entirely (table-only), e.g. for data that doesn't suit cards.
+ *   expandable      Boolean (default: true) — false hides the row chevron / details panel
  *   initialPerPage  Number  (default: 10)
  *   sendUrl         String  — used when mode='select'
  *
@@ -68,6 +69,7 @@ export default {
         bulkActions:    { type: Array,   default: () => [] },
         defaultView:    { type: String,  default: 'table' },
         allowCardView:  { type: Boolean, default: true },
+        expandable:     { type: Boolean, default: true },   // false = no row chevron / details panel
         initialPerPage: { type: Number,  default: 10 },
         initialSort:    { type: String,  default: '' },
         initialDir:     { type: String,  default: 'asc' },
@@ -338,6 +340,7 @@ export default {
                                         </button>
                                         <!-- Expand chevron -->
                                         <button
+                                            v-if="expandable"
                                             class="dt-action-btn dt-action-btn--expand"
                                             :class="{ 'is-expanded': expanded_id === item.id }"
                                             title="Details"
@@ -533,7 +536,7 @@ export default {
         )
 
         const hasActions = computed(() =>
-            props.canEdit || props.canDelete || props.canView || props.mode !== 'read'
+            props.canEdit || props.canDelete || props.canView || (props.mode !== 'read' && props.expandable)
         )
 
         const colSpan = computed(() => {
