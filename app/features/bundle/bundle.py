@@ -1815,6 +1815,13 @@ def get_bundle_list_rule_part_of():
         j['rule_paths'] = paths.get(b.id, [])
         j['is_own'] = my_id is not None and b.user_id == my_id
         j['tags'] = BundleModel.get_tags_for_bundle_json(b.id)
+        # a fork: say of which bundle — its name only when the viewer may see the original
+        j['forked_from'] = None
+        if b.forked_from_uuid:
+            parent = BundleModel.get_bundle_by_id(b.forked_from_id) if b.forked_from_id else None
+            j['forked_from'] = ({'id': parent.id, 'name': parent.name, 'visible': True}
+                                if parent and BundleModel.can_view_bundle(parent)
+                                else {'id': None, 'name': None, 'visible': False})
         out.append(j)
     return {"bundles": out, "total": len(out)}, 200
 

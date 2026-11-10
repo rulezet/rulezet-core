@@ -124,13 +124,17 @@
                 <div v-else class="d-flex flex-column gap-3">
                     <article v-for="b in visibleBundles" :key="b.id" class="rb-item">
                         <div class="rb-item__main">
-                            <div class="rb-item__icon"><i class="fa-solid fa-layer-group"></i></div>
+                            <div class="rb-item__icon" :class="{ 'rb-item__icon--fork': b.is_fork }"><i class="fa-solid" :class="b.is_fork ? 'fa-code-fork' : 'fa-layer-group'"></i></div>
                             <div class="flex-grow-1" style="min-width:0;">
                                 <div class="d-flex flex-wrap align-items-center gap-2">
                                     <a :href="`/bundle/detail/${b.id}`" class="rb-item__title">[[ b.name ]]</a>
                                     <span v-if="b.is_verified" class="rb-badge rb-badge--verified"><i class="fa-solid fa-circle-check"></i>Verified</span>
                                     <span v-if="!b.access" class="rb-badge"><i class="fa-solid fa-lock"></i>Private</span>
                                     <span v-if="b.is_own" class="rb-badge rb-badge--own"><i class="fa-solid fa-user"></i>Yours</span>
+                                    <span v-if="b.is_fork" class="rb-badge rb-badge--fork" title="This bundle is a fork (a copy that can propose its changes back)">
+                                        <i class="fa-solid fa-code-fork"></i>Fork<template v-if="b.forked_from && b.forked_from.visible"> of
+                                        <a :href="`/bundle/detail/${b.forked_from.id}`" class="rb-badge__link">[[ b.forked_from.name ]]</a></template>
+                                    </span>
                                 </div>
                                 <div class="rb-item__meta">
                                     <a :href="`/account/detail_user/${b.user_id}`" class="rb-item__author">
@@ -232,10 +236,12 @@
             const filterOptions = [
                 { key: 'all', label: 'All' },
                 { key: 'verified', label: 'Verified' },
+                { key: 'forks', label: 'Forks' },
                 ...(isAuthenticated ? [{ key: 'mine', label: 'Mine' }, { key: 'others', label: 'Community' }] : []),
             ];
             function matchesFilter(b, key) {
                 if (key === 'verified') return !!b.is_verified;
+                if (key === 'forks')    return !!b.is_fork;
                 if (key === 'mine')     return b.is_own;
                 if (key === 'others')   return !b.is_own;
                 return true;

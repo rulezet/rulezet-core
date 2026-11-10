@@ -201,3 +201,9 @@ a.rb-path:hover .rb-path__seg { border-color: #0d6efd; }
 }
 .rb-strip__more:hover { text-decoration: underline; }
 .rb-strip--empty { font-size: .8rem; color: var(--subtle-text-color); }
+
+/* forks (purple, like the bundle fork panel) */
+.rb-badge--fork { color: #6f42c1; border-color: rgba(111,66,193,.3); background: rgba(111,66,193,.08); }
+.rb-badge__link { color: inherit; font-weight: 700; text-decoration: none; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+.rb-badge__link:hover { text-decoration: underline; }
+.rb-item__icon--fork { background: rgba(111,66,193,.12) !important; color: #6f42c1 !important; }
