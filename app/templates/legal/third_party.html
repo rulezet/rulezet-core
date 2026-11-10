@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% block title %}Third-Party Software — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account/user_detail.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/legal/third_party.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5">
+
+    <!-- ── Banner ── -->
+    <div class="explorer-banner mb-4">
+        <i class="fa-solid fa-boxes-packing banner-watermark"></i>
+        <nav aria-label="breadcrumb" class="mb-2">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+                <li class="breadcrumb-item"><a href="/legal" class="text-decoration-none text-muted">Legal notice</a></li>
+                <li class="breadcrumb-item active text-muted" aria-current="page">Third-party software</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="banner-icon"><i class="fa-solid fa-boxes-packing"></i></div>
+            <div><h2 class="fw-bold mb-1">Third-Party Software</h2><div class="banner-accent"></div></div>
+        </div>
+        <p class="text-muted mb-0" style="max-width:660px;font-size:.95rem;">
+            Every library, font, data set and tool Rulezet is built on — with its license and a link to the project.
+        </p>
+    </div>
+
+    <!-- ── The power of open source ── -->
+    <section class="tp-hero mb-4">
+        <div class="tp-hero__icon"><i class="fa-brands fa-osi"></i></div>
+        <div>
+            <h3 class="tp-hero__title">The power of open source brings us together.</h3>
+            <p class="tp-hero__text">
+                Rulezet is free software (GNU AGPL v3), and it only exists thanks to the work of thousands of people who
+                share their code, fonts and data openly. Each component below stays under its own license; we thank their
+                authors and communities, and we credit them here as their licenses ask.
+            </p>
+        </div>
+    </section>
+
+    <div class="tp-kpis mb-4">
+        <div class="ud-kpi-card ud-kpi-card--blue"><div class="ud-kpi-icon"><i class="fa-brands fa-python"></i></div>
+            <div class="ud-kpi-body"><div class="ud-kpi-value">{{ packages|length }}</div><div class="ud-kpi-label">Python packages</div></div></div>
+        <div class="ud-kpi-card ud-kpi-card--teal"><div class="ud-kpi-icon"><i class="fa-solid fa-link"></i></div>
+            <div class="ud-kpi-body"><div class="ud-kpi-value">{{ direct_count }}</div><div class="ud-kpi-label">Direct dependencies</div></div></div>
+        <div class="ud-kpi-card ud-kpi-card--purple"><div class="ud-kpi-icon"><i class="fa-solid fa-cubes"></i></div>
+            <div class="ud-kpi-body"><div class="ud-kpi-value">{{ other_count }}</div><div class="ud-kpi-label">Libraries, fonts, data &amp; tools</div></div></div>
+    </div>
+
+    <!-- jump links -->
+    <nav class="tp-toc mb-4" aria-label="Sections">
+        {% for g in groups %}<a href="#group-{{ loop.index }}"><i class="fa-solid {{ g.icon or 'fa-box' }}"></i>{{ g.title }}</a>{% endfor %}
+        <a href="#python"><i class="fa-brands fa-python"></i>Python packages</a>
+    </nav>
+
+    <!-- ── Libraries, fonts, data, modules, tools (setting legal.third_party) ── -->
+    {% for g in groups %}
+    <section class="tp-group mb-4" id="group-{{ loop.index }}">
+        <div class="ud-section-header mb-3">
+            <i class="fa-solid {{ g.icon or 'fa-box' }} ud-section-icon"></i>
+            <div><div class="ud-section-title">{{ g.title }}</div><div class="ud-section-sub">{{ g['items']|length }} component{{ 's' if g['items']|length > 1 }}</div></div>
+        </div>
+        <div class="tp-grid">
+            {% for i in g['items'] %}
+            <div class="tp-item">
+                <div class="tp-item__head">
+                    {% if i.url %}<a href="{{ i.url }}" target="_blank" rel="noopener noreferrer" class="tp-item__name">{{ i.name }} <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                    {% else %}<span class="tp-item__name">{{ i.name }}</span>{% endif %}
+                    {% if i.version %}<span class="tp-version">{{ i.version }}</span>{% endif %}
+                </div>
+                <div class="tp-license"><i class="fa-solid fa-scale-balanced"></i>{{ i.license }}</div>
+                {% if i.use %}<div class="tp-use">{{ i.use }}</div>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+
+    <!-- ── Python packages (read from the server's environment) ── -->
+    <section class="tp-group mb-4" id="python">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+            <div class="ud-section-header">
+                <i class="fa-brands fa-python ud-section-icon"></i>
+                <div>
+                    <div class="ud-section-title">Python packages</div>
+                    <div class="ud-section-sub">Read from this server's environment: always the exact list, versions and licenses in use.</div>
+                </div>
+            </div>
+            <input type="search" class="form-control form-control-sm tp-search" id="tp-search" placeholder="Filter by name or license…" aria-label="Filter the Python packages">
+        </div>
+        <div class="tp-licenses mb-3">
+            {% for name, n in top_licenses %}<span>{{ name }} <b>{{ n }}</b></span>{% endfor %}
+        </div>
+        <div class="tp-table-wrap">
+            <table class="tp-table" id="tp-table">
+                <thead><tr><th>Package</th><th>Version</th><th>License</th><th class="d-none d-md-table-cell">What it is</th></tr></thead>
+                <tbody>
+                    {% for p in packages %}
+                    <tr data-q="{{ (p.name ~ ' ' ~ p.license)|lower }}">
+                        <td>
+                            {% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener noreferrer">{{ p.name }}</a>{% else %}{{ p.name }}{% endif %}
+                            {% if p.direct %}<span class="tp-direct" title="Listed in Rulezet's pyproject.toml">direct</span>{% endif %}
+                        </td>
+                        <td class="tp-mono">{{ p.version }}</td>
+                        <td>{{ p.license }}</td>
+                        <td class="d-none d-md-table-cell tp-summary">{{ p.summary }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <p class="tp-note">
+        <i class="fa-solid fa-circle-info me-1"></i>
+        Each component's full license text comes with its source code. Rulezet's own code is under the
+        <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener noreferrer">GNU AGPL v3</a> —
+        <a href="https://github.com/rulezet/rulezet-core" target="_blank" rel="noopener noreferrer">source code on GitHub</a>.
+        Spotted a missing credit or a wrong license? <a href="https://github.com/rulezet/rulezet-core/issues" target="_blank" rel="noopener noreferrer">Tell us</a>.
+    </p>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+    // filter the Python packages table
+    (function () {
+        var input = document.getElementById('tp-search');
+        var rows = document.querySelectorAll('#tp-table tbody tr');
+        if (!input) return;
+        input.addEventListener('input', function () {
+            var q = input.value.trim().toLowerCase();
+            rows.forEach(function (r) { r.hidden = q && r.dataset.q.indexOf(q) === -1; });
+        });
+    })();
+</script>
+{% endblock %}

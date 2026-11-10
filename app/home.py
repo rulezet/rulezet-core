@@ -824,6 +824,22 @@ def about() -> render_template:
 def privacy_policy() -> render_template:
     return render_template("privacy_policy.html")
 
+@home_blueprint.route("/legal/third-party")
+def third_party_software() -> render_template:
+    """Every piece of third-party software Rulezet uses, with its license: the Python packages read
+    from this server's environment, the rest from the setting legal.third_party."""
+    from app.core.utils.third_party import python_packages, other_components
+    packages = python_packages()
+    groups = other_components()
+    licenses = {}
+    for p in packages:
+        licenses[p['license']] = licenses.get(p['license'], 0) + 1
+    return render_template("legal/third_party.html", packages=packages, groups=groups,
+                           direct_count=sum(1 for p in packages if p['direct']),
+                           other_count=sum(len(g['items']) for g in groups),
+                           top_licenses=sorted(licenses.items(), key=lambda kv: -kv[1])[:8])
+
+
 # legal notice page
 @home_blueprint.route("/legal")
 def legal_notice() -> render_template:
