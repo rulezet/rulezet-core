@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/timeline.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin/logs.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/ip-address.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 {% endblock %}
@@ -178,7 +179,7 @@
             </div>
             <div class="logs-detail-field" v-if="selectedTlItem.ip_address">
               <span class="logs-detail-label">IP</span>
-              <span class="logs-detail-value">[[ selectedTlItem.ip_address ]]</span>
+              <span class="logs-detail-value"><ip-address :ip="selectedTlItem.ip_address"></ip-address></span>
             </div>
             <div class="logs-detail-field" v-if="selectedTlItem.method">
               <span class="logs-detail-label">Method</span>
@@ -290,13 +291,14 @@ import { create_message } from '/static/js/toaster.js'
 import LogTable            from '/static/js/components/log-table.js'
 import Timeline            from '/static/js/components/timeline.js'
 import CodeViewer          from '/static/js/components/code-viewer.js'
+import IpAddress           from '/static/js/components/ip-address.js'
 
 const { createApp, ref, onMounted } = Vue
 
 createApp({
     delimiters: ['[[', ']]'],
     components: {
-        'log-table': LogTable, 'timeline': Timeline, 'code-viewer': CodeViewer,
+        'log-table': LogTable, 'timeline': Timeline, 'code-viewer': CodeViewer, 'ip-address': IpAddress,
     },
     setup() {
 

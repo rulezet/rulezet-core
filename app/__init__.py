@@ -177,6 +177,8 @@ def create_app(start_worker=True):
     app.register_blueprint(rule_mirror_blueprint)
     from app.features.admin.cache.cache_routes import cache_admin_blueprint
     app.register_blueprint(cache_admin_blueprint)          # /admin/cache
+    from app.features.admin.ip_lookup.ip_lookup_routes import ip_lookup_blueprint
+    app.register_blueprint(ip_lookup_blueprint)            # /admin/ip-lookup/<ip>
     app.register_blueprint(media_blueprint)
     app.register_blueprint(media_static_blueprint)
     app.register_blueprint(app_settings_blueprint)

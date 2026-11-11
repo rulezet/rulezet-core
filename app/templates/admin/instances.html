@@ -1,6 +1,9 @@
 {% extends 'base.html' %}
 {% import 'macros/admin_nav.html' as anav %}
 {% block title %}Instance Registry — Rulezet{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/ip-address.css') }}">
+{% endblock %}
 
 {% block content %}
 {% if current_user.is_admin() %}
@@ -166,7 +169,7 @@
                         </td>
                         <td>
                             {% if inst.ip_address %}
-                            <code style="font-size:.78rem;">{{ inst.ip_address }}</code>
+                            <span class="ipa" data-ip="{{ inst.ip_address }}" style="font-size:.78rem;">{{ inst.ip_address }}</span>
                             {% else %}
                             <span class="text-muted" style="font-size:.8rem;">—</span>
                             {% endif %}
@@ -337,6 +340,13 @@
         return `${d} d ago`
     }
 
+    function escHtml(v) {
+        return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+    }
+    // IP addresses: magnifier → whois window (components/ip-address.js)
+    function withIpLookup(fn) { import('/static/js/components/ip-address.js').then(fn) }
+    withIpLookup(m => m.enhanceIpAddresses(document))
+
     function renderPullHistory(entries, count, label) {
         pullStatTotal.textContent = count
         if (entries.length === 0) {
@@ -349,8 +359,8 @@
 
         const items = entries.map(e => {
             const rel   = relTime(e.created_at)
-            const ip    = e.ip_address ? `<span class="badge bg-secondary-subtle text-secondary ms-2" style="font-size:.65rem;font-family:monospace;">${e.ip_address}</span>` : ''
-            const url   = e.instance_url ? `<div class="text-muted" style="font-size:.72rem;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px;">${e.instance_url}</div>` : ''
+            const ip    = e.ip_address ? `<span class="badge bg-secondary-subtle text-secondary ms-2" style="font-size:.65rem;"><span class="ipa" data-ip="${escHtml(e.ip_address)}">${escHtml(e.ip_address)}</span></span>` : ''
+            const url   = e.instance_url ? `<div class="text-muted" style="font-size:.72rem;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px;">${escHtml(e.instance_url)}</div>` : ''
             const total = e.rules_total != null ? `<div class="text-muted" style="font-size:.72rem;">${Number(e.rules_total).toLocaleString()} rules available</div>` : ''
             return `
             <div class="d-flex gap-3 py-2 border-bottom" style="font-size:.8rem;">
@@ -367,6 +377,7 @@
             </div>`
         }).join('')
         pullList.innerHTML = items
+        withIpLookup(m => m.enhanceIpAddresses(pullList))
     }
 
     document.querySelectorAll('.show-pulls').forEach(btn => {

@@ -1,0 +1,85 @@
+/* IP address + whois window — js/components/ip-address.js (IpAddress, enhanceIpAddresses, openIpLookup). */
+
+/* ── The address and its magnifier (visible on hover / keyboard focus) ── */
+.ipa { display: inline-flex; align-items: center; gap: .3rem; max-width: 100%;
+    font-family: var(--bs-font-monospace, monospace); overflow-wrap: anywhere; }
+.ipa-btn {
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 22px; height: 22px; padding: 0; border-radius: 6px;
+    border: 1px solid transparent; background: transparent; color: #0d6efd;
+    font-size: .7rem; cursor: pointer; opacity: 0;
+    transition: opacity .12s ease, background .12s ease, border-color .12s ease;
+}
+.ipa:hover .ipa-btn, .ipa-btn:focus-visible { opacity: 1; }
+.ipa-btn:hover, .ipa-btn:focus-visible { background: rgba(13, 110, 253, .1); border-color: rgba(13, 110, 253, .3); outline: none; }
+@media (hover: none) { .ipa-btn { opacity: 1; } }     /* touch screens: no hover, always shown */
+
+/* ── Window ── */
+.ipa-overlay {
+    position: fixed; inset: 0; z-index: 2100;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+    background: rgba(8, 15, 30, .45); backdrop-filter: blur(2px);
+}
+.ipa-overlay[hidden] { display: none; }
+body.ipa-open { overflow: hidden; }
+.ipa-modal {
+    width: 100%; max-width: 600px; max-height: calc(100vh - 32px); display: flex; flex-direction: column;
+    border-radius: 16px; border: 1px solid var(--border-color);
+    background: var(--card-bg-color); color: var(--text-color);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .25); overflow: hidden;
+    animation: ipa-in .15s ease;
+}
+@keyframes ipa-in { from { transform: translateY(8px) scale(.98); opacity: 0; } }
+
+.ipa-head { display: flex; align-items: center; gap: .6rem; padding: 1rem 1.1rem;
+    border-bottom: 1px solid var(--border-color); }
+.ipa-head-icon { width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #0d6efd, #0a58ca); color: #fff; }
+.ipa-head-text { flex: 1; min-width: 0; }
+.ipa-head-kicker { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--subtle-text-color); }
+.ipa-title { font-weight: 700; font-size: 1.05rem; overflow-wrap: anywhere; }
+.ipa-icon-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border-color);
+    background: transparent; color: var(--subtle-text-color); flex-shrink: 0; }
+.ipa-icon-btn:hover { color: #0d6efd; border-color: rgba(13, 110, 253, .4); }
+
+.ipa-body { padding: 1.1rem; overflow-y: auto; }
+.ipa-mono { font-family: var(--bs-font-monospace, monospace); overflow-wrap: anywhere; }
+.ipa-muted, .ipa-sub { color: var(--subtle-text-color); }
+.ipa-sub { font-size: .78rem; margin-top: .15rem; overflow-wrap: anywhere; }
+
+.ipa-state { display: flex; align-items: center; gap: .8rem; padding: 1.4rem .4rem; color: var(--subtle-text-color); }
+.ipa-state > i { font-size: 1.4rem; color: #0d6efd; }
+.ipa-state--error > i { color: #dc3545; }
+
+/* country + organisation */
+.ipa-hero { display: flex; align-items: center; gap: .9rem; padding: .9rem 1rem; margin-bottom: 1rem;
+    border-radius: 12px; background: var(--light-bg-color); border: 1px solid var(--border-color); }
+.ipa-flag { font-size: 2.2rem; line-height: 1; color: #0d6efd; }
+.ipa-hero-text { flex: 1; min-width: 0; }
+.ipa-hero-country { font-weight: 700; font-size: 1.05rem; }
+.ipa-hero-org { color: var(--subtle-text-color); font-size: .88rem; overflow-wrap: anywhere; }
+.ipa-code { font-size: .7rem; font-weight: 600; padding: .1rem .35rem; border-radius: 4px;
+    background: rgba(13, 110, 253, .12); color: #0d6efd; vertical-align: middle; }
+.ipa-registry { font-size: .72rem; font-weight: 600; padding: .25rem .55rem; border-radius: 999px;
+    border: 1px solid rgba(13, 110, 253, .35); color: #0d6efd; white-space: nowrap; }
+
+.ipa-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
+.ipa-cell { padding: .55rem .7rem; border-radius: 10px; border: 1px solid var(--border-color); min-width: 0; }
+.ipa-cell--wide { grid-column: 1 / -1; }
+.ipa-cell-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--subtle-text-color); margin-bottom: .2rem; }
+.ipa-cell-label i { width: 1rem; margin-right: .3rem; color: #0d6efd; }
+.ipa-cell-value { font-size: .86rem; overflow-wrap: anywhere; }
+@media (max-width: 520px) { .ipa-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.ipa-notes { margin-top: .8rem; font-size: .8rem; color: var(--subtle-text-color); }
+.ipa-notes summary { cursor: pointer; }
+.ipa-notes div { margin-top: .2rem; overflow-wrap: anywhere; }
+
+.ipa-links { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: 1rem; }
+.ipa-link { font-size: .78rem; padding: .3rem .6rem; border-radius: 8px; text-decoration: none;
+    border: 1px solid var(--border-color); color: var(--text-color); }
+.ipa-link:hover { border-color: rgba(13, 110, 253, .5); color: #0d6efd; }
+.ipa-link i { font-size: .65rem; margin-left: .2rem; }
+.ipa-source { margin-top: .9rem; font-size: .72rem; color: var(--subtle-text-color); }
