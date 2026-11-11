@@ -210,6 +210,155 @@ class CreateRule(Resource):
         
          
 
+###################
+#   Edit a rule   #
+###################
+
+def _last_modif_iso(rule):
+    return rule.last_modif.isoformat() if rule.last_modif else None
+
+
+@rule_private_ns.route('/edit/<int:rule_id>')
+@rule_private_ns.doc(
+    description="""
+Change a rule's content with your API key.
+
+- **You own the rule** (or you are an admin): choose `"mode": "edit"` (the rule itself is
+  updated — the same save as the web edit page: version bumped, history entry) or
+  `"mode": "proposal"` (an edit proposal, reviewed on Rulezet).
+- **You don't own it**: an edit proposal is always created (`mode` is ignored), exactly like
+  "Propose an edit" on the website — the owner is notified and reviews it.
+
+The new content is validated first (same check as the web, referenced YARA rules resolved).
+
+### Conflict check (direct edit)
+
+Send what you last read from `GET /api/rule/public/detail/<id>`: `base_last_modif` (its
+`last_modif`) and/or `base_version` (its `version`). If the rule changed on Rulezet since,
+the edit is refused with **409** and the current values, so nothing is overwritten silently.
+
+### JSON body
+
+| Field            | Type   | Required | Description                                                    |
+|------------------|--------|----------|----------------------------------------------------------------|
+| content          | string | yes      | The new rule content                                           |
+| mode             | string | no       | `edit` (owner/admin only) or `proposal` (default `proposal`)   |
+| message          | string | no       | Why — the proposal's message (shown to the owner)              |
+| base_last_modif  | string | no       | `last_modif` you based the change on (ISO 8601)                |
+| base_version     | string | no       | `version` you based the change on                              |
+
+### Responses
+
+Direct edit — 200:
+```json
+{"success": true, "mode": "edit", "rule_id": 12, "version": "1.1",
+ "last_modif": "2026-11-11T10:24:03.120934", "url": "https://rulezet.org/rule/detail_rule/12"}
+```
+Proposal — 201 (`owner`: whether you could have edited directly):
+```json
+{"success": true, "mode": "proposal", "rule_id": 12, "proposal_id": 345, "owner": false,
+ "url": "https://rulezet.org/rule/proposal_content_discuss?id=345"}
+```
+Errors: `{"success": false, "message": "..."}` — 400 (invalid body / syntax error / same
+content), 403 (`mode: edit` on a rule you don't own), 404 (rule not found), 409 (conflict
+or an identical open proposal; a conflict also returns `current_version` and
+`current_last_modif`).
+
+### Example cURL
+
+```bash
+curl -X POST http://127.0.0.1:7009/api/rule/private/edit/12 \\
+  -H "Content-Type: application/json" -H "X-API-KEY: <YOUR_API_KEY>" \\
+  -d '{"content": "rule x { condition: true }", "mode": "edit", "message": "Fix condition",
+       "base_last_modif": "2026-11-10T08:00:00"}'
+```
+"""
+)
+class EditRule(Resource):
+    @api_required
+    def post(self, rule_id):
+        """Edit a rule (owner) or propose an edit (anyone)"""
+        user = utils.get_user_from_api(request.headers)
+        if not user:
+            return {"success": False, "message": "Unauthorized"}, 403
+
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return {"success": False, "message": "The body must be a JSON object"}, 400
+
+        content = data.get("content")
+        message = data.get("message")
+        mode = (data.get("mode") or "proposal")
+        if not isinstance(content, str) or not content.strip():
+            return {"success": False, "message": "'content' is required (text)"}, 400
+        if message is not None and not isinstance(message, str):
+            return {"success": False, "message": "'message' must be text"}, 400
+        if mode not in ("edit", "proposal"):
+            return {"success": False, "message": "'mode' must be 'edit' or 'proposal'"}, 400
+        content = content.replace('\r\n', '\n').replace('\r', '\n')
+
+        rule = RuleModel.get_rule(rule_id)
+        if not rule or rule.is_deleted:
+            return {"success": False, "message": "Rule not found"}, 404
+
+        base = (request.host_url or "").rstrip("/")
+        is_owner_or_admin = user.id == rule.user_id or user.is_admin()
+
+        # ── Not the owner, or the owner asked for a proposal ─────────────────
+        if mode == "proposal" or not is_owner_or_admin:
+            proposal_id, error, code = RuleModel.submit_edit_proposal(
+                rule, user.id, content, message, "content_update", source="api")
+            if error:
+                return {"success": False, "message": error}, code
+            return {
+                "success": True, "mode": "proposal", "rule_id": rule.id, "proposal_id": proposal_id,
+                "owner": is_owner_or_admin,
+                "url": f"{base}/rule/proposal_content_discuss?id={proposal_id}",
+            }, 201
+
+        # ── Direct edit (owner / admin) ──────────────────────────────────────
+        base_last_modif = data.get("base_last_modif")
+        base_version = data.get("base_version")
+        conflict = False
+        if base_last_modif:
+            from datetime import datetime
+            try:
+                sent = datetime.fromisoformat(str(base_last_modif).replace("Z", "+00:00")).replace(tzinfo=None)
+            except ValueError:
+                return {"success": False, "message": "'base_last_modif' must be an ISO 8601 date"}, 400
+            current = rule.last_modif.replace(tzinfo=None) if rule.last_modif else None
+            # a value read at minute precision (older responses) still matches its minute
+            if current and sent != current and not (sent.second == 0 and sent.microsecond == 0
+                                                   and sent == current.replace(second=0, microsecond=0)):
+                conflict = True
+        if base_version is not None and str(base_version) != str(rule.version):
+            conflict = True
+        if conflict:
+            return {
+                "success": False,
+                "message": "The rule changed on Rulezet since your version — reload it and apply your change again.",
+                "current_version": rule.version,
+                "current_last_modif": _last_modif_iso(rule),
+            }, 409
+
+        if "".join((rule.to_string or "").split()) == "".join(content.split()):
+            return {"success": False, "message": "The content is the same as the current content (ignoring formatting)."}, 400
+
+        rule_dict = rule.to_json()
+        rule_dict["to_string"] = content
+        valid, error = verify_syntax_rule_by_format(rule_dict, rule=rule)
+        if not valid:
+            return {"success": False, "message": f"Syntax error: {error}"}, 400
+
+        rule_dict["cve_id"] = rule.cve_id      # kept as is (to_json may turn it into [])
+        saved = RuleModel.save_rule_edit(rule, rule_dict, user.id)
+        return {
+            "success": True, "mode": "edit", "rule_id": saved.id, "version": saved.version,
+            "last_modif": _last_modif_iso(saved),
+            "url": f"{base}/rule/detail_rule/{saved.id}",
+        }, 200
+
+
 #####################
 #   Delete a rule   #
 #####################
@@ -815,6 +964,7 @@ All parameters are optional. Combining them applies AND logic between filters.
 | license         | string          | Filter by license — comma-separated for OR (e.g. `"MIT,GPL"`)              |
 | vulnerabilities | list[string]    | Filter by CVE IDs (e.g. `["CVE-2021-44228"]`)                              |
 | tags            | list[string]    | Filter by tag names (e.g. `["malware", "apt"]`)                             |
+| mine            | boolean         | If true, only the rules you own (the API key's user)                        |
 | sort_by         | string          | `newest` (default), `oldest`, `most_likes`, `least_likes`                  |
 | page            | integer         | Page number, default 1                                                      |
 | per_page        | integer         | Results per page, default 20, max 100. Ignored if `paginate` is false       |
@@ -1002,9 +1152,19 @@ class SearchRules(Resource):
                     "message": f"Invalid CVE format(s): {', '.join(bad_cves)}. Expected format: CVE-YYYY-NNNNN"
                 }, 400
 
+        mine = data.get("mine", False)
+        if not isinstance(mine, bool):
+            if str(mine).lower() in ("true", "1"):
+                mine = True
+            elif str(mine).lower() in ("false", "0", ""):
+                mine = False
+            else:
+                return {"success": False, "message": "'mine' must be a boolean"}, 400
+
         # ── Run query ─────────────────────────────────────────────────────────
         try:
             query = RuleModel.filter_rules(
+                user_id         = user.id if mine else None,
                 search          = search,
                 search_field    = search_field,
                 exact_match     = exact_match,
