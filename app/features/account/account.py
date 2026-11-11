@@ -1042,9 +1042,11 @@ def verify(user_id):
                 is_public=False,
                 actor_id=user_id,
             )
-            flash("Account verified!", "success")
+            # New member: land on their profile, invited to finish it (picture, bio…)
+            flash("Welcome to Rulezet! Your account is verified. You can now complete your profile: "
+                  "add a profile picture, a bio and your links.||/account/edit", "success")
             login_user(user, remember=True)
-            return redirect("/")
+            return redirect("/account/profil")
         else:
             flash("Invalid code.", "warning")
             
