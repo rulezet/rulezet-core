@@ -2030,6 +2030,19 @@ wheels = [
 ]
 
 [[package]]
+name = "pyatr"
+version = "0.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyyaml" },
+    { name = "regex" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4f/ba/675cec572f92dfb27898015e4b3571c21a3fa039f4b8f95854c1492a75af/pyatr-0.5.0.tar.gz", hash = "sha256:0cb27aaf8adea853280f1295ed5e0b00f995f9f109c46c262294b0d5a78db3c7", size = 836603, upload-time = "2026-11-04T20:57:43.845Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/39/d5/84e7985f027347f305444d211927f88657b15470b02759f1606f387e4e5d/pyatr-0.5.0-py3-none-any.whl", hash = "sha256:42882ba9b1631d90d22e76c977f7b3f3bb298a971bf0c87bf4c99ddaaa8ffaa5", size = 828048, upload-time = "2026-11-04T20:57:42.616Z" },
+]
+
+[[package]]
 name = "pycparser"
 version = "3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2743,6 +2756,7 @@ dependencies = [
     { name = "openai" },
     { name = "psutil" },
     { name = "psycopg2-binary" },
+    { name = "pyatr" },
     { name = "pymisp" },
     { name = "pysigma" },
     { name = "pysigma-backend-elasticsearch" },
@@ -2806,6 +2820,7 @@ requires-dist = [
     { name = "openai", specifier = ">=1.107.1,<2" },
     { name = "psutil", specifier = ">=7.2.2" },
     { name = "psycopg2-binary", specifier = ">=2.9.12" },
+    { name = "pyatr", specifier = ">=0.5.0" },
     { name = "pymisp", specifier = ">=2.5.34.1" },
     { name = "pysigma", specifier = ">=1.4.0" },
     { name = "pysigma-backend-elasticsearch", specifier = ">=2.1.1" },

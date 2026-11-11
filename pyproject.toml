@@ -64,6 +64,7 @@ dependencies = [
     "pysigma-backend-secops>=1.0.0",
     "pysigma-backend-splunk>=2.1.0",
     "pysigma-backend-sumologic>=0.2.3",
+    "pyatr>=0.5.0",                       # ATR rule tester driver (app/features/rule_tester/drivers/atr_driver.py)
     # integrations
     "pymisp>=2.5.34.1",
     "pyvelociraptor>=0.1.14",
