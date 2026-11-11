@@ -636,29 +636,6 @@ def edit_rule(rule_id) -> render_template:
             
 
             
-            # create an history for the rule
-
-            content_changed = rule.to_string.strip() != form_dict['to_string'].strip()
-            old_snapshot = RuleModel.rule_metadata_snapshot(rule)
-            history = None
-
-            if content_changed:
-                if rule_dict["version"] == rule.version:
-                    rule_dict["version"] = bump_version(rule_dict["version"])
-                result = {
-                    "id": rule_id,
-                    "title": rule.title,
-                    "success": True,
-                    "manual_submit": True,
-                    "message": "simple edit",
-                    "new_content": form_dict['to_string'],
-                    "old_content": rule.to_string,
-                    "old_snapshot": old_snapshot,
-                }
-                history_id = RuleModel.create_rule_history(result)
-                history = RuleModel.get_history_rule_by_id(history_id)
-                history.message = "accepted"
-
             v_data = request.form.get('vulnerabilities')
             form_dict['vulnerabilities'] = v_data
 
@@ -670,40 +647,7 @@ def edit_rule(rule_id) -> render_template:
 
             rule_dict['related_rules'] = request.form.get('related_rules')
 
-            success , current_rule = RuleModel.edit_rule_core(rule_dict, rule_id)
-            log_activity("rule.edit", f"Edited rule '{current_rule.title}' (id={rule_id})",
-                         target_type="rule", target_id=rule_id, target_uuid=current_rule.uuid)
-
-            # Someone other than the owner (an admin, typically) touched this
-            # rule — credit them as a contributor.
-            if current_user.id != current_rule.user_id:
-                RuleModel.add_contributor(current_user.id, rule_id)
-
-            new_snapshot = RuleModel.rule_metadata_snapshot(current_rule)
-            metadata_changed = new_snapshot != old_snapshot
-
-            if history is not None:
-                # Content already tracked above — attach the metadata diff to the same version.
-                history.new_snapshot = new_snapshot
-                history.change_type = "mixed" if metadata_changed else "content"
-                db.session.commit()
-            elif metadata_changed:
-                # No content change, but title/author/owner/tags/etc changed — still worth a version.
-                # manual_submit=False: was_last_history_manuel() gates GitHub
-                # auto-sync on this flag and a metadata-only edit shouldn't
-                # block future content syncs for the rule.
-                RuleModel.create_rule_history({
-                    "id": rule_id,
-                    "title": current_rule.title,
-                    "success": True,
-                    "manual_submit": False,
-                    "message": "Metadata updated",
-                    "new_content": current_rule.to_string,
-                    "old_content": current_rule.to_string,
-                    "old_snapshot": old_snapshot,
-                    "new_snapshot": new_snapshot,
-                    "change_type": "metadata",
-                })
+            current_rule = RuleModel.save_rule_edit(rule, rule_dict, current_user.id)
 
             # tested with the editor's Test button right before saving: that result is this version's
             try:
@@ -2474,55 +2418,10 @@ def propose_edit(rule_id) -> redirect:
     if not rule:
         return _err("Rule not found.", 404)
 
-    current_normalized  = "".join(rule.to_string.split())
-    proposed_normalized = "".join(proposed_content.split())
-
-    if current_normalized == proposed_normalized:
-        return _err("Proposed content is the same as the current content (ignoring formatting).")
-
-    open_duplicate = RuleModel.find_open_duplicate(rule_id, proposed_content)
-    if open_duplicate:
-        return _err(f"An open proposal (#{open_duplicate.id}) already proposes this exact content — "
-                    f"comment on it or revise it instead.", 409)
-
-    rule_dict = rule.to_json()
-    rule_dict['to_string'] = proposed_content
-    valide, error = verify_syntax_rule_by_format(rule_dict, rule=rule)
-    if not valide:
-        return _err(f"Syntax error in proposed content: {error}")
-
-    edit_type = data.get('edit_type', 'content_update')
-    form = {
-        "rule_id": rule_id,
-        "proposed_content": proposed_content,
-        "message": message,
-        "edit_type": edit_type,
-    }
-
-    success, proposal_id = RuleModel.propose_edit_core(form, current_user.id)
-    if not success:
-        return _err("Failed to save proposal.", 500)
-
-    gamification = AccountModel.get_or_create_gamification_profile(current_user.id)
-    if gamification:
-        AccountModel.update_propose_edit_gamification(gamification.id, "add_one_to_suggested")
-
-    try:
-        from app.features.notification.notification_core import notify_proposal_submitted
-        from app.core.db_class.rule_proposal import RuleEditProposal as ProposalModel
-        proposal_obj = ProposalModel.query.get(proposal_id)
-        if proposal_obj:
-            notify_proposal_submitted(proposal_obj, rule)
-    except Exception as _e:
-        print(f"[rule] notify_proposal_submitted error: {_e}")
-
-    log_activity(
-        "rule.propose_edit",
-        f"Submitted an edit proposal for rule '{rule.title}' (id={rule_id})",
-        target_type="rule", target_id=rule_id, target_uuid=rule.uuid,
-        extra={"proposal_id": proposal_id, "message": message or ""},
-        is_public=False,
-    )
+    proposal_id, error, code = RuleModel.submit_edit_proposal(
+        rule, current_user.id, proposed_content, message, data.get('edit_type', 'content_update'))
+    if error:
+        return _err(error, code)
 
     discuss_url = f"/rule/proposal_content_discuss?id={proposal_id}"
     if is_ajax:

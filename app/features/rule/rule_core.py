@@ -1720,6 +1720,139 @@ def propose_edit_core(form , user_id) -> bool:
     return True , new_proposal.id
 
 
+def save_rule_edit(rule, rule_dict: dict, editor_id: int, history_message: str = "simple edit") -> Rule:
+    """Save an already-validated full edit of a rule by its owner or an admin —
+    shared by the web edit page and the API (POST /api/rule/private/edit/<id>).
+
+    rule_dict holds every field edit_rule_core writes (format, title, license,
+    description, source, version, to_string, author, original_uuid, cve_id or
+    vulnerabilities; tags / related_rules / references only if they change).
+    When the content changes: version bumped if unchanged, a history entry
+    ("accepted") with the old/new content and the metadata diff. Metadata-only
+    change: a "Metadata updated" history entry. The editor is credited as a
+    contributor when not the owner. Returns the saved rule."""
+    from app.core.utils.utils import bump_version
+    from app.core.utils.activity_log import log_activity
+
+    content_changed = (rule.to_string or "").strip() != (rule_dict["to_string"] or "").strip()
+    old_snapshot = rule_metadata_snapshot(rule)
+    history = None
+
+    if content_changed:
+        if rule_dict["version"] == rule.version:
+            rule_dict["version"] = bump_version(rule_dict["version"])
+        history_id = create_rule_history({
+            "id": rule.id,
+            "title": rule.title,
+            "success": True,
+            "manual_submit": True,
+            "message": history_message,
+            "new_content": rule_dict["to_string"],
+            "old_content": rule.to_string,
+            "old_snapshot": old_snapshot,
+        })
+        history = get_history_rule_by_id(history_id)
+        history.message = "accepted"
+
+    _ok, current_rule = edit_rule_core(rule_dict, rule.id)
+    log_activity("rule.edit", f"Edited rule '{current_rule.title}' (id={rule.id})",
+                 target_type="rule", target_id=rule.id, target_uuid=current_rule.uuid,
+                 actor_id=editor_id)
+
+    # Someone other than the owner (an admin, typically) touched this rule — credit them.
+    if editor_id != current_rule.user_id:
+        add_contributor(editor_id, rule.id)
+
+    new_snapshot = rule_metadata_snapshot(current_rule)
+    metadata_changed = new_snapshot != old_snapshot
+
+    if history is not None:
+        # Content already tracked above — attach the metadata diff to the same version.
+        history.new_snapshot = new_snapshot
+        history.change_type = "mixed" if metadata_changed else "content"
+        db.session.commit()
+    elif metadata_changed:
+        # No content change, but title/author/owner/tags/etc changed — still worth a version.
+        # manual_submit=False: was_last_history_manuel() gates GitHub auto-sync on this
+        # flag and a metadata-only edit shouldn't block future content syncs for the rule.
+        create_rule_history({
+            "id": rule.id,
+            "title": current_rule.title,
+            "success": True,
+            "manual_submit": False,
+            "message": "Metadata updated",
+            "new_content": current_rule.to_string,
+            "old_content": current_rule.to_string,
+            "old_snapshot": old_snapshot,
+            "new_snapshot": new_snapshot,
+            "change_type": "metadata",
+        })
+    return current_rule
+
+
+def submit_edit_proposal(rule, user_id: int, proposed_content: str, message: str = None,
+                         edit_type: str = "content_update", source: str = "web") -> tuple:
+    """Create an edit proposal on a rule — the whole flow of the web "Propose an
+    edit" (POST /rule/propose_edit/<id>), shared with the API: content checks,
+    syntax validation, the proposal row, gamification, the owner's notification
+    and the activity log.
+
+    Returns (proposal_id, None, 201) on success, (None, error_message, http_code)
+    otherwise."""
+    from app.features.rule.rule_format.main_format import verify_syntax_rule_by_format
+    from app.core.utils.activity_log import log_activity
+
+    if not proposed_content or not proposed_content.strip():
+        return None, "Proposed content cannot be empty.", 400
+
+    if "".join((rule.to_string or "").split()) == "".join(proposed_content.split()):
+        return None, "Proposed content is the same as the current content (ignoring formatting).", 400
+
+    open_duplicate = find_open_duplicate(rule.id, proposed_content)
+    if open_duplicate:
+        return None, (f"An open proposal (#{open_duplicate.id}) already proposes this exact content — "
+                      f"comment on it or revise it instead."), 409
+
+    rule_dict = rule.to_json()
+    rule_dict['to_string'] = proposed_content
+    valide, error = verify_syntax_rule_by_format(rule_dict, rule=rule)
+    if not valide:
+        return None, f"Syntax error in proposed content: {error}", 400
+
+    success, proposal_id = propose_edit_core({
+        "rule_id": rule.id,
+        "proposed_content": proposed_content,
+        "message": message,
+        "edit_type": edit_type or "content_update",
+    }, user_id)
+    if not success:
+        return None, "Failed to save proposal.", 500
+
+    from app.features.account import account_core as AccountModel
+    gamification = AccountModel.get_or_create_gamification_profile(user_id)
+    if gamification:
+        AccountModel.update_propose_edit_gamification(gamification.id, "add_one_to_suggested")
+
+    try:
+        from app.features.notification.notification_core import notify_proposal_submitted
+        proposal_obj = RuleEditProposal.query.get(proposal_id)
+        if proposal_obj:
+            notify_proposal_submitted(proposal_obj, rule)
+    except Exception as _e:
+        print(f"[rule] notify_proposal_submitted error: {_e}")
+
+    extra = {"proposal_id": proposal_id, "message": message or ""}
+    if source != "web":
+        extra["source"] = source
+    log_activity(
+        "rule.propose_edit",
+        f"Submitted an edit proposal for rule '{rule.title}' (id={rule.id})",
+        target_type="rule", target_id=rule.id, target_uuid=rule.uuid,
+        extra=extra, is_public=False, actor_id=user_id,
+    )
+    return proposal_id, None, 201
+
+
 def create_proposal_revision(previous_proposal_id, proposed_content, message, edit_type, user_id):
     """Create a proposal that continues a prior one (discussion-driven revision).
 
@@ -5322,7 +5455,7 @@ def verify_rule_syntaxe(rule: Any , new_content) -> Optional[ValidationResult]:
 
 
 def validate_rule_syntax(rule_format: str, content: str,
-                         resolve_dependencies: bool = False) -> Optional[ValidationResult]:
+                         resolve_dependencies: bool = False, **trust) -> Optional[ValidationResult]:
     """Run the same per-format syntax check a rule goes through at creation
     time (verify_rule_syntaxe above), without a DB Rule object and without
     ever persisting anything — for a dry-run "would this rule be accepted"
@@ -5343,7 +5476,9 @@ def validate_rule_syntax(rule_format: str, content: str,
                 # No dependency resolution by default: this backs a public,
                 # unauthenticated endpoint — resolving YARA references means
                 # database lookups + one compile per referenced rule, per call.
-                return instance.validate(content, resolve_dependencies=resolve_dependencies)
+                # trust: rule_id / source / github_path / owner_ids — which referenced
+                # rules may be compiled in (see yara_format.find_trusted_dependency_rule)
+                return instance.validate(content, resolve_dependencies=resolve_dependencies, **trust)
         except Exception:
             continue
     return None

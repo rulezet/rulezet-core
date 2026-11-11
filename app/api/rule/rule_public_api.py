@@ -364,8 +364,15 @@ class DetailRule(Resource):
             # rule.author is the free-text author, not a User
             "source": rule.source or rule.author or f"{author.first_name} {author.last_name}".strip(),
             "license": rule.license,
-            "cve_id": rule.cve_id,
+            "cve_id": rule.cve_id,                                    # unchanged (raw stored text)
+            "cve_ids": RuleModel._parse_vulnerabilities(rule.cve_id),   # the same, as a real list
             "original_uuid": rule.original_uuid,
+            "uuid": rule.uuid,
+            "creation_date": rule.creation_date.isoformat() if rule.creation_date else None,
+            # full precision: send it back as base_last_modif when editing (POST /api/rule/private/edit/<id>)
+            "last_modif": rule.last_modif.isoformat() if rule.last_modif else None,
+            "tags": sorted({a.tag.name for a in rule.rule_tags_assocs if a.tag}),
+            "attacks": sorted({a.technique_id for a in rule.attack_assocs if a.technique_id}),
             "user": {
                 "id": author.id,
                 "first_name": author.first_name,
@@ -567,13 +574,81 @@ class RulesByAttackTechnique(Resource):
 MAX_VALIDATE_CONTENT = 512 * 1024   # public endpoint: one rule, not a corpus
 
 
+@rule_public_ns.route('/dependencies/<int:rule_id>')
+@rule_public_ns.doc(
+    description="""
+The rules a rule **needs** to work (transitively: what those need too) and the rules that
+need it — YARA rules used in its condition, Wazuh `if_sid` parents, Sigma correlation
+bases, Kunai `rule()`, manual "depends on" links. Use it to import a rule together with
+everything it needs.
+
+### Response
+
+```json
+{
+  "rule_id": 12,
+  "requires": [ {"id": 7, "uuid": "…", "title": "…", "format": "yara", "depth": 1,
+                 "via": 12, "version": "1.0", "last_modif": "…", "to_string": "rule A { … }"} ],
+  "required_by": [ {"id": 30, "uuid": "…", "title": "…", "format": "yara", "depth": 1, "via": 12} ],
+  "edges": [ {"from": 12, "to": 7, "type": "yara_condition_ref"} ],
+  "install_order": [7, 12],
+  "truncated": false
+}
+```
+
+`edges`: `from` needs `to`. `install_order`: the rule and the rules it requires, each after
+the rules it needs (the order a single YARA file must declare them in).
+
+### Example cURL Request
+
+```bash
+curl -X GET "http://127.0.0.1:7009/api/rule/public/dependencies/12"
+```
+"""
+)
+class RuleDependencies(Resource):
+    def get(self, rule_id):
+        """Rules this rule needs, and rules that need it"""
+        from app.features.rule_relation.rule_relation_core import get_dependency_graph, dependency_install_order
+        from app.core.db_class.rule import Rule
+
+        rule = RuleModel.get_rule(rule_id)
+        if not rule or rule.is_deleted:
+            return {"message": "Rule not found"}, 404
+
+        graph = get_dependency_graph(rule_id)
+        required_ids = [n["id"] for n in graph["nodes"] if n["role"] == "requires"]
+        rules = {r.id: r for r in RuleModel._active().filter(Rule.id.in_(required_ids)).all()} if required_ids else {}
+
+        def _node(n, with_content):
+            out = {k: n[k] for k in ("id", "uuid", "title", "format", "depth", "via")}
+            r = rules.get(n["id"])
+            if with_content and r:
+                out.update(version=r.version, to_string=r.to_string,
+                           last_modif=r.last_modif.isoformat() if r.last_modif else None)
+            return out
+
+        requires = [_node(n, True) for n in graph["nodes"] if n["role"] == "requires" and n["id"] in rules]
+        required_by = [_node(n, False) for n in graph["nodes"] if n["role"] == "required_by"]
+        install_ids = [rule_id] + [n["id"] for n in requires]
+        return {
+            "rule_id": rule_id,
+            "requires": requires,
+            "required_by": required_by,
+            "edges": graph["edges"],
+            "install_order": dependency_install_order(install_ids, graph["edges"]),
+            "truncated": graph["truncated"],
+        }, 200
+
+
 @rule_public_ns.route('/validate')
 @rule_public_ns.doc(
     description="""
 Check whether a rule's content is **syntactically valid** for a given format — the same
 per-format check a rule goes through on creation/import, run here as a dry run: nothing
-is saved, no rule is created. The content is checked on its own (max 512 KB): a YARA
-rule referencing other rules by name is not compiled together with them here.
+is saved, no rule is created (max 512 KB). A YARA rule referencing other rules by name
+(e.g. in its condition) is compiled together with those rules, as on the web Create / Edit
+pages — only rules that can be trusted to be the intended ones (see `rule_id` / `X-API-KEY`).
 
 ### JSON body
 
@@ -581,6 +656,10 @@ rule referencing other rules by name is not compiled together with them here.
 |----------|--------|---------------------------------------------------------------------------|
 | format   | string | Rule format, e.g. yara, sigma, suricata, zeek, wazuh, nse, crs, nova, splunk, elastic, sagan, kql, atr, kunai |
 | content  | string | The rule's raw content to validate                                       |
+| rule_id  | int    | Optional. The rule this content edits: rules of the same source / GitHub path, or linked to it, can be compiled in |
+
+Optional header `X-API-KEY`: your own rules can be compiled in too. Without either, a
+referenced rule is not looked up (a rule with the same name could be anyone's).
 
 ### Example cURL Request
 
@@ -608,6 +687,28 @@ class ValidateRule(Resource):
         result = RuleModel.validate_rule_syntax(rule_format, content)
         if result is None:
             return {"error": f"Unknown or unsupported format: {rule_format}"}, 404
+        # A rule referencing others (YARA: a rule name in the condition) fails on its own
+        # with "undefined identifier": look the referenced rules up in Rulezet and compile
+        # again with them, like the web Create / Edit pages. Only on that failure, so a
+        # plain check stays one compile.
+        if not result.ok and any('undefined identifier' in str(e) for e in (result.errors or [])):
+            # Only trusted rules are compiled in (never just "a rule with that name"): the
+            # rules of the API key's user, and — with rule_id, the rule being edited — the
+            # rules of the same source / GitHub path or already linked to it.
+            trust = {}
+            api_user = utils.get_user_from_api(request.headers) if request.headers.get("X-API-KEY") else None
+            if api_user:
+                trust["owner_ids"] = (api_user.id,)
+            edited = None
+            rule_id = payload.get("rule_id")
+            if isinstance(rule_id, int) and not isinstance(rule_id, bool):
+                edited = RuleModel.get_rule(rule_id)
+            if edited and not edited.is_deleted:
+                trust.update(rule_id=edited.id, source=edited.source, github_path=edited.github_path)
+                trust["owner_ids"] = tuple({*trust.get("owner_ids", ()), edited.user_id})
+            resolved = RuleModel.validate_rule_syntax(rule_format, content, resolve_dependencies=True, **trust)
+            if resolved is not None:
+                result = resolved
 
         return {
             "format": rule_format,
