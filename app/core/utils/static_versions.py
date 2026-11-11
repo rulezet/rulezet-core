@@ -32,11 +32,38 @@ def file_version(filename):
         return None
 
 
-def import_map():
-    """{"imports": {"/static/js/x.js": "/static/js/x.js?v=…", …}} for every module in static/js."""
+def _module_entries(directory):
+    imports = {}
+    for root, _dirs, files in os.walk(directory):
+        for name in files:
+            if name.endswith('.js'):
+                path = os.path.join(root, name)
+                url = '/static/' + os.path.relpath(path, STATIC_DIR).replace(os.sep, '/')
+                try:
+                    imports[url] = f'{url}?v={int(os.path.getmtime(path))}'
+                except OSError:
+                    continue
+    return imports
+
+
+def import_map(hidden=None):
+    """{"imports": {"/static/js/x.js": "/static/js/x.js?v=…", …}} for every module in static/js.
+
+    hidden: name of a hidden game dir ('starfield', 'nightshift') whose modules are added —
+    only on that game's own page, so its modules are versioned too (otherwise a stale
+    cached copy of one of them breaks the game after an update)."""
+    hidden_dir = os.path.join(MODULES_DIR, hidden) if hidden else None
+    if hidden_dir not in HIDDEN_DIRS:
+        hidden_dir = None
     now = time.monotonic()
-    if now - _map_cache['built_at'] < REFRESH_SECONDS:
+    if now - _map_cache['built_at'] >= REFRESH_SECONDS:
+        _build_map(now)
+    if not hidden_dir:
         return _map_cache['imports']
+    return {'imports': {**_map_cache['imports']['imports'], **_module_entries(hidden_dir)}}
+
+
+def _build_map(now):
     imports = {}
     for root, _dirs, files in os.walk(MODULES_DIR):
         if root.startswith(HIDDEN_DIRS):
@@ -51,4 +78,3 @@ def import_map():
             except OSError:
                 continue
     _map_cache.update(built_at=now, imports={'imports': imports})
-    return _map_cache['imports']

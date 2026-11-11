@@ -18,7 +18,7 @@ def _require_admin():
 def starfield():
     """Hidden easter egg — a small space game. Not linked from any nav/sitemap."""
     is_admin = current_user.is_authenticated and current_user.is_admin()
-    return render_template('starfield.html', is_admin=is_admin)
+    return render_template('starfield.html', is_admin=is_admin, import_map_hidden='starfield')
 
 
 @starfield_blueprint.route('/starfield/run', methods=['POST'])
