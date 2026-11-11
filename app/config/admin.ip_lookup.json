@@ -1,0 +1,19 @@
+{
+  "label": "IP lookup (whois)",
+  "category": "Admin",
+  "description": "The magnifier next to an IP address in the admin pages (activity log, instances): RDAP (whois) lookup at the regional registry found through IANA's bootstrap files, plus a reverse DNS lookup. 'cache_hours': how long an answer is kept; 'timeout_seconds': per request; 'links': extra tools opened from the window ({ip} is replaced by the address).",
+  "public": false,
+  "value": {
+    "bootstrap_ipv4": "https://data.iana.org/rdap/ipv4.json",
+    "bootstrap_ipv6": "https://data.iana.org/rdap/ipv6.json",
+    "timeout_seconds": 6,
+    "cache_hours": 24,
+    "reverse_dns": true,
+    "links": [
+      {"label": "bgp.he.net", "url": "https://bgp.he.net/ip/{ip}"},
+      {"label": "Shodan", "url": "https://www.shodan.io/host/{ip}"},
+      {"label": "AbuseIPDB", "url": "https://www.abuseipdb.com/check/{ip}"},
+      {"label": "GreyNoise", "url": "https://viz.greynoise.io/ip/{ip}"}
+    ]
+  }
+}

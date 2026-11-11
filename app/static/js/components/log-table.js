@@ -21,6 +21,7 @@
 
 import PaginationComponent from '/static/js/rule/paginationComponent.js'
 import CodeViewer         from '/static/js/components/code-viewer.js'
+import IpAddress          from '/static/js/components/ip-address.js'
 
 const { ref, computed, onMounted } = Vue
 
@@ -86,7 +87,7 @@ function formatFull(val) {
 
 export default {
     name: 'LogTable',
-    components: { 'pagination-component': PaginationComponent, 'code-viewer': CodeViewer },
+    components: { 'pagination-component': PaginationComponent, 'code-viewer': CodeViewer, 'ip-address': IpAddress },
 
     props: {
         fetchUrl:    { type: String,  required: true },
@@ -531,7 +532,7 @@ export default {
                                     </div>
                                     <div class="lt-expand-field" v-if="log.ip_address">
                                         <span class="lt-expand-label">IP Address</span>
-                                        <span class="lt-expand-value lt-mono">{{ log.ip_address }}</span>
+                                        <span class="lt-expand-value lt-mono"><ip-address :ip="log.ip_address"></ip-address></span>
                                     </div>
                                     <div class="lt-expand-field">
                                         <span class="lt-expand-label">Level</span>
