@@ -38,7 +38,7 @@ def _run(data):
 
 @nightshift_blueprint.route('/nightshift')
 def nightshift():
-    return render_template('nightshift/nightshift.html')
+    return render_template('nightshift/nightshift.html', import_map_hidden='nightshift')
 
 
 @nightshift_blueprint.route('/nightshift/cases')
