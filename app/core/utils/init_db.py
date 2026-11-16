@@ -290,6 +290,10 @@ def insert_default_ai_agent_configs():
         # Long narrative report over a whole bundle, written section by
         # section: num_predict is the per-SECTION cap, timeout_s the longest
         # silence allowed (the first call reads the whole bundle material).
+        # Tag suggestions: short prompt (~40 candidate tags from the trie), short
+        # JSON answer — meant to feel instant on the rule create/edit pages.
+        {"agent_key": "tag_suggest", "enabled": True, "max_per_hour": 120,
+         "timeout_s": 60, "num_predict": 768, "default_model": "qwen2.5-coder:7b"},
         {"agent_key": "bundle_analysis", "enabled": True, "max_per_hour": None,
          "timeout_s": 900, "num_predict": 800, "default_model": "qwen2.5-coder:7b"},
     ]

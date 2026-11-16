@@ -1,0 +1,31 @@
+{
+    "label": "Tag suggestions — families and matching",
+    "category": "AI",
+    "description": "Tag suggestions on the rule create/edit pages (6th AI integration). A token trie is built in memory from the tags of these taxonomy / galaxy families only (their names, values and galaxy synonyms) — the other families (firearms, drugs, satellites, …) are never looked at. families: namespaces kept; include_used_min_rules: also keep any tag already used on at least this many rules, whatever its family (0 = off); exclude_prefixes: tags whose name starts with one of these are never suggested (markings like TLP / PAP, already set by default on every rule); min_term_length: shorter words are ignored (technique ids like T1059 are always kept); stopwords: words never matched on their own; max_candidates: matches shown / handed to the AI; max_ai_suggestions: tags the AI may keep; simulate_ai: no model call, the AI step is simulated from the trie scores (same answer shape, model shown as \"simulated\") — for a dev machine whose local Ollama is too slow, never on production.",
+    "public": false,
+    "value": {
+        "families": [
+            "tool", "threat-actor", "malpedia", "ransomware", "rat", "botnet", "backdoor", "banker", "stealer", "wiper", "cryptominers", "exploit-kit", "android", "stalkerware", "rmm-tool", "tds", "cloak",
+            "mitre-attack-pattern", "mitre-enterprise-attack-attack-pattern", "mitre-mobile-attack-attack-pattern", "mitre-ics-techniques", "mitre-atlas-attack-pattern",
+            "mitre-malware", "mitre-enterprise-attack-malware", "mitre-mobile-attack-malware", "mitre-tool", "mitre-enterprise-attack-tool", "mitre-ics-software",
+            "mitre-intrusion-set", "mitre-enterprise-attack-intrusion-set", "mitre-ics-groups", "mitre-campaign", "campaigns", "microsoft-activity-group", "360net-threat-actor", "groups",
+            "mitre-data-source", "mitre-data-component", "branded-vulnerability", "operating-system", "sector",
+            "ms-caro-malware", "ms-caro-malware-full", "malware_classification", "maec-malware-behavior", "maec-malware-capabilities", "maec-malware-obfuscation-methods", "maec-delivery-vectors",
+            "runtime-packer", "file-type", "kill-chain", "unified-kill-chain", "unified-ransomware-kill-chain", "ransomware-roles",
+            "phishing", "dga", "ddos", "tor", "infoleak", "vulnerability", "stealth_malware", "detection-engineering", "information-security-data-source", "domain-abuse", "cryptocurrency-threat",
+            "ics", "iot", "cloud-security", "rsit", "ecsirt"
+        ],
+        "include_used_min_rules": 3,
+        "exclude_prefixes": ["tlp", "pap", "admiralty-scale", "estimative-language", "workflow", "misp:"],
+        "min_term_length": 4,
+        "stopwords": [
+            "rule", "rules", "condition", "strings", "meta", "author", "description", "date", "reference", "references", "title", "status", "level", "logsource", "detection", "selection", "filter",
+            "product", "service", "category", "fields", "falsepositives", "true", "false", "none", "unknown", "other", "file", "files", "data", "network", "windows", "linux", "process", "event",
+            "user", "system", "test", "tool", "tools", "malware", "attack", "threat", "group", "high", "medium", "low", "critical", "informational", "experimental", "stable", "this", "that", "with",
+            "from", "used", "uses", "using", "based", "detects", "detect", "detection", "match", "image", "command", "commandline", "parent", "contains", "endswith", "startswith", "path", "version", "family", "download", "malw", "sample", "samples", "hash", "string", "generic", "suspicious", "potential"
+        ],
+        "max_candidates": 40,
+        "max_ai_suggestions": 10,
+        "simulate_ai": false
+    }
+}

@@ -22,7 +22,7 @@ from app.features.ai.ai_core import get_default_ollama_model, get_ollama_url, is
 
 ai_blueprint = Blueprint('ai', __name__, template_folder='templates')
 
-_KNOWN_AGENT_KEYS = {'chatbot', 'rule_analysis', 'rule_generator', 'rule_fixer', 'bundle_analysis'}
+_KNOWN_AGENT_KEYS = {'chatbot', 'rule_analysis', 'rule_generator', 'rule_fixer', 'bundle_analysis', 'tag_suggest'}
 
 
 @ai_blueprint.before_request
@@ -63,6 +63,22 @@ def admin_rule_fixer():
     return render_template('ai/admin_rule_fixer.html')
 
 
+@ai_blueprint.route('/admin/tag-suggest', methods=['GET'])
+def admin_tag_suggest():
+    return render_template('ai/admin_tag_suggest.html')
+
+
+@ai_blueprint.route('/admin/tag-suggest/index', methods=['GET'])
+def admin_tag_suggest_index():
+    """Size of the in-memory tag trie and the families it is built from."""
+    from app.features.ai.tag_suggest_core import _settings, index_stats
+    cfg = _settings()
+    return jsonify({**index_stats(), 'families': sorted(cfg['families']),
+                    'include_used_min_rules': cfg['include_used_min_rules'],
+                    'max_candidates': cfg['max_candidates'], 'max_ai_suggestions': cfg['max_ai_suggestions'],
+                    'simulate_ai': cfg['simulate_ai']})
+
+
 @ai_blueprint.route('/admin/models', methods=['GET'])
 def admin_models():
     return render_template('ai/models_security.html')
@@ -78,7 +94,7 @@ def admin_how_it_works():
     return render_template('ai/ai_how_it_works.html')
 
 
-@ai_blueprint.route('/admin/<any(rule_analysis, rule_generator, rule_fixer, bundle_analysis):agent_key>/history/<string:uuid>', methods=['GET'])
+@ai_blueprint.route('/admin/<any(rule_analysis, rule_generator, rule_fixer, bundle_analysis, tag_suggest):agent_key>/history/<string:uuid>', methods=['GET'])
 def history_detail(agent_key, uuid):
     gen = AIGeneration.query.filter_by(agent_key=agent_key, uuid=uuid).first()
     if not gen:

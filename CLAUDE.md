@@ -19,6 +19,7 @@ Feature folders under `app/features/`: `account`, `admin`, `attack`, `blog`, `bu
 REST API (Flask-RESTX, CSRF exempt) under `/api/`, swagger at `/api/`. Public/private namespaces per feature: `rule`, `bundle`, `connector`, `account`, `comment`, `config`, `log`, `instance`, `rule_tester`, `utils`.
 API key auth via `@api_required` decorator, key in `X-API-KEY` header.
 Background jobs: `BackgroundJob` rows, handlers registered with `@register_handler('type')` in `app/features/jobs/job_handlers.py` (~20 types, e.g. `bulk_add_tag_to_rules`, `delete_github_rules`, `connector_pull`, `update_misp_data`, `bulk_parse_attack_rules`, `trash_restore_bulk`), worker in `job_worker.py` polls every 2s.
+AI agents (`app/features/ai/agents/`, one `AIAgent` class each, admin pages under `/ai/admin/`): chatbot, rule_analysis, bundle_analysis, rule_generator, rule_fixer, tag_suggest — a new agent also goes in `_KNOWN_AGENT_KEYS` (ai.py), `insert_default_ai_agent_configs()`, both AI navs, the overview and How it works. Tag suggestions: token trie over the tag families of setting `ai.tag_suggest` + AI pick among those candidates only (`simulate_ai` for a slow local Ollama) — `docs/design/ai_tag_suggest.md`.
 Activity log everywhere: `from app.core.utils.activity_log import log_activity` — action dot-namespaced e.g. `rule.create`.
 
 CRITICAL: never use `Rule.query` directly — always use `_active()` from `rule_core.py` which filters `is_deleted == False`.

@@ -3,6 +3,7 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ai/tag_suggest.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
@@ -262,6 +263,12 @@
                         <div v-else class="be-empty-hint">No tag yet — pick some in the list below.</div>
                     </div>
 
+                    <!-- Tag suggestions (trie + AI, same component as the rule edit page) — admins / AI Managers -->
+                    {% if can_suggest_tags() %}
+                    <tag-suggest class="mb-3" :model-value="allSelectedTagsObjects" @update:model-value="addSuggestedTags"
+                                 kind="bundle" :target-id="bundleId" csrf="{{ csrf_token() }}"></tag-suggest>
+                    {% endif %}
+
                     <!-- Search -->
                     <div class="be-search mb-3">
                         <i class="fa-solid fa-magnifying-glass"></i>
@@ -370,6 +377,7 @@ import BundleStructureEditor from '/static/js/bundle/BundleStructureEditor.js'
 import BundleRuleSelector    from '/static/js/bundle/BundleRuleSelector.js'
 import VulnerabilityInput    from '/static/js/vulnerability/vulnerabilityInput.js'
 import TagCreateModal        from '/static/js/tags/tagCreateModal.js'
+import TagSuggest            from '/static/js/ai/TagSuggest.js'
 import SmartEditor           from '/static/js/components/smart-editor.js'
 import FormatChip from '/static/js/rule/formatChip.js'
 import PaginationComponent   from '/static/js/rule/paginationComponent.js'
@@ -389,6 +397,7 @@ createApp({
         'bundle-rule-selector':    BundleRuleSelector,
         'vulnerability-input':     VulnerabilityInput,
         'tag-create-modal':        TagCreateModal,
+        'tag-suggest':             TagSuggest,
         'smart-editor':            SmartEditor,
         'format-chip':             FormatChip,
         'pagination-component':    PaginationComponent,
@@ -564,6 +573,11 @@ createApp({
             }
         }
 
+        // TagSuggest emits the full list (current + added) — select the new ones.
+        function addSuggestedTags(list) {
+            list.forEach(t => { if (!selectedTags.value.includes(t.id)) toggleSelection(t) })
+        }
+
         function clearSelection() {
             selectedTags.value          = []
             allSelectedTagsObjects.value = []
@@ -646,6 +660,7 @@ createApp({
         })
 
         return {
+            addSuggestedTags,
             bundleId, csrfToken, bundleNameShort, bundleNameMedium, structureEditor, bundleRuleIds,
             onAddRules, onPreviewRule, onTreeReady, onTreeSaved,
             linkedRulesModalOpen, pendingAdd, cancelAddRules, confirmAddRulesWithLinked,

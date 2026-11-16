@@ -34,7 +34,7 @@
     </div>
     <p class="text-muted mb-0" style="max-width:660px;font-size:.95rem;">
       A complete walkthrough of Rulezet's AI system — the shared architecture every feature is built on,
-      then exactly how each of the five agents works under the hood.
+      then exactly how each of the six agents works under the hood.
     </p>
   </div>
 
@@ -70,6 +70,7 @@
             <a class="hiw-toc-link" href="#bundle-analysis">Bundle Analysis</a>
             <a class="hiw-toc-link" href="#rule-generator">Rule Generator</a>
             <a class="hiw-toc-link" href="#rule-fixer">Rule Fixer</a>
+            <a class="hiw-toc-link" href="#tag-suggest">Tag Suggestions</a>
             <a class="hiw-toc-link" href="#admin-controls">Admin controls</a>
           </nav>
         </div>
@@ -89,10 +90,10 @@
         </div>
         <p style="font-size:.92rem;color:var(--subtle-text-color);">
           Rulezet's AI features are all powered by a self-hosted <strong>Ollama</strong> instance — there's no
-          third-party API key, no per-token billing, and nothing leaves the instance. Five independent agents share
+          third-party API key, no per-token billing, and nothing leaves the instance. Six independent agents share
           one architecture: a <strong>Chatbot</strong> assistant, a <strong>Rule Analysis</strong> summarizer,
           a <strong>Bundle Analysis</strong> reviewer, a <strong>Rule Generator</strong> (Beta, YARA-only),
-          and a <strong>Rule Fixer</strong>. Each one is a
+          a <strong>Rule Fixer</strong> and <strong>Tag Suggestions</strong>. Each one is a
           thin, single-purpose wrapper — a system prompt, a bit of parsing logic, and a call into existing
           rule/bundle code. None of them re-implement anything Rulezet already does; they just decide
           <em>when</em> to call it.
@@ -117,7 +118,7 @@
           <h4 class="fw-bold mb-0">The shared architecture</h4>
         </div>
         <p style="font-size:.92rem;color:var(--subtle-text-color);">
-          All five agents extend the same base class and go through the same pipeline before a single token
+          All six agents extend the same base class and go through the same pipeline before a single token
           is ever generated.
         </p>
 
@@ -231,7 +232,7 @@
             <div class="hiw-agent-card">
               <div class="fw-bold mb-2"><i class="fa-solid fa-power-off text-primary me-2"></i>Per-feature kill switch</div>
               <p class="text-muted mb-0" style="font-size:.84rem;">
-                Any of the five agents can be disabled instance-wide from the AI Overview page — instantly, no
+                Any of the six agents can be disabled instance-wide from the AI Overview page — instantly, no
                 restart needed — either one at a time or all at once.
               </p>
             </div>
@@ -545,6 +546,69 @@
           <i class="fa-solid fa-circle-info me-2 text-primary"></i>
           The fix is never applied automatically. You get a side-by-side diff and a short explanation of what
           changed — nothing touches your rule until you review it and save.
+        </div>
+      </section>
+
+      <hr style="border-color:var(--border-color);" class="mb-5">
+
+      <!-- ═══════════════════════════════════════════════════════════
+           SECTION 7b — Tag Suggestions
+      ════════════════════════════════════════════════════════════ -->
+      <section id="tag-suggest" class="hiw-section mb-5">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="banner-icon" style="width:42px;height:42px;"><i class="fa-solid fa-tags" style="font-size:1.1rem;"></i></div>
+          <h4 class="fw-bold mb-0">Tag Suggestions</h4>
+        </div>
+
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          A <strong>Tag suggestions</strong> card with Rulezy on the rule edit page (under the tag picker) and on the
+          bundle edit page (Tags tab). For a rule it reads the form as it is now (title, description, content,
+          format — unsaved changes included); for a bundle, its name, description and the titles and tags of its
+          rules. It proposes MISP taxonomy and galaxy tags. Only <strong>admins and AI Managers</strong> see and use
+          it (AI Operators don't), and it disappears everywhere when the agent is disabled. The database holds tens of thousands of tags, far too many for any model's
+          context, so the work is split in two:
+        </p>
+
+        <div class="d-flex flex-column gap-3 mt-2">
+        <div class="d-flex gap-3 align-items-start">
+          <div class="hiw-step-num">1</div>
+          <div style="font-size:.88rem;">
+            <strong>The trie — instant, no AI.</strong>
+            <br><span class="text-muted">
+              Only the tag <em>families</em> that make sense on a detection rule are indexed (tool, threat-actor,
+              malpedia, ransomware, the MITRE ATT&amp;CK galaxies, malware classifications, kill chains…) plus every
+              tag already used on a few rules; firearms, drugs or satellites are never looked at, and marking tags
+              (TLP, PAP…) are never suggested. Each tag gives its
+              words — its value, its galaxy synonyms, its ATT&amp;CK id — to a token trie kept in memory. The rule's
+              text is walked through it in a few milliseconds. A match scores higher when it is rare (a word shared by
+              200 tags is worth little), long (a multi-word name) and found in the title.
+            </span>
+          </div>
+        </div>
+        <div class="d-flex gap-3 align-items-start">
+          <div class="hiw-step-num">2</div>
+          <div style="font-size:.88rem;">
+            <strong>The AI pick.</strong>
+            <br><span class="text-muted">
+              Only the best ~25 candidates go to the model, with the gist of the rule — a small prompt, a short JSON
+              answer. It keeps the tags that really describe the rule, drops the ones that only share a generic word
+              and the near-duplicates, and gives a one-sentence reason each.
+            </span>
+          </div>
+        </div>
+        </div>
+
+        <div class="hiw-callout hiw-callout--info mt-3">
+          <i class="fa-solid fa-circle-info me-2 text-primary"></i>
+          The model can only pick from the list it was given — any id outside it is thrown away, so it can never
+          invent a tag. Nothing is added by itself: the user clicks a tag (or <em>Add all</em>) and still saves the
+          rule as usual.
+        </div>
+        <div class="hiw-callout hiw-callout--warning mt-3">
+          <i class="fa-solid fa-flask me-2 text-warning"></i>
+          The families, the stopwords and the limits are the setting <code>ai.tag_suggest</code> (Admin →
+          Configuration). Its <code>simulate_ai</code> switch replaces the model call by a simulation computed from
+          the trie scores — for a development machine whose local Ollama is too slow, never for production.
         </div>
       </section>
 
