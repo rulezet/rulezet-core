@@ -433,8 +433,8 @@ def create_app(start_worker=True):
     app.jinja_env.globals['ai_pending_requests'] = ai_pending_requests
 
     def can_suggest_tags():
-        """Tag Suggestions card on the rule / bundle edit pages — admins and
-        AI Managers, agent enabled (tag_suggest_core.can_use)."""
+        """Tag Suggestions card on the rule / bundle edit pages — admins, AI
+        Operators and AI Managers, agent enabled (tag_suggest_core.can_use)."""
         from flask_login import current_user as _cu
         from app.features.ai.tag_suggest_core import can_use
         return can_use(_cu)

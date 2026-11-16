@@ -2,7 +2,7 @@
 
 Proposes MISP taxonomy / galaxy tags on the **rule edit** page and the **bundle edit** page (Tags tab). Not on the rule create page (on purpose).
 
-**Who:** admins and AI Managers (`ai.manage`) only — not AI Operators (`ai.use`), not plain users — and only while the agent is enabled. One check, `tag_suggest_core.can_use(user)`, used by the four routes and by the Jinja global `can_suggest_tags()` that shows the card. Bundle routes also require the bundle's owner or an admin (like the edit page). The admin page `/ai/admin/tag-suggest` is under the AI blueprint's own guard (admin or `ai.manage`).
+**Who:** admins, AI Operators (`ai.use`) and AI Managers (`ai.manage`) — not plain users — and only while the agent is enabled. A Tag manager (`rule.tag_any`) who is also an AI Operator gets it on the tags-only restricted edit of any rule (the card sits outside the disabled fieldsets). One check, `tag_suggest_core.can_use(user)`, used by the four routes and by the Jinja global `can_suggest_tags()` that shows the card. Bundle routes also require the bundle's owner or an admin (like the edit page). The admin page `/ai/admin/tag-suggest` is under the AI blueprint's own guard (admin or `ai.manage`).
 
 ## Why two steps
 

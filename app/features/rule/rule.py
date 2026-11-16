@@ -224,7 +224,7 @@ def _tag_suggest_input():
 def suggest_tags():
     """Instant tag candidates for the rule being edited (trie over the
     taxonomy / galaxy families of setting ai.tag_suggest, no AI).
-    Admins and AI Managers only (tag_suggest_core.can_use)."""
+    Admins, AI Operators and AI Managers (tag_suggest_core.can_use)."""
     from app.features.ai import tag_suggest_core as TagSuggest
     if not TagSuggest.can_use(current_user):
         return jsonify({"ok": False, "error": "Tag suggestions aren't available."}), 403

@@ -2918,7 +2918,7 @@ def import_bundle_json():
 
 def _tag_suggest_bundle():
     """The bundle and the tag ids already selected in the page, or an error
-    response. Admins and AI Managers only (tag_suggest_core.can_use), and on
+    response. Admins, AI Operators and AI Managers (tag_suggest_core.can_use), on
     a bundle they may edit (owner or admin, like the edit page)."""
     from app.features.ai.tag_suggest_core import can_use
     if not can_use(current_user):
