@@ -599,6 +599,16 @@
         </div>
         </div>
 
+        <p style="font-size:.92rem;color:var(--subtle-text-color);" class="mt-3">
+          <strong>Generic tags.</strong> Each Rulezet format has a short context — what its rules detect — and generic tags
+          that fit it: a file type and platform for a YARA rule that checks the MZ header, a data source for a Sigma rule
+          on process creation, a C2 or exploitation category for a Suricata signature… They come from regex
+          <em>signals</em> on the rule (setting <code>ai.tag_suggest_formats</code>), carry a <em>Generic</em> badge, and
+          the model gets the format's context and keeps them only when the rule clearly supports them.
+          Admins and AI Managers choose on the Tag Suggestions admin page which tags may be suggested:
+          taxonomies, galaxies, imported tags and custom tags.
+        </p>
+
         <div class="hiw-callout hiw-callout--info mt-3">
           <i class="fa-solid fa-circle-info me-2 text-primary"></i>
           The model can only pick from the list it was given — any id outside it is thrown away, so it can never

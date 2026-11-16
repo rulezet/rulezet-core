@@ -76,7 +76,24 @@ def admin_tag_suggest_index():
     return jsonify({**index_stats(), 'families': sorted(cfg['families']),
                     'include_used_min_rules': cfg['include_used_min_rules'],
                     'max_candidates': cfg['max_candidates'], 'max_ai_suggestions': cfg['max_ai_suggestions'],
-                    'simulate_ai': cfg['simulate_ai']})
+                    'simulate_ai': cfg['simulate_ai'], 'sources': cfg['sources']})
+
+
+@ai_blueprint.route('/admin/tag-suggest/sources', methods=['POST'])
+def admin_tag_suggest_sources():
+    """Which tags may be suggested: taxonomies / galaxies / imported / custom
+    — saved into setting ai.tag_suggest (with its history), so admins and AI
+    Managers can switch them here without the Configuration page."""
+    from app.features.ai.tag_suggest_core import SOURCES, set_sources
+    data = request.get_json(silent=True) or {}
+    sources = {k: bool(v) for k, v in (data.get('sources') or {}).items() if k in SOURCES}
+    error = set_sources(sources, current_user.id)
+    if error:
+        return jsonify({'success': False, 'error': error}), 400
+    on = ', '.join(k for k in SOURCES if sources.get(k)) or 'none'
+    log_activity('ai.tag_suggest_sources', f'Tag Suggestions now draw from: {on}',
+                 extra={'sources': sources}, is_public=False, icon='fa-solid fa-tags')
+    return jsonify({'success': True})
 
 
 @ai_blueprint.route('/admin/models', methods=['GET'])

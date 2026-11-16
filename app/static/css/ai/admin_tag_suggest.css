@@ -1,0 +1,49 @@
+/* AI admin → Tag Suggestions (templates/ai/admin_tag_suggest.html):
+   sources switches, trie KPIs, context per format. Section headers reuse
+   .ud-section-* from css/account/user_detail.css. */
+
+.ats-hint { font-size: .8rem; color: var(--subtle-text-color); }
+
+/* ── Sources ── */
+.ats-sources { display: flex; flex-direction: column; gap: .55rem; }
+.ats-source {
+    display: flex; align-items: center; gap: .75rem; margin: 0;
+    padding: .6rem .75rem; border: 1px solid var(--border-color); border-radius: 10px;
+    background: var(--light-bg-color); cursor: pointer; transition: border-color .15s, background .15s;
+}
+.ats-source--on { border-color: rgba(13, 110, 253, .45); background: rgba(13, 110, 253, .05); }
+.ats-source__icon {
+    width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(108, 117, 125, .14); color: var(--subtle-text-color);
+}
+.ats-source--on .ats-source__icon { background: linear-gradient(135deg, #0d6efd, #0a58ca); color: #fff; }
+.ats-source__text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ats-source__name { font-weight: 600; font-size: .88rem; color: var(--text-color); }
+.ats-source__count { font-weight: 400; font-size: .72rem; color: var(--subtle-text-color); margin-left: .35rem; }
+.ats-source__desc { font-size: .76rem; color: var(--subtle-text-color); }
+
+/* ── Trie KPIs ── */
+.ats-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: .6rem; margin-bottom: .75rem; }
+.ats-kpi {
+    display: flex; flex-direction: column; padding: .6rem .75rem; border-radius: 10px;
+    border: 1px solid var(--border-color); background: var(--light-bg-color);
+}
+.ats-kpi__value { font-weight: 800; font-size: 1.15rem; color: #0d6efd; }
+.ats-kpi__label { font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; color: var(--subtle-text-color); }
+
+/* ── Context per format ── */
+.ats-formats { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: .75rem; }
+.ats-format {
+    position: relative; padding: .75rem .85rem .75rem 1rem; border-radius: 10px;
+    border: 1px solid var(--border-color); background: var(--light-bg-color);
+}
+.ats-format::before {
+    content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px;
+    border-radius: 0 3px 3px 0; background: #0d6efd;
+}
+.ats-format__head { display: flex; align-items: center; gap: .5rem; margin-bottom: .35rem; }
+.ats-format__name { font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: .82rem; color: var(--text-color); margin-right: auto; }
+.ats-format__stat { font-size: .72rem; padding: .05rem .45rem; border-radius: 999px; background: rgba(13, 110, 253, .1); color: #0d6efd; }
+.ats-format__context { font-size: .8rem; line-height: 1.4; color: var(--subtle-text-color); }
+.ats-format__missing { margin-top: .4rem; font-size: .74rem; color: #b58105; cursor: help; }

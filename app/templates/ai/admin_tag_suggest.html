@@ -5,6 +5,8 @@
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/table/data-table.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/account/user_detail.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ai/admin_tag_suggest.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -42,26 +44,109 @@
 
   <agent-config-card agent-key="tag_suggest" :csrf-token="csrfToken" @notify="onNotify"></agent-config-card>
 
+  <div v-if="index && index.simulate_ai" class="alert alert-warning py-2 px-3 small mb-4">
+    <i class="fa-solid fa-flask me-1"></i><strong>Simulation mode is on</strong> — no model is called, the AI picks
+    are computed from the trie scores (setting <code>ai.tag_suggest</code> → <code>simulate_ai</code>). Dev only.
+  </div>
+
+  <div class="row g-4 mb-4">
+    <!-- Sources -->
+    <div class="col-lg-5">
+      <div class="card border-0 shadow-sm rounded-3 h-100">
+        <div class="card-body p-4">
+          <div class="ud-section-header mb-3">
+            <div class="ud-section-icon"><i class="fa-solid fa-database"></i></div>
+            <div>
+              <div class="ud-section-title">Tag sources</div>
+              <div class="ud-section-sub">Which tags may be suggested</div>
+            </div>
+          </div>
+          <div v-if="index" class="ats-sources">
+            <label v-for="s in SOURCE_LIST" :key="s.key" class="ats-source" :class="{'ats-source--on': sources[s.key]}">
+              <span class="ats-source__icon"><i class="fa-solid" :class="s.icon"></i></span>
+              <span class="ats-source__text">
+                <span class="ats-source__name">[[ s.label ]]
+                  <span class="ats-source__count">[[ (index.by_source[s.key] || 0).toLocaleString() ]] indexed</span>
+                </span>
+                <span class="ats-source__desc">[[ s.desc ]]</span>
+              </span>
+              <span class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" v-model="sources[s.key]" :disabled="savingSources"
+                       @change="saveSources" :aria-label="s.label">
+              </span>
+            </label>
+            <div class="ats-hint">
+              Taxonomies and galaxies are limited to the families below; imported and custom tags must be used on at least
+              <strong>[[ index.include_used_min_rules || 'any number of' ]]</strong> rule(s).
+            </div>
+          </div>
+          <div v-else class="small text-muted"><i class="fa-solid fa-spinner fa-spin me-1"></i>Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trie -->
+    <div class="col-lg-7">
+      <div class="card border-0 shadow-sm rounded-3 h-100">
+        <div class="card-body p-4">
+          <div class="ud-section-header mb-3">
+            <div class="ud-section-icon"><i class="fa-solid fa-sitemap"></i></div>
+            <div>
+              <div class="ud-section-title">Tag trie</div>
+              <div class="ud-section-sub">Built in memory, matched in a few milliseconds</div>
+            </div>
+            {% if current_user.is_admin() %}
+            <a href="/admin/configuration?q=ai.tag_suggest" class="btn btn-sm btn-outline-secondary rounded-pill ms-auto">
+              <i class="fa-solid fa-sliders me-1"></i>Families &amp; matching
+            </a>
+            {% endif %}
+          </div>
+          <div v-if="index">
+            <div class="ats-kpis">
+              <div class="ats-kpi"><span class="ats-kpi__value">[[ index.tags.toLocaleString() ]]</span><span class="ats-kpi__label">tags indexed</span></div>
+              <div class="ats-kpi"><span class="ats-kpi__value">[[ index.terms.toLocaleString() ]]</span><span class="ats-kpi__label">terms</span></div>
+              <div class="ats-kpi"><span class="ats-kpi__value">[[ index.families.length ]]</span><span class="ats-kpi__label">families</span></div>
+              <div class="ats-kpi"><span class="ats-kpi__value">[[ index.generic ]]</span><span class="ats-kpi__label">generic tags</span></div>
+            </div>
+            <div class="ats-hint mb-2">
+              Up to [[ index.max_candidates ]] matches are shown; the model keeps at most [[ index.max_ai_suggestions ]].
+            </div>
+            <div class="d-flex flex-wrap gap-1">
+              <span v-for="f in index.families" :key="f" class="badge rounded-pill bg-primary-subtle text-primary-emphasis fw-normal">[[ f ]]</span>
+            </div>
+          </div>
+          <div v-else class="small text-muted"><i class="fa-solid fa-spinner fa-spin me-1"></i>Loading…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Format contexts -->
   <div class="card border-0 shadow-sm rounded-3 mb-4">
     <div class="card-body p-4">
-      <div class="d-flex align-items-center gap-2 mb-2">
-        <i class="fa-solid fa-sitemap text-primary"></i>
-        <h6 class="fw-bold mb-0">Tag trie</h6>
-        <a href="/admin/configuration?q=ai.tag_suggest" class="btn btn-sm btn-outline-secondary rounded-pill ms-auto">
-          <i class="fa-solid fa-sliders me-1"></i>Edit families &amp; matching
+      <div class="ud-section-header mb-3">
+        <div class="ud-section-icon"><i class="fa-solid fa-shapes"></i></div>
+        <div>
+          <div class="ud-section-title">Context per format</div>
+          <div class="ud-section-sub">What each format detects — given to the model, and the source of the generic tags (file type, platform, data source, incident category, kill-chain phase)</div>
+        </div>
+        {% if current_user.is_admin() %}
+        <a href="/admin/configuration?q=ai.tag_suggest_formats" class="btn btn-sm btn-outline-secondary rounded-pill ms-auto">
+          <i class="fa-solid fa-sliders me-1"></i>Edit contexts
         </a>
+        {% endif %}
       </div>
-      <div v-if="index && index.simulate_ai" class="alert alert-warning py-2 px-3 small mb-2">
-        <i class="fa-solid fa-flask me-1"></i><strong>Simulation mode is on</strong> — no model is called, the AI picks
-        are computed from the trie scores (setting <code>ai.tag_suggest</code> → <code>simulate_ai</code>). Dev only.
-      </div>
-      <div v-if="index" class="small" style="color:var(--subtle-text-color);">
-        <strong style="color:var(--text-color);">[[ index.tags ]]</strong> tags indexed under
-        <strong style="color:var(--text-color);">[[ index.terms ]]</strong> terms, from
-        [[ index.families.length ]] families<span v-if="index.include_used_min_rules"> + every tag used on at least [[ index.include_used_min_rules ]] rules</span>.
-        Up to [[ index.max_candidates ]] candidates are shown / sent to the model, which keeps at most [[ index.max_ai_suggestions ]].
-        <div class="d-flex flex-wrap gap-1 mt-2">
-          <span v-for="f in index.families" :key="f" class="badge rounded-pill bg-primary-subtle text-primary-emphasis fw-normal">[[ f ]]</span>
+      <div v-if="index" class="ats-formats">
+        <div v-for="f in index.formats" :key="f.format" class="ats-format">
+          <div class="ats-format__head">
+            <span class="ats-format__name">[[ f.format ]]</span>
+            <span class="ats-format__stat" title="Tags every rule of the format gets"><i class="fa-solid fa-tag me-1"></i>[[ f.tags ]]</span>
+            <span class="ats-format__stat" title="Signals: regexes on the rule that add generic tags"><i class="fa-solid fa-signal me-1"></i>[[ f.signals ]]</span>
+          </div>
+          <div class="ats-format__context">[[ f.context ]]</div>
+          <div v-if="f.missing.length" class="ats-format__missing" :title="f.missing.join('\n')">
+            <i class="fa-solid fa-triangle-exclamation me-1"></i>[[ f.missing.length ]] tag(s) not found or disabled
+          </div>
         </div>
       </div>
       <div v-else class="small text-muted"><i class="fa-solid fa-spinner fa-spin me-1"></i>Loading…</div>
@@ -101,7 +186,7 @@ import UserChip            from '/static/js/components/UserChip.js'
 import DataTable            from '/static/js/components/table/data-table.js'
 import AgentConfigCard     from '/static/js/ai/agentConfigCard.js'
 
-const { createApp, ref } = Vue
+const { createApp, ref, reactive } = Vue
 
 createApp({
     delimiters: ['[[', ']]'],
@@ -110,7 +195,37 @@ createApp({
         const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || ''
         const table_ref = ref(null)
         const index = ref(null)
-        fetch('/ai/admin/tag-suggest/index').then(r => r.json()).then(d => { index.value = d }).catch(() => {})
+        const sources = reactive({})
+        const savingSources = ref(false)
+        const SOURCE_LIST = [
+            { key: 'taxonomy', label: 'Taxonomies', icon: 'fa-sitemap',     desc: 'MISP taxonomies (tlp-like predicates and values)' },
+            { key: 'galaxy',   label: 'Galaxies',   icon: 'fa-meteor',      desc: 'MISP galaxies: tools, threat actors, malware, ATT&CK…' },
+            { key: 'imported', label: 'Imported tags', icon: 'fa-file-import', desc: 'Tags that came with rules imported from GitHub / files' },
+            { key: 'custom',   label: 'Custom tags', icon: 'fa-user-pen',    desc: 'Tags created on this instance or received from a connector' },
+        ]
+        function loadIndex() {
+            return fetch('/ai/admin/tag-suggest/index').then(r => r.json()).then(d => {
+                index.value = d
+                Object.assign(sources, d.sources || {})
+            }).catch(() => {})
+        }
+        loadIndex()
+        async function saveSources() {
+            savingSources.value = true
+            try {
+                const res = await fetch('/ai/admin/tag-suggest/sources', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                    body: JSON.stringify({ sources: { ...sources } }),
+                })
+                const data = await res.json().catch(() => ({}))
+                if (data.success) create_message('Tag sources saved — the trie is rebuilt.', 'success-subtle')
+                else create_message(data.error || 'Failed to save', 'danger-subtle')
+            } finally {
+                await loadIndex()
+                savingSources.value = false
+            }
+        }
         const columns = [
             { key: 'status',     label: 'Status', sortable: false },
             { key: 'model',      label: 'Model', sortable: true },
@@ -146,7 +261,7 @@ createApp({
             else create_message(data.error || 'Failed to delete', 'danger-subtle')
         }
 
-        return { csrfToken, table_ref, index, columns, bulkActions, onNotify, handleDelete, handleBulkAction }
+        return { csrfToken, table_ref, index, sources, savingSources, SOURCE_LIST, saveSources, columns, bulkActions, onNotify, handleDelete, handleBulkAction }
     }
 }).mount('#ts-app')
 </script>
