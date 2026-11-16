@@ -2,6 +2,7 @@
 {% block title %}Edit Rule — Rulezet{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/ai/tag_suggest.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/license-input.css') }}">
@@ -143,6 +144,9 @@
                                 <tag-input v-model="selectedTags" label="Rule Tags" :user-id="{{current_user.id}}"
                                     placeholder="Search and add tags...">
                                 </tag-input>
+                                {% if can_suggest_tags() %}
+                                <tag-suggest v-model="selectedTags" kind="rule" :target-id="{{ rule.id }}" csrf="{{ csrf_token() }}"></tag-suggest>
+                                {% endif %}
                                 <input type="hidden" name="tags" :value="JSON.stringify(selectedTags)">
                             </div>
                         </div>
@@ -315,6 +319,7 @@
     import VulnerabilityInput from '/static/js/vulnerability/vulnerabilityInput.js';
     import SmartEditor from '/static/js/components/smart-editor.js';
     import TagInput from '/static/js/tags/tagInput.js';
+    import TagSuggest from '/static/js/ai/TagSuggest.js';
     import VersionPicker from '/static/js/tags/utils/versionPicker.js';
     import AttackInput from '/static/js/attack/attackInput.js';
     import RelatedRuleInput from '/static/js/rule_relation/relatedRuleInput.js';
@@ -330,6 +335,7 @@
             'vulnerability-input': VulnerabilityInput,
             'smart-editor': SmartEditor,
             'tag-input': TagInput,
+            'tag-suggest': TagSuggest,
             'version-picker': VersionPicker,
             'attack-input': AttackInput,
             'related-rule-input': RelatedRuleInput,

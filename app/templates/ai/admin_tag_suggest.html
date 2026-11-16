@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+{% import 'macros/ai_admin_nav.html' as ai_nav with context %}
+{% block title %}Tag Suggestions — AI Admin — Rulezet{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/theme-bridge.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/table/data-table.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid my-4" id="ts-app" v-cloak>
+
+  <div class="explorer-banner mb-4">
+    <i class="fa-solid fa-tags banner-watermark"></i>
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb mb-0" style="font-size:.75rem;text-transform:uppercase;letter-spacing:.03em;">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none text-muted">Home</a></li>
+        <li class="breadcrumb-item"><a href="#" class="text-decoration-none text-muted">Admin</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">Tag Suggestions</li>
+      </ol>
+    </nav>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      {% if mascot_enabled %}
+      <div class="banner-icon banner-icon--mascot"><img src="{{ url_for('static', filename='images/rulezy/analyseRule.png') }}" alt=""></div>
+      {% else %}
+      <div class="banner-icon"><i class="fa-solid fa-tags"></i></div>
+      {% endif %}
+      <div>
+        <h2 class="fw-bold mb-1">Tag Suggestions</h2>
+        <div class="banner-accent"></div>
+      </div>
+    </div>
+    <p class="text-muted mb-0" style="max-width:600px;font-size:.95rem;">
+      Proposes taxonomy and galaxy tags for a rule being written. A token trie built from the useful tag
+      families finds the candidates instantly (no AI), then the model keeps the relevant ones and says why —
+      it can only pick from that list, and nothing is added until the user clicks. Triggered from the
+      "Suggest tags" button under the tag picker on the rule create / edit pages, not from here.
+    </p>
+  </div>
+
+  {{ ai_nav.ai_admin_nav('tag_suggest') }}
+
+  <agent-config-card agent-key="tag_suggest" :csrf-token="csrfToken" @notify="onNotify"></agent-config-card>
+
+  <div class="card border-0 shadow-sm rounded-3 mb-4">
+    <div class="card-body p-4">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <i class="fa-solid fa-sitemap text-primary"></i>
+        <h6 class="fw-bold mb-0">Tag trie</h6>
+        <a href="/admin/configuration?q=ai.tag_suggest" class="btn btn-sm btn-outline-secondary rounded-pill ms-auto">
+          <i class="fa-solid fa-sliders me-1"></i>Edit families &amp; matching
+        </a>
+      </div>
+      <div v-if="index && index.simulate_ai" class="alert alert-warning py-2 px-3 small mb-2">
+        <i class="fa-solid fa-flask me-1"></i><strong>Simulation mode is on</strong> — no model is called, the AI picks
+        are computed from the trie scores (setting <code>ai.tag_suggest</code> → <code>simulate_ai</code>). Dev only.
+      </div>
+      <div v-if="index" class="small" style="color:var(--subtle-text-color);">
+        <strong style="color:var(--text-color);">[[ index.tags ]]</strong> tags indexed under
+        <strong style="color:var(--text-color);">[[ index.terms ]]</strong> terms, from
+        [[ index.families.length ]] families<span v-if="index.include_used_min_rules"> + every tag used on at least [[ index.include_used_min_rules ]] rules</span>.
+        Up to [[ index.max_candidates ]] candidates are shown / sent to the model, which keeps at most [[ index.max_ai_suggestions ]].
+        <div class="d-flex flex-wrap gap-1 mt-2">
+          <span v-for="f in index.families" :key="f" class="badge rounded-pill bg-primary-subtle text-primary-emphasis fw-normal">[[ f ]]</span>
+        </div>
+      </div>
+      <div v-else class="small text-muted"><i class="fa-solid fa-spinner fa-spin me-1"></i>Loading…</div>
+    </div>
+  </div>
+
+  <data-table
+    ref="table_ref"
+    fetch-url="/ai/admin/history/tag_suggest/data"
+    :columns="columns"
+    :can-delete="true"
+    :bulk-actions="bulkActions"
+    initial-sort="created_at"
+    initial-dir="desc"
+    @delete="handleDelete"
+    @bulk-action="handleBulkAction">
+    <template #cell-status="{ item }">
+      <span class="badge rounded-pill" :class="item.status === 'failed' ? 'bg-danger-subtle text-danger-emphasis' : 'bg-success-subtle text-success-emphasis'"
+            :title="item.error || ''">[[ item.status ]]</span>
+      <div v-if="item.error" class="small text-danger text-truncate mt-1" style="max-width:420px;" :title="item.error">[[ item.error ]]</div>
+    </template>
+    <template #cell-username="{ item }">
+      <user-chip :user-id="item.user_id" :username="item.username || 'unknown'" size="sm"></user-chip>
+    </template>
+    <template #cell-view="{ item }">
+      <a :href="'/ai/admin/tag_suggest/history/' + item.uuid" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+        <i class="fa-solid fa-eye me-1"></i>View
+      </a>
+    </template>
+  </data-table>
+
+</div>
+
+<script type="module">
+import { create_message } from '/static/js/toaster.js'
+import UserChip            from '/static/js/components/UserChip.js'
+import DataTable            from '/static/js/components/table/data-table.js'
+import AgentConfigCard     from '/static/js/ai/agentConfigCard.js'
+
+const { createApp, ref } = Vue
+
+createApp({
+    delimiters: ['[[', ']]'],
+    components: { 'user-chip': UserChip, 'data-table': DataTable, 'agent-config-card': AgentConfigCard },
+    setup() {
+        const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || ''
+        const table_ref = ref(null)
+        const index = ref(null)
+        fetch('/ai/admin/tag-suggest/index').then(r => r.json()).then(d => { index.value = d }).catch(() => {})
+        const columns = [
+            { key: 'status',     label: 'Status', sortable: false },
+            { key: 'model',      label: 'Model', sortable: true },
+            { key: 'username',   label: 'Requested by', sortable: false },
+            { key: 'created_at', label: 'Date', type: 'date', sortable: true },
+            { key: 'view',       label: '', sortable: false },
+        ]
+        const bulkActions = [{ key: 'delete', label: 'Delete', icon: 'fa-trash', variant: 'danger' }]
+        function onNotify({ message, level }) { create_message(message, level) }
+
+        async function handleDelete(item) {
+            if (!(await window.rzConfirm('Delete this entry? This cannot be undone.'))) return
+            const res = await fetch('/ai/admin/history/tag_suggest/bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ action: 'delete', ids: [item.id] }),
+            })
+            const data = await res.json()
+            if (data.success) { create_message('Deleted.', 'success-subtle'); table_ref.value?.fetchData() }
+            else create_message(data.error || 'Failed to delete', 'danger-subtle')
+        }
+
+        async function handleBulkAction({ action, ids }) {
+            if (action !== 'delete') return
+            if (!(await window.rzConfirm('Delete the selected entries? This cannot be undone.'))) return
+            const res = await fetch('/ai/admin/history/tag_suggest/bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ action: 'delete', ids }),
+            })
+            const data = await res.json()
+            if (data.success) { create_message(`Deleted ${data.deleted}.`, 'success-subtle'); table_ref.value?.fetchData() }
+            else create_message(data.error || 'Failed to delete', 'danger-subtle')
+        }
+
+        return { csrfToken, table_ref, index, columns, bulkActions, onNotify, handleDelete, handleBulkAction }
+    }
+}).mount('#ts-app')
+</script>
+{% endblock %}

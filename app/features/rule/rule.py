@@ -203,6 +203,53 @@ def rule() -> render_template:
                                    deep_validation_available=deep_validation_available)
 
 
+def _tag_suggest_input():
+    data = request.get_json(silent=True) or {}
+    exclude = []
+    for v in data.get('exclude_ids') or []:
+        try:
+            exclude.append(int(v))
+        except (TypeError, ValueError):
+            pass
+    return {
+        'title': str(data.get('title') or '')[:500],
+        'description': str(data.get('description') or '')[:5000],
+        'content': str(data.get('content') or '')[:100000],
+        'format': str(data.get('format') or '')[:50],
+    }, exclude, as_db_id(data.get('rule_id'))
+
+
+@rule_blueprint.route("/suggest_tags", methods=['POST'])
+@login_required
+def suggest_tags():
+    """Instant tag candidates for the rule being edited (trie over the
+    taxonomy / galaxy families of setting ai.tag_suggest, no AI).
+    Admins and AI Managers only (tag_suggest_core.can_use)."""
+    from app.features.ai import tag_suggest_core as TagSuggest
+    if not TagSuggest.can_use(current_user):
+        return jsonify({"ok": False, "error": "Tag suggestions aren't available."}), 403
+    text, exclude, _ = _tag_suggest_input()
+    if not (text['title'] or text['content']):
+        return jsonify({"ok": False, "error": "Write a title or the rule content first."}), 400
+    return jsonify({"ok": True, "candidates": TagSuggest.candidates(exclude_ids=exclude, **text),
+                    "ai_available": TagSuggest.ai_available(current_user)})
+
+
+@rule_blueprint.route("/ai_suggest_tags", methods=['POST'])
+@login_required
+def ai_suggest_tags():
+    """The AI keeps the relevant tags among the trie's candidates and says
+    why. Never applies anything — the user clicks the ones they want."""
+    from app.features.ai import tag_suggest_core as TagSuggest
+    if not TagSuggest.can_use(current_user):
+        return jsonify({"ok": False, "error": "Tag suggestions aren't available."}), 403
+    text, exclude, rule_id = _tag_suggest_input()
+    if rule_id and not RuleModel.get_rule(rule_id):
+        rule_id = None
+    body, status = TagSuggest.ai_pick(current_user, text, exclude, 'rule', rule_id)
+    return jsonify(body), status
+
+
 @rule_blueprint.route("/ai_generate_rule", methods=['POST'])
 @login_required
 def ai_generate_rule():

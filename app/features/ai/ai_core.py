@@ -1047,7 +1047,7 @@ class AIAgent(ABC):
     @property
     @abstractmethod
     def key(self) -> str:
-        """'chatbot' | 'rule_analysis' | 'rule_generator' | 'rule_fixer' | 'bundle_analysis'."""
+        """'chatbot' | 'rule_analysis' | 'rule_generator' | 'rule_fixer' | 'bundle_analysis' | 'tag_suggest'."""
 
     @property
     @abstractmethod

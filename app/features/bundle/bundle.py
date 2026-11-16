@@ -2912,3 +2912,47 @@ def import_bundle_json():
         return jsonify({"success": False, "message": report.get("error")}), 400
     return jsonify({"success": True, "bundle_id": bundle.id, "report": report,
                     "url": url_for("bundle.detail", bundle_id=bundle.id)})
+
+
+# ─── AI tag suggestions (same engine as rules: app/features/ai/tag_suggest_core.py) ───
+
+def _tag_suggest_bundle():
+    """The bundle and the tag ids already selected in the page, or an error
+    response. Admins and AI Managers only (tag_suggest_core.can_use), and on
+    a bundle they may edit (owner or admin, like the edit page)."""
+    from app.features.ai.tag_suggest_core import can_use
+    if not can_use(current_user):
+        return None, [], (jsonify({"ok": False, "error": "Tag suggestions aren't available."}), 403)
+    data = request.get_json(silent=True) or {}
+    bundle = BundleModel.get_bundle_by_id(as_db_id(data.get('bundle_id')))
+    if not bundle:
+        return None, [], (jsonify({"ok": False, "error": "Bundle not found."}), 404)
+    if current_user.id != bundle.user_id and not current_user.is_admin():
+        return None, [], (jsonify({"ok": False, "error": "Forbidden."}), 403)
+    exclude = [i for i in (as_db_id(v) for v in data.get('exclude_ids') or []) if i]
+    return bundle, exclude, None
+
+
+@bundle_blueprint.route("/suggest_tags", methods=['POST'])
+@login_required
+def suggest_tags():
+    """Instant tag candidates for a bundle, from its name, description and its
+    rules' titles and tags (trie, no AI)."""
+    from app.features.ai import tag_suggest_core as TagSuggest
+    bundle, exclude, err = _tag_suggest_bundle()
+    if err:
+        return err
+    return jsonify({"ok": True, "ai_available": TagSuggest.ai_available(current_user),
+                    "candidates": TagSuggest.candidates(exclude_ids=exclude, **TagSuggest.bundle_text(bundle))})
+
+
+@bundle_blueprint.route("/ai_suggest_tags", methods=['POST'])
+@login_required
+def ai_suggest_tags():
+    """The AI keeps the relevant tags for the bundle among the candidates."""
+    from app.features.ai import tag_suggest_core as TagSuggest
+    bundle, exclude, err = _tag_suggest_bundle()
+    if err:
+        return err
+    body, status = TagSuggest.ai_pick(current_user, TagSuggest.bundle_text(bundle), exclude, 'bundle', bundle.id)
+    return jsonify(body), status
