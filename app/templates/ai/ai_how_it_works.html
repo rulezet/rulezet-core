@@ -564,8 +564,9 @@
           A <strong>Tag suggestions</strong> card with Rulezy on the rule edit page (under the tag picker) and on the
           bundle edit page (Tags tab). For a rule it reads the form as it is now (title, description, content,
           format — unsaved changes included); for a bundle, its name, description and the titles and tags of its
-          rules. It proposes MISP taxonomy and galaxy tags. Only <strong>admins and AI Managers</strong> see and use
-          it (AI Operators don't), and it disappears everywhere when the agent is disabled. The database holds tens of thousands of tags, far too many for any model's
+          rules. It proposes MISP taxonomy and galaxy tags. Only <strong>admins, AI Operators and AI Managers</strong>
+          see and use it — including a Tag manager who is also an AI Operator, on any rule they may tag — and it
+          disappears everywhere when the agent is disabled. The database holds tens of thousands of tags, far too many for any model's
           context, so the work is split in two:
         </p>
 

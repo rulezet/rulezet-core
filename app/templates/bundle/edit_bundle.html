@@ -263,7 +263,7 @@
                         <div v-else class="be-empty-hint">No tag yet — pick some in the list below.</div>
                     </div>
 
-                    <!-- Tag suggestions (trie + AI, same component as the rule edit page) — admins / AI Managers -->
+                    <!-- Tag suggestions (trie + AI, same component as the rule edit page) — admins / AI Operators / AI Managers -->
                     {% if can_suggest_tags() %}
                     <tag-suggest class="mb-3" :model-value="allSelectedTagsObjects" @update:model-value="addSuggestedTags"
                                  kind="bundle" :target-id="bundleId" csrf="{{ csrf_token() }}"></tag-suggest>

@@ -209,14 +209,16 @@ def simulate_ai_picks(found, max_suggestions):
 
 
 def can_use(user) -> bool:
-    """Who sees and uses Tag Suggestions — trie AND AI step: admins and AI
-    Managers (ai.manage) only, while the agent is enabled (AI admin → Tag
-    Suggestions / Overview). AI Operators (ai.use only) and plain users never
-    see it. Every route and template goes through this one check."""
+    """Who sees and uses Tag Suggestions — trie AND AI step: admins, AI
+    Operators (ai.use) and AI Managers (ai.manage), while the agent is enabled
+    (AI admin → Tag Suggestions / Overview). Plain users never see it. Every
+    route and template goes through this one check. On the rule edit page this
+    includes a Tag manager (rule.tag_any) who is also an AI Operator, in the
+    tags-only restricted edit of someone else's rule."""
     from app.core.db_class.ai import AIAgentConfig
     if not user or not user.is_authenticated:
         return False
-    if not (user.is_admin() or user.has_permission('ai.manage')):
+    if not (user.is_admin() or user.has_permission('ai.use') or user.has_permission('ai.manage')):
         return False
     cfg = AIAgentConfig.query.filter_by(agent_key='tag_suggest').first()
     return cfg.enabled if cfg else True
