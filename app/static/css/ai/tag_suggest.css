@@ -141,3 +141,7 @@
     .ts-go { width: 100%; }
     .ts-avatar, .ts-avatar img { width: 44px; height: 44px; }
 }
+
+/* Generic tag (from the format's context, setting ai.tag_suggest_formats) */
+.ts-generic { font-size: .68rem; font-weight: 600; padding: .1rem .45rem; border-radius: 999px; white-space: nowrap;
+    background: rgba(111, 66, 193, .12); color: #6f42c1; }

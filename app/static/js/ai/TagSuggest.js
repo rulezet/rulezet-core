@@ -222,6 +222,7 @@ const TagSuggest = {
                             <span class="ts-conf" :class="'ts-conf--' + t.confidence">
                                 <i class="fa-solid me-1" :class="CONF[t.confidence].icon"></i>[[ CONF[t.confidence].label ]]
                             </span>
+                            <span v-if="t.generic" class="ts-generic" title="Generic tag: comes from what rules of this format detect"><i class="fa-solid fa-shapes me-1"></i>Generic</span>
                             <span class="ts-pick__action">
                                 <i class="fa-solid" :class="selectedIds.has(t.id) ? 'fa-check' : 'fa-plus'"></i>
                             </span>
@@ -246,7 +247,7 @@ const TagSuggest = {
                 <div v-else class="ts-chips">
                     <span v-for="t in shownOthers" :key="t.id" class="tag-split shadow-sm ts-chip"
                           :class="{'ts-chip--added': selectedIds.has(t.id)}" role="button" tabindex="0"
-                          :title="'Matched: ' + t.matched.join(', ')" @click="add(t)" @keydown.enter.prevent="add(t)">
+                          :title="(t.generic ? 'Generic tag for this format: ' : 'Matched: ') + t.matched.join(', ')" @click="add(t)" @keydown.enter.prevent="add(t)">
                         <span class="tag-left" v-html="mapIcon(t.icon)"></span>
                         <span class="tag-right" :style="{ backgroundColor: bg(t) }">
                             <span class="fw-bold me-2" :style="{ color: fg(t) }">[[ t.name ]]</span>

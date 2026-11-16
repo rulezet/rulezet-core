@@ -1,0 +1,174 @@
+{
+    "label": "Tag suggestions — context per rule format",
+    "category": "AI",
+    "description": "What a rule of each Rulezet format detects, so Tag Suggestions also proposes GENERIC but correct tags (file type, platform, data source, incident category, kill-chain phase), not only the names found in the rule. Per format (lower-case key, as in rule.format): context — one or two sentences given to the AI; tags — exact tag names that fit every rule of the format; signals — {label, pattern (case-insensitive regex on title + description + content), tags} that add tags when the rule matches. Unknown tag names are skipped (the admin page lists them). A bundle uses the context of the format most of its rules have.",
+    "public": false,
+    "value": {
+        "yara": {
+            "context": "YARA matches files or memory with byte / string patterns and a condition: it identifies a malware family, a tool, a packer or a file type at rest or in memory.",
+            "tags": ["misp-galaxy:mitre-data-source=\"File - DS0022\""],
+            "signals": [
+                {"label": "PE file", "pattern": "uint16\\(0\\)\\s*==\\s*0x5a4d|pe\\.is_pe|pe\\.(imports|exports|sections|number_of_sections|entry_point)|import\\s+\"pe\"", "tags": ["file-type:type=\"peexe\"", "ms-caro-malware:malware-platform=\"Win32\""]},
+                {"label": "PE DLL", "pattern": "pe\\.is_dll|pe\\.characteristics\\s*&\\s*pe\\.dll", "tags": ["file-type:type=\"pedll\""]},
+                {"label": "64-bit PE", "pattern": "pe\\.is_64bit|pe\\.machine\\s*==\\s*pe\\.machine_amd64", "tags": ["file-type:type=\"peexe64\"", "ms-caro-malware:malware-platform=\"Win64\""]},
+                {"label": ".NET", "pattern": "import\\s+\"dotnet\"|dotnet\\.|mscoree\\.dll|_CorExeMain", "tags": ["ms-caro-malware:malware-platform=\"MSIL\""]},
+                {"label": "ELF file", "pattern": "uint32\\(0\\)\\s*==\\s*0x464c457f|import\\s+\"elf\"|elf\\.(type|machine|number_of_sections)", "tags": ["file-type:type=\"elf\"", "ms-caro-malware:malware-platform=\"Linux\""]},
+                {"label": "Mach-O file", "pattern": "uint32\\(0\\)\\s*==\\s*0x(feedfacf|feedface|cefaedfe|cffaedfe|cafebabe)|import\\s+\"macho\"", "tags": ["file-type:type=\"macho\"", "ms-caro-malware:malware-platform=\"MacOS\""]},
+                {"label": "PDF", "pattern": "%PDF|uint32\\(0\\)\\s*==\\s*0x46445025", "tags": ["file-type:type=\"pdf\""]},
+                {"label": "Office / OLE", "pattern": "d0\\s*cf\\s*11\\s*e0|0xe011cfd0|\\bvbaProject\\b|word/document\\.xml|\\bAutoOpen\\b|Document_Open", "tags": ["file-type:type=\"doc\""]},
+                {"label": "RTF", "pattern": "\\{\\\\rtf|0x74725c7b", "tags": ["file-type:type=\"rtf\""]},
+                {"label": "LNK", "pattern": "uint32\\(0\\)\\s*==\\s*0x0000004c|\\.lnk\\b", "tags": ["file-type:type=\"lnk\""]},
+                {"label": "PowerShell", "pattern": "powershell|invoke-expression|\\biex\\b|frombase64string|-encodedcommand", "tags": ["file-type:type=\"script\"", "misp-galaxy:mitre-data-source=\"Script - DS0012\""]},
+                {"label": "JavaScript", "pattern": "\\beval\\s*\\(|document\\.write|activexobject|wscript\\.shell", "tags": ["ms-caro-malware:malware-platform=\"JS\""]},
+                {"label": "VBScript", "pattern": "createobject\\s*\\(|\\.vbs\\b|vbscript", "tags": ["file-type:type=\"vbs\"", "ms-caro-malware:malware-platform=\"VBS\""]},
+                {"label": "Android", "pattern": "classes\\.dex|androidmanifest|import\\s+\"dex\"|\\bdex\\.", "tags": ["ms-caro-malware:malware-platform=\"AndroidOS\""]},
+                {"label": "Shell script", "pattern": "#!/bin/(ba)?sh|/bin/sh -c|chmod \\+x", "tags": ["file-type:type=\"shell\""]}
+            ]
+        },
+        "sigma": {
+            "context": "Sigma is a generic signature for log events (SIEM): its logsource (product / category / service) says which logs it reads, and its detection which event values reveal an attacker technique on an endpoint, a server or a cloud service.",
+            "tags": [],
+            "signals": [
+                {"label": "Windows", "pattern": "product:\\s*windows", "tags": ["ms-caro-malware:malware-platform=\"Win32\""]},
+                {"label": "Linux", "pattern": "product:\\s*linux", "tags": ["ms-caro-malware:malware-platform=\"Linux\""]},
+                {"label": "macOS", "pattern": "product:\\s*macos", "tags": ["ms-caro-malware:malware-platform=\"MacOS\""]},
+                {"label": "Process creation", "pattern": "category:\\s*process_(creation|access|tampering)|EventID:\\s*(4688|1)\\b", "tags": ["misp-galaxy:mitre-data-source=\"Process - DS0009\""]},
+                {"label": "Command line", "pattern": "CommandLine", "tags": ["misp-galaxy:mitre-data-source=\"Command - DS0017\""]},
+                {"label": "Registry", "pattern": "category:\\s*registry_|TargetObject|HKLM\\\\|HKCU\\\\", "tags": ["misp-galaxy:mitre-data-source=\"Windows Registry - DS0024\""]},
+                {"label": "File events", "pattern": "category:\\s*file_", "tags": ["misp-galaxy:mitre-data-source=\"File - DS0022\""]},
+                {"label": "Network", "pattern": "category:\\s*(network_connection|firewall|proxy|dns)|DestinationIp|DestinationPort", "tags": ["misp-galaxy:mitre-data-source=\"Network Traffic - DS0029\""]},
+                {"label": "DNS", "pattern": "category:\\s*dns|service:\\s*dns|QueryName", "tags": ["misp-galaxy:mitre-data-source=\"Domain Name - DS0038\""]},
+                {"label": "PowerShell", "pattern": "service:\\s*powershell|category:\\s*ps_|ScriptBlockText", "tags": ["misp-galaxy:mitre-data-source=\"Script - DS0012\""]},
+                {"label": "Logon", "pattern": "EventID:\\s*(4624|4625|4648|4672)\\b|LogonType", "tags": ["misp-galaxy:mitre-data-source=\"Logon Session - DS0028\""]},
+                {"label": "Active Directory", "pattern": "EventID:\\s*(4662|5136|4769|4768)\\b|service:\\s*security", "tags": ["misp-galaxy:mitre-data-source=\"Active Directory - DS0026\""]},
+                {"label": "Cloud", "pattern": "product:\\s*(aws|azure|gcp|m365|okta|google_workspace)", "tags": ["misp-galaxy:mitre-data-source=\"Cloud Service - DS0025\""]},
+                {"label": "Web server", "pattern": "category:\\s*webserver|cs-uri", "tags": ["misp-galaxy:mitre-data-source=\"Application Log - DS0015\""]}
+            ]
+        },
+        "suricata": {
+            "context": "Suricata is a network IDS/IPS signature: it inspects packets and protocol fields (http, dns, tls, …) and raises an alert when traffic matches — C2 beaconing, exploitation attempts, scans, malware downloads, policy violations.",
+            "tags": ["misp-galaxy:mitre-data-source=\"Network Traffic - DS0029\"", "rsit:intrusion-attempts=\"ids-alert\""],
+            "signals": [
+                {"label": "C2 / trojan", "pattern": "classtype:\\s*(trojan-activity|command-and-control)|\\bC2\\b|\\bCnC\\b|beacon", "tags": ["rsit:malicious-code=\"c2-server\"", "kill-chain:Command and Control"]},
+                {"label": "Exploit", "pattern": "classtype:\\s*(attempted-admin|attempted-user|web-application-attack|shellcode-detect)|\\bexploit\\b|CVE-\\d{4}-\\d+", "tags": ["rsit:intrusion-attempts=\"exploit\"", "kill-chain:Exploitation"]},
+                {"label": "Scan", "pattern": "classtype:\\s*(attempted-recon|network-scan)|\\bscan(ner|ning)?\\b", "tags": ["rsit:information-gathering=\"scanner\"", "kill-chain:Reconnaissance"]},
+                {"label": "Brute force", "pattern": "brute.?force|password guess", "tags": ["rsit:intrusion-attempts=\"brute-force\""]},
+                {"label": "Phishing", "pattern": "phish", "tags": ["rsit:fraud=\"phishing\""]},
+                {"label": "DoS", "pattern": "classtype:\\s*(attempted-dos|successful-dos)|\\bddos\\b", "tags": ["rsit:availability=\"dos\""]},
+                {"label": "DNS", "pattern": "dns\\.query|dns_query|\\bdns\\b", "tags": ["misp-galaxy:mitre-data-source=\"Domain Name - DS0038\""]},
+                {"label": "Certificate", "pattern": "tls\\.cert|ja3|tls_cert", "tags": ["misp-galaxy:mitre-data-source=\"Certificate - DS0037\""]},
+                {"label": "Malware download", "pattern": "file_data|filemagic|\\.exe\\b", "tags": ["kill-chain:Delivery"]}
+            ]
+        },
+        "sagan": {
+            "context": "Sagan is a log analysis engine with Suricata-like rules on syslog / application logs: it alerts on authentication failures, brute force, privilege abuse and suspicious system or network-device events.",
+            "tags": ["misp-galaxy:mitre-data-source=\"Application Log - DS0015\""],
+            "signals": [
+                {"label": "Brute force", "pattern": "brute.?force|authentication fail|failed password|login fail", "tags": ["rsit:intrusion-attempts=\"brute-force\"", "misp-galaxy:mitre-data-source=\"Logon Session - DS0028\""]},
+                {"label": "Privileged account", "pattern": "\\broot\\b|sudo|administrator|privilege", "tags": ["rsit:intrusions=\"privileged-account-compromise\""]},
+                {"label": "Scan", "pattern": "\\bscan", "tags": ["rsit:information-gathering=\"scanner\""]},
+                {"label": "Firewall", "pattern": "firewall|iptables|\\bdenied\\b", "tags": ["misp-galaxy:mitre-data-source=\"Firewall - DS0018\""]}
+            ]
+        },
+        "zeek": {
+            "context": "Zeek is a network analysis framework: its scripts read protocol logs and connection metadata to detect suspicious network behaviour.",
+            "tags": ["misp-galaxy:mitre-data-source=\"Network Traffic - DS0029\""],
+            "signals": [
+                {"label": "DNS", "pattern": "dns", "tags": ["misp-galaxy:mitre-data-source=\"Domain Name - DS0038\""]},
+                {"label": "Certificate", "pattern": "x509|ssl|ja3", "tags": ["misp-galaxy:mitre-data-source=\"Certificate - DS0037\""]},
+                {"label": "C2", "pattern": "beacon|\\bC2\\b", "tags": ["kill-chain:Command and Control"]}
+            ]
+        },
+        "splunk": {
+            "context": "A Splunk SPL search over SIEM logs: it hunts or alerts on event values that reveal an attacker technique (endpoint, network, authentication, cloud).",
+            "tags": [],
+            "signals": [
+                {"label": "Process", "pattern": "process_name|parent_process|EventCode=(4688|1)\\b|Processes\\.", "tags": ["misp-galaxy:mitre-data-source=\"Process - DS0009\""]},
+                {"label": "Registry", "pattern": "registry_path|Registry\\.", "tags": ["misp-galaxy:mitre-data-source=\"Windows Registry - DS0024\""]},
+                {"label": "Network", "pattern": "dest_port|dest_ip|Network_Traffic", "tags": ["misp-galaxy:mitre-data-source=\"Network Traffic - DS0029\""]},
+                {"label": "PowerShell", "pattern": "powershell|ScriptBlockText|EventCode=4104", "tags": ["misp-galaxy:mitre-data-source=\"Script - DS0012\""]},
+                {"label": "Authentication", "pattern": "Authentication\\.|EventCode=(4624|4625)", "tags": ["misp-galaxy:mitre-data-source=\"Logon Session - DS0028\""]},
+                {"label": "Cloud", "pattern": "aws|azure|gcp|o365|okta", "tags": ["misp-galaxy:mitre-data-source=\"Cloud Service - DS0025\""]}
+            ]
+        },
+        "elastic": {
+            "context": "An Elastic detection rule (EQL / KQL / ES|QL) over endpoint, network and cloud logs: it alerts on event values that reveal an attacker technique.",
+            "tags": [],
+            "signals": [
+                {"label": "Windows", "pattern": "host\\.os\\.type\\s*[:=]+\\s*\"?windows|os: windows", "tags": ["ms-caro-malware:malware-platform=\"Win32\""]},
+                {"label": "Linux", "pattern": "host\\.os\\.type\\s*[:=]+\\s*\"?linux|os: linux", "tags": ["ms-caro-malware:malware-platform=\"Linux\""]},
+                {"label": "macOS", "pattern": "host\\.os\\.type\\s*[:=]+\\s*\"?macos|os: macos", "tags": ["ms-caro-malware:malware-platform=\"MacOS\""]},
+                {"label": "Process", "pattern": "process where|process\\.name|process\\.parent", "tags": ["misp-galaxy:mitre-data-source=\"Process - DS0009\""]},
+                {"label": "Registry", "pattern": "registry where|registry\\.path", "tags": ["misp-galaxy:mitre-data-source=\"Windows Registry - DS0024\""]},
+                {"label": "File", "pattern": "file where|file\\.path", "tags": ["misp-galaxy:mitre-data-source=\"File - DS0022\""]},
+                {"label": "Network", "pattern": "network where|destination\\.ip|destination\\.port", "tags": ["misp-galaxy:mitre-data-source=\"Network Traffic - DS0029\""]},
+                {"label": "Cloud", "pattern": "aws\\.|azure\\.|gcp\\.|o365\\.|okta\\.", "tags": ["misp-galaxy:mitre-data-source=\"Cloud Service - DS0025\""]}
+            ]
+        },
+        "kql": {
+            "context": "A KQL hunting / detection query for Microsoft Sentinel or Defender: it searches Microsoft security tables (DeviceProcessEvents, SigninLogs, …) for values that reveal an attacker technique.",
+            "tags": [],
+            "signals": [
+                {"label": "Process", "pattern": "DeviceProcessEvents|ProcessCommandLine|SecurityEvent.*4688", "tags": ["misp-galaxy:mitre-data-source=\"Process - DS0009\"", "ms-caro-malware:malware-platform=\"Win32\""]},
+                {"label": "Registry", "pattern": "DeviceRegistryEvents|RegistryKey", "tags": ["misp-galaxy:mitre-data-source=\"Windows Registry - DS0024\""]},
+                {"label": "File", "pattern": "DeviceFileEvents", "tags": ["misp-galaxy:mitre-data-source=\"File - DS0022\""]},
+                {"label": "Network", "pattern": "DeviceNetworkEvents|RemoteIP|RemotePort", "tags": ["misp-galaxy:mitre-data-source=\"Network Traffic - DS0029\""]},
+                {"label": "Sign-ins", "pattern": "SigninLogs|AADSignInEventsBeta|IdentityLogonEvents|DeviceLogonEvents", "tags": ["misp-galaxy:mitre-data-source=\"Logon Session - DS0028\""]},
+                {"label": "Cloud", "pattern": "AuditLogs|OfficeActivity|AzureActivity|CloudAppEvents", "tags": ["misp-galaxy:mitre-data-source=\"Cloud Service - DS0025\""]},
+                {"label": "Email", "pattern": "EmailEvents|EmailAttachmentInfo|EmailUrlInfo", "tags": ["maec-delivery-vectors:maec-delivery-vector=\"email-attachment\""]}
+            ]
+        },
+        "wazuh": {
+            "context": "A Wazuh rule decodes host and application logs (HIDS) and raises an alert at a level: authentication, file integrity, rootkit checks, system and web server events.",
+            "tags": ["misp-galaxy:mitre-data-source=\"Application Log - DS0015\""],
+            "signals": [
+                {"label": "Brute force", "pattern": "brute|authentication fail|multiple failed", "tags": ["rsit:intrusion-attempts=\"brute-force\"", "misp-galaxy:mitre-data-source=\"Logon Session - DS0028\""]},
+                {"label": "File integrity", "pattern": "syscheck|integrity", "tags": ["misp-galaxy:mitre-data-source=\"File - DS0022\""]},
+                {"label": "Windows", "pattern": "win\\.|windows|eventchannel", "tags": ["ms-caro-malware:malware-platform=\"Win32\""]},
+                {"label": "Web attack", "pattern": "web|sql injection|xss|path traversal", "tags": ["rsit:intrusion-attempts=\"exploit\""]}
+            ]
+        },
+        "crs": {
+            "context": "An OWASP Core Rule Set (ModSecurity) WAF rule: it inspects HTTP requests and responses to block web attacks — SQL injection, XSS, path traversal, remote code execution, scanners.",
+            "tags": ["rsit:intrusion-attempts=\"exploit\"", "kill-chain:Exploitation", "misp-galaxy:mitre-data-source=\"Application Log - DS0015\""],
+            "signals": [
+                {"label": "Scanner", "pattern": "scanner|user-agent", "tags": ["rsit:information-gathering=\"scanner\"", "kill-chain:Reconnaissance"]},
+                {"label": "Data leakage", "pattern": "leak|RESPONSE_BODY", "tags": ["rsit:information-content-security=\"data-leak\""]}
+            ]
+        },
+        "nse": {
+            "context": "An Nmap NSE script: it probes hosts and services over the network to discover them, fingerprint versions or check for a vulnerability.",
+            "tags": ["rsit:information-gathering=\"scanner\"", "kill-chain:Reconnaissance", "misp-galaxy:mitre-data-source=\"Internet Scan - DS0035\""],
+            "signals": [
+                {"label": "Vulnerability check", "pattern": "vulns\\.|CVE-\\d{4}-\\d+|exploit", "tags": ["rsit:intrusion-attempts=\"exploit\""]},
+                {"label": "Brute force", "pattern": "brute", "tags": ["rsit:intrusion-attempts=\"brute-force\""]}
+            ]
+        },
+        "kunai": {
+            "context": "A Kunai rule filters Linux endpoint events collected with eBPF (process execution, file, network, kernel module, BPF program) to detect malicious activity on Linux hosts.",
+            "tags": ["ms-caro-malware:malware-platform=\"Linux\""],
+            "signals": [
+                {"label": "Process", "pattern": "execve|\\.exe\\b|command_line", "tags": ["misp-galaxy:mitre-data-source=\"Process - DS0009\""]},
+                {"label": "Network", "pattern": "connect|dst\\.ip|dns_query", "tags": ["misp-galaxy:mitre-data-source=\"Network Traffic - DS0029\""]},
+                {"label": "Kernel", "pattern": "init_module|bpf_prog|kernel", "tags": ["misp-galaxy:mitre-data-source=\"Kernel - DS0008\""]}
+            ]
+        },
+        "atr": {
+            "context": "An Agent Threat Rule (ATR) detects attacks against AI agents and LLM applications: prompt injection, tool abuse, data exfiltration through the agent, jailbreaks.",
+            "tags": [],
+            "signals": [
+                {"label": "Data exfiltration", "pattern": "exfiltrat|leak", "tags": ["rsit:information-content-security=\"data-leak\""]}
+            ]
+        },
+        "plum": {
+            "context": "A Plum rule describes detection logic for a security monitoring pipeline: it matches events or artefacts that reveal malicious activity.",
+            "tags": [],
+            "signals": []
+        },
+        "nova": {
+            "context": "A NOVA rule matches prompts sent to large language models (keywords, semantic similarity, LLM evaluation) to detect prompt injection, jailbreaks or malicious use of AI.",
+            "tags": [],
+            "signals": []
+        }
+    }
+}

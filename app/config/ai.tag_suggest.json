@@ -1,7 +1,7 @@
 {
     "label": "Tag suggestions — families and matching",
     "category": "AI",
-    "description": "Tag suggestions on the rule create/edit pages (6th AI integration). A token trie is built in memory from the tags of these taxonomy / galaxy families only (their names, values and galaxy synonyms) — the other families (firearms, drugs, satellites, …) are never looked at. families: namespaces kept; include_used_min_rules: also keep any tag already used on at least this many rules, whatever its family (0 = off); exclude_prefixes: tags whose name starts with one of these are never suggested (markings like TLP / PAP, already set by default on every rule); min_term_length: shorter words are ignored (technique ids like T1059 are always kept); stopwords: words never matched on their own; max_candidates: matches shown / handed to the AI; max_ai_suggestions: tags the AI may keep; simulate_ai: no model call, the AI step is simulated from the trie scores (same answer shape, model shown as \"simulated\") — for a dev machine whose local Ollama is too slow, never on production.",
+    "description": "Tag suggestions on the rule create/edit pages (6th AI integration). A token trie is built in memory from the tags of these taxonomy / galaxy families only (their names, values and galaxy synonyms) — the other families (firearms, drugs, satellites, …) are never looked at. sources: which tags may be suggested — taxonomy / galaxy (MISP taxonomies and galaxies, of the families below), imported (tags that came with imported rules) and custom (tags created on this instance or received from a connector); also switchable on the AI admin → Tag Suggestions page; families: taxonomy / galaxy namespaces kept; include_used_min_rules: imported and custom tags must be used on at least this many rules (0 = all of them); per-format context and generic tags: setting ai.tag_suggest_formats; exclude_prefixes: tags whose name starts with one of these are never suggested (markings like TLP / PAP, already set by default on every rule); min_term_length: shorter words are ignored (technique ids like T1059 are always kept); stopwords: words never matched on their own; max_candidates: matches shown / handed to the AI; max_ai_suggestions: tags the AI may keep; simulate_ai: no model call, the AI step is simulated from the trie scores (same answer shape, model shown as \"simulated\") — for a dev machine whose local Ollama is too slow, never on production.",
     "public": false,
     "value": {
         "families": [
@@ -15,6 +15,7 @@
             "phishing", "dga", "ddos", "tor", "infoleak", "vulnerability", "stealth_malware", "detection-engineering", "information-security-data-source", "domain-abuse", "cryptocurrency-threat",
             "ics", "iot", "cloud-security", "rsit", "ecsirt"
         ],
+        "sources": {"taxonomy": true, "galaxy": true, "imported": true, "custom": false},
         "include_used_min_rules": 3,
         "exclude_prefixes": ["tlp", "pap", "admiralty-scale", "estimative-language", "workflow", "misp:"],
         "min_term_length": 4,
