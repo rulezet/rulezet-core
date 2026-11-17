@@ -484,6 +484,27 @@ TASK_TYPES = {
             {'key': 'default_public', 'type': 'bool', 'label': 'Publish new reports immediately', 'default': True},
         ],
     },
+    'ai_tag_suggest': {
+        'label': 'AI Tag Suggestions — tag rules',
+        'icon': 'fa-solid fa-tags',
+        'job_type': 'ai_tag_suggest',
+        'target_picker': 'rule_list_select',
+        # Background lane, bounded per run like AI Rule Analysis: schedule it
+        # to recur, rules already done by a real run are skipped.
+        'extra_options': [
+            {'key': 'confidences', 'type': 'multiselect', 'label': 'Tags to add — AI confidence', 'default': ['high'],
+             'options': [{'value': 'high', 'label': 'Strong match (high)'},
+                         {'value': 'medium', 'label': 'Likely (medium)'},
+                         {'value': 'low', 'label': 'Maybe (low)'}]},
+            {'key': 'include_generic', 'type': 'bool', 'label': 'Also add generic tags (file type, platform, data source…)', 'default': True},
+            {'key': 'dry_run', 'type': 'bool', 'label': 'Dry run — only log what would be added', 'default': False},
+            {'key': 'model', 'type': 'text', 'label': 'Model — blank uses the agent default', 'default': ''},
+            {'key': 'batch_size', 'type': 'text', 'label': 'Rules per run', 'default': '100'},
+            {'key': 'max_seconds', 'type': 'text', 'label': 'Max seconds per run', 'default': '1800'},
+            {'key': 'redo_done', 'type': 'bool', 'label': 'Run again on rules already done by a previous run', 'default': False},
+        ],
+        'required_options': ['confidences'],
+    },
 }
 
 
@@ -554,6 +575,7 @@ _DESCRIPTIONS = {
     'github_branch_backfill': 'Fills in the git branch of rules imported before branches were recorded.',
     'suricata_audit': 'Checks Suricata rules and writes a report; no rule is changed.',
     'suricata_deep_validate': 'Validates Suricata rules with the real Suricata engine, a batch per run, and records the result.',
+    'ai_tag_suggest': 'Runs AI Tag Suggestions on the targeted rules (e.g. every rule with a CVE): for each rule the trie and the format context find candidates, the AI keeps the relevant ones, and the tags of the chosen confidence levels are added — with a rule-history entry. Dry run only logs them. Rules done by a real run are skipped next time, so schedule it to go through the catalog step by step.',
     'gamification_recompute': 'Recomputes every user\'s points, level and badges; the leaderboard cache is reset at the end.',
     'github_sync_schedule_launch': 'Runs one Git sync schedule now: checks its repositories for updated and new rules, then accepts / adds them if the schedule says so — the same as its own timer.',
     'git_sources_update': 'The Git Sources update check on the chosen repositories (or all): finds the rules changed upstream and the new ones; accepts / adds them when ticked (never an invalid update), otherwise they wait for review on the Git Sources page.',

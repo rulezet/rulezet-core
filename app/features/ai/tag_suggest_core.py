@@ -400,7 +400,7 @@ def ai_pick(user, text, exclude, target_type, target_id):
     return {"ok": True, "model": result.model_used, "simulated": cfg['simulate_ai'], "suggestions": picks}, 200
 
 
-def _save_history(user, text, target_type, target_id, found, picks, model):
+def _save_history(user, text, target_type, target_id, found, picks, model, extra_meta=None):
     """One AIGeneration row per AI call — the admin page's history table
     (/ai/admin/tag-suggest), like the other agents."""
     import uuid as uuid_mod
@@ -415,11 +415,12 @@ def _save_history(user, text, target_type, target_id, found, picks, model):
             uuid=str(uuid_mod.uuid4()), agent_key='tag_suggest',
             rule_id=target_id if target_type == 'rule' else None,
             bundle_id=target_id if target_type == 'bundle' else None,
-            user_id=user.id, content='\n'.join(lines), model=model,
+            user_id=getattr(user, 'id', None), content='\n'.join(lines), model=model,
+            job_uuid=(extra_meta or {}).get('job_uuid'),
             meta={'target': target_type,
                   'suggestions': [{'id': p['id'], 'name': p['name'], 'confidence': p['confidence'],
                                    'reason': p['reason']} for p in picks],
-                  'candidates': [c['name'] for c in found]},
+                  'candidates': [c['name'] for c in found], **(extra_meta or {})},
             is_public=False,
         ))
         db.session.commit()

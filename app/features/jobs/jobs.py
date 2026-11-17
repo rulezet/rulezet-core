@@ -457,6 +457,10 @@ def create_job():
         and payload.get('agent_key') == 'rule_analysis'
         and current_user.has_permission('ai.use')
     )
+    # Adding AI-picked tags to many rules is an AI admin decision: admins and
+    # AI Managers (ai.manage) only.
+    if job_type == 'ai_tag_suggest' and current_user.has_permission('ai.manage'):
+        is_ai_job = True
     if not current_user.is_admin() and not is_tag_manager_job and not is_ai_job:
         return jsonify({"error": "Forbidden."}), 403
 
