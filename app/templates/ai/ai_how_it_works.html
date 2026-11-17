@@ -608,6 +608,12 @@
           Admins and AI Managers choose on the Tag Suggestions admin page which tags may be suggested:
           taxonomies, galaxies, imported tags and custom tags.
         </p>
+        <p style="font-size:.92rem;color:var(--subtle-text-color);">
+          <strong>On many rules at once.</strong> The Workflows task <em>AI Tag Suggestions — tag rules</em> runs the same
+          thing on a filtered set of rules (for example every rule with a CVE) and adds the tags of the confidence levels
+          you choose, with a history entry on each rule — or only logs them in a dry run. It works in batches and skips
+          the rules already done, so a recurring task goes through the whole catalog step by step.
+        </p>
 
         <div class="hiw-callout hiw-callout--info mt-3">
           <i class="fa-solid fa-circle-info me-2 text-primary"></i>

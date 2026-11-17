@@ -45,6 +45,22 @@ Setting `ai.tag_suggest_formats`, one entry per Rulezet format (yara, sigma, sur
 
 Generic tags are looked up by exact name, whatever their family (chosen on purpose), but still active, not excluded and of an enabled source. They score 1.0 (format) / 1.6 (signal), are flagged `generic: true`, and always reach the model besides the top 25 NAME candidates (`for_model()`). The model is told to keep a GENERIC tag only when the rule clearly supports it. In the UI they carry a "Generic" badge. A bundle uses the context of the format most of its rules have. The admin page lists each format with its context and any tag name not found.
 
+## Bulk job (Workflows)
+
+Workflows task **AI Tag Suggestions — tag rules** (`task_types.py` key `ai_tag_suggest`, job `ai_tag_suggest` in `job_handlers.py`, background lane like `ai_generate`). Targets: the RuleList picker (e.g. the "with CVE" filter = `has_cve`, or selected rules). Options:
+- **Tags to add:** which AI confidences (Strong / Likely / Maybe, checkboxes, default Strong only).
+- **Generic tags:** whether to add them too.
+- **Dry run:** only logs what would be added.
+- **Model.**
+- **Limits:** rules per run (100), max seconds per run (1800).
+- **Redo:** run again on rules already done.
+
+Per rule: the trie and the format context give the candidates (tags already on the rule are excluded), the agent picks, and the kept tags are inserted with a rule-history entry ("AI Tag Suggestions added: …"). The job's author is credited as a contributor and the quality score is refreshed, as in `bulk_add_tag_to_rules`. Each rule also gets an `AIGeneration` row (`meta.source` = `bulk` / `bulk_dry_run`, `applied` / `would_apply`, `job_uuid`), which shows in the admin history.
+
+**Resumable:** a rule with a `bulk` row is skipped next time, so a recurring task goes through the catalog step by step. A dry run doesn't count as done.
+
+**Rights:** `/jobs/create` allows `ai_tag_suggest` for admins and `ai.manage`. A systemic failure (agent disabled, busy, budget) stops the run. One activity-log entry at the end (`ai.tag_suggest_bulk`).
+
 ## Simulation mode (dev)
 
 `simulate_ai: true` in the setting skips the model call: `simulate_ai_picks()` keeps NAME candidates scoring ≥ 35 % of the best one, then the generic tags a signal found (not the per-format ones), one tag per set of matched words (galaxy / taxonomy before a plain twin), confidence from the score ratio, reason `[simulated] The rule mentions …`. The answer has the same shape as the real model's and the UI shows the model as `simulated`. Useful when the local Ollama runs on CPU (a 7B model there needs over a minute even for a tiny prompt). Never on production.

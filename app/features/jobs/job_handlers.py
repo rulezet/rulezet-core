@@ -6264,6 +6264,181 @@ def _ai_generate_finish(job, generated, failed):
             level='warning' if failed else 'success', event='done')
 
 
+# ─── ai_tag_suggest (Tag Suggestions on many rules) ─────────────────────────
+# The Tag Suggestions agent run over a filtered set of rules (Workflows task
+# "AI Tag Suggestions — tag rules", e.g. every rule with a CVE first), in the
+# background lane like ai_generate, bounded per run (batch_size / max_seconds)
+# and resumable the same way: a rule already handled by a real (non dry-run)
+# bulk run has an AIGeneration row with meta.source == 'bulk' and is skipped.
+# Per rule: trie candidates + generic tags of its format -> the model keeps the
+# relevant ones -> the picks whose confidence the task allows (and generic or
+# not) are added to the rule, with a rule-history entry, like bulk tagging.
+# Dry run: the same, but nothing is added — only the job log and the history
+# row say what would have been.
+
+AI_TAG_LOG_EVERY_BULK = 50
+_AI_TAG_CONFIDENCES = ('high', 'medium', 'low')
+
+
+@register_handler('ai_tag_suggest')
+def handle_ai_tag_suggest(job, app):
+    import time as _time
+
+    from app.core.db_class.ai import AIGeneration
+    from app.features.ai import tag_suggest_core as TagSuggest
+    from app.features.ai.ai_core import get_agent
+
+    payload        = job.payload or {}
+    filters        = payload.get('filters') or {}
+    rule_ids       = filters.get('rule_ids', payload.get('rule_ids', 'ALL'))
+    model          = payload.get('model') or None
+    dry_run        = bool(payload.get('dry_run'))
+    redo           = bool(payload.get('redo_done'))
+    with_generic   = payload.get('include_generic', True) is not False
+    confidences    = [c for c in (payload.get('confidences') or ['high']) if c in _AI_TAG_CONFIDENCES] or ['high']
+    batch_size     = None if payload.get('unlimited_batch') else int(payload.get('batch_size') or 100)
+    max_seconds    = None if payload.get('unlimited_time') else int(payload.get('max_seconds') or 1800)
+
+    q = Rule.query.filter(Rule.is_deleted == False)
+    if rule_ids != 'ALL':
+        q = q.filter(Rule.id.in_(rule_ids))
+    else:
+        scope = {k: v for k, v in filters.items() if k != 'rule_ids'}
+        if any(v for v in scope.values()):
+            q = q.filter(Rule.id.in_(_build_rule_query(scope).with_entities(Rule.id).order_by(None)))
+    if not redo:
+        done = (db.session.query(AIGeneration.rule_id)
+                .filter(AIGeneration.agent_key == 'tag_suggest', AIGeneration.rule_id.isnot(None),
+                        AIGeneration.meta['source'].as_string() == 'bulk'))
+        q = q.filter(~Rule.id.in_(done))
+
+    remaining = q.count()
+    total = remaining if batch_size is None else min(remaining, batch_size)
+    job.total, job.done = total, 0
+    db.session.commit()
+    if total == 0:
+        log_job(job, 'Nothing to do — every targeted rule was already handled by a bulk run '
+                     '(tick "Run again on rules already done" to redo them).', level='info', event='done')
+        return
+
+    agent = get_agent('tag_suggest')
+    actor = User.query.get(job.created_by)
+    cfg = TagSuggest._settings()
+    allowed_levels = ', '.join(confidences) + (' (generic tags too)' if with_generic else ' (no generic tags)')
+    log_job(job, f'Starting — {"all " if batch_size is None else "up to "}{total} rule(s) this run '
+                 f'({remaining} left), adding {allowed_levels}'
+                 f'{" — DRY RUN, nothing is added" if dry_run else ""}, '
+                 f'{"simulated AI" if cfg["simulate_ai"] else f"model {model or chr(34) + chr(34)}"}, '
+                 f'{"no time limit" if max_seconds is None else f"max {max_seconds}s"} …',
+            level='info', event='start')
+
+    started, processed, last_id = _time.monotonic(), 0, 0
+    tagged_rules = tags_added = failed = 0
+    log_each = total <= 50
+
+    while processed < total:
+        rows = (q.filter(Rule.id > last_id).order_by(Rule.id.asc())
+                .with_entities(Rule.id, Rule.title, Rule.format, Rule.description, Rule.to_string, Rule.user_id)
+                .limit(min(200, total - processed)).all())
+        if not rows:
+            break
+        last_id = rows[-1][0]
+        existing = {}
+        for rid, tid in (db.session.query(RuleTagAssociation.rule_id, RuleTagAssociation.tag_id)
+                         .filter(RuleTagAssociation.rule_id.in_([r[0] for r in rows]))):
+            existing.setdefault(rid, set()).add(tid)
+
+        for rule_id, title, fmt, description, content, owner_id in rows:
+            if _is_cancelled(job):
+                log_job(job, 'Cancelled.', level='warning', event='cancelled')
+                return
+            while _should_pause(job):
+                _time.sleep(2)
+            if max_seconds is not None and _time.monotonic() - started > max_seconds:
+                log_job(job, f'Time budget ({max_seconds}s) reached — {total - processed} rule(s) left '
+                             f'for the next run.', level='info', event='progress')
+                return _ai_tag_suggest_finish(job, processed, tagged_rules, tags_added, failed, dry_run)
+
+            text = {'title': title or '', 'description': description or '', 'content': content or '', 'format': fmt or ''}
+            found = TagSuggest.candidates(exclude_ids=existing.get(rule_id, ()), **text)
+            picks = []
+            if found:
+                result = agent.run(user=actor, rule_id=rule_id, input_summary=f"Rule #{rule_id}: {title or '(untitled)'}",
+                                   candidates=found, max_suggestions=cfg['max_ai_suggestions'],
+                                   simulate=cfg['simulate_ai'], model=model, acquire_timeout=max_seconds or 600, **text)
+                if not result.ok:
+                    if result.meta.get('status') in ('disabled', 'busy', 'budget'):
+                        log_job(job, f'Stopping: {result.error}', level='error', event='error')
+                        job.status, job.error = 'failed', result.error
+                        db.session.commit()
+                        return
+                    failed += 1
+                    processed += 1
+                    job.done = processed
+                    db.session.commit()
+                    log_job(job, f'Rule #{rule_id}: {result.error}', level='warning', event='rule_failed')
+                    continue
+                by_id = {c['id']: c for c in found}
+                picks = [{**by_id[p['id']], 'confidence': p['confidence'], 'reason': p['reason']}
+                         for p in result.meta.get('suggestions', [])]
+
+            kept = [p for p in picks if p['confidence'] in confidences and (with_generic or not p.get('generic'))]
+            if kept and not dry_run:
+                now = _now()
+                db.session.bulk_insert_mappings(RuleTagAssociation, [
+                    {'uuid': str(uuid_mod.uuid4()), 'rule_id': rule_id, 'tag_id': p['id'],
+                     'user_id': job.created_by, 'added_at': now} for p in kept])
+                names = sorted(p['name'] for p in kept)
+                create_rule_history({
+                    'id': rule_id, 'title': title, 'success': True, 'manual_submit': False,
+                    'message': f"AI Tag Suggestions added: {', '.join(names)}",
+                    'new_content': content, 'old_content': content,
+                    'old_snapshot': {'tags': []}, 'new_snapshot': {'tags': names},
+                    'change_type': 'metadata', 'analyzed_by_user_id': job.created_by,
+                })
+                if job.created_by and job.created_by != owner_id:
+                    add_contributor(job.created_by, rule_id)
+                _refresh_quality_scores([rule_id])
+                tagged_rules += 1
+                tags_added += len(kept)
+            elif kept:
+                tagged_rules += 1
+                tags_added += len(kept)
+            TagSuggest._save_history(actor, text, 'rule', rule_id, found, picks, model or 'simulated',
+                                     extra_meta={'source': 'bulk_dry_run' if dry_run else 'bulk', 'job_uuid': job.uuid,
+                                                 'applied': [] if dry_run else [p['name'] for p in kept],
+                                                 'would_apply': [p['name'] for p in kept] if dry_run else []})
+            processed += 1
+            job.done = processed
+            db.session.commit()
+            if log_each or kept:
+                verb = 'would add' if dry_run else 'added'
+                log_job(job, f"Rule #{rule_id} {(title or '')[:60]}: "
+                             + (f"{verb} {', '.join(p['name'] + ' (' + p['confidence'] + ')' for p in kept)}" if kept
+                                else f"nothing kept ({len(picks)} pick(s), {len(found)} candidate(s))"),
+                        level='info', event='progress')
+            if processed % AI_TAG_LOG_EVERY_BULK == 0:
+                log_job(job, f'{processed}/{total} rule(s) — {tagged_rules} tagged, {tags_added} tag(s), '
+                             f'{failed} failed.', level='info', event='progress')
+
+    _ai_tag_suggest_finish(job, processed, tagged_rules, tags_added, failed, dry_run)
+
+
+def _ai_tag_suggest_finish(job, processed, tagged_rules, tags_added, failed, dry_run):
+    if failed and not processed - failed:
+        log_job(job, f'Failed — {failed} rule(s) failed, nothing done.', level='error', event='error')
+        job.status, job.error = 'failed', f'{failed} rule(s) failed — see the log.'
+        db.session.commit()
+        return
+    verb = 'would be added' if dry_run else 'added'
+    log_job(job, f'Done — {processed} rule(s) handled, {tags_added} tag(s) {verb} on {tagged_rules} rule(s)'
+                 f'{f", {failed} failed" if failed else ""}.', level='success', event='done')
+    if not dry_run and tags_added:
+        log_activity('ai.tag_suggest_bulk', f'AI Tag Suggestions added {tags_added} tag(s) on {tagged_rules} rule(s)',
+                     extra={'job_uuid': job.uuid}, is_public=False, icon='fa-solid fa-tags',
+                     actor_id=job.created_by)
+
+
 # ─── ai_bundle_analysis (bundle_analysis) ───────────────────────────────────
 # One long narrative review of a whole bundle (BundleAnalysisAgent). Runs in
 # the background lane like ai_generate — a detailed report on a 7B model can

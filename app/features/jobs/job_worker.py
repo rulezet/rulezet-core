@@ -35,7 +35,7 @@ _HANDLERS = {}
 # module docstring above. Empty until an AI agent bulk job type actually
 # registers itself — the background-lane thread simply finds nothing to
 # claim and sleeps until one exists, so this is safe to ship ahead of time.
-_BACKGROUND_LANE_TYPES = {'ai_generate', 'ai_bundle_analysis'}
+_BACKGROUND_LANE_TYPES = {'ai_generate', 'ai_bundle_analysis', 'ai_tag_suggest'}
 
 
 def register_handler(job_type):
