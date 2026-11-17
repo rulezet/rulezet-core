@@ -54,6 +54,7 @@ dependencies = [
     "sigmalint-cli>=0.1.7",               # Sigma editor external checks (external_checks_sigma.py)
     "idstools>=0.6.5",
     "suricataparser>=1.0.0",
+    "suricata-language-server>=2.1.2",   # Suricata deep validation with the real engine (deep_validate.py)
     "zeekscript>=1.3.6",
     "msc-pyparser>=1.2.2",
     "nova-hunting>=0.1.4",
