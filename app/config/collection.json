@@ -1,0 +1,69 @@
+{
+    "label": "Collections (personal folders)",
+    "category": "Collections",
+    "description": "Personal folders of rules and bundles (My rules -> Folders, /collection). default_folders: created for a user on their first visit. statuses: per-item workflow (key, label, icon, color). colors: choices offered when creating a folder (the icon uses the shared icon picker). Limits per user.",
+    "public": true,
+    "value": {
+        "default_folders": [
+            {
+                "name": "To fix",
+                "icon": "fa-solid fa-wrench",
+                "color": "#dc3545",
+                "description": "Rules with a problem, a false positive or a change request to follow up."
+            },
+            {
+                "name": "To test",
+                "icon": "fa-solid fa-flask",
+                "color": "#fd7e14",
+                "description": "Rules to try on samples or in a lab before using them."
+            },
+            {
+                "name": "To review",
+                "icon": "fa-solid fa-magnifying-glass",
+                "color": "#0d6efd",
+                "description": "Rules to read again or to check with a colleague."
+            },
+            {
+                "name": "Reading list",
+                "icon": "fa-solid fa-book-open",
+                "color": "#6f42c1",
+                "description": "Interesting rules and bundles to learn from."
+            }
+        ],
+        "statuses": [
+            {
+                "key": "todo",
+                "label": "To do",
+                "icon": "fa-regular fa-circle",
+                "color": "#6c757d"
+            },
+            {
+                "key": "doing",
+                "label": "In progress",
+                "icon": "fa-solid fa-circle-half-stroke",
+                "color": "#0d6efd"
+            },
+            {
+                "key": "done",
+                "label": "Done",
+                "icon": "fa-solid fa-circle-check",
+                "color": "#198754"
+            }
+        ],
+        "colors": [
+            "#0d6efd",
+            "#6f42c1",
+            "#d63384",
+            "#dc3545",
+            "#fd7e14",
+            "#ffc107",
+            "#198754",
+            "#20c997",
+            "#0dcaf0",
+            "#6c757d"
+        ],
+        "max_folders": 200,
+        "max_items_per_folder": 2000,
+        "max_depth": 4
+    }
+}

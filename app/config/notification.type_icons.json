@@ -55,6 +55,7 @@
         "message_direct": "fa-solid fa-envelope",
         "message_mention": "fa-solid fa-at",
         "message_invite": "fa-solid fa-user-plus",
-        "message_channel": "fa-solid fa-hashtag"
+        "message_channel": "fa-solid fa-hashtag",
+        "collection_reminder": "fa-solid fa-bell"
     }
 }

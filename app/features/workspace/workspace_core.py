@@ -247,6 +247,13 @@ def bulk_add_rules_to_workspace(ws: Workspace, rule_ids: list) -> int:
     return added
 
 
+def workspace_ids_with_rule(user_id: int, rule_id: int) -> list:
+    """Ids of the user's workspaces that contain this rule (WorkspacePicker)."""
+    return [wid for (wid,) in db.session.query(WorkspaceRule.workspace_id)
+            .join(Workspace, Workspace.id == WorkspaceRule.workspace_id)
+            .filter(Workspace.user_id == user_id, WorkspaceRule.rule_id == rule_id).all()]
+
+
 def remove_rule_from_workspace(ws: Workspace, rule_id: int) -> bool:
     wr = WorkspaceRule.query.filter_by(workspace_id=ws.id, rule_id=rule_id).first()
     if not wr:

@@ -39,6 +39,14 @@ def list_workspaces():
     return jsonify([ws.to_json() for ws in workspaces])
 
 
+@workspace_blueprint.route('/of_rule/<int:rule_id>')
+@login_required
+def workspaces_of_rule(rule_id):
+    """The user's workspaces + which of them already hold this rule (WorkspacePicker)."""
+    return jsonify({'workspaces': [ws.to_json() for ws in WsModel.get_user_workspaces(current_user.id)],
+                    'member_ids': WsModel.workspace_ids_with_rule(current_user.id, rule_id)})
+
+
 @workspace_blueprint.route('/create', methods=['POST'])
 @login_required
 def create_workspace():

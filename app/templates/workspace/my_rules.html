@@ -102,67 +102,8 @@
         <p class="small">Create one above to start organising your detection rules.</p>
     </div>
 
-    <!-- New Workspace Modal -->
-    <div class="modal fade" id="wsModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg rounded-4" style="background:var(--card-bg-color);">
-            <div class="modal-header border-0 pb-0 pt-4 px-4">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="rounded-circle d-flex align-items-center justify-content-center shadow-sm"
-                         :style="{ backgroundColor: wsForm.color, width: '52px', height: '52px', color: 'white', transition: 'all 0.3s ease' }">
-                        <i :class="['fa-solid', wsForm.icon || 'fa-folder']" style="font-size:1.4rem;"></i>
-                    </div>
-                    <div>
-                        <h5 class="modal-title fw-bold mb-0">New Workspace</h5>
-                        <p class="text-muted small mb-0">Organise your rules by category or project</p>
-                    </div>
-                </div>
-                <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body p-4">
-                <div class="row g-3">
-                    <div class="col-12">
-                        <label class="form-label fw-bold small text-muted text-uppercase mb-1">Name <span class="text-danger">*</span></label>
-                        <div class="input-group shadow-sm rounded-3">
-                            <span class="input-group-text border-0 bg-light">
-                                <i class="fa-solid fa-signature text-muted"></i>
-                            </span>
-                            <input type="text" class="form-control border-0 bg-light"
-                                   v-model="wsForm.name" placeholder="e.g. Ransomware Detection"
-                                   maxlength="100" style="height:45px;">
-                        </div>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label fw-bold small text-muted text-uppercase mb-1">Description</label>
-                        <textarea class="form-control border-0 bg-light rounded-3 p-3 shadow-sm"
-                                  v-model="wsForm.description" rows="2"
-                                  placeholder="Optional description…"></textarea>
-                    </div>
-                    <div class="col-md-7">
-                        <icon-picker v-model="wsForm.icon"></icon-picker>
-                    </div>
-                    <div class="col-md-5">
-                        <label class="form-label fw-bold small text-muted text-uppercase mb-1">Color</label>
-                        <div class="d-flex align-items-center bg-light rounded-3 p-1 shadow-sm">
-                            <input type="color" class="form-control form-control-color border-0 bg-transparent"
-                                   v-model="wsForm.color" style="width:45px;height:35px;">
-                            <input type="text" class="form-control border-0 bg-transparent py-0 small text-muted font-monospace"
-                                   v-model="wsForm.color">
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer border-0 p-4 pt-0">
-                <button class="btn btn-link text-decoration-none fw-bold text-muted px-4"
-                        data-bs-dismiss="modal">Cancel</button>
-                <button class="btn btn-primary rounded-pill px-5 fw-bold shadow"
-                        @click="saveWorkspace" :disabled="!wsForm.name.trim()">
-                    <i class="fa-solid fa-circle-check me-2"></i>Create
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+    <!-- New Workspace window (shared component, also in the "Add to a workspace" picker) -->
+    <workspace-create-modal ref="createModal" csrf-token="{{ csrf_token() }}" @created="ws => workspaces.push(ws)"></workspace-create-modal>
 
 </div><!-- end #ws-app -->
 {% endblock %}
@@ -170,19 +111,18 @@
 {% block script %}
 <script type="module">
     const { createApp, ref, watch, onMounted } = Vue
-    import IconPicker from '/static/js/tags/utils/iconPicker.js'
+    import WorkspaceCreateModal from '/static/js/components/WorkspaceCreateModal.js'
     import { create_message } from '/static/js/toaster.js'
 
     const csrfToken = '{{ csrf_token() }}'
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { IconPicker },
+        components: { 'workspace-create-modal': WorkspaceCreateModal },
         setup() {
             const workspaces = ref([])
             const showAll    = ref(false)
-            const wsForm     = ref({ name: '', description: '', icon: 'fa-folder', color: '#0d6efd' })
-            let _modal = null
+            const createModal = ref(null)
 
             async function loadWorkspaces() {
                 try {
@@ -200,31 +140,7 @@
                 window.location.href = `/workspace/${ws.uuid}`
             }
 
-            function openCreateModal() {
-                wsForm.value = { name: '', description: '', icon: 'fa-folder', color: '#0d6efd' }
-                _modal.show()
-            }
-
-            async function saveWorkspace() {
-                const name = wsForm.value.name.trim()
-                if (!name) return
-                try {
-                    const csrf = document.getElementById('csrf_token')?.value || csrfToken
-                    const res = await fetch('/workspace/create', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-                        body: JSON.stringify(wsForm.value),
-                    })
-                    const data = await res.json()
-                    if (data.success) {
-                        workspaces.value.push(data.workspace)
-                        _modal.hide()
-                        create_message(`Workspace "${name}" created`, 'success')
-                    }
-                } catch {
-                    create_message('Failed to create workspace', 'danger')
-                }
-            }
+            function openCreateModal() { createModal.value?.open() }
 
             async function deleteWorkspace(ws) {
                 if (!(await window.rzConfirm(`Delete workspace "${ws.name}"?\n\nRules will not be deleted.`))) return
@@ -244,13 +160,12 @@
             }
 
             onMounted(async () => {
-                _modal = new bootstrap.Modal(document.getElementById('wsModal'))
                 await loadWorkspaces()
             })
 
             return {
-                workspaces, showAll, wsForm,
-                goToWorkspace, openCreateModal, saveWorkspace, deleteWorkspace,
+                workspaces, showAll, createModal,
+                goToWorkspace, openCreateModal, deleteWorkspace,
             }
         }
     }).mount('#ws-app')

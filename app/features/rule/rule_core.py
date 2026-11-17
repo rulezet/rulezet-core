@@ -393,6 +393,10 @@ def _wipe_rule_children(rule_ids: list) -> None:
         or_(RuleSimilarity.rule_id.in_(ids), RuleSimilarity.similar_rule_id.in_(ids))
     ).delete(synchronize_session=False)
 
+    # 13b. Personal folder items (features/collection)
+    from app.features.collection.collection_core import purge_objects
+    purge_objects('rule', ids)
+
     # 14. Rule-to-rule relations (has ondelete=CASCADE but be explicit — same
     # reasoning as step 13)
     RuleRelation.query.filter(

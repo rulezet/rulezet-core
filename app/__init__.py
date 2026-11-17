@@ -145,11 +145,13 @@ def create_app(start_worker=True):
     from app.features.messages.messages import messages_blueprint
     from app.features.messages.oversight import messages_admin_blueprint
     from app.features.editor.editor import editor_blueprint, editor_page_blueprint
+    from app.features.collection.collection import collection_blueprint
 
     app.register_blueprint(home_blueprint, url_prefix="/")
     app.register_blueprint(account_blueprint, url_prefix="/account")
     app.register_blueprint(rule_blueprint, url_prefix="/rule")
     app.register_blueprint(bundle_blueprint, url_prefix="/bundle")
+    app.register_blueprint(collection_blueprint, url_prefix="/collection")
     app.register_blueprint(tags_blueprint, url_prefix="/tags")
     app.register_blueprint(jobs_blueprint, url_prefix='/jobs')
     app.register_blueprint(connector_blueprint, url_prefix='/connector')

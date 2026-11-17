@@ -7,6 +7,8 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/rule/ruleList.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/report-modal.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/collection-picker.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/collection/collection.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -29,7 +31,7 @@
             </div>
         </div>
         <p class="text-muted mb-0" style="max-width:600px;font-size:0.95rem;">
-            Manage your rules and favorites — edit, delete, download or bundle them in bulk.
+            Manage your rules and favorites — edit, delete, download or bundle them in bulk, and sort them into your own folders.
         </p>
     </div>
 
@@ -61,6 +63,15 @@
             <i class="fas fa-thumbs-up"></i>
             <span>My Likes</span>
         </a>
+
+        <!-- My folders (Collections) -->
+        <a href="#"
+           class="dr-nav__item"
+           :class="activeTab === 'folders' ? 'active' : ''"
+           @click.prevent="activeTab = 'folders'; foldersOpened = true">
+            <i class="fas fa-folder-tree"></i>
+            <span>My Folders</span>
+        </a>
     </nav>
 
     <!-- My Rules tab -->
@@ -78,7 +89,9 @@
             :can-favorite="true"
             :current-user-is-authenticated="true"
             :csrf-token="csrfToken"
+            @bulk-action="onBulk"
             :bulk-actions="[
+                { key: 'folder',   label: 'Add to folder', icon: 'fa-folder-plus' },
                 { key: 'download', label: 'Download',       icon: 'fa-download' },
                 { key: 'bundle',   label: 'Add to bundle',  icon: 'fa-layer-group' },
                 { key: 'delete',   label: 'Delete',         icon: 'fa-trash', variant: 'danger' },
@@ -100,7 +113,9 @@
             :can-favorite="true"
             :current-user-is-authenticated="true"
             :csrf-token="csrfToken"
+            @bulk-action="onBulk"
             :bulk-actions="[
+                { key: 'folder',   label: 'Add to folder', icon: 'fa-folder-plus' },
                 { key: 'download', label: 'Download',      icon: 'fa-download' },
                 { key: 'bundle',   label: 'Add to bundle', icon: 'fa-layer-group' },
             ]">
@@ -137,23 +152,38 @@
             :can-favorite="true"
             :current-user-is-authenticated="true"
             :csrf-token="csrfToken"
+            @bulk-action="onBulk"
             :bulk-actions="[
+                { key: 'folder',   label: 'Add to folder', icon: 'fa-folder-plus' },
                 { key: 'download', label: 'Download',      icon: 'fa-download' },
                 { key: 'bundle',   label: 'Add to bundle', icon: 'fa-layer-group' },
             ]">
         </rule-list>
     </div>
 
+    <!-- My Folders tab — lazy -->
+    <div v-if="foldersOpened" v-show="activeTab === 'folders'">
+        <collection-browser :csrf-token="csrfToken"
+                            :initial-folder="{{ (request.args.get('folder') | int(0)) or 'null' }}"
+                            :initial-item="{{ (request.args.get('item') | int(0)) or 'null' }}"
+                            :initial-view="{{ request.args.get('view') | tojson }}"></collection-browser>
+    </div>
+
+    <!-- "Add to folder" bulk action of the lists above -->
+    <collection-picker ref="picker" kind="rule" :object-ids="pickerIds" :csrf-token="csrfToken" :show-button="false"></collection-picker>
+
 </div>
 {% endblock %}
 
 {% block script %}
 <script type="module">
-    const { createApp, ref, computed } = Vue
+    const { createApp, ref, computed, nextTick, watch } = Vue
     import RuleList                  from '/static/js/rule/ruleList.js'
     import TagsDisplaysList          from '/static/js/tags/tagsDisplaysList.js'
     import VulnerabilityDisplaysList from '/static/js/vulnerability/vulnerabilityDisplayList.js'
     import { create_message }        from '/static/js/toaster.js'
+    import CollectionPicker          from '/static/js/components/CollectionPicker.js'
+    import CollectionBrowser         from '/static/js/collection/CollectionBrowser.js'
 
     const csrfToken   = '{{ csrf_token() }}'
     const currentUserId = {{ current_user.id }}
@@ -165,12 +195,37 @@
             'rule-list':                   RuleList,
             'tags-displays-list':          TagsDisplaysList,
             'vulnerability-displays-list': VulnerabilityDisplaysList,
+            'collection-picker':           CollectionPicker,
+            'collection-browser':          CollectionBrowser,
         },
         setup() {
             const activeTab   = ref('rules')
-            const favOpened   = ref(false)
-            const likesOpened = ref(false)
             const voteFilter  = ref('up')  // 'up' | 'down' | 'both'
+            const startTab    = new URLSearchParams(location.search).get('tab')
+            if (['rules', 'favorites', 'likes', 'folders'].includes(startTab)) activeTab.value = startTab
+            const favOpened     = ref(activeTab.value === 'favorites')
+            const likesOpened   = ref(activeTab.value === 'likes')
+            const foldersOpened = ref(activeTab.value === 'folders')
+            // Keep the tab in the URL (a reload / a reminder link opens the same tab)
+            watch(activeTab, tab => {
+                const u = new URL(window.location)
+                u.searchParams.set('tab', tab)
+                if (tab !== 'folders') ['folder', 'item', 'view'].forEach(k => u.searchParams.delete(k))
+                history.replaceState(null, '', u)
+            })
+            const picker      = ref(null)
+            const pickerIds   = ref([])
+
+            // RuleList bulk actions it does not handle itself ('folder')
+            async function onBulk({ action, ids }) {
+                if (action !== 'folder') return
+                if (ids === 'ALL' || !Array.isArray(ids)) {
+                    create_message('Select the rules to put in a folder.', 'warning'); return
+                }
+                pickerIds.value = ids
+                await nextTick()
+                picker.value.open()
+            }
 
             const votesFetchUrl = computed(() =>
                 voteFilter.value === 'both'
@@ -196,7 +251,7 @@
             }
 
             return {
-                activeTab, favOpened, likesOpened, voteFilter, votesFetchUrl,
+                activeTab, favOpened, likesOpened, foldersOpened, voteFilter, votesFetchUrl, picker, pickerIds, onBulk,
                 csrfToken, currentUserId, isAdmin, goToAddRule, handleDelete,
             }
         }

@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/diff-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-detail.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/vote-pill.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/collection-picker.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-health.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/bundle/bundle-releases.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/help-tip.css') }}">
@@ -238,6 +239,9 @@
                             :title="bundle.is_favorited ? 'Remove from favorites' : 'Add to favorites'">
                             <i :class="bundle.is_favorited ? 'fa-solid fa-star' : 'fa-regular fa-star'"></i>
                         </button>
+                        {% if current_user.is_authenticated %}
+                        <collection-picker kind="bundle" :object-ids="[bundle.id]" csrf-token="{{ csrf_token() }}" compact></collection-picker>
+                        {% endif %}
                     </div>
 
                     <div class="bd-actions">
@@ -996,6 +1000,7 @@
     import ReportModal from '/static/js/components/ReportModal.js';
     import AttackMatrix from '/static/js/components/attack-matrix.js';
     import VoterPopover from '/static/js/components/VoterPopover.js';
+    import CollectionPicker from '/static/js/components/CollectionPicker.js';
 
     const csrfToken = '{{ csrf_token() }}';
 
@@ -1029,6 +1034,7 @@
             'report-modal': ReportModal,
             'attack-matrix': AttackMatrix,
             'voter-popover': VoterPopover,
+            'collection-picker': CollectionPicker,
         },
         setup() {
             /**

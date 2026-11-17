@@ -78,8 +78,14 @@ const NotificationBell = {
 
         // ── Computed ─────────────────────────────────────────────────────────
         const loaded      = ref(false)
-        const serverUnread = (window.RZ_NAV && window.RZ_NAV.unread) || 0
-        const unreadCount = computed(() => loaded.value ? items.value.filter(n => !n.is_read).length : serverUnread)
+        // Real unread total (not capped by the 15 items the panel loads): starts from the page
+        // (window.RZ_NAV.unread), refreshed by /notifications/unread_count when the panel opens,
+        // after a read, and when the tab comes back into view — never on a timer.
+        const unreadCount = ref((window.RZ_NAV && window.RZ_NAV.unread) || 0)
+        async function refreshCount() {
+            const d = await apiFetch('/notifications/unread_count').catch(() => null)
+            if (d && typeof d.count === 'number') unreadCount.value = d.count
+        }
 
         const showBanner = computed(() =>
             notifStyle.value === 'prominent' && unreadCount.value > 0 && !bannerDismissed.value
@@ -98,6 +104,7 @@ const NotificationBell = {
                 if (data) {
                     items.value = data
                     loaded.value = true
+                    await refreshCount()
                     // Reset banner dismiss when new unread arrive
                     if (unreadCount.value > 0) bannerDismissed.value = false
                 }
@@ -123,6 +130,7 @@ const NotificationBell = {
             if (notif.is_read) return
             await apiFetch(`/notifications/${notif.id}/read`, { method: 'POST' })
             notif.is_read = true
+            unreadCount.value = Math.max(0, unreadCount.value - 1)
         }
 
         async function deleteNotif(notif, event) {
@@ -130,11 +138,13 @@ const NotificationBell = {
             event.preventDefault()
             await apiFetch(`/notifications/${notif.id}`, { method: 'DELETE' })
             items.value = items.value.filter(n => n.id !== notif.id)
+            if (!notif.is_read) unreadCount.value = Math.max(0, unreadCount.value - 1)
         }
 
         async function markAllRead() {
             await apiFetch('/notifications/read_all', { method: 'POST' })
             items.value.forEach(n => { n.is_read = true })
+            unreadCount.value = 0
             window.dispatchEvent(new Event('rz:notif-read'))
         }
 
@@ -178,6 +188,9 @@ const NotificationBell = {
             }
             window.addEventListener('rz:job-created', fetchBell)
             window.addEventListener('rz:notif-read', fetchBell)
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') refreshCount()
+            })
         })
 
         return {
