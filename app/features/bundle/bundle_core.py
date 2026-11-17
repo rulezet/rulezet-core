@@ -424,6 +424,8 @@ def delete_bundle(bundle_id: int) -> bool:
     # so it needs an explicit purge.
     purge_unified_comments('bundle', bundle_id)
     _fork_side_effects(bundle_id, deleted=True)
+    from app.features.collection.collection_core import purge_objects
+    purge_objects('bundle', bundle_id)       # personal folder items
     db.session.delete(bundle)
     db.session.commit()
     return True

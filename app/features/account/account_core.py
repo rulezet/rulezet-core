@@ -684,6 +684,10 @@ def delete_user_core(id) -> bool:
         {'created_by': None}, synchronize_session=False
     )
 
+    # Personal folders (features/collection)
+    from app.features.collection.collection_core import purge_user
+    purge_user(id)
+
     # clean up avatar file before DB delete
     if user.profile_picture:
         _delete_avatar_file(user.profile_picture)

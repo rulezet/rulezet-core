@@ -68,21 +68,6 @@
         "level": "detail"
       },
       {
-        "target": "[data-tour=\"rule-metadata\"]",
-        "title": "What the rule says about itself",
-        "text": "References, author and dates read from the rule's own text."
-      },
-      {
-        "target": "[data-tour=\"rule-tags\"]",
-        "title": "Tags",
-        "text": "TLP / PAP sharing levels, malware families, platforms… Click one to see every rule with it."
-      },
-      {
-        "target": "[data-tour=\"rule-attack\"]",
-        "title": "ATT&CK techniques",
-        "text": "The MITRE ATT&CK techniques this rule detects. Each opens its page with every rule for it."
-      },
-      {
         "target": "[data-tour=\"rule-content\"]",
         "title": "The rule",
         "text": "The rule itself, highlighted, ready to copy."
@@ -121,6 +106,21 @@
         "title": "Report",
         "text": "Something wrong (stolen, broken, dangerous)? Tell the administrators.",
         "level": "detail"
+      },
+      {
+        "target": "[data-tour=\"rule-metadata\"]",
+        "title": "What the rule says about itself",
+        "text": "References, author and dates read from the rule's own text."
+      },
+      {
+        "target": "[data-tour=\"rule-tags\"]",
+        "title": "Tags",
+        "text": "TLP / PAP sharing levels, malware families, platforms… Click one to see every rule with it."
+      },
+      {
+        "target": "[data-tour=\"rule-attack\"]",
+        "title": "ATT&CK techniques",
+        "text": "The MITRE ATT&CK techniques this rule detects. Each opens its page with every rule for it."
       },
       {
         "target": "[data-tour=\"rule-contributors\"]",

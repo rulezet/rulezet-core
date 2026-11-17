@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/dataTable.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/code-viewer.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/components/smart-editor.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/components/collection-picker.css') }}">
 {% endif %}
 <style>[v-cloak] { display: none; }</style>
 {% endblock %}
@@ -85,6 +86,7 @@
                     <button class="btn btn-sm btn-primary rounded-pill px-3" @click="openAddToBundle">
                         <i class="fa-solid fa-plus me-1"></i>Add to a bundle
                     </button>
+                    <workspace-picker :rule-ids="[RULE_ID]" :csrf-token="csrfToken"></workspace-picker>
                     {% endif %}
                 </div>
             </div>
@@ -110,9 +112,12 @@
                     <h6 class="fw-bold mb-1">Not part of any bundle yet</h6>
                     <p class="mb-3">Bundles group rules into shareable, deployable rulesets.</p>
                     {% if current_user.is_authenticated %}
+<div class="d-flex flex-wrap justify-content-center gap-2">
                     <button class="btn btn-sm btn-primary rounded-pill px-3" @click="openAddToBundle">
                         <i class="fa-solid fa-plus me-1"></i>Add it to a bundle
                     </button>
+                    <workspace-picker :rule-ids="[RULE_ID]" :csrf-token="csrfToken"></workspace-picker>
+                    </div>
                     {% endif %}
                 </div>
                 <div v-else-if="visibleBundles.length === 0" class="rb-empty">
@@ -216,6 +221,7 @@
 <script type="module">
     const { createApp, ref, computed, onMounted, nextTick } = Vue;
     import RuleExportAction from '/static/js/rule/ruleExportAction.js';
+    import WorkspacePicker from '/static/js/components/WorkspacePicker.js';
 
     const RULE_ID = {{ rule.id }};
     const RULE_TITLE = {{ rule.title | tojson }};
@@ -225,7 +231,7 @@
 
     createApp({
         delimiters: ['[[', ']]'],
-        components: { 'rule-export-action': RuleExportAction },
+        components: { 'rule-export-action': RuleExportAction, 'workspace-picker': WorkspacePicker },
         setup() {
             const loading = ref(true);
             const bundles = ref([]);

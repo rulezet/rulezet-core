@@ -255,6 +255,12 @@ def tick(app, now=None):
     _fire_due_retries(app, now)
     _enforce_timeouts(now)
     _fire_due_reminders(now)
+    try:                      # users' own folder reminders (collection_core)
+        from app.features.collection.collection_core import fire_due_reminders
+        fire_due_reminders(now)
+    except Exception as e:
+        db.session.rollback()
+        print(f"[task_scheduler] collection reminders: {e}")
     for schedule in due:
         try:
             if (now - schedule.next_run_at).total_seconds() > MISFIRE_GRACE_SECONDS and schedule.catch_up:
