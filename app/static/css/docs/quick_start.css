@@ -996,3 +996,25 @@
     .back-to-top.visible { opacity: 1; visibility: visible; transform: translateY(0); }
     .back-to-top:hover { background: var(--accent-dark); }
     @media (max-width: 840px) { .back-to-top { right: 16px; bottom: 16px; } }
+
+    /* The real coloured Rulezet logo (image/logo.png) on a light tile: its dark-teal
+       lettering stays readable on the dark sidebar — never the all-white version. */
+    .sidebar-logo-icon {
+      width: 44px; height: 44px; padding: 3px; background: #fff; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, .08), 0 4px 14px rgba(13, 110, 253, .25);
+      transition: transform .2s;
+    }
+    .sidebar-logo-icon:hover { transform: scale(1.05); }
+    .sidebar-logo-icon img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .footer-brand-icon { background: #fff !important; border: 1px solid var(--border); padding: 2px; }
+    .footer-brand-icon img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+    /* Hero: text on the left, the animated Rulezet logo on the right */
+    .hero-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 32px; }
+    .hero-logo { width: clamp(200px, 22vw, 300px); }
+    .hero-logo img { width: 100%; height: auto; display: block; filter: drop-shadow(0 18px 40px rgba(13, 110, 253, .16)); }
+    @media (max-width: 900px) {
+      .hero-top { grid-template-columns: 1fr; }
+      .hero-logo { order: -1; width: 180px; margin: 0 auto 8px; }
+    }

@@ -30,11 +30,7 @@
   <!-- ── Sidebar ── -->
   <aside class="sidebar" id="sidebar" aria-label="Documentation navigation">
     <div class="sidebar-logo">
-      <div class="sidebar-logo-icon" aria-hidden="true">
-        <svg width="16" height="18" viewBox="0 0 16 18" fill="currentColor">
-          <path d="M8 0L0 3v5c0 4.97 3.42 9.62 8 10.83C12.58 17.62 16 12.97 16 8V3L8 0z"/>
-        </svg>
-      </div>
+      <a href="/" class="sidebar-logo-icon" aria-label="Rulezet home"><img src="{{ url_for('static', filename='image/logo.png') }}" alt="" width="44" height="44"></a>
       <div class="sidebar-logo-text">
         <span class="sidebar-logo-name">Rulezet</span>
         <span class="sidebar-logo-version">v{{ version }}</span>
@@ -162,6 +158,8 @@
 
         <!-- ── Hero ── -->
         <div class="hero">
+          <div class="hero-top">
+          <div class="hero-text">
           <div class="hero-badges" role="list" aria-label="Project metadata">
             <span class="badge badge-amber" role="listitem">
               <i class="fas fa-tag" aria-hidden="true"></i>
@@ -198,6 +196,14 @@
               <i class="fa-brands fa-github" aria-hidden="true"></i>
               GitHub
             </a>
+          </div>
+
+          </div>
+          <!-- the animated Rulezet logo (same build animation as the home page; still image for reduced motion) -->
+          <picture class="hero-logo" aria-hidden="true">
+            <source media="(prefers-reduced-motion: reduce)" srcset="{{ url_for('static', filename='image/animation/rulezet_logo_final.png') }}">
+            <img src="{{ url_for('static', filename='image/animation/rulezet_logo_build.webp') }}" alt="" width="380" height="380" fetchpriority="high" decoding="async">
+          </picture>
           </div>
 
           <!-- Annotated Sigma rule — the hero thesis in YAML form -->
@@ -1044,7 +1050,7 @@ python3 manage.py deploy</code></pre>
     <div>
       <div class="footer-brand">
         <div class="footer-brand-icon" aria-hidden="true">
-          <i class="fas fa-shield-halved"></i>
+          <img src="{{ url_for('static', filename='image/logo.png') }}" alt="" width="28" height="28">
         </div>
         <span class="footer-brand-name">Rulezet</span>
       </div>
