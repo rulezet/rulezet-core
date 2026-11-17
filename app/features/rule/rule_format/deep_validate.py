@@ -21,6 +21,8 @@ import json
 import subprocess
 import tempfile
 import os
+import shutil
+import sys
 
 from flask import current_app
 
@@ -29,6 +31,16 @@ from flask import current_app
 # — generous enough for one rule to never look "hung" from a user's POV,
 # tight enough that a wedged subprocess can't block a worker indefinitely.
 DEFAULT_TIMEOUT_SECONDS = 20
+
+
+def _sls_binary() -> str | None:
+    """The suricata-language-server script of THIS app's environment: next to
+    the running Python (.venv/bin — gunicorn is often started without
+    activating the venv, so .venv/bin is not on PATH), else on PATH."""
+    local = os.path.join(os.path.dirname(sys.executable), 'suricata-language-server')
+    if os.path.isfile(local) and os.access(local, os.X_OK):
+        return local
+    return shutil.which('suricata-language-server')
 
 
 def is_deep_validation_configured() -> bool:
@@ -65,16 +77,22 @@ def deep_validate_suricata_rule(content: str, timeout: int = DEFAULT_TIMEOUT_SEC
             tmp.write(content)
             tmp_path = tmp.name
 
+        sls = _sls_binary()
+        if not sls:
+            return {'available': False,
+                    'error': "'suricata-language-server' is not installed in this app's environment — "
+                             "run `python3 manage.py update` (it is a dependency in pyproject.toml).",
+                    'ok': None, 'diagnostics': []}
         try:
             result = subprocess.run(
-                ['suricata-language-server', '--batch-file', tmp_path,
+                [sls, '--batch-file', tmp_path,
                  '--no-engine-analysis', '--suricata-binary', binary_path],
                 capture_output=True, text=True, timeout=timeout,
             )
         except FileNotFoundError:
             return {'available': False,
-                    'error': "'suricata-language-server' is not installed in this app's "
-                             "environment (pip install suricata-language-server).",
+                    'error': "'suricata-language-server' could not be started — "
+                             "run `python3 manage.py update` (it is a dependency in pyproject.toml).",
                     'ok': None, 'diagnostics': []}
         except subprocess.TimeoutExpired:
             return {'available': True, 'error': f'Suricata engine check timed out after {timeout}s.',
