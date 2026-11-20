@@ -200,7 +200,7 @@
 .lt-table-wrap { overflow-x: auto; }
 
 .lt-table {
-    width: 100%; min-width: 1230px;
+    width: 100%; min-width: 1265px;
     border-collapse: collapse; table-layout: fixed;
     font-size: .8125rem;
 }
@@ -299,7 +299,11 @@
 /* IP address shown inline */
 .lt-td--ip { font-family: var(--font-mono); font-size: .75rem; }
 .lt-ip { display: inline-flex; align-items: center; gap: .3rem; max-width: 100%; }
-.lt-ip > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lt-ip { min-width: 0; }
+/* only the address text is truncated: the whois (where is this IP from) button stays visible */
+.lt-ip .ipa { min-width: 0; flex: 1 1 auto; overflow-wrap: normal; }
+.lt-ip .ipa-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lt-row:hover .lt-ip .ipa-btn { opacity: 1; }
 .lt-ip-filter {
     background: none; border: none; padding: .1rem .25rem; cursor: pointer;
     font-size: .6rem; color: var(--text-muted); opacity: 0; border-radius: var(--radius-sm);
