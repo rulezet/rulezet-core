@@ -48,12 +48,15 @@ class ActivityLog(db.Model):
         # No user + a request IP = an anonymous visitor (view, download…);
         # no user and no request at all = a genuine system action (cron, job).
         username = "Anonymous" if self.ip_address else "System"
+        avatar = None
         try:
             if self.user:
                 username = self.user.get_username()
+                avatar = self.user.get_avatar_url()
         except Exception:
             pass
         return {
+            "actor_avatar": avatar,
             "id":          self.id,
             "uuid":        self.uuid,
             "user_id":     self.user_id,
