@@ -181,7 +181,7 @@ grpcio==1.83.1
     #   rulezet-core
 grpcio-tools==1.83.1
     # via pyvelociraptor
-gunicorn==26.0.0
+gunicorn==27.0.1
     # via rulezet-core
 h11==0.16.0
     # via httpcore
