@@ -1069,9 +1069,29 @@ def _parse_common_log_args():
     return page, per_page, search, level, user_id_f, sort_key, sort_dir, date_from, date_to
 
 
+def _extra_log_filters():
+    """GitHub-style filters of the log table (IP prefix, actor kind, visibility)."""
+    return {
+        'ip':         request.args.get('ip', '', type=str).strip(),
+        'actor':      request.args.get('actor', '', type=str).strip(),
+        'visibility': request.args.get('visibility', '', type=str).strip(),
+    }
+
+
+# Scope of each logs listing — the facets endpoint applies the same pinning.
+_LOG_SCOPES = {
+    # Activity Logs: everything except what the Connections and API Activity pages show
+    'all':         {'exclude_actions': ('user.login', 'user.logout'), 'exclude_category': 'api'},
+    'connections': {'fixed_actions': ('user.login', 'user.logout')},
+    'api':         {'fixed_category': 'api'},
+}
+
+
 def _build_logs_query(search='', action='', category='', level='', user_id_f=None,
                        date_from='', date_to='', sort_key='created_at', sort_dir='desc',
-                       fixed_actions=None, fixed_category=None):
+                       fixed_actions=None, fixed_category=None,
+                       ip='', actor='', visibility='', exclude_actions=None,
+                       exclude_category=None):
     """Shared filter/sort builder behind every admin logs listing variant.
     fixed_actions/fixed_category pin a listing to an exact set of
     actions (Connections: user.login/user.logout) or a category (API:
@@ -1088,7 +1108,23 @@ def _build_logs_query(search='', action='', category='', level='', user_id_f=Non
             ActivityLog.title.ilike(like),
             ActivityLog.action.ilike(like),
             ActivityLog.description.ilike(like),
+            ActivityLog.ip_address.ilike(like),
         ))
+    if ip:
+        q = q.filter(ActivityLog.ip_address.ilike(f'{ip}%'))
+    # actor: 'system' = no user and no request, 'anonymous' = no user but a request IP
+    if actor == 'system':
+        q = q.filter(ActivityLog.user_id.is_(None), ActivityLog.ip_address.is_(None))
+    elif actor == 'anonymous':
+        q = q.filter(ActivityLog.user_id.is_(None), ActivityLog.ip_address.isnot(None))
+    if visibility == 'public':
+        q = q.filter(ActivityLog.is_public.is_(True))
+    elif visibility == 'private':
+        q = q.filter(ActivityLog.is_public.isnot(True))
+    if exclude_actions:
+        q = q.filter(ActivityLog.action.notin_(exclude_actions))
+    if exclude_category:
+        q = q.filter(or_(ActivityLog.category.is_(None), ActivityLog.category != exclude_category))
     if fixed_actions:
         q = q.filter(ActivityLog.action.in_(fixed_actions))
     elif action:
@@ -1154,7 +1190,8 @@ def get_logs_page():
 
     q = _build_logs_query(search=search, action=action, category=category, level=level,
                            user_id_f=user_id_f, date_from=date_from, date_to=date_to,
-                           sort_key=sort_key, sort_dir=sort_dir)
+                           sort_key=sort_key, sort_dir=sort_dir, **_extra_log_filters(),
+                           **_LOG_SCOPES['all'])
     items, total, total_pages, page = _paginate_logs_query(q, page, per_page)
     return _logs_page_response(items, total, total_pages, page, per_page)
 
@@ -1169,7 +1206,7 @@ def get_connection_logs_page():
     q = _build_logs_query(search=search, level=level, user_id_f=user_id_f,
                            date_from=date_from, date_to=date_to,
                            sort_key=sort_key, sort_dir=sort_dir,
-                           fixed_actions=('user.login', 'user.logout'))
+                           **_extra_log_filters(), **_LOG_SCOPES['connections'])
     items, total, total_pages, page = _paginate_logs_query(q, page, per_page)
     return _logs_page_response(items, total, total_pages, page, per_page)
 
@@ -1184,9 +1221,71 @@ def get_api_logs_page():
     q = _build_logs_query(search=search, level=level, user_id_f=user_id_f,
                            date_from=date_from, date_to=date_to,
                            sort_key=sort_key, sort_dir=sort_dir,
-                           fixed_category='api')
+                           **_extra_log_filters(), **_LOG_SCOPES['api'])
     items, total, total_pages, page = _paginate_logs_query(q, page, per_page)
     return _logs_page_response(items, total, total_pages, page, per_page)
+
+
+@home_blueprint.route('/admin/logs/facets', methods=['GET'])
+@login_required
+def get_logs_facets():
+    """Options of a filter menu of the log table, with counts: authors, actions,
+    categories or IPs. Counts follow the other active filters (like GitHub), the
+    facet's own filter excluded. `q` narrows the list, `scope` = all|connections|api."""
+    if not current_user.is_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    from app.core.db_class.activity_log import ActivityLog
+    from app.core.db_class.user import User
+    from sqlalchemy import func, or_
+
+    facet = request.args.get('facet', '', type=str)
+    term  = request.args.get('q', '', type=str).strip()
+    scope = _LOG_SCOPES.get(request.args.get('scope', 'all', type=str), {})
+    if facet not in ('user', 'action', 'category', 'ip'):
+        return jsonify({"error": "Unknown facet"}), 400
+    offset = max(0, request.args.get('offset', 0, type=int))
+    limit  = min(100, max(1, request.args.get('limit', 50, type=int)))
+
+    _, _, search, level, user_id_f, _, _, date_from, date_to = _parse_common_log_args()
+    extra = _extra_log_filters()
+    kw = dict(search=search, level=level, date_from=date_from, date_to=date_to,
+              action=request.args.get('action', '', type=str).strip(),
+              category=request.args.get('category', '', type=str).strip(),
+              user_id_f=user_id_f, **extra, **scope)
+    if facet == 'user':
+        kw['user_id_f'] = None
+        kw['actor'] = ''
+    elif facet in ('action', 'category', 'ip'):
+        kw[facet] = ''
+    scoped = _build_logs_query(**kw).order_by(None)
+    count = func.count(ActivityLog.id).label('n')
+
+    items = []
+    if facet == 'user':
+        q = (scoped.join(User, User.id == ActivityLog.user_id)
+                   .with_entities(User, count)
+                   .group_by(User.id))
+        if term:
+            like = f'%{term}%'
+            q = q.filter(or_(User.username.ilike(like), User.first_name.ilike(like),
+                             User.last_name.ilike(like)))
+        rows = q.order_by(count.desc(), User.id).offset(offset).limit(limit + 1).all()
+        has_more = len(rows) > limit
+        for user, n in rows[:limit]:
+            items.append({"value": str(user.id), "label": user.get_username() or f'#{user.id}',
+                          "avatar": user.get_avatar_url(), "user_id": user.id, "count": n})
+    else:
+        col = {'action': ActivityLog.action, 'category': ActivityLog.category,
+               'ip': ActivityLog.ip_address}[facet]
+        q = scoped.with_entities(col, count).filter(col.isnot(None)).group_by(col)
+        if term:
+            q = q.filter(col.ilike(f'%{term}%'))
+        rows = q.order_by(count.desc(), col).offset(offset).limit(limit + 1).all()
+        has_more = len(rows) > limit
+        for val, n in rows[:limit]:
+            items.append({"value": val, "label": val, "count": n})
+    return jsonify({"items": items, "has_more": has_more, "offset": offset}), 200
 
 
 @home_blueprint.route('/admin/logs/delete/<int:log_id>', methods=['POST'])
