@@ -519,7 +519,7 @@ export default {
                     <col>
                     <col style="width:118px">
                     <col style="width:150px">
-                    <col style="width:140px">
+                    <col style="width:175px">
                     <col style="width:170px">
                     <col style="width:190px">
                     <col v-if="canModerate" style="width:96px">
