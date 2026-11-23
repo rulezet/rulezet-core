@@ -1,0 +1,265 @@
+{
+  "title": "Rulezet YARA rule template",
+  "description": "Every piece of a YARA rule that Rulezet reads when a rule is created or imported: the rule header and each key of the meta: section, the Rulezet field it fills, and how to write it. Companion guide: yara_template.md.",
+  "format": "yara",
+  "general_syntax": {
+    "meta_entry": "key = \"value\"  (identifier, '=', double-quoted string; integers and true/false are valid YARA but only reach the extra metadata, never title/author/version/license/uuid)",
+    "first_meta_block_only": "author, description, license, version, id/uuid and source are read from the FIRST meta: block of the file — one rule per file gives predictable results.",
+    "repeated_keys": "A key may be repeated (reference = \"…\" twice): every value is kept in references/extra metadata, but for the main fields (description, author…) the last value wins.",
+    "lists": "A list is one string, items separated by commas: \"a, b, c\". Tags also accept spaces, ';' and '|'.",
+    "comments": "Keys inside // or /* */ comments are ignored by tag and metadata extraction.",
+    "escaping": "Escape a double quote as \\\" and a backslash as \\\\ inside a value."
+  },
+  "header": {
+    "rule_name": {
+      "rulezet_field": "title",
+      "required": true,
+      "how_to_write": "rule Name_Of_The_Rule { … } — letters, digits and '_', not starting with a digit, max 128 characters. The rule name IS the title on Rulezet (there is no title meta key).",
+      "example": "rule MAL_Example_Loader_Nov26"
+    },
+    "rule_tags": {
+      "rulezet_field": "tags (imported tags)",
+      "required": false,
+      "how_to_write": "rule Name : tag1 tag2 tag3 — identifiers separated by spaces after a colon. Lower-cased on Rulezet ('Ransomware' and 'ransomware' are one tag).",
+      "example": "rule MAL_Example_Loader_Nov26 : loader windows ransomware"
+    },
+    "modifiers": {
+      "rulezet_field": null,
+      "required": false,
+      "how_to_write": "Avoid 'global rule': its condition is ANDed into every other rule of the namespace — Rulezet flags it as a risk. 'private rule' is fine for helper rules.",
+      "example": "private rule Helper_IsPE"
+    },
+    "imports": {
+      "rulezet_field": null,
+      "required": false,
+      "how_to_write": "import \"pe\" / \"math\" / \"hash\"… on top of the file, before the rule.",
+      "example": "import \"pe\""
+    },
+    "dependencies": {
+      "rulezet_field": "rule relations (depends on)",
+      "required": false,
+      "how_to_write": "Naming another rule in the condition makes it a dependency: Rulezet resolves it from rules already on the instance (validation fails if it can't).",
+      "example": "condition: Helper_IsPE and 2 of ($s*)"
+    }
+  },
+  "meta": {
+    "description": {
+      "rulezet_field": "description",
+      "aliases": [],
+      "required": true,
+      "type": "string",
+      "how_to_write": "One or two sentences: what it detects and why. Vulnerability ids written here (CVE-2024-1234, GHSA-xxxx-xxxx-xxxx, GCVE-…) are linked to the rule as vulnerabilities — this is the ONLY place Rulezet reads them from for YARA.",
+      "default_if_missing": "Rule <name> (No description metadata provided).",
+      "counts_for": "documentation score (has_description)",
+      "example": "Detects the Example loader dropped by exploitation of CVE-2024-1234"
+    },
+    "author": {
+      "rulezet_field": "author",
+      "aliases": [],
+      "required": true,
+      "type": "string",
+      "how_to_write": "Name, handle or team. Several authors: \"Alice, Bob\".",
+      "default_if_missing": "author of the import (GitHub repo owner) or Unknown",
+      "example": "Jane Doe (@janedoe)"
+    },
+    "date": {
+      "rulezet_field": "extra metadata (shown as Date)",
+      "aliases": ["creation_date"],
+      "required": true,
+      "type": "date",
+      "how_to_write": "ISO 8601: YYYY-MM-DD.",
+      "counts_for": "documentation score (has_date)",
+      "example": "2026-11-23"
+    },
+    "modified": {
+      "rulezet_field": "extra metadata (shown as Modified)",
+      "aliases": ["last_modified", "updated_date"],
+      "required": false,
+      "type": "date",
+      "how_to_write": "ISO 8601: YYYY-MM-DD, date of the last change.",
+      "example": "2026-11-23"
+    },
+    "version": {
+      "rulezet_field": "version",
+      "aliases": [],
+      "required": false,
+      "type": "string",
+      "how_to_write": "Quoted: \"1.0\", \"1.2\". An unquoted number is ignored (version falls back to 1.0).",
+      "default_if_missing": "1.0",
+      "example": "1.0"
+    },
+    "license": {
+      "rulezet_field": "license",
+      "aliases": [],
+      "required": true,
+      "type": "string",
+      "how_to_write": "An SPDX identifier, or the license name / URL.",
+      "default_if_missing": "license of the imported repo, or unknown",
+      "example": "DRL-1.1"
+    },
+    "id": {
+      "rulezet_field": "original_uuid",
+      "aliases": ["uuid"],
+      "required": true,
+      "type": "uuid",
+      "how_to_write": "A UUID v4, generated once and NEVER changed: it is how Rulezet recognises the same rule on re-import (duplicate check, GitHub updates, connectors). 'id' is read before 'uuid'.",
+      "default_if_missing": "Unknown",
+      "example": "5d1c9a6e-3b2f-4c8e-9a1d-7f4e2b6c8a10"
+    },
+    "reference": {
+      "rulezet_field": "references",
+      "aliases": ["references", "ref", "refs", "url", "urls", "link", "links", "report", "reports", "blog", "source_url", "more_info", "see_also"],
+      "required": true,
+      "type": "url (repeatable)",
+      "how_to_write": "One URL per entry; repeat the key for several (reference = \"…\" on two lines). Up to 50 kept. A MITRE URL (attack.mitre.org/techniques/T1059/001) also maps the technique.",
+      "counts_for": "documentation score (has_reference — only 'reference' and 'reference_url' count there)",
+      "example": "https://example.org/blog/example-loader-analysis"
+    },
+    "source": {
+      "rulezet_field": "source",
+      "aliases": [],
+      "required": false,
+      "type": "string",
+      "how_to_write": "Where the rule comes from (project, repo URL). On a GitHub import the repo URL wins.",
+      "default_if_missing": "repo URL of the import, or Unknown",
+      "example": "https://github.com/example-org/yara-rules"
+    },
+    "tags": {
+      "rulezet_field": "tags (imported tags) + platform detection",
+      "aliases": ["tag"],
+      "required": false,
+      "type": "list",
+      "how_to_write": "\"tag1, tag2, tag3\" — separators , ; | or spaces. 'namespace:value' is one tag (\"exploit: cve-2024-1234\" → exploit:cve-2024-1234). Platform words (windows, linux, macos, aws…) also set the rule's platform badges. Not shown in the extra metadata.",
+      "example": "loader, windows, ransomware"
+    },
+    "tlp": {
+      "rulezet_field": "TLP tag (replaces the default tlp:clear)",
+      "aliases": ["sharing"],
+      "required": false,
+      "type": "enum",
+      "values": ["CLEAR", "WHITE", "GREEN", "AMBER", "AMBER+STRICT", "RED"],
+      "how_to_write": "\"TLP:AMBER\", \"tlp:amber\" or just \"AMBER\". Must match a tlp:* tag of the instance.",
+      "default_if_missing": "tlp:clear",
+      "example": "TLP:CLEAR"
+    },
+    "pap": {
+      "rulezet_field": "PAP tag (replaces the default PAP:CLEAR)",
+      "aliases": [],
+      "required": false,
+      "type": "enum",
+      "values": ["CLEAR", "WHITE", "GREEN", "AMBER", "RED"],
+      "how_to_write": "\"PAP:GREEN\" or \"GREEN\".",
+      "default_if_missing": "PAP:CLEAR",
+      "example": "PAP:CLEAR"
+    },
+    "mitre_attack": {
+      "rulezet_field": "ATT&CK techniques",
+      "aliases": ["attack", "attack_id", "mitre_attack_id", "mitre_attack_technique", "technique_id", "attck"],
+      "required": false,
+      "type": "list",
+      "how_to_write": "Technique ids, comma separated: \"T1059.001, T1105\". Sub-techniques as T1234.001.",
+      "example": "T1059.001, T1105"
+    },
+    "hash": {
+      "rulezet_field": "extra metadata (hash type MD5/SHA-1/SHA-256/SHA-512 detected and shown)",
+      "aliases": ["sha256", "md5", "sha1"],
+      "required": false,
+      "type": "hash (repeatable)",
+      "how_to_write": "One sample hash per entry, repeat the key for several. Hex only.",
+      "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "malware_family": {
+      "rulezet_field": "extra metadata (red badge)",
+      "aliases": ["malware", "family"],
+      "required": false,
+      "type": "list",
+      "how_to_write": "\"ExampleLoader\" or \"Mirai, Gafgyt\".",
+      "example": "ExampleLoader"
+    },
+    "threat_actor": {
+      "rulezet_field": "extra metadata (purple badge)",
+      "aliases": ["actor"],
+      "required": false,
+      "type": "list",
+      "how_to_write": "Actor name(s), comma separated.",
+      "example": "APT-Example"
+    },
+    "malware_type": {
+      "rulezet_field": "extra metadata (orange badge)",
+      "aliases": ["category", "type"],
+      "required": false,
+      "type": "string",
+      "how_to_write": "Loader, Ransomware, RAT, Webshell, Hacktool…",
+      "example": "Loader"
+    },
+    "os": {
+      "rulezet_field": "extra metadata (teal badge) + platform detection",
+      "aliases": ["platform"],
+      "required": false,
+      "type": "string",
+      "how_to_write": "Windows, Linux, macOS, Android…",
+      "example": "Windows"
+    },
+    "filetype": {
+      "rulezet_field": "extra metadata (blue badge)",
+      "aliases": [],
+      "required": false,
+      "type": "string",
+      "how_to_write": "PE, ELF, Mach-O, PDF, Office, Script…",
+      "example": "PE"
+    },
+    "severity": {
+      "rulezet_field": "extra metadata (coloured scale)",
+      "aliases": ["level", "threat_level", "priority"],
+      "required": false,
+      "type": "enum",
+      "values": ["informational", "low", "medium", "high", "critical"],
+      "how_to_write": "One of the values, lower case.",
+      "example": "high"
+    },
+    "score": {
+      "rulezet_field": "extra metadata (meter)",
+      "aliases": ["risk_score"],
+      "required": false,
+      "type": "integer 0-100",
+      "how_to_write": "score = 75 (integer, unquoted, or \"75\").",
+      "example": 75
+    },
+    "confidence": {
+      "rulezet_field": "extra metadata (coloured scale)",
+      "aliases": ["reliability"],
+      "required": false,
+      "type": "enum",
+      "values": ["low", "medium", "high"],
+      "how_to_write": "One of the values, lower case.",
+      "example": "medium"
+    },
+    "status": {
+      "rulezet_field": "extra metadata (coloured scale)",
+      "aliases": ["maturity"],
+      "required": false,
+      "type": "enum",
+      "values": ["experimental", "test", "stable", "deprecated"],
+      "how_to_write": "One of the values, lower case.",
+      "example": "experimental"
+    },
+    "falsepositives": {
+      "rulezet_field": "extra metadata (shown as False positives)",
+      "aliases": ["false_positives", "known_false_positives"],
+      "required": false,
+      "type": "string",
+      "how_to_write": "Known benign matches, or \"None known\". false_positives / known_false_positives are kept as long text.",
+      "example": "Packed installers using the same stub"
+    },
+    "any_other_key": {
+      "rulezet_field": "extra metadata (shown as-is on the rule page)",
+      "aliases": [],
+      "required": false,
+      "type": "string | integer | boolean",
+      "how_to_write": "Any other identifier = value is kept and displayed (max 40 keys, 20 values per key, 300 characters per value).",
+      "example": "sample_source = \"MalwareBazaar\""
+    }
+  },
+  "never_in_extra_metadata": ["title", "name", "description", "desc", "summary", "author", "authors", "license", "licence", "version", "id", "uuid", "tags", "tag", "rule_id"],
+  "example_rule": "import \"pe\"\n\nrule MAL_Example_Loader_Nov26 : loader windows\n{\n    meta:\n        description = \"Detects the Example loader dropped by exploitation of CVE-2024-1234\"\n        author = \"Jane Doe (@janedoe)\"\n        date = \"2026-11-23\"\n        modified = \"2026-11-23\"\n        version = \"1.0\"\n        license = \"DRL-1.1\"\n        id = \"5d1c9a6e-3b2f-4c8e-9a1d-7f4e2b6c8a10\"\n        reference = \"https://example.org/blog/example-loader-analysis\"\n        reference = \"https://attack.mitre.org/techniques/T1105/\"\n        source = \"https://github.com/example-org/yara-rules\"\n        tags = \"ransomware, exploit:cve-2024-1234\"\n        tlp = \"TLP:CLEAR\"\n        pap = \"PAP:CLEAR\"\n        mitre_attack = \"T1059.001, T1105\"\n        hash = \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"\n        malware_family = \"ExampleLoader\"\n        threat_actor = \"APT-Example\"\n        malware_type = \"Loader\"\n        os = \"Windows\"\n        filetype = \"PE\"\n        severity = \"high\"\n        score = 75\n        confidence = \"medium\"\n        status = \"experimental\"\n        falsepositives = \"Packed installers using the same stub\"\n\n    strings:\n        $s1 = \"ExampleLoader/1.0\" ascii wide\n        $s2 = { 4D 5A 90 00 03 00 00 00 }\n        $s3 = \"cmd.exe /c powershell -enc\" ascii nocase\n\n    condition:\n        uint16(0) == 0x5A4D and filesize < 2MB and pe.number_of_sections > 2 and 2 of ($s*)\n}\n"
+}
